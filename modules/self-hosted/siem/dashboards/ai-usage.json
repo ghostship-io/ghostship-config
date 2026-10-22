@@ -1492,7 +1492,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -1502,7 +1502,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, source) ((ghostship_ai_model_strength{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_strength{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source) ((ghostship_ai_model_strength{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_strength{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -1512,7 +1512,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, source) ((ghostship_ai_model_cost_per_task{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_cost_per_task{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source) ((ghostship_ai_model_cost_per_task{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_cost_per_task{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -1522,7 +1522,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, source) ((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) and on(provider, model) max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source) ((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) and on(provider, model) max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -1534,7 +1534,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model, source, index) ((ghostship_ai_model_intelligence_index{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_intelligence_index{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source, index) ((ghostship_ai_model_intelligence_index{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_intelligence_index{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "F",
@@ -1544,7 +1544,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model, source) ((ghostship_ai_model_throughput{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_throughput{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source) ((ghostship_ai_model_throughput{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_throughput{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "G",
@@ -1554,7 +1554,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model, source, kind) ((ghostship_ai_model_token_price{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_token_price{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, source, kind) ((ghostship_ai_model_token_price{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_token_price{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "description": "Compared candidates, ordered by the explicit measured-value policy. Intelligence is the AA index; task cost is a benchmark cost in USD. Available is observed capacity, not quality. Missing values stay unknown.",
@@ -1755,7 +1755,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, status, variant) ((ghostship_ai_model_fact{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "B",
@@ -1765,7 +1765,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model) ((ghostship_ai_model_fact_confidence{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_confidence{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_model_fact_confidence{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_confidence{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "C",
@@ -1775,7 +1775,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (component, transform, in_force) ((ghostship_ai_calculation_transform and (timestamp(ghostship_ai_calculation_transform) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (component, transform, in_force) ((ghostship_ai_calculation_transform and (timestamp(ghostship_ai_calculation_transform) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "fieldConfig": {
@@ -1831,7 +1831,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (component, formula, scope) (ghostship_ai_calculation_component)",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (component, formula, scope) (ghostship_ai_calculation_component), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -1841,7 +1841,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (component, weight) (ghostship_ai_calculation_weight)",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (component, weight) (ghostship_ai_calculation_weight), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       }
@@ -1955,7 +1955,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (component, weight) ((ghostship_ai_calculation_weight and (timestamp(ghostship_ai_calculation_weight) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (component, weight) ((ghostship_ai_calculation_weight and (timestamp(ghostship_ai_calculation_weight) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "fieldConfig": {
@@ -2006,7 +2006,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, status, variant) ((ghostship_ai_model_fact{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -2016,7 +2016,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact_confidence{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_confidence{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, status, variant) ((ghostship_ai_model_fact_confidence{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_confidence{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -2026,7 +2026,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, status, variant) ((ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       }
@@ -2061,6 +2061,138 @@
        }
       }
      ]
+    },
+    {
+     "id": 100,
+     "type": "table",
+     "title": "Paced Availability by model",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 33,
+      "w": 12,
+      "h": 8
+     },
+     "description": "Latest snapshot. The ordering measure: the share left minus the expected share left in the model's most constraining window. Positive means ahead of the pace that window draws. Unavailable until the collector that publishes it is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model) (ghostship_ai_model_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "Paced Availability"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "Paced Availability"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
+    },
+    {
+     "id": 101,
+     "type": "table",
+     "title": "3D reserve and AA-3D evidence",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 12,
+      "y": 34,
+      "w": 12,
+      "h": 8
+     },
+     "description": "Latest snapshot. The models that are reserved for 3D work and the tiers they are held out of, the measured AA-3D Elo and the value of the model for 3D work. Unavailable until the collector that publishes them is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, tier, reserve, withheld) (ghostship_ai_model_reserved{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_reserved{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "B",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model) (ghostship_ai_three_d_elo{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_elo{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "C",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, cost_source, proxy) (ghostship_ai_model_value_3d{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value_3d{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "reading"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
     }
    ]
   },
@@ -2100,7 +2232,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "B",
@@ -2110,7 +2242,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "transformations": [
@@ -2263,7 +2395,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "B",
@@ -2273,7 +2405,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       },
       {
        "refId": "C",
@@ -2283,7 +2415,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider, model) group_left() (ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "transformations": [
@@ -2452,7 +2584,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Chief (Claude Opus 5.5)\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -2463,7 +2595,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Chief (Claude Opus 5.5)\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -2660,7 +2792,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -2671,7 +2803,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -2868,7 +3000,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -2879,7 +3011,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3076,7 +3208,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3087,7 +3219,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3284,7 +3416,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) ((ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3295,7 +3427,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) (time() - (ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) (time() - (ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3316,6 +3448,72 @@
       }
      },
      "description": "3D recommendations use AA-3D results and measured task cost. No family or 3D priors. Token usage is a rolling observation, not a capability score. Pending AA-3D evidence stays Unavailable. Ranking-fixes 3D prior/score were removed; usage still publishes."
+    },
+    {
+     "id": 102,
+     "type": "table",
+     "title": "Frontier members and their wait",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 36,
+      "w": 24,
+      "h": 8
+     },
+     "description": "Latest snapshot. The models the owner's policy admits to the frontier, the state they are in and the seconds until one becomes available again. Unavailable until the collector that publishes them is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, state) (ghostship_ai_frontier_member{provider=~\"$provider\"} and (timestamp(ghostship_ai_frontier_member{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "B",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model) (ghostship_ai_frontier_wait_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_frontier_wait_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "reading"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
     }
    ]
   },
@@ -3355,7 +3553,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, model, limit, scope, basis) ((ghostship_ai_provider_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, limit, scope, basis) ((ghostship_ai_provider_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "fieldConfig": {
@@ -3410,7 +3608,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, binding) ((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, binding) ((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "fieldConfig": {
@@ -3467,7 +3665,7 @@
        },
        "instant": true,
        "format": "table",
-       "expr": "max by (provider, evidence) ((ghostship_ai_provider_capacity_windows{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_windows{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))"
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, evidence) ((ghostship_ai_provider_capacity_windows{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_windows{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")"
       }
      ],
      "fieldConfig": {
@@ -3519,7 +3717,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, tier, source) ((ghostship_ai_free_model{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, tier, source) ((ghostship_ai_free_model{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3530,7 +3728,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, tier, source) ((ghostship_ai_free_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, tier, source) ((ghostship_ai_free_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3541,7 +3739,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, tier, source) (time() - (ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, tier, source) (time() - (ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3649,7 +3847,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, family, developer_country, operator_country) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, family, developer_country, operator_country) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3660,7 +3858,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) ((ghostship_ai_pool_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_pool_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_available{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3671,7 +3869,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) ((ghostship_ai_pool_model_selected{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_selected{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_pool_model_selected{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_selected{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3682,7 +3880,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) ((ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3693,7 +3891,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, state) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider) group_left(state) topk by (provider) (1, (ghostship_ai_pool_provider_state{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_provider_state{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, state) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) * on(provider) group_left(state) topk by (provider) (1, (ghostship_ai_pool_provider_state{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_provider_state{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3807,7 +4005,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, limit, scope) ((ghostship_ai_pool_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, limit, scope) ((ghostship_ai_pool_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3818,7 +4016,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, result) ((ghostship_ai_pool_health_events{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_health_events{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, result) ((ghostship_ai_pool_health_events{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_health_events{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3829,7 +4027,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model) ((ghostship_ai_pool_latency_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_latency_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_pool_latency_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_latency_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3840,7 +4038,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, kind, unit) ((ghostship_ai_pool_quota_amount{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_amount{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, kind, unit) ((ghostship_ai_pool_quota_amount{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_amount{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3851,7 +4049,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, unit) (1000 * (ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, unit) (1000 * (ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -3977,7 +4175,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, account, kind) ((ghostship_ai_pool_concurrency{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_concurrency{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, account, kind) ((ghostship_ai_pool_concurrency{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_concurrency{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4063,7 +4261,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, worker, client, status) ((ghostship_ai_pool_recent_jobs{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_recent_jobs{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, worker, client, status) ((ghostship_ai_pool_recent_jobs{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_recent_jobs{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4150,7 +4348,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, window) ((ghostship_ai_pool_ledger_requests{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_ledger_requests{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, window) ((ghostship_ai_pool_ledger_requests{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_ledger_requests{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4214,6 +4412,149 @@
        "show": false
       }
      }
+    },
+    {
+     "id": 103,
+     "type": "table",
+     "title": "Pool admissions, cooldowns and published limits",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 40,
+      "w": 24,
+      "h": 8
+     },
+     "description": "Latest snapshot. The bench score the pool gave a route for a workload, a cooldown that cannot be true, the limit the provider publishes and the limit its own response headers carried. Unavailable until the collector that publishes them is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, workload) (ghostship_ai_pool_admission{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_admission{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "B",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, issue) (ghostship_ai_pool_cooldown_invalid{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_cooldown_invalid{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "C",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, limit, source) (ghostship_ai_pool_published_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_published_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "D",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model, limit, scope) (ghostship_ai_pool_observed_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_observed_limit{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "reading"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
+    },
+    {
+     "id": 104,
+     "type": "table",
+     "title": "Unavailable routes and the reason",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 41,
+      "w": 24,
+      "h": 8
+     },
+     "description": "Latest snapshot. The routes the T3 Code state says are unavailable, the scope of the failure and its bounded reason code. A route that stays visible never wins. Unavailable until the collector that publishes them is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (scope, target, reason) (ghostship_ai_route_unavailable and (timestamp(ghostship_ai_route_unavailable) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "reading"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
     }
    ]
   },
@@ -4250,7 +4591,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -4260,7 +4601,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, source, status) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} * on(source) group_left(status) ghostship_ai_source_status) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, source, status) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} * on(source) group_left(status) ghostship_ai_source_status) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -4270,7 +4611,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -4280,7 +4621,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, source) ((time() - ghostship_ai_source_observed_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, source) ((time() - ghostship_ai_source_observed_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       }
@@ -4372,7 +4713,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace((ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       },
@@ -4382,7 +4723,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "count((ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(count((ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "format": "table"
       }
@@ -4604,7 +4945,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"})",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"}), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4667,6 +5008,105 @@
        "show": false
       }
      }
+    },
+    {
+     "id": 105,
+     "type": "table",
+     "title": "The owner's lists and the AA feed",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 38,
+      "w": 24,
+      "h": 8
+     },
+     "description": "Latest snapshot. The frontier workhorses and the excluded models the runtime policy names, the models the AA pull found or found changed, and the state of the feed itself. Unavailable until the collector that publishes them is deployed.",
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (model) (ghostship_ai_policy_frontier_workhorse and (timestamp(ghostship_ai_policy_frontier_workhorse) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "B",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (model) (ghostship_ai_policy_excluded_model and (timestamp(ghostship_ai_policy_excluded_model) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "C",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model) (ghostship_ai_model_new and (timestamp(ghostship_ai_model_new) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "D",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (provider, model) (ghostship_ai_model_changed and (timestamp(ghostship_ai_model_changed) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      },
+      {
+       "refId": "E",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "max by (source, status, reason) (ghostship_ai_feed_status and (timestamp(ghostship_ai_feed_status) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))",
+       "instant": true,
+       "format": "table",
+       "legendFormat": "reading"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true
+        },
+        "renameByName": {
+         "Value": "reading"
+        }
+       }
+      }
+     ],
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm",
+      "footer": {
+       "show": false
+      }
+     }
     }
    ]
   },
@@ -4703,7 +5143,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort_desc(max by (provider, account, model, window, quota, source) (100 * (ghostship_ai_quota_used_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_used_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(max by (provider, account, model, window, quota, source) (100 * (ghostship_ai_quota_used_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_used_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4714,7 +5154,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, account, model, window, quota, source) (1000 * (ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, account, model, window, quota, source) (1000 * (ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4725,7 +5165,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, account, model, window, quota, source) ((ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) - time())",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, account, model, window, quota, source) ((ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) - time()), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -4736,7 +5176,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, account, model, window, quota, source) (time() - (ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, account, model, window, quota, source) (time() - (ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -5074,7 +5514,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "sort_desc(max by (provider, model, window, source, basis) ((ghostship_ai_usage_cost_usd{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_cost_usd{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(max by (provider, model, window, source, basis) ((ghostship_ai_usage_cost_usd{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_cost_usd{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
@@ -5085,7 +5525,7 @@
         "type": "prometheus",
         "uid": "victoriametrics"
        },
-       "expr": "max by (provider, model, window, source) ((ghostship_ai_usage_unpriced_records{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_unpriced_records{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+       "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model, window, source) ((ghostship_ai_usage_unpriced_records{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_unpriced_records{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\")",
        "instant": true,
        "range": false,
        "format": "table"
