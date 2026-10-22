@@ -19,7 +19,10 @@ import aa_diff  # noqa: E402
 import aa_pull  # noqa: E402
 
 NOW = 1_800_000_000.0
-RAW = Path("/tmp/aa-pull/raw")
+# The public pages, cut down to the smallest excerpt that still exercises
+# the parser. They are committed with the tests: a test never reads a
+# scratch path, and a missing fixture fails the test.
+PAGES = Path(__file__).resolve().parent / "fixtures" / "ai-usage" / "aa-pages"
 
 
 def load(name, file):
@@ -31,10 +34,10 @@ def load(name, file):
 
 
 def page(name):
-    """One real page, or an empty string when it is not there."""
-    path = RAW / name
+    """One committed page excerpt."""
+    path = PAGES / name
     if not path.exists():
-        return ""
+        raise AssertionError(f"the page fixture {path} is missing")
     return path.read_text(encoding="utf-8", errors="replace")
 
 
@@ -356,9 +359,7 @@ class PublicPullTests(unittest.TestCase):
     def test_a_deprecated_model_is_published_with_its_flag(self):
         # The model page of a deprecated model carries the model itself, and
         # the page says which model superseded it.
-        text = page("grok/grok-4-5.html")
-        if not text:
-            self.skipTest("the model page fixture is not there")
+        text = page("grok-4-5.html")
         grok = aa_pull.parse_model_page(text)
         self.assertEqual(grok["slug"], "grok-4-5")
         self.assertTrue(grok["deprecated"])
