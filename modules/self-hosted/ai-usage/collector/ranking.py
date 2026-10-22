@@ -52,10 +52,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 try:  # pragma: no cover - the collector always ships metrics.py
-    from metrics import label_value
+    from metrics import ExactLabel, label_value
 except ImportError:  # pragma: no cover - standalone use
     def label_value(value: object) -> str:
         return str(value)
+
+    class ExactLabel(str):  # pragma: no cover - standalone use
+        """A label value that is published exactly as it is."""
 
 try:  # pragma: no cover - the collector always ships catalog.py
     from catalog import PROVIDER_ALIASES
@@ -2026,14 +2029,16 @@ def rank_samples(
                 )
             # The human name of the model, so a row of the dashboard can say
             # what the model is. One series per candidate, and the name is
-            # never empty: the raw id is the last resort.
+            # never empty: the raw id is the last resort. The name is
+            # published exactly: it is a name, and the exposition format
+            # escapes it the way the format requires.
             samples.append(
                 (
                     "ghostship_ai_model_info",
                     {
                         "provider": provider,
                         "model": model,
-                        "name": label_value(
+                        "name": ExactLabel(
                             model_display_name(
                                 entry.provider,
                                 entry.model,
