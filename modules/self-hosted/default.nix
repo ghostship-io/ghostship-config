@@ -44,6 +44,9 @@
     ./plex-auto-languages.nix
     ./pyload.nix
 
+    # AI usage: read-only provider limits, usage and free models
+    ./ai-usage
+
     # Apps and utilities
     ./agent-desktop.nix
     ./agent-desktop-update.nix
