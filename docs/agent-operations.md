@@ -175,6 +175,13 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 - Cloudflare SSH compatibility on `chill-penguin` depends on
   `services.openssh.macs` including plain `hmac-sha2-256` and
   `hmac-sha2-512` in addition to the `*-etm` variants.
+- The agent SSH key runs `ghostship-ssh-command-guard` as its forced command
+  (`modules/self-hosted/ssh-command-guard.nix`). It refuses a recursive content
+  read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` with exit status
+  126 and a journal line under the `ghostship-ssh-command-guard` tag, and runs
+  every other command unchanged. Read named files only; a search of the host is
+  not a named file. The owner's own keys are authorized without a forced
+  command.
 
 ## Nix, Builds, and Host Boot
 

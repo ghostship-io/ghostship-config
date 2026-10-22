@@ -66,6 +66,16 @@ in
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev"
   ];
 
+  # The agent workspace key runs the host command guard as its forced command,
+  # so an agent session cannot search the host recursively. The owner's own keys
+  # above are authorized without a forced command and are not affected.
+  ghostship.sshCommandGuard = {
+    enable = true;
+    keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAPNLcXkA3IdqGKkbpWyl2xd4v5cCqzp8OblCDILPlL8 agent-workspace@ghostship"
+    ];
+  };
+
   # NFS support
   environment.systemPackages = with pkgs; [
     nfs-utils

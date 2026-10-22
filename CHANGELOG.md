@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.51] - 2026-10-22
+
+- Agent SSH command guard: the agent workspace key now runs `ghostship-ssh-command-guard` as its forced command on `chill-penguin`. A recursive content read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` is refused with exit status 126 and a journal line under the `ghostship-ssh-command-guard` tag, and every other command runs unchanged, including interactive sessions, `scp`, `sftp`, `nix-store --serve` and `ssh-ng` transfers. The owner's own keys are authorized without a forced command. A copy of the agent key outside the managed authorized keys file is removed at activation, because sshd stops at the first file that holds the key. The regression tests use the commands agents actually ran on 2026-10-22, including the `grep -rl` over `/etc` and `/root` that opened a SIEM investigation.
+
 ## [3.17.50] - 2026-10-22
 
 - Agent desktop browser stage: a stage-control restart re-pairs the windows it finds. Sway does not re-announce the windows it already has, so the anchor titles (the run id in a window's title) were only learned from new window events; after the restart that `run-chrome` loops on, every window stayed unpaired and `browser_window` `screenshot` and `ui` failed with `not_found` until the page titles happened to differ. The stage now reads the sway tree once at setup and seeds the anchor titles from it.
