@@ -1,0 +1,279 @@
+# The review fixture of the Providers page.
+#
+# Every state the page has to show, with the metrics the collector publishes:
+# a route ahead of the pace, a route on it, a route behind it, a spent route,
+# a route whose limits are unknown, a route the provider publishes as a
+# promotion, a route reserved for 3D work, a route in the free quality band,
+# and the three states of an inferred capacity: no limit seen, a limit in
+# its window, and a limit that is spent.
+#
+# The counts are the counts of a live day: about six bulk winners, ten free
+# winners, two frontier routes, three routes in the 3D tier and thirteen
+# providers, so the page is sized for the rows it really has.
+#
+# The samples carry no timestamp: the store stamps them on import, so the
+# freshness window of the dashboard sees one collection.
+
+ghostship_ai_collection_duration_seconds 1
+ghostship_ai_collection_timestamp_seconds 1790000000
+
+# The routing is off: the owner has not approved it.
+ghostship_ai_routing_enabled 0
+
+# --- Bulk ------------------------------------------------------------------
+# The next coding job goes to the first row. The order is the collector's.
+ghostship_ai_model_winner_position{tier="bulk",provider="opencode-go",model="minimax_minimax-m3.1-flash_free"} 1
+ghostship_ai_model_winner_position{tier="bulk",provider="claude",model="claude-haiku-5-5"} 2
+ghostship_ai_model_winner_position{tier="bulk",provider="antigravity",model="gemini-3.8-flash"} 3
+ghostship_ai_model_winner_position{tier="bulk",provider="codex",model="gpt-5.2-codex"} 4
+ghostship_ai_model_winner_position{tier="bulk",provider="groq",model="llama-4.3-70b"} 5
+ghostship_ai_model_winner_position{tier="bulk",provider="nvidia",model="qwen3.8-max"} 6
+ghostship_ai_model_rank{tier="bulk",provider="opencode-go",model="minimax_minimax-m3.1-flash_free"} 1
+ghostship_ai_model_rank{tier="bulk",provider="claude",model="claude-haiku-5-5"} 2
+ghostship_ai_model_rank{tier="bulk",provider="antigravity",model="gemini-3.8-flash"} 3
+ghostship_ai_model_rank{tier="bulk",provider="codex",model="gpt-5.2-codex"} 4
+ghostship_ai_model_rank{tier="bulk",provider="groq",model="llama-4.3-70b"} 5
+ghostship_ai_model_rank{tier="bulk",provider="nvidia",model="qwen3.8-max"} 6
+ghostship_ai_model_rank{tier="bulk",provider="grok",model="grok-4.6"} 7
+
+# The promotion route: the provider publishes it as unlimited for a limited
+# time, so it has no window, no pace and no measured allowance.
+ghostship_ai_entitlement_info{provider="opencode-go",account="default",model="minimax_minimax-m3.1-flash_free",window="unlimited__limited-time_promotion_",quota="free-unlimited",source="published",entitlement="opencode-go:default:minimax_minimax-m3.1-flash_free:unlimited (limited-time promotion):free-unlimited",basis="promotion",ends_at=""} 1
+ghostship_ai_model_capacity_basis{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",basis="published",state="",window="unlimited__limited-time_promotion_",scope="model",unit="requests",weights=""} 1
+
+# The route ahead of the pace, the route on it, and the route behind it.
+ghostship_ai_model_capacity_remaining{provider="claude",model="claude-haiku-5-5",tier="bulk"} 0.92
+ghostship_ai_model_paced_availability{provider="claude",model="claude-haiku-5-5"} 0.58
+ghostship_ai_model_capacity_remaining{provider="antigravity",model="gemini-3.8-flash",tier="bulk"} 0.46
+ghostship_ai_model_paced_availability{provider="antigravity",model="gemini-3.8-flash"} 0
+ghostship_ai_model_capacity_remaining{provider="codex",model="gpt-5.2-codex",tier="bulk"} 0.71
+ghostship_ai_model_paced_availability{provider="codex",model="gpt-5.2-codex"} 0.12
+ghostship_ai_model_capacity_remaining{provider="groq",model="llama-4.3-70b",tier="bulk"} 0.64
+ghostship_ai_model_paced_availability{provider="groq",model="llama-4.3-70b"} 0.05
+ghostship_ai_model_capacity_remaining{provider="nvidia",model="qwen3.8-max",tier="bulk"} 0.55
+ghostship_ai_model_paced_availability{provider="nvidia",model="qwen3.8-max"} -0.02
+ghostship_ai_model_capacity_remaining{provider="grok",model="grok-4.6",tier="bulk"} 0
+ghostship_ai_model_paced_availability{provider="grok",model="grok-4.6"} 0
+ghostship_ai_model_available{provider="grok",model="grok-4.6",reason="an_allowance_of_the_account_is_spent"} 0
+
+# The route reserved for 3D work.
+ghostship_ai_model_reserved{provider="antigravity",model="gemini-3.8-flash",tier="3d",reserve="3d",withheld="ordered_last"} 1
+
+# The value of a bulk route: its value, its AA intelligence and its cost.
+ghostship_ai_model_value{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",source="measured"} 0.54
+ghostship_ai_model_strength{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",source="measured"} 42.7
+ghostship_ai_model_cost_per_task{provider="opencode-go",model="minimax_minimax-m3.1-flash_free"} 0
+ghostship_ai_model_value{provider="claude",model="claude-haiku-5-5",source="measured"} 0.56
+ghostship_ai_model_strength{provider="claude",model="claude-haiku-5-5",source="measured"} 41.2
+ghostship_ai_model_cost_per_task{provider="claude",model="claude-haiku-5-5"} 0.8
+ghostship_ai_model_value{provider="antigravity",model="gemini-3.8-flash",source="measured"} 0.43
+ghostship_ai_model_strength{provider="antigravity",model="gemini-3.8-flash",source="measured"} 39.8
+ghostship_ai_model_cost_per_task{provider="antigravity",model="gemini-3.8-flash"} 6.01
+ghostship_ai_model_value{provider="codex",model="gpt-5.2-codex",source="measured"} 0.51
+ghostship_ai_model_strength{provider="codex",model="gpt-5.2-codex",source="measured"} 40.1
+ghostship_ai_model_cost_per_task{provider="codex",model="gpt-5.2-codex"} 3.4
+ghostship_ai_model_value{provider="groq",model="llama-4.3-70b",source="measured"} 0.48
+ghostship_ai_model_strength{provider="groq",model="llama-4.3-70b",source="measured"} 35.4
+ghostship_ai_model_cost_per_task{provider="groq",model="llama-4.3-70b"} 0.9
+ghostship_ai_model_value{provider="nvidia",model="qwen3.8-max",source="measured"} 0.47
+ghostship_ai_model_strength{provider="nvidia",model="qwen3.8-max",source="measured"} 38.2
+ghostship_ai_model_cost_per_task{provider="nvidia",model="qwen3.8-max"} 2.2
+
+# The name a person would say, when the collector publishes one.
+ghostship_ai_model_info{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",name="MiniMax M3.1 Flash Free"} 1
+ghostship_ai_model_info{provider="claude",model="claude-haiku-5-5",name="Claude Haiku 5.5"} 1
+ghostship_ai_model_info{provider="antigravity",model="gemini-3.8-flash",name="Gemini 3.8 Flash"} 1
+ghostship_ai_model_info{provider="codex",model="gpt-5.2-codex",name="GPT-5.2 Codex"} 1
+ghostship_ai_model_info{provider="groq",model="llama-4.3-70b",name="Llama 4.3 70B"} 1
+ghostship_ai_model_info{provider="nvidia",model="qwen3.8-max",name="Qwen 3.8 Max"} 1
+ghostship_ai_model_info{provider="grok",model="grok-4.6",name="Grok 4.6"} 1
+
+# --- Free ------------------------------------------------------------------
+# The free pool answers with one response. The band is the quality band of
+# the route; it arrives with the free winners.
+ghostship_ai_model_winner_position{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash",band="true"} 1
+ghostship_ai_model_winner_position{tier="free",provider="nvidia",model="glm-5.3-flash",band="true"} 2
+ghostship_ai_model_winner_position{tier="free",provider="groq",model="qwen3.8-27b",band="false"} 3
+ghostship_ai_model_winner_position{tier="free",provider="kilo",model="nemotron-3.5-super-vl",band="false"} 4
+ghostship_ai_model_winner_position{tier="free",provider="together",model="llama-4.3-8b",band="false"} 5
+ghostship_ai_model_winner_position{tier="free",provider="fireworks",model="mistral-small-4",band="false"} 6
+ghostship_ai_model_winner_position{tier="free",provider="google",model="gemma-3-27b",band="false"} 7
+ghostship_ai_model_winner_position{tier="free",provider="deepseek",model="deepseek-v4.1-flash",band="false"} 8
+ghostship_ai_model_winner_position{tier="free",provider="azure",model="phi-4-mini",band="false"} 9
+ghostship_ai_model_winner_position{tier="free",provider="cohere",model="command-r-plus",band="false"} 10
+ghostship_ai_model_rank{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash"} 1
+ghostship_ai_model_rank{tier="free",provider="nvidia",model="glm-5.3-flash"} 2
+ghostship_ai_model_rank{tier="free",provider="groq",model="qwen3.8-27b"} 3
+ghostship_ai_model_rank{tier="free",provider="kilo",model="nemotron-3.5-super-vl"} 4
+ghostship_ai_model_rank{tier="free",provider="together",model="llama-4.3-8b"} 5
+ghostship_ai_model_rank{tier="free",provider="fireworks",model="mistral-small-4"} 6
+ghostship_ai_model_rank{tier="free",provider="google",model="gemma-3-27b"} 7
+ghostship_ai_model_rank{tier="free",provider="deepseek",model="deepseek-v4.1-flash"} 8
+ghostship_ai_model_rank{tier="free",provider="azure",model="phi-4-mini"} 9
+ghostship_ai_model_rank{tier="free",provider="cohere",model="command-r-plus"} 10
+ghostship_ai_model_rank{tier="free",provider="openrouter",model="gpt-oss-120b"} 11
+
+# The promotion route of the free pool.
+ghostship_ai_entitlement_info{provider="opencode-go",account="default",model="minimax_minimax-m3.1-flash",window="unlimited__limited-time_promotion_",quota="free-unlimited",source="published",entitlement="opencode-go:default:minimax_minimax-m3.1-flash:unlimited (limited-time promotion):free-unlimited",basis="promotion",ends_at=""} 1
+ghostship_ai_model_capacity_basis{provider="opencode-go",model="minimax_minimax-m3.1-flash",basis="published",state="",window="unlimited__limited-time_promotion_",scope="model",unit="requests",weights=""} 1
+
+# The routes with a measured allowance.
+ghostship_ai_model_capacity_basis{provider="nvidia",model="glm-5.3-flash",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="nvidia",model="glm-5.3-flash",tier="free"} 0.8
+ghostship_ai_model_paced_availability{provider="nvidia",model="glm-5.3-flash"} 0.12
+ghostship_ai_model_capacity_basis{provider="groq",model="qwen3.8-27b",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="groq",model="qwen3.8-27b",tier="free"} 0.75
+ghostship_ai_model_paced_availability{provider="groq",model="qwen3.8-27b"} 0.05
+ghostship_ai_model_capacity_basis{provider="deepseek",model="deepseek-v4.1-flash",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="deepseek",model="deepseek-v4.1-flash",tier="free"} 0.88
+ghostship_ai_model_paced_availability{provider="deepseek",model="deepseek-v4.1-flash"} 0.2
+ghostship_ai_model_capacity_basis{provider="azure",model="phi-4-mini",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="azure",model="phi-4-mini",tier="free"} 0.71
+ghostship_ai_model_paced_availability{provider="azure",model="phi-4-mini"} 0.03
+ghostship_ai_model_capacity_basis{provider="cohere",model="command-r-plus",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="cohere",model="command-r-plus",tier="free"} 0.66
+ghostship_ai_model_paced_availability{provider="cohere",model="command-r-plus"} 0.01
+ghostship_ai_model_capacity_basis{provider="openrouter",model="gpt-oss-120b",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="openrouter",model="gpt-oss-120b",tier="free"} 0.59
+ghostship_ai_model_paced_availability{provider="openrouter",model="gpt-oss-120b"} -0.01
+
+# The route whose limits are unknown: the provider publishes no window.
+ghostship_ai_model_quota_unknown{provider="kilo",model="nemotron-3.5-super-vl",reason="no_window"} 1
+ghostship_ai_model_capacity_basis{provider="kilo",model="nemotron-3.5-super-vl",basis="unknown",state="",window="",scope="model",unit="requests",weights=""} 1
+
+# The inferred capacity: no limit seen, a limit in its window, and a limit
+# that is spent.
+ghostship_ai_model_capacity_basis{provider="together",model="llama-4.3-8b",basis="inferred",state="no_failure",window="",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_basis{provider="fireworks",model="mistral-small-4",basis="inferred",state="in_window",window="5h",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="fireworks",model="mistral-small-4",tier="free"} 0.62
+ghostship_ai_model_paced_availability{provider="fireworks",model="mistral-small-4"} 0.04
+ghostship_ai_model_capacity_basis{provider="google",model="gemma-3-27b",basis="inferred",state="exhausted",window="5h",scope="model",unit="requests",weights=""} 1
+ghostship_ai_model_capacity_remaining{provider="google",model="gemma-3-27b",tier="free"} 0
+ghostship_ai_model_paced_availability{provider="google",model="gemma-3-27b"} 0
+ghostship_ai_model_available{provider="google",model="gemma-3-27b",reason="an_allowance_of_the_account_is_spent"} 0
+ghostship_ai_entitlement_reset_timestamp_seconds{provider="google",account="default",model="gemma-3-27b",window="5h",quota="5h",source="t3",entitlement="google:default:gemma-3-27b:5h:5h",basis="measured",ends_at=""} 1790007200
+
+# The limit basis of every free route.
+ghostship_ai_provider_limit{provider="opencode-go",model="minimax_minimax-m3.1-flash",limit="rpm",scope="account",basis="published"} -1
+ghostship_ai_provider_limit{provider="nvidia",model="glm-5.3-flash",limit="rpm",scope="account",basis="configured"} 40
+ghostship_ai_provider_limit{provider="groq",model="qwen3.8-27b",limit="rpd",scope="account",basis="configured"} 1000
+ghostship_ai_provider_limit{provider="kilo",model="nemotron-3.5-super-vl",limit="rpm",scope="account",basis="unknown"} -1
+ghostship_ai_provider_limit{provider="together",model="llama-4.3-8b",limit="rpm",scope="account",basis="unknown"} -1
+ghostship_ai_provider_limit{provider="fireworks",model="mistral-small-4",limit="rpm",scope="account",basis="configured"} 60
+ghostship_ai_provider_limit{provider="google",model="gemma-3-27b",limit="rpm",scope="account",basis="configured"} 30
+ghostship_ai_provider_limit{provider="deepseek",model="deepseek-v4.1-flash",limit="rpm",scope="account",basis="configured"} 120
+ghostship_ai_provider_limit{provider="azure",model="phi-4-mini",limit="rpm",scope="account",basis="configured"} 30
+ghostship_ai_provider_limit{provider="cohere",model="command-r-plus",limit="rpm",scope="account",basis="configured"} 20
+ghostship_ai_provider_limit{provider="openrouter",model="gpt-oss-120b",limit="rpm",scope="account",basis="configured"} 50
+
+ghostship_ai_model_strength{provider="opencode-go",model="minimax_minimax-m3.1-flash",source="measured"} 42.7
+ghostship_ai_model_strength{provider="nvidia",model="glm-5.3-flash",source="measured"} 41.8
+ghostship_ai_model_strength{provider="groq",model="qwen3.8-27b",source="measured"} 33.7
+ghostship_ai_model_strength{provider="kilo",model="nemotron-3.5-super-vl",source="measured"} 26.5
+ghostship_ai_model_strength{provider="together",model="llama-4.3-8b",source="measured"} 25.1
+ghostship_ai_model_strength{provider="fireworks",model="mistral-small-4",source="measured"} 29.4
+ghostship_ai_model_strength{provider="google",model="gemma-3-27b",source="measured"} 27.8
+ghostship_ai_model_strength{provider="deepseek",model="deepseek-v4.1-flash",source="measured"} 38.9
+ghostship_ai_model_strength{provider="azure",model="phi-4-mini",source="measured"} 28.2
+ghostship_ai_model_strength{provider="cohere",model="command-r-plus",source="measured"} 31.6
+ghostship_ai_model_strength{provider="openrouter",model="gpt-oss-120b",source="measured"} 24.9
+ghostship_ai_model_info{provider="opencode-go",model="minimax_minimax-m3.1-flash",name="MiniMax M3.1 Flash"} 1
+ghostship_ai_model_info{provider="nvidia",model="glm-5.3-flash",name="GLM-5.3 Flash"} 1
+ghostship_ai_model_info{provider="groq",model="qwen3.8-27b",name="Qwen3.8 27B"} 1
+ghostship_ai_model_info{provider="kilo",model="nemotron-3.5-super-vl",name="Nemotron 3.5 Super VL"} 1
+ghostship_ai_model_info{provider="together",model="llama-4.3-8b",name="Llama 4.3 8B"} 1
+ghostship_ai_model_info{provider="fireworks",model="mistral-small-4",name="Mistral Small 4"} 1
+ghostship_ai_model_info{provider="google",model="gemma-3-27b",name="Gemma 3 27B"} 1
+ghostship_ai_model_info{provider="deepseek",model="deepseek-v4.1-flash",name="DeepSeek V4.1 Flash"} 1
+ghostship_ai_model_info{provider="azure",model="phi-4-mini",name="Phi 4 Mini"} 1
+ghostship_ai_model_info{provider="cohere",model="command-r-plus",name="Command R Plus"} 1
+ghostship_ai_model_info{provider="openrouter",model="gpt-oss-120b",name="GPT OSS 120B"} 1
+
+# --- Frontier --------------------------------------------------------------
+# The chief and the backup of the owner.
+ghostship_ai_model_winner_position{tier="frontier",provider="claude",model="claude-opus-5-5"} 1
+ghostship_ai_model_winner_position{tier="frontier",provider="codex",model="gpt-6.1-sol"} 2
+ghostship_ai_model_rank{tier="frontier",provider="claude",model="claude-opus-5-5"} 1
+ghostship_ai_model_rank{tier="frontier",provider="codex",model="gpt-6.1-sol"} 2
+ghostship_ai_model_capacity_remaining{provider="claude",model="claude-opus-5-5",tier="frontier"} 0.92
+ghostship_ai_model_paced_availability{provider="claude",model="claude-opus-5-5"} 0.58
+ghostship_ai_model_capacity_remaining{provider="codex",model="gpt-6.1-sol",tier="frontier"} 0.09
+ghostship_ai_model_paced_availability{provider="codex",model="gpt-6.1-sol"} -0.6
+ghostship_ai_model_info{provider="claude",model="claude-opus-5-5",name="Claude Opus 5.5"} 1
+ghostship_ai_model_info{provider="codex",model="gpt-6.1-sol",name="GPT-6.1-Sol"} 1
+
+# --- 3D --------------------------------------------------------------------
+# The tier holds three models that carry AA-3D evidence.
+ghostship_ai_model_winner_position{tier="3d",provider="antigravity",model="gemini-3.8-flash"} 1
+ghostship_ai_model_winner_position{tier="3d",provider="moonshot",model="kimi-k3"} 2
+ghostship_ai_model_winner_position{tier="3d",provider="nvidia",model="glm-5.3-flash"} 3
+ghostship_ai_model_rank{tier="3d",provider="antigravity",model="gemini-3.8-flash"} 1
+ghostship_ai_model_rank{tier="3d",provider="moonshot",model="kimi-k3"} 2
+ghostship_ai_model_rank{tier="3d",provider="nvidia",model="glm-5.3-flash"} 3
+ghostship_ai_model_capacity_remaining{provider="antigravity",model="gemini-3.8-flash",tier="3d"} 0.46
+ghostship_ai_model_paced_availability{provider="antigravity",model="gemini-3.8-flash"} 0
+ghostship_ai_model_capacity_remaining{provider="moonshot",model="kimi-k3",tier="3d"} 0.81
+ghostship_ai_model_paced_availability{provider="moonshot",model="kimi-k3"} 0.11
+ghostship_ai_model_capacity_remaining{provider="nvidia",model="glm-5.3-flash",tier="3d"} 0.67
+ghostship_ai_model_paced_availability{provider="nvidia",model="glm-5.3-flash"} 0.03
+ghostship_ai_model_value_3d{provider="antigravity",model="gemini-3.8-flash",cost_source="measured",proxy="measured"} 0.61
+ghostship_ai_model_value_3d{provider="moonshot",model="kimi-k3",cost_source="measured",proxy="measured"} 0.58
+ghostship_ai_model_value_3d{provider="nvidia",model="glm-5.3-flash",cost_source="measured",proxy="measured"} 0.49
+ghostship_ai_model_info{provider="moonshot",model="kimi-k3",name="Kimi K3"} 1
+ghostship_ai_model_info{provider="nvidia",model="glm-5.3-flash",name="GLM-5.3 Flash"} 1
+
+# --- Providers -------------------------------------------------------------
+# The lowest window decides. The pace of that window is the pace of the
+# provider.
+ghostship_ai_provider_capacity_remaining_ratio{provider="claude",binding="weekly"} 0.92
+ghostship_ai_provider_paced_availability{provider="claude",binding="weekly"} 0.58
+ghostship_ai_provider_capacity_remaining_ratio{provider="antigravity",binding="5_hour"} 0.46
+ghostship_ai_provider_paced_availability{provider="antigravity",binding="5_hour"} 0
+ghostship_ai_provider_capacity_remaining_ratio{provider="codex",binding="weekly"} 0.09
+ghostship_ai_provider_paced_availability{provider="codex",binding="weekly"} -0.6
+ghostship_ai_provider_capacity_remaining_ratio{provider="nvidia",binding="weekly"} 0.55
+ghostship_ai_provider_paced_availability{provider="nvidia",binding="weekly"} -0.02
+ghostship_ai_provider_capacity_remaining_ratio{provider="groq",binding="weekly"} 0.64
+ghostship_ai_provider_paced_availability{provider="groq",binding="weekly"} 0.05
+ghostship_ai_provider_capacity_remaining_ratio{provider="deepseek",binding="weekly"} 0.88
+ghostship_ai_provider_paced_availability{provider="deepseek",binding="weekly"} 0.2
+ghostship_ai_provider_capacity_remaining_ratio{provider="fireworks",binding="5_hour"} 0.62
+ghostship_ai_provider_paced_availability{provider="fireworks",binding="5_hour"} 0.04
+ghostship_ai_provider_capacity_remaining_ratio{provider="azure",binding="weekly"} 0.71
+ghostship_ai_provider_paced_availability{provider="azure",binding="weekly"} 0.03
+ghostship_ai_provider_capacity_remaining_ratio{provider="cohere",binding="monthly"} 0.66
+ghostship_ai_provider_paced_availability{provider="cohere",binding="monthly"} 0.01
+ghostship_ai_provider_capacity_remaining_ratio{provider="openrouter",binding="daily"} 0.59
+ghostship_ai_provider_paced_availability{provider="openrouter",binding="daily"} -0.01
+ghostship_ai_provider_capacity_remaining_ratio{provider="ollama",binding="session"} 0
+ghostship_ai_provider_capacity_remaining_ratio{provider="grok",binding="prepaid_balance"} 0
+ghostship_ai_provider_capacity_basis{provider="together",model="*",basis="inferred",state="no_failure",window="",scope="account",unit="requests",weights=""} 1
+
+# The window of every provider, and when it resets.
+ghostship_ai_entitlement_info{provider="claude",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="claude:default:_:weekly:weekly",basis="measured",ends_at=""} 1
+ghostship_ai_entitlement_used_ratio{provider="claude",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="claude:default:_:weekly:weekly",basis="measured",ends_at=""} 0.08
+ghostship_ai_entitlement_reset_timestamp_seconds{provider="claude",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="claude:default:_:weekly:weekly",basis="measured",ends_at=""} 1790600000
+ghostship_ai_entitlement_info{provider="antigravity",account="default",model="_",window="5_hour",quota="5_hour",source="t3",entitlement="antigravity:default:_:5_hour:5_hour",basis="measured",ends_at=""} 1
+ghostship_ai_entitlement_used_ratio{provider="antigravity",account="default",model="_",window="5_hour",quota="5_hour",source="t3",entitlement="antigravity:default:_:5_hour:5_hour",basis="measured",ends_at=""} 0.54
+ghostship_ai_entitlement_reset_timestamp_seconds{provider="antigravity",account="default",model="_",window="5_hour",quota="5_hour",source="t3",entitlement="antigravity:default:_:5_hour:5_hour",basis="measured",ends_at=""} 1790007200
+ghostship_ai_entitlement_info{provider="codex",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="codex:default:_:weekly:weekly",basis="measured",ends_at=""} 1
+ghostship_ai_entitlement_used_ratio{provider="codex",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="codex:default:_:weekly:weekly",basis="measured",ends_at=""} 0.91
+ghostship_ai_entitlement_reset_timestamp_seconds{provider="codex",account="default",model="_",window="weekly",quota="weekly",source="t3",entitlement="codex:default:_:weekly:weekly",basis="measured",ends_at=""} 1790600000
+ghostship_ai_entitlement_info{provider="ollama",account="default",model="_",window="session",quota="session",source="t3",entitlement="ollama:default:_:session:session",basis="measured",ends_at=""} 1
+ghostship_ai_entitlement_used_ratio{provider="ollama",account="default",model="_",window="session",quota="session",source="t3",entitlement="ollama:default:_:session:session",basis="measured",ends_at=""} 1
+ghostship_ai_entitlement_reset_timestamp_seconds{provider="ollama",account="default",model="_",window="session",quota="session",source="t3",entitlement="ollama:default:_:session:session",basis="measured",ends_at=""} 1790003600
+
+# The providers the dashboard covers.
+ghostship_ai_provider_coverage{provider="claude",source="t3"} 1
+ghostship_ai_provider_coverage{provider="antigravity",source="t3"} 1
+ghostship_ai_provider_coverage{provider="codex",source="t3"} 1
+ghostship_ai_provider_coverage{provider="ollama",source="t3"} 1
+ghostship_ai_provider_coverage{provider="grok",source="t3"} 1
+ghostship_ai_provider_coverage{provider="cursor",source="t3"} 1
+ghostship_ai_provider_coverage{provider="opencode",source="t3"} 1
+ghostship_ai_provider_coverage{provider="nvidia",source="t3"} 1
+ghostship_ai_provider_coverage{provider="groq",source="t3"} 1
+ghostship_ai_provider_coverage{provider="deepseek",source="t3"} 1
+ghostship_ai_provider_coverage{provider="fireworks",source="t3"} 1
+ghostship_ai_provider_coverage{provider="azure",source="t3"} 1
+ghostship_ai_provider_coverage{provider="cohere",source="t3"} 1

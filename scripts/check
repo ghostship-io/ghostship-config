@@ -63,6 +63,7 @@ python3 -m unittest discover -s tests -p test_siem_alerts.py
 python3 -m unittest discover -s tests -p test_siem_grafana.py
 python3 -m unittest discover -s tests -p test_siem_podman_snapshot.py
 python3 -m unittest discover -s tests -p test_siem_watchdog.py
+python3 -m unittest discover -s tests -p test_siem_grafana_plugins.py
 python3 -m unittest discover -s tests -p test_newsletter_health.py
 python3 -m unittest discover -s tests -p test_ghostship_notify.py
 vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
@@ -87,6 +88,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_integration.py
 python3 -m unittest discover -s tests -p test_ai_usage_aa_normalize.py
 python3 -m unittest discover -s tests -p test_ai_usage_aa_pull.py
 python3 -m unittest discover -s tests -p test_ai_usage_gate.py
+python3 -m unittest discover -s tests -p test_ai_usage_providers_page.py
 python3 -m unittest discover -s tests -p test_ai_usage_free_pool.py
 python3 -m unittest discover -s tests -p test_ai_usage_pool_recent_jobs.py
 python3 -m unittest discover -s tests -p test_ai_usage_duplicate_series.py
