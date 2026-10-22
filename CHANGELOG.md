@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.71] - 2026-10-22
+
+- The kernel audit backlog holds 131072 records. A container restart burst overflowed the previous 32768 and the kernel dropped 70811 audit records, and a dropped record is a detection that never happened. The limit rises on both paths that reach the kernel: `security.audit.backlogLimit`, which NixOS writes into the generated audit rules and the kernel command line, and the `ghostship-audit-backlog` unit, which runs `auditctl -b` after those rules were loaded and therefore decides the value the kernel ends up with; the unit now carries that option instead of repeating the number. Nothing else moves: the failure mode stays printk, the rate limit stays unlimited, the rules and the log rotation are untouched, and no backlog wait time was configured, so none was added. A check evaluates the host configuration and holds every path to the new limit and the unchanged failure mode.
+
 ## [3.17.70] - 2026-10-22
 
 - The AI usage collector publishes the owner's routing switch. A consumer of the routing snapshot could not learn whether routing was on: the snapshot carried no switch at all, and a missing field is not an answer. The new NixOS option `ghostship.aiUsage.routing.enabled` is off by default and nothing else in the repository sets it, the unit passes it to the collector as `--routing-enabled true|false`, and the collector publishes it in the routing snapshot, in every projection of that snapshot, and in the new gauge `ghostship_ai_routing_enabled` (1 or 0, no labels). The collector never acts on the switch itself: it publishes the owner's decision and leaves the decision to the consumer.
