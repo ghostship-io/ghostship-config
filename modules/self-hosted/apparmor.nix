@@ -173,6 +173,9 @@ in
     {
       # Complain-mode learning bursts (every strict profile at container start)
       # overflow the kernel's 1024-record backlog; lost records reset every window.
+      # A container restart burst overflowed 32768 as well, so this unit carries
+      # the same limit as security.audit.backlogLimit: it runs after the audit
+      # rules were loaded and sets the value the kernel ends up with.
       ghostship-audit-backlog = {
         description = "Raise the kernel audit backlog for AppArmor learning";
         after = [ "auditd.service" ];
@@ -181,7 +184,7 @@ in
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
-          ExecStart = "${pkgs.audit}/bin/auditctl -b 32768";
+          ExecStart = "${pkgs.audit}/bin/auditctl -b 131072";
         };
       };
       ghostship-apparmor-review = {
