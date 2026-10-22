@@ -225,6 +225,17 @@ class ExhaustedWithHistory(unittest.TestCase):
             result.paced_availability, -(1.0 - elapsed / 18000.0)
         )
 
+    def test_the_spent_window_is_the_open_episode(self):
+        # An outcome that is not a limit does not start the episode, so the
+        # window that is spent is the one of the open episode.
+        events = list(self.events) + [
+            event("acme", "sonnet", at(0, 14), outcome="other"),
+        ]
+        result = route(events, self.now)
+        self.assertEqual(result.state, "exhausted")
+        self.assertAlmostEqual(result.start_at, at(0, 13, 5))
+        self.assertAlmostEqual(result.reset_at, at(0, 18, 5))
+
 
 class Tiling(unittest.TestCase):
     """Case 8: the window that ended while nobody used the route."""
