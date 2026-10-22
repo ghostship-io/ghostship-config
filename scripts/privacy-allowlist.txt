@@ -125,3 +125,4 @@ ghostship-io/ghostship-config  # this repository's published forge name
 ghostship-io/ghostship-config.git  # this repository's published forge path
 nix-community/nixos-apple-silicon  # upstream source
 linuxserver/webtop  # upstream image
+suffix:@anthropic.com              # agent co-author attribution address, no account behind it
