@@ -517,14 +517,24 @@ class UnknownModelTests(unittest.TestCase):
         self.assertFalse(found[0].available)
         samples = ranking.rank_samples(ranked, now=NOW)
         names = {name for name, _labels, _value in samples}
-        self.assertNotIn("ghostship_ai_model_rank", names)
+        # The model is not in a tier, so it holds no tier of its own. It
+        # keeps its rank and its availability, so a consumer can list it at
+        # the bottom with the reason it is not usable.
         self.assertNotIn("ghostship_ai_model_tier", names)
+        ranks = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_rank"
+        ]
+        self.assertEqual(len(ranks), 1)
+        self.assertEqual(ranks[0][1], 0.0)
         available = [
-            value
-            for name, _labels, value in samples
+            (labels, value)
+            for name, labels, value in samples
             if name == "ghostship_ai_model_available"
         ]
-        self.assertEqual(available, [0.0])
+        self.assertEqual([value for _labels, value in available], [0.0])
+        self.assertTrue(available[0][0]["reason"])
 
 
 class LineageFrontierTests(unittest.TestCase):
