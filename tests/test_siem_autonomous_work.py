@@ -859,7 +859,7 @@ class DashboardContractTests(unittest.TestCase):
         self.assertEqual(page['uid'], 'ghostship-host')
         self.assertFalse(page['editable'])
         titles = {panel['title']: panel for panel in page['panels']}
-        for title in ('CPU total  (all cores)', 'CPU per core  /  activity grid', 'Memory used',
+        for title in ('CPU total  (all cores)', 'CPU per core  /  5-minute busy average', 'Memory used',
                       'Memory total', 'Memory available', 'Host writers', 'CPUs reporting'):
             self.assertIn(title, titles)
         units = {title: titles[title]['fieldConfig']['defaults'].get('unit')
@@ -873,7 +873,7 @@ class DashboardContractTests(unittest.TestCase):
         # with one row per core in numeric order and restrained busy thresholds.
         self.assertIn('avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))',
                       titles['CPU total  (all cores)']['targets'][0]['expr'])
-        per_core = titles['CPU per core  /  activity grid']
+        per_core = titles['CPU per core  /  5-minute busy average']
         self.assertEqual(per_core['type'], 'state-timeline')
         self.assertIn('avg by (cpu)', per_core['targets'][0]['expr'])
         self.assertIn('sort_by_label_numeric(', per_core['targets'][0]['expr'])
@@ -1004,26 +1004,23 @@ class NativeStoreTests(unittest.TestCase):
                 return json.load(response)['data']['result']
 
         page = json.loads((SIEM/'dashboards/host.json').read_text())
-        ex = {}
-        for panel in page['panels']:
-            for target in panel.get('targets', []):
-                ex.setdefault(panel['title'], []).append(target['expr'])
-        total = query(ex['CPU total  (all cores)'][0])
+        by_id = {panel['id']: panel for panel in page['panels']}
+        # Select by panel id: a retitled panel must not break this load-bearing test.
+        total = query(by_id[1001]['targets'][0]['expr'])
         self.assertEqual(len(total), 1)
         self.assertAlmostEqual(float(total[0]['value'][1]), 50.0, places=3)
-        cores = query(ex['CPU per core'][0])
+        cores = query(by_id[8]['targets'][0]['expr'])
         self.assertEqual(len(cores), 2, 'One series per cpu, no duplicated core')
         self.assertEqual(sorted(float(c['value'][1]) for c in cores), [0.0, 100.0])
-        self.assertEqual(float(query(ex['Memory used'][0])[0]['value'][1]), 600.0)
-        self.assertEqual(float(query(ex['Memory total'][0])[0]['value'][1]), 1000.0)
-        self.assertEqual(float(query(ex['Memory available'][0])[0]['value'][1]), 400.0)
-        self.assertAlmostEqual(float(query(ex['Memory used %'][0])[0]['value'][1]), 60.0, places=3)
-        self.assertEqual(float(query(ex['Host writers'][0])[0]['value'][1]), 1.0)
-        self.assertEqual(float(query(ex['CPUs reporting'][0])[0]['value'][1]), 2.0)
-        memory = {target_metric['metric'].get('__name__', target_metric['metric'].get('refId'))
-                  for target_metric in query(ex['Memory  (total, used, available)'][0])}
+        self.assertEqual(float(query(by_id[1002]['targets'][0]['expr'])[0]['value'][1]), 600.0)
+        self.assertEqual(float(query(by_id[1003]['targets'][0]['expr'])[0]['value'][1]), 1000.0)
+        self.assertEqual(float(query(by_id[1004]['targets'][0]['expr'])[0]['value'][1]), 400.0)
+        self.assertAlmostEqual(float(query(by_id[1007]['targets'][0]['expr'])[0]['value'][1]), 60.0, places=3)
+        self.assertEqual(float(query(by_id[1008]['targets'][0]['expr'])[0]['value'][1]), 1.0)
+        self.assertEqual(float(query(by_id[1009]['targets'][0]['expr'])[0]['value'][1]), 2.0)
+        memory = {m['metric'].get('__name__') for m in query(by_id[2]['targets'][0]['expr'])}
         self.assertEqual(len(memory), 1, 'A single memory total series from one writer')
-        self.assertAlmostEqual(float(query(ex['Node sample age'][0])[0]['value'][1]), 60.0, delta=70)
+        self.assertAlmostEqual(float(query(by_id[1006]['targets'][0]['expr'])[0]['value'][1]), 60.0, delta=70)
 
     def test_ai_usage_exception_table_reports_only_unhealthy_sources(self):
         # The exception panel must never list a healthy provider: every target is
@@ -1076,9 +1073,11 @@ class NativeStoreTests(unittest.TestCase):
         titles = {panel['title']: panel for panel in page['panels']}
         winners = titles['Winners by tier']
         detail = titles['Winner detail  /  source, quality, expiry']
-        units = {o['matcher']['options']: o['properties'][0]['value']
-                 for o in winners['fieldConfig']['overrides'] + detail['fieldConfig']['overrides']
-                 if o['properties'][0]['id'] == 'unit'}
+        units = {}
+        for override in winners['fieldConfig']['overrides'] + detail['fieldConfig']['overrides']:
+            for prop in override['properties']:
+                if prop['id'] == 'unit':
+                    units[override['matcher']['options']] = prop['value']
         self.assertEqual(units['Capacity'], 'percentunit')
         self.assertEqual(units['Expires in'], 'dtdurations')
         # The core table carries only the decision fields; the evidence is a
@@ -1091,8 +1090,11 @@ class NativeStoreTests(unittest.TestCase):
         renamed = detail['transformations'][1]['options']['renameByName']
         self.assertIn('Source', renamed.values())
         # Core columns are narrow enough to read at phone width.
-        widths = {o['matcher']['options']: o['properties'][0]['value']
-                  for o in winners['fieldConfig']['overrides'] if o['properties'][0]['id'] == 'custom.width'}
+        widths = {}
+        for override in winners['fieldConfig']['overrides']:
+            for prop in override['properties']:
+                if prop['id'] == 'custom.width':
+                    widths[override['matcher']['options']] = prop['value']
         self.assertLessEqual(sum(widths.values()), 460)
         # Rows are grouped by tier, never interleaved by position.
         self.assertEqual(winners['options']['sortBy'][0]['displayName'], 'tier')
@@ -1108,6 +1110,45 @@ class NativeStoreTests(unittest.TestCase):
         self.assertLess(titles['Winners by tier']['gridPos']['y'], titles['Frontier tier']['gridPos']['y'])
         self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
                         titles['Quota windows']['gridPos']['y'])
+
+    def test_host_grid_reports_twenty_cores_in_numeric_order_with_a_hot_core(self):
+        now = int(time.time())
+        older, newer = (now - 120) * 1000, (now - 60) * 1000
+        lines = []
+        for cpu in range(20):
+            # core 7 is saturated; every other core is idle.
+            idle = 0 if cpu == 7 else 60
+            lines.append(f'node_cpu_seconds_total{{cpu="{cpu}",mode="idle"}} 0 {older}')
+            lines.append(f'node_cpu_seconds_total{{cpu="{cpu}",mode="idle"}} {idle} {newer}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+                                                     data=('\n'.join(lines)).encode(),
+                                                     headers={'Content-Type': 'text/plain'}), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/host.json').read_text())
+        grid = next(panel for panel in page['panels'] if panel['id'] == 8)
+        url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': grid['targets'][0]['expr']})
+        with urllib.request.urlopen(url, timeout=5) as response:
+            result = json.load(response)['data']['result']
+        self.assertEqual(len(result), 20, 'Every core must be present')
+        order = [int(item['metric']['cpu']) for item in result]
+        self.assertEqual(order, sorted(order), 'sort_by_label_numeric keeps 2 before 10')
+        hot = {int(item['metric']['cpu']): float(item['value'][1]) for item in result}
+        self.assertAlmostEqual(hot[7], 100.0, places=3)
+        # A core with no samples at all is absent (a true gap), which the grid shows
+        # as no row; a skipped scrape inside a 5m rate is interpolated and must not
+        # be asserted as a gap.
+        lines.append(f'node_cpu_seconds_total{{cpu="99",mode="idle"}} 0 {older}')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+                                                     data=(lines[-1] + '\n').encode(),
+                                                     headers={'Content-Type': 'text/plain'}), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        with urllib.request.urlopen(url, timeout=5) as response:
+            single = json.load(response)['data']['result']
+        self.assertNotIn(99, [int(item['metric']['cpu']) for item in single],
+                         'One sample cannot form a rate, so the core has no row')
 
     def test_actual_dashboard_queries_against_native_stores_and_repoll_dedup(self):
         fixture = CollectorTests()
