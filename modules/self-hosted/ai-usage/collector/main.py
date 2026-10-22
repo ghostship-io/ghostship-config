@@ -813,6 +813,7 @@ def ranking_inputs(
                 if isinstance(measured.get("observedAtEpoch"), (int, float))
                 else None
             ),
+            basis=str(measured.get("basis") or ""),
             gating=gating is not False,
         )
         if model == "*":
@@ -1167,6 +1168,7 @@ def collect(
     pool_ledger: str | None = POOL_LEDGER_FILE,
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
+    window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
@@ -1180,7 +1182,9 @@ def collect(
     results.append(providers_module.read_opencode_go(f"{t3_home}", moment))
     results.append(providers_module.read_antigravity(f"{t3_home}", moment))
     results.append(providers_module.read_openrouter(secrets_env, moment))
-    results.append(providers_module.read_ollama(secrets_env, moment))
+    results.append(
+        providers_module.read_ollama(secrets_env, moment, state_path=window_state_path)
+    )
     results.extend(pool_module.collect(pool_server, pool_token, pool_ledger, moment, home=t3_home))
 
     extra: list[Sample] = []
@@ -1514,6 +1518,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Where the model ranking keeps its evaluation state.",
     )
     parser.add_argument(
+        "--window-state",
+        default=providers_module.OLLAMA_WINDOW_STATE_FILE,
+        help=(
+            "Where the collector remembers the reset instants of the windows "
+            "whose length it has to learn from them."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -1560,6 +1572,7 @@ def main(argv: list[str] | None = None) -> int:
     results, extra, context = collect(
         now,
         state_path=args.state,
+        window_state_path=args.window_state,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
     )
