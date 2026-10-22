@@ -7,9 +7,21 @@
   if is_string(value) {
     text = string!(value)
     text = replace(text, r'(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', "[REDACTED-PRIVATE-KEY]")
-    text = replace(text, r'(?i)(?P<k>(?:x-plex-token|token|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth|password|passwd|pwd|secret|session|signature|sig)=)[^&\s"]+', "$k[REDACTED]")
+    # Secret names in every shape a log carries them: key=value, key="value",
+    # key: value, "key":"value" and "key": "value". The name stands alone
+    # between word boundaries and the key itself is kept, so a reader still
+    # sees which field was secret, while names that only start with a secret
+    # word (session_count, password_policy, signal) keep their value.
+    text = replace(text, r'(?i)(?P<k>["]?\b(?:x-plex-token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passwd|token|secret|session|signature|sig|cookie|pwd|auth)\b["]?\s*[:=]\s*)(?P<q>")?(?P<v>[^"&\s}]+)', "$k$q[REDACTED]")
+    # The same names behind a prefix (db_password, user_token) are still
+    # secrets, and the separator follows the name directly, so session_count
+    # is not one. sig is left out on purpose: it is too short to tell a
+    # secret from a word such as msg_sig.
+    text = replace(text, r'(?i)(?P<k>(?:x-plex-token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passwd|token|secret|session|signature|cookie|pwd|auth)[:=])[^"&\s}]+', "$k[REDACTED]")
     text = replace(text, r'(?i)(?P<k>\b(?:bearer|basic)\s+)[A-Za-z0-9._~+/=-]+', "$k[REDACTED]")
-    text = replace(text, r'(?i)(?P<k>\b(?:proxy-)?authorization\s*[:=]\s*)(?P<s>(?:bearer|basic|token)\s+)?[^\s&"]+', "$k$s[REDACTED]")
+    # The authorization header, with or without a scheme, and the JSON shape
+    # ("authorization":"...") that a JSON log line carries.
+    text = replace(text, r'(?i)(?P<k>\b(?:proxy-)?authorization["]?\s*[:=]\s*)(?P<q>")?(?P<s>(?:bearer|basic|token)\s+)?(?P<v>[^\s&"}]+)', "$k$q$s[REDACTED]")
     text = replace(text, r'(?i)(?P<k>\b(?:cookie|set-cookie|x-api-key|x-plex-token|cf-access-token|cf-access-jwt-assertion)\s*:\s*)[^\s";]+(?:;\s*[^\s";]+)*', "$k[REDACTED]")
     text = replace(text, r'\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b', "[REDACTED-JWT]")
     text = replace(text, r'(?P<k>://[^/\s:@]+:)[^@\s/]+@', "$k[REDACTED]@")
