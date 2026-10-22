@@ -49,6 +49,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,7 +59,14 @@ import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
 import quota as quota_module
+import usage_inference
 import value_policy
+
+try:  # pragma: no cover - the collector always ships metrics.py
+    from metrics import ExactLabel
+except ImportError:  # pragma: no cover - standalone use
+    class ExactLabel(str):  # pragma: no cover - standalone use
+        """A label value that is published exactly as it is."""
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -3369,6 +3377,245 @@ def provider_capacity_samples(
                 paced,
             )
         )
+    return samples
+
+
+# The place a window row takes in the card of its account. The session
+# window comes first, because it is the one that runs out first, and the
+# monthly window comes after the weekly one. An inferred window comes
+# after every window a provider reported, and a window of an unknown kind
+# comes last.
+ACCOUNT_WINDOW_ORDER = {
+    "session": 1,
+    "daily": 2,
+    "weekly": 3,
+    "monthly": 4,
+    "quota": 5,
+    "inferred": 8,
+}
+ACCOUNT_WINDOW_ORDER_OTHER = 9
+
+# How many decimals the even-spend line of a window is published with. The
+# line is a position in a bar, and a tenth of a percent is finer than a
+# bar shows.
+ACCOUNT_WINDOW_LINE_DECIMALS = 3
+
+# The marks of an account that has no period to show. The inference files
+# a route that was never refused under one of them, and the account is
+# learning rather than holding a window.
+NOT_A_WINDOW_QUOTA_IDS = frozenset({usage_inference.QUOTA_ID_NO_FAILURE})
+
+
+def _epoch_seconds(value: Any) -> float | None:
+    """A moment in seconds, from the epoch or from the published form."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return _finite(value)
+    if isinstance(value, str):
+        try:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.timestamp()
+    return None
+
+
+def _title_case(text: Any) -> str:
+    """A name in title case: 'seven_day' reads 'Seven Day'."""
+    return " ".join(
+        word.capitalize()
+        for word in re.split(r"[^0-9A-Za-z]+", str(text or ""))
+        if word
+    )
+
+
+def _is_window(record: Mapping[str, Any]) -> bool:
+    """True when a record is a window of an account.
+
+    The mark of an account whose limit was never seen is not a window: the
+    account has no period to show, and the card says it is learning.
+    """
+    return str(record.get("quota_id") or "") not in NOT_A_WINDOW_QUOTA_IDS
+
+
+def _window_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The identity of a window: its kind, its quota and its scope.
+
+    The quota id is the canonical one, so the two names of one window
+    (the OpenCode Go status and the Go usage endpoint name the same three
+    windows) are one window.
+    """
+    kind = str(record.get("kind") or "")
+    quota_id = str(record.get("quota_id") or "")
+    canonical = quota_module.QUOTA_ALIASES.get(quota_id, quota_id)
+    applies = tuple(str(token) for token in (record.get("applies_to") or ()))
+    return (kind, canonical, applies)
+
+
+def _window_rank(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The order the readings of one window are read in.
+
+    The reading that carries the length of the window wins, then the one
+    that carries its reset, then the freshest one, then the one with the
+    least left, and finally the one that resets first. A reading that
+    knows nothing is never the one that wins.
+    """
+    duration = _finite(record.get("duration_seconds"))
+    reset = _epoch_seconds(record.get("reset_at"))
+    check = _epoch_seconds(record.get("check_at"))
+    remaining = _finite(record.get("remaining_ratio"))
+    return (
+        0 if duration is not None and duration > 0 else 1,
+        0 if reset is not None else 1,
+        -check if check is not None else float("inf"),
+        remaining if remaining is not None else float("inf"),
+        reset if reset is not None else float("inf"),
+    )
+
+
+def _kept_windows(records: Iterable[Any]) -> list[dict[str, Any]]:
+    """One record per window: the reading the row of the card is drawn from."""
+    kept: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for record in records or ():
+        if not isinstance(record, Mapping):
+            continue
+        if not _is_window(record):
+            continue
+        key = _window_key(record)
+        current = kept.get(key)
+        if current is None or _window_rank(record) < _window_rank(current):
+            kept[key] = dict(record)
+    return list(kept.values())
+
+
+def _window_suffix(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
+    """The part of the label that names the window itself.
+
+    An inferred window names the window it was inferred over, and a window
+    whose quota id extends another window of the same kind says which one
+    it is.
+    """
+    prefix = f"{kind}:"
+    if quota_id.startswith(prefix):
+        return _title_case(quota_id[len(prefix):])
+    for other in sorted(siblings):
+        if other == quota_id:
+            continue
+        for separator in ("_", "-"):
+            if quota_id.startswith(other + separator):
+                return _title_case(quota_id[len(other) + 1:])
+    return ""
+
+
+def _window_label(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
+    """The label of a row of a card.
+
+    The label is the kind of the window, and a window that names a
+    narrower period than its kind says which one after a dot: the weekly
+    window of a model family reads 'Weekly · Fable'.
+    """
+    base = _title_case(kind)
+    suffix = _window_suffix(kind, quota_id, siblings)
+    return f"{base} · {suffix}" if suffix else base
+
+
+def account_window_samples(
+    snapshot: Mapping[str, Any],
+) -> list[tuple[str, dict[str, str], float]]:
+    """The capacity windows of every account, one series per window.
+
+    A row of a card is one window of one account: the label of the window,
+    the share that is left, the even-spend line, the reset, and the place
+    the row takes in the card. The values are read from the routing
+    snapshot, and the page never recomputes a window.
+
+    Two readings of one window are one series. The reading that carries
+    the length of the window wins, then the one that carries its reset,
+    then the freshest one, then the one with the least left, and finally
+    the one that resets first.
+
+    An account that publishes no window of its own is learning, and the
+    collector says so instead of drawing a row.
+    """
+    quota = snapshot.get("quota") or {}
+    accounts = {
+        str(name): records for name, records in (quota.get("accounts") or {}).items()
+    }
+    capacity = {
+        str(name): value for name, value in (quota.get("provider_capacity") or {}).items()
+    }
+    samples: list[tuple[str, dict[str, str], float]] = []
+    for account in sorted(set(accounts) | set(capacity)):
+        windows = _kept_windows(accounts.get(account) or [])
+        if not windows:
+            samples.append(
+                (
+                    "ghostship_ai_account_window_learning",
+                    {"account": account},
+                    1.0,
+                )
+            )
+            continue
+        siblings: dict[str, list[str]] = {}
+        for window in windows:
+            kind = str(window.get("kind") or "")
+            siblings.setdefault(kind, []).append(str(window.get("quota_id") or ""))
+        for window in sorted(
+            windows,
+            key=lambda item: (
+                ACCOUNT_WINDOW_ORDER.get(str(item.get("kind") or ""), ACCOUNT_WINDOW_ORDER_OTHER),
+                str(item.get("kind") or ""),
+                str(item.get("quota_id") or ""),
+            ),
+        ):
+            kind = str(window.get("kind") or "")
+            quota_id = str(window.get("quota_id") or "")
+            labels = {
+                "account": account,
+                "kind": kind,
+                "quota_id": quota_id,
+                # The label is a name for a reader, and it is published the
+                # way it reads.
+                "label": ExactLabel(_window_label(kind, quota_id, siblings.get(kind, []))),
+                "evidence": str(window.get("evidence") or "unknown"),
+            }
+            remaining = _finite(window.get("remaining_ratio"))
+            if remaining is not None:
+                samples.append(
+                    ("ghostship_ai_account_window_remaining_ratio", dict(labels), remaining)
+                )
+            seconds = _finite(window.get("seconds_to_reset"))
+            duration = _finite(window.get("duration_seconds"))
+            if seconds is not None and duration is not None and duration > 0:
+                line = max(0.0, min(1.0, float(seconds) / float(duration)))
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_expected_remaining_ratio",
+                        dict(labels),
+                        round(line, ACCOUNT_WINDOW_LINE_DECIMALS),
+                    )
+                )
+            reset = _epoch_seconds(window.get("reset_at"))
+            if reset is not None:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_reset_timestamp_seconds",
+                        dict(labels),
+                        reset,
+                    )
+                )
+            samples.append(
+                (
+                    "ghostship_ai_account_window_order",
+                    dict(labels),
+                    float(
+                        ACCOUNT_WINDOW_ORDER.get(kind, ACCOUNT_WINDOW_ORDER_OTHER)
+                    ),
+                )
+            )
     return samples
 
 
