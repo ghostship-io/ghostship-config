@@ -338,20 +338,31 @@ def _access_record(
     free_models: set[tuple[str, str]],
     promo_models: set[tuple[str, str]],
     prices: Mapping[str, Any] | None,
+    native_mapped: bool = False,
 ) -> dict[str, Any]:
     """How a model is reached, and what it costs.
 
-    The dedicated free routes are the ones this fleet runs itself, through the
-    free inference pool. A zero price elsewhere is a paid provider route that
-    costs nothing right now, and the two are not the same thing.
+    The promotional zero price is checked first: a paid provider's route
+    that costs nothing right now is a paid route, and it competes in bulk.
+    The dedicated free routes are the ones that cost nothing by
+    construction: the free inference pool's own integrations, and the routes
+    a provider lists at no cost. The two are not the same thing, and a
+    model that is in both sets is a promotional route.
+
+    A free route that the live instance catalog proves is a native route
+    runs as a provider-native thread; a free route the collector only knows
+    from the pool runs as an inference job.
     """
     pair = (provider, model)
-    if pair in free_models:
-        kind = ACCESS_DEDICATED_FREE
-        basis = "the dedicated free inference pool"
-    elif pair in promo_models:
+    if pair in promo_models:
         kind = ACCESS_PROVIDER_PROMO
         basis = "a paid provider route that costs nothing right now"
+    elif pair in free_models:
+        kind = ACCESS_DEDICATED_FREE
+        basis = (
+            "a free route: the dedicated free inference pool, or a route the "
+            "provider lists at no cost"
+        )
     elif isinstance(prices, Mapping) and any(
         isinstance(value, (int, float)) for value in prices.values()
     ):
@@ -365,9 +376,9 @@ def _access_record(
         "basis": basis,
         "price": dict(prices or {}),
         "execution": (
-            "inference_job"
-            if kind == ACCESS_DEDICATED_FREE
-            else "provider_native"
+            "provider_native"
+            if native_mapped or kind != ACCESS_DEDICATED_FREE
+            else "inference_job"
         ),
     }
 
@@ -1635,7 +1646,12 @@ def _fill_value(
         for name in components
     }
     row["access"] = _access_record(
-        provider, model, free_set or set(), promo_set or set(), prices
+        provider,
+        model,
+        free_set or set(),
+        promo_set or set(),
+        prices,
+        native_mapped=bool((row.get("native") or {}).get("mapped")),
     )
     row["value"] = {
         "strength": None if strength is None else round(strength, 2),

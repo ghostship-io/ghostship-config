@@ -456,6 +456,19 @@ WINDOW_SCOPES = (
 )
 
 
+# The providers whose zero-price listing is a free route of its own. The
+# OpenRouter free models and the Go subscription's free models cost nothing
+# by construction, so they are dedicated free routes and they may hold the
+# free tier.
+FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
+
+# The providers whose zero-price listing is a promotional route of a paid
+# account. It costs nothing right now, it is not a free route of its own,
+# and it competes in bulk. A model that is in both sets is a promotional
+# route: the promotional zero price is checked first.
+PROMO_PROVIDERS = ("opencode", "ollama")
+
+
 def _window_scope(quota_id: str) -> tuple[str, ...]:
     """The model families a quota window applies to."""
     text = str(quota_id or "").lower()
@@ -513,13 +526,7 @@ def ranking_inputs(
     catalog: catalog_module.Catalog,
     context: dict[str, Any],
     measured_windows: list[dict[str, Any]] | None = None,
-) -> tuple[
-    list[tuple[str, str]],
-    set[tuple[str, str]],
-    dict[tuple[str, str], float],
-    dict[str, list[Any]],
-    set[str],
-]:
+) -> dict[str, Any]:
     """Derive the ranking inputs from what the sources reported."""
     measured_windows = measured_windows or []
     inventory: set[tuple[str, str]] = set()
@@ -542,7 +549,13 @@ def ranking_inputs(
         elif name == "ghostship_ai_pool_model_available":
             external[(provider, model)] = value > 0
         elif name == "ghostship_ai_free_model":
-            free.add((provider, model))
+            # A free route of a free-route provider is a dedicated free
+            # route; the zero-price listing of a paid account is a
+            # promotional route that competes in bulk.
+            if provider in PROMO_PROVIDERS:
+                promo.add((provider, model))
+            else:
+                free.add((provider, model))
         elif name == "ghostship_ai_usage_tokens" and labels.get("window") == "7d":
             key = (provider, model)
             usage[key] = usage.get(key, 0.0) + value
@@ -583,9 +596,14 @@ def ranking_inputs(
                 labels.get("source", ""),
             )
             quota_reset[key] = value
-    # A provider's promotional zero-price model is a paid route that costs
-    # nothing right now. It belongs to bulk, not to the dedicated free tier.
-    for provider in ("opencode-go", "opencode", "openrouter", "ollama"):
+    # The free routes of the T3 accounts, and the promotional zero-price
+    # routes of the paid accounts. The two sets are kept apart: a model that
+    # is in both is a promotional route, and the promotional zero price is
+    # checked before the dedicated free class.
+    for provider in FREE_ROUTE_PROVIDERS:
+        for entry in catalog.free_models(provider):
+            free.add((entry["provider"], entry["model"]))
+    for provider in PROMO_PROVIDERS:
         for entry in catalog.free_models(provider):
             promo.add((entry["provider"], entry["model"]))
     windows: dict[str, list[Any]] = {}
@@ -618,7 +636,15 @@ def ranking_inputs(
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
-    return sorted(inventory), free, promo, external, usage, windows, pool_providers
+    return {
+        "inventory": sorted(inventory),
+        "free": free,
+        "promo": promo,
+        "external": external,
+        "usage": usage,
+        "windows": windows,
+        "pool_providers": pool_providers,
+    }
 
 
 def ranking_samples(
@@ -640,9 +666,14 @@ def ranking_samples(
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
-    inventory, free, promo, external, usage, windows, pool_providers = ranking_inputs(
-        results, catalog, context, measured_windows
-    )
+    inputs = ranking_inputs(results, catalog, context, measured_windows)
+    inventory = inputs["inventory"]
+    free = inputs["free"]
+    promo = inputs["promo"]
+    external = inputs["external"]
+    usage = inputs["usage"]
+    windows = inputs["windows"]
+    pool_providers = inputs["pool_providers"]
     context["free_models"] = free
     context["promo_models"] = promo
     samples: list[Sample] = []
