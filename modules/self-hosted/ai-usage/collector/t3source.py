@@ -320,6 +320,13 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             native[pair] = {
                 "providerInstance": instance,
                 "modelId": slug,
+                "name": (
+                    model.get("name")
+                    or model.get("label")
+                    or model.get("displayName")
+                    or model.get("display_name")
+                    or model.get("title")
+                ),
                 "options": _model_options(model),
             }
         state = str(provider.get("status") or "")
