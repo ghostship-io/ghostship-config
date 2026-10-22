@@ -332,6 +332,10 @@ METRIC_HELP = {
         "How many metric series this collection published twice. The repeats "
         "are dropped, so the file holds one series per name and label set."
     ),
+    "ghostship_ai_routing_enabled": (
+        "One when the owner's routing switch is on. The collector publishes "
+        "the switch and never acts on it itself."
+    ),
 }
 
 GAUGE_METRICS = tuple(METRIC_HELP)
@@ -1187,6 +1191,7 @@ def build_snapshot(
     aa_3d_cache: dict[str, Any] | None = None,
     free_models: set[tuple[str, str]] | None = None,
     promo_models: set[tuple[str, str]] | None = None,
+    routing_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1229,6 +1234,7 @@ def build_snapshot(
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
+        routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
         quota_block = snapshot.setdefault("quota", {})
@@ -1590,6 +1596,13 @@ def render(
     writer.add(
         "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
     )
+    # The owner's routing switch, published as it is. The gauge carries no
+    # label: the switch is one switch for the whole snapshot.
+    writer.add(
+        "ghostship_ai_routing_enabled",
+        {},
+        1.0 if ((snapshot or {}).get("routing") or {}).get("enabled") else 0.0,
+    )
     return writer.render()
 
 
@@ -1662,9 +1675,20 @@ def main(argv: list[str] | None = None) -> int:
         default=SNAPSHOT_PATH,
         help="Where the canonical ranking and eligibility snapshot is written.",
     )
+    parser.add_argument(
+        "--routing-enabled",
+        choices=("true", "false"),
+        default="false",
+        help=(
+            "The owner's routing switch. The collector publishes it to its "
+            "consumers and never acts on it itself."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
+    routing_enabled = args.routing_enabled == "true"
+    log(f"the routing switch is {'on' if routing_enabled else 'off'}")
     now = wall_clock() if args.now is None else args.now
     aa_cache = aa.load_cache(args.aa_cache, now)
     aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)
@@ -1692,6 +1716,7 @@ def main(argv: list[str] | None = None) -> int:
         free_models=context.get("free_models") or set(),
         promo_models=context.get("promo_models") or set(),
         aa_3d_cache=aa_3d_cache,
+        routing_enabled=routing_enabled,
     )
     text = render(results, extra, now, duration, snapshot)
     if args.stdout:
