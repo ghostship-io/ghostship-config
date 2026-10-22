@@ -997,6 +997,81 @@ class NativeStoreTests(unittest.TestCase):
         self.assertEqual(len(memory), 1, 'A single memory total series from one writer')
         self.assertAlmostEqual(float(query(ex['Node sample age'][0])[0]['value'][1]), 60.0, delta=70)
 
+    def test_ai_usage_exception_table_reports_only_unhealthy_sources(self):
+        # The exception panel must never list a healthy provider: every target is
+        # restricted to the exception set, and the ages only cover those sources.
+        now = int(time.time())
+        samples = [
+            ('healthy', 'ok', 1, now - 60),
+            ('partial', 'partial', 1, now - 60),
+            ('stale', 'ok', 1, now - 3600),
+            ('failed', 'ok', 0, now - 60),
+        ]
+        lines = []
+        for source, status, success, last in samples:
+            lines.append(f'ghostship_ai_provider_coverage{{provider="{source}",source="{source}"}} 1 {now*1000}')
+            lines.append(f'ghostship_ai_source_status{{provider="{source}",source="{source}",status="{status}"}} 1 {now*1000}')
+            lines.append(f'ghostship_ai_source_success{{provider="{source}",source="{source}"}} {success} {now*1000}')
+            lines.append(f'ghostship_ai_source_last_success_timestamp_seconds{{provider="{source}",source="{source}"}} {last} {now*1000}')
+            lines.append(f'ghostship_ai_source_observed_timestamp_seconds{{provider="{source}",source="{source}"}} {now-30} {now*1000}')
+        # A provider whose coverage exists but whose source never reported.
+        lines.append(f'ghostship_ai_provider_coverage{{provider="missing",source="missing"}} 1 {now*1000}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(
+            vm + '/api/v1/import/prometheus', data=('\n'.join(lines)).encode(),
+            headers={'Content-Type': 'text/plain'}), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        panel = next(p for p in page['panels'] if p['title'] == 'Providers with no fresh reading')
+
+        def query(expr):
+            url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        exceptions = {item['metric'].get('provider') for item in query(panel['targets'][0]['expr'])}
+        self.assertNotIn('healthy', exceptions)
+        self.assertEqual(exceptions, {'partial', 'stale', 'failed', 'missing'})
+        status = {item['metric']['provider']: item['metric'].get('status')
+                  for item in query(panel['targets'][1]['expr'])}
+        self.assertEqual(status.get('partial'), 'partial', 'A partial source stays visible')
+        self.assertNotIn('healthy', status)
+        self.assertNotIn('missing', status, 'A source with no reading has no status, not a healthy one')
+        ages = {item['metric'].get('provider') for item in query(panel['targets'][2]['expr'])}
+        self.assertEqual(ages, {'partial', 'stale', 'failed'})
+
+    def test_ai_usage_decision_hierarchy_units_and_variables(self):
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        titles = {panel['title']: panel for panel in page['panels']}
+        winners = titles['Winners by tier']
+        units = {o['matcher']['options']: o['properties'][0]['value']
+                 for o in winners['fieldConfig']['overrides']
+                 if o['properties'][0]['id'] == 'unit'}
+        self.assertEqual(units['Capacity'], 'percentunit')
+        self.assertEqual(units['Expires in'], 'dtdurations')
+        # The value's source is part of the row so a prior estimate never reads as measured.
+        self.assertIn('group_left(source)', winners['targets'][0]['expr'])
+        renamed = winners['transformations'][1]['options']['renameByName']
+        self.assertIn('Source', renamed.values())
+        # Rows are grouped by tier, never interleaved by position.
+        self.assertEqual(winners['options']['sortBy'][0]['displayName'], 'tier')
+        self.assertIn('tier', winners['transformations'][2]['options']['indexByName'])
+        self.assertEqual([v['name'] for v in page['templating']['list']], ['provider'])
+        candidates = titles['Candidates considered']
+        self.assertTrue(all('$provider' in t['expr'] for t in candidates['targets']))
+        self.assertLessEqual(len(candidates['targets']), 8)
+        self.assertFalse(any('calculation_gate' in t['expr']
+                             for p in page['panels'] for t in p.get('targets', [])))
+        self.assertIn('Routing off or disabled providers', titles)
+        exception = titles['Providers with no fresh reading']
+        self.assertTrue(all('unless on(source)' in t['expr'] for t in exception['targets']))
+        self.assertLess(titles['Winners by tier']['gridPos']['y'], titles['Frontier tier']['gridPos']['y'])
+        self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
+                        titles['Quota windows']['gridPos']['y'])
+
     def test_actual_dashboard_queries_against_native_stores_and_repoll_dedup(self):
         fixture = CollectorTests()
         fixture.setUp()
@@ -1106,7 +1181,7 @@ class NativeStoreTests(unittest.TestCase):
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_GRAFANA') and os.environ.get('GHOSTSHIP_TEST_PROVISIONING'),
                      'Set GHOSTSHIP_TEST_GRAFANA and GHOSTSHIP_TEST_PROVISIONING for native provisioning/auth checks')
 class GrafanaProvisioningTests(unittest.TestCase):
-    def test_actual_provisioning_home_four_dashboards_and_datasource_auth(self):
+    def test_actual_provisioning_home_five_dashboards_and_datasource_auth(self):
         # Fresh Grafana migrations fsync hundreds of transactions. Use private
         # tmpfs for this disposable DB so the loop measures provisioning, not
         # the host filesystem's fsync latency.
@@ -1180,7 +1255,8 @@ class GrafanaProvisioningTests(unittest.TestCase):
         with urllib.request.urlopen(url+'/api/search?type=dash-db',timeout=5) as response:
             dashboards=json.load(response)
         self.assertEqual({d['uid'] for d in dashboards},
-                         {'ghostship-autonomous-work','ghostship-host','ghostship-security','ghostship-siem-pipeline'})
+                         {'ghostship-autonomous-work','ghostship-host','ghostship-security',
+                          'ghostship-siem-pipeline','ghostship-ai-usage'})
         with urllib.request.urlopen(url+'/api/dashboards/home',timeout=5) as response:home=json.load(response)
         self.assertTrue(home.get('redirectUri','').startswith('/d/ghostship-autonomous-work') or
                         home.get('dashboard',{}).get('uid')=='ghostship-autonomous-work',
