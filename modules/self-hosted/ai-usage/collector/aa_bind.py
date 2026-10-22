@@ -40,6 +40,8 @@ import re
 from collections import Counter
 from typing import Any, Iterable, Mapping
 
+import value_policy
+
 # The variant markers the feed puts in a record name or at the end of a slug,
 # and the native option values they correspond to.
 VARIANT_MARKERS = {
@@ -515,10 +517,11 @@ def _matches(target: Mapping[str, Any], record: Mapping[str, Any]) -> dict[str, 
 
 
 def _reference_value(record: Mapping[str, Any]) -> float | None:
-    """The 80/20 model-selection value of one measured record.
+    """The model-selection value of one measured record.
 
     Both the intelligence index and the measured cost per task are required;
-    a record without either has no selection value.
+    a record without either has no selection value. The weights and the
+    transform come from the owner's policy, so there is one scorer.
     """
     indices = record.get("indices") or {}
     intelligence = indices.get("intelligence_index")
@@ -530,9 +533,16 @@ def _reference_value(record: Mapping[str, Any]) -> float | None:
     cost_value = float(cost)
     if not (cost_value >= 0.0) or not (cost_value == cost_value) or cost_value == float("inf"):
         return None
-    return round(
-        0.80 * (float(intelligence) / 100.0) + 0.20 * (1.0 / (1.0 + cost_value)), 6
+    efficiency, _evidence = value_policy.cost_transform(
+        cost_value, (), value_policy.DEFAULT_COST_TRANSFORM
     )
+    if efficiency is None:
+        return None
+    value, _missing = value_policy.combine(
+        {"intelligence": float(intelligence) / 100.0, "cost_per_task": efficiency},
+        value_policy.VALUE_WEIGHTS,
+    )
+    return None if value is None else round(value, 6)
 
 
 def _condition_alternatives(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
