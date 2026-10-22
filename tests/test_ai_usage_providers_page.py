@@ -702,6 +702,19 @@ class WorkedCasesTests(unittest.TestCase):
                     continue
                 self.assertLess(order[provider], order[other], f"{provider} before {other}")
 
+    def test_a_sunk_route_keeps_no_place(self):
+        """A route that cannot be used keeps no place: its rank cell reads '–'."""
+        panel = section(self.page, "Free")
+        rank = self.rows(panel, target_by_field(panel, "rank"))
+        # The exhausted route of the free pool was the seventh winner.
+        self.assertEqual(rank["gemma-3-27b"], 0)
+        # The routes that can run keep the place of the collector.
+        self.assertEqual(rank["qwen3.8-27b"], 3)
+        self.assertEqual(rank["llama-4.3-8b"], 5)
+        # The cell reads a dash when the route has no place.
+        content = panel["options"]["content"]
+        self.assertIn("{{#if rank}}{{rank}}{{else}}–{{/if}}", content)
+
     def test_the_basis_of_a_route_is_the_one_the_collector_publishes(self):
         """The basis of a route is published, inferred, reported or unknown."""
         panel = section(self.page, "Free")
