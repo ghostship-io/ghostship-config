@@ -469,6 +469,133 @@ class ValuePolicyTests(unittest.TestCase):
         )
 
 
+class HonestScoreTests(unittest.TestCase):
+    """F7 and F8: the published score is the value, and the text says so."""
+
+    def test_the_recommendation_is_chosen_by_the_published_value(self):
+        rows = [
+            {
+                "provider": "opencode-go",
+                "model": "minimax-m3.1-flash-free",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 1},
+                "score": {"bulk": 999.0},
+                "value": {"value": 0.4},
+                "available": True,
+                "availability": {"state": "available"},
+                "admission": {"state": "settled", "reason": ""},
+                "native": {"provider_instance_id": "opencode", "model_id": "x", "options": [], "mapped": True},
+                "role": "delegate",
+                "quota_state": "available",
+                "aa": {"state": "measured"},
+                "access": {"kind": "provider_paid", "basis": "", "price": {}, "execution": "provider_native"},
+                "selection": {"excluded": False},
+                "eligibility": {
+                    "frontier_prime": {"allowed": False, "basis": "policy:owner"},
+                    "delegate": {"allowed": True, "basis": "policy:owner+native+tier"},
+                    "background": {"allowed": False, "basis": "policy:owner"},
+                    "gpt_model_allowed": {"allowed": True, "basis": "policy:owner"},
+                },
+            },
+            {
+                "provider": "opencode-go",
+                "model": "deepseek-v4-pro",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 2},
+                "score": {"bulk": 1.0},
+                "value": {"value": 0.7},
+                "available": True,
+                "availability": {"state": "available"},
+                "admission": {"state": "settled", "reason": ""},
+                "native": {"provider_instance_id": "opencode", "model_id": "y", "options": [], "mapped": True},
+                "role": "delegate",
+                "quota_state": "available",
+                "aa": {"state": "measured"},
+                "access": {"kind": "provider_paid", "basis": "", "price": {}, "execution": "provider_native"},
+                "selection": {"excluded": False},
+                "eligibility": {
+                    "frontier_prime": {"allowed": False, "basis": "policy:owner"},
+                    "delegate": {"allowed": True, "basis": "policy:owner+native+tier"},
+                    "background": {"allowed": False, "basis": "policy:owner"},
+                    "gpt_model_allowed": {"allowed": True, "basis": "policy:owner"},
+                },
+            },
+        ]
+        result = snapshot._recommendations(rows, snapshot.WORKLOAD_CLASSES)
+        # The higher score would pick the first row; the published value
+        # picks the second one.
+        self.assertEqual(result["metadata"]["model"], "deepseek-v4-pro")
+
+    def test_no_text_claims_the_weights_are_renormalized(self):
+        policy = _load("ai_usage_design_value_policy_text", "value_policy")
+        document = policy.policy_document()
+        self.assertFalse(document["renormalized"])
+        self.assertIn("nothing is renormalized", document["basis"])
+        self.assertIn(
+            "nothing is renormalized",
+            snapshot.VALUE_POLICY["requires"] + snapshot.VALUE_POLICY.get("basis", ""),
+        )
+
+    def test_the_policy_lists_have_one_source(self):
+        # The runtime policy is the source of the owner's lists, and the
+        # constant is only the fallback.
+        policy = {
+            "frontierPrimeModels": ("gpt-6.1-sol",),
+            "excludedModels": ("gpt-6-astra",),
+            "allowedGptModels": ("gpt-6.1-sol",),
+            "backgroundProviderInstances": ("opencode",),
+        }
+        data = build_free_snapshot(
+            [("codex", "gpt-6.1-sol")],
+            [aa_record("gpt-6-1-sol", "GPT-6.1 Sol")],
+            native=[("codex", "gpt-6.1-sol")],
+        )
+        row = data["candidates"][0]
+        self.assertIn("selection", row)
+        self.assertTrue(row["selection"]["frontier_workhorse"])
+        # The policy of the snapshot names the same list.
+        self.assertEqual(
+            data["policy"]["frontier_prime_models"],
+            ["gpt-6.1-sol", "claude-opus-5-5"],
+        )
+
+    def test_an_excluded_model_is_never_selected(self):
+        data = build_free_snapshot(
+            [("codex", "gpt-6.1-sol")],
+            [aa_record("gpt-6-1-sol", "GPT-6.1 Sol")],
+            native=[("codex", "gpt-6.1-sol")],
+        )
+        self.assertIsNotNone(data["candidates"][0])
+        # The exclusion list of the policy is read, not the constant.
+        self.assertTrue(snapshot._selection_excluded("gpt-6-astra"))
+        self.assertTrue(snapshot._selection_excluded("gpt-6-astra", ["gpt-6-astra"]))
+        self.assertFalse(snapshot._selection_excluded("gpt-6-astra", ["claude-fable-5"]))
+
+    def test_the_workhorse_list_is_published_as_a_metric(self):
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=[],
+            policy={
+                "frontierPrimeModels": ("gpt-6.1-sol",),
+                "excludedModels": ("gpt-6-astra",),
+            },
+        )
+        samples = snapshot.decision_samples(data)
+        workhorses = {
+            labels["model"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_policy_frontier_workhorse"
+        }
+        excluded = {
+            labels["model"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_policy_excluded_model"
+        }
+        self.assertEqual(workhorses, {"gpt-6.1-sol"})
+        self.assertEqual(excluded, {"gpt-6-astra"})
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 

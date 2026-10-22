@@ -55,6 +55,10 @@ OWNER_POLICY = {
     "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-sol"),
     "allowedGptModels": ("gpt-6.1-sol",),
     "backgroundProviderInstances": ("opencode",),
+    # The models the owner excludes from every selection. They stay visible
+    # in the usage and the quota readings; they are never a winner and never
+    # a recommendation.
+    "excludedModels": ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1"),
     # The frontier authority reviews every implementation before it is
     # integrated. A review by a bulk model is never a final approval, and a
     # required frontier that is unavailable is waited for, never replaced.
@@ -203,6 +207,13 @@ METRIC_HELP = {
     "ghostship_ai_model_fact_confidence": "The confidence a fact carries.",
     "ghostship_ai_model_winner": "One for the winner of a provider and tier.",
     "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
+    "ghostship_ai_policy_frontier_workhorse": (
+        "One for every model the owner's policy names a frontier workhorse."
+    ),
+    "ghostship_ai_policy_excluded_model": (
+        "One for every model the owner's policy excludes from selection; it "
+        "stays visible in the usage and the quota readings."
+    ),
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
     "ghostship_ai_calculation_transform": (
@@ -938,6 +949,12 @@ def ranking_samples(
     if "free_route_accounts" in inspect.signature(ranking_module.rank_models).parameters:
         rank_kwargs["free_route_accounts"] = sorted(
             free_route_accounts(results, context, measured_windows)
+        )
+    if "frontier_workhorses" in inspect.signature(ranking_module.rank_models).parameters:
+        # The owner's list of frontier workhorses comes from the runtime
+        # policy, so the producer and the reader share one list.
+        rank_kwargs["frontier_workhorses"] = sorted(
+            OWNER_POLICY.get("frontierPrimeModels") or ()
         )
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)

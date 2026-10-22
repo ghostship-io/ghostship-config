@@ -563,6 +563,24 @@ def _candidate(
             )
 
     native_record = _native_record(provider, model, native)
+    # The owner's lists, read once from the runtime policy. Every consumer
+    # of them reads this block, so a policy change has one effect.
+    workhorses = policy.get(POLICY_WORKHORSES)
+    excluded = policy.get(POLICY_EXCLUDED)
+    selection = {
+        "frontier_workhorse": _frontier_workhorse(model, workhorses),
+        "excluded": _selection_excluded(model, excluded),
+        "workhorses": [
+            str(name) for name in (workhorses if isinstance(workhorses, (list, tuple)) else FRONTIER_WORKHORSES)
+        ],
+        "excluded_models": [
+            str(name)
+            for name in (
+                excluded if isinstance(excluded, (list, tuple)) else SELECTION_EXCLUDED_MODELS
+            )
+        ],
+        "basis": "the runtime policy of the owner",
+    }
     quota_state = _quota_state(remaining, windows)
     capacity_measured = bool(windows) and all(
         window["evidence"] == "provider_reported" for window in windows
@@ -691,6 +709,7 @@ def _candidate(
             "formula": CALCULATION["value"]["formula"],
         },
         "eligibility": _eligibility(provider, model, tiers, native_record, policy),
+        "selection": selection,
         "frontier_surplus": {
             "available": bool(surplus.get("available")),
             "reason": str(surplus.get("reason") or ""),
@@ -875,6 +894,20 @@ def _display_tier(tiers: list[str]) -> str:
     return (tiers or [""])[0]
 
 
+def _published_value(row: Mapping[str, Any]) -> float:
+    """The published value of a row, or zero when it has none.
+
+    The recommendation is chosen by the value the owner's policy defines,
+    never by a blended score: a name suffix, a catalog price, a capacity
+    term and a pace term are not in the decision, so they are not in the
+    choice either.
+    """
+    value = (row.get("value") or {}).get("value")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
+
+
 def _recommendations(
     candidates: list[dict[str, Any]], classes: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:
@@ -896,7 +929,7 @@ def _recommendations(
             if (row.get("availability") or {}).get("state") == "available"
             and row.get("rank")
             and (row.get("admission") or {}).get("state") == "settled"
-            and not _selection_excluded(str(row.get("model") or ""))
+            and not (row.get("selection") or {}).get("excluded")
         ]
         if entry.get("complexity") == "high":
             # A dedicated free route needs admission evidence for the workload
@@ -932,7 +965,7 @@ def _recommendations(
             preferred,
             key=lambda row: (
                 1 if row["native"]["mapped"] else 0,
-                max(row["score"].values()) if row["score"] else 0.0,
+                _published_value(row),
             ),
             reverse=True,
         )
@@ -994,10 +1027,7 @@ def _recommendations(
                     "private_data": bool(entry["private_data"]),
                 }
                 continue
-            chosen = max(
-                frontier_rows,
-                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
-            )
+            chosen = max(frontier_rows, key=_published_value)
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
@@ -1010,10 +1040,7 @@ def _recommendations(
             }
             continue
         if eligible:
-            chosen = max(
-                eligible,
-                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
-            )
+            chosen = max(eligible, key=_published_value)
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
@@ -1067,6 +1094,10 @@ VALUE_POLICY = {
     "not_aa_claim": "the weights are an owner policy; the inputs are the feed's",
     "cost_transform": COST_TRANSFORM,
     "cost_transforms": dict(value_policy.COST_TRANSFORMS),
+    "basis": (
+        "both measurements are required and nothing is renormalized: a missing "
+        "input leaves the value unknown"
+    ),
 }
 
 # The calculation of a winner, published with the snapshot so every number
@@ -1937,8 +1968,16 @@ def _winners(
 # The owner's explicit selection exclusions. Astra and Fable remain in the
 # usage and quota readings, and they are never a winner or a recommendation in
 # any tier: the frontier workhorses are GPT-6.1 Sol and Claude Opus 5.5.
+#
+# These are the fallback, not the source: the runtime policy carries the
+# owner's lists, and the policy is what is read. The fallback keeps the
+# collector honest when the policy is absent.
 SELECTION_EXCLUDED_MODELS = ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1")
 FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
+
+# The names of the runtime policy fields that carry the owner's lists.
+POLICY_WORKHORSES = "frontierPrimeModels"
+POLICY_EXCLUDED = "excludedModels"
 
 
 def _normalised_model(model: str) -> str:
@@ -2143,12 +2182,29 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _selection_excluded(model: str) -> bool:
-    return _normalised_model(model) in SELECTION_EXCLUDED_MODELS
+def _selection_excluded(model: str, excluded: Any = None) -> bool:
+    """True when the owner's policy excludes a model from selection.
+
+    The excluded list is the runtime policy's, and the constant is only the
+    fallback for a collector that runs without one. An excluded model stays
+    visible in the usage and the quota readings; it is never a winner and
+    never a recommendation.
+    """
+    names = excluded if isinstance(excluded, (list, tuple)) else SELECTION_EXCLUDED_MODELS
+    wanted = {_normalised_model(str(name)) for name in names}
+    return _normalised_model(model) in wanted
 
 
-def _frontier_workhorse(model: str) -> bool:
-    return str(model or "").strip().lower() in FRONTIER_WORKHORSES
+def _frontier_workhorse(model: str, workhorses: Any = None) -> bool:
+    """True when the owner's policy names a model a frontier workhorse.
+
+    The list is the runtime policy's, and the constant is only the fallback
+    for a collector that runs without one. There is one list, so a policy
+    change cannot work in the producer and be ignored in the reader.
+    """
+    names = workhorses if isinstance(workhorses, (list, tuple)) else FRONTIER_WORKHORSES
+    wanted = {str(name).strip().lower() for name in names}
+    return str(model or "").strip().lower() in wanted
 
 
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
@@ -2176,14 +2232,15 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         # The runtime reasoning policy is not satisfiable: the mismatch stays
         # visible and the model is not selected.
         return False
-    if _selection_excluded(str(row.get("model") or "")):
+    selection = row.get("selection") or {}
+    if selection.get("excluded"):
         # Astra and Fable are read, counted and shown; they are never picked.
         return False
     eligibility = row.get("eligibility") or {}
     if tier == "frontier":
-        # The frontier is the owner's two workhorses and nothing else.
-        return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and (
-            _frontier_workhorse(str(row.get("model") or ""))
+        # The frontier is the owner's workhorses and nothing else.
+        return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and bool(
+            selection.get("frontier_workhorse")
         )
     if tier == "free":
         if (row.get("access") or {}).get("kind") != ACCESS_DEDICATED_FREE:
@@ -2565,6 +2622,7 @@ def build_snapshot(
         },
         "policy": {
             "frontier_prime_models": list(policy.get("frontierPrimeModels") or ()),
+            "excluded_models": list(policy.get(POLICY_EXCLUDED) or ()),
             "allowed_gpt_models": list(policy.get("allowedGptModels") or ()),
             "background_provider_instances": list(
                 policy.get("backgroundProviderInstances") or ()
@@ -2868,6 +2926,17 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 },
                 1.0,
             )
+        )
+    # The owner's lists, published so a reader can filter on them instead of
+    # repeating them in a query.
+    policy = snapshot.get("policy") or {}
+    for model in policy.get("frontier_prime_models") or ():
+        samples.append(
+            ("ghostship_ai_policy_frontier_workhorse", {"model": str(model)}, 1.0)
+        )
+    for model in policy.get("excluded_models") or ():
+        samples.append(
+            ("ghostship_ai_policy_excluded_model", {"model": str(model)}, 1.0)
         )
     for tier, winners in (snapshot.get("tier_winners") or {}).items():
         for position, winner in enumerate(winners, start=1):
