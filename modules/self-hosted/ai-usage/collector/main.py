@@ -598,6 +598,8 @@ def ranking_samples(
     *,
     t3_home: str = T3_HOME,
     state_path: str | None = None,
+    aa_cache: dict[str, Any] | None = None,
+    aa_3d_cache: dict[str, Any] | None = None,
 ) -> tuple[list[Sample], list[Any]]:
     """Rank every model we can use.
 
@@ -625,8 +627,12 @@ def ranking_samples(
             # belongs to the free tier.
             continue
         tokens = int(entry.get("tokens", 0))
+        measured_3d = aa_3d.lookup(aa_3d_cache, provider, model)
         three_d_scores[(provider, model)] = {
             "usage_tokens": tokens,
+            "elo": measured_3d.get("elo"),
+            "source": measured_3d.get("source"),
+            "observed_at": measured_3d.get("observed_at"),
             # A model belongs in the 3D tier only when the catalog proves it
             # can look at an image. The workload admission is verified at the
             # snapshot, where the durable evidence lives. A high token count
@@ -698,6 +704,7 @@ def build_snapshot(
     measured_windows: list[dict[str, Any]] | None = None,
     catalog: Any = None,
     facts: dict[str, Any] | None = None,
+    aa_3d_cache: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -735,6 +742,7 @@ def build_snapshot(
         measured_windows=measured_windows,
         catalog=catalog,
         facts=facts,
+        aa_3d_cache=aa_3d_cache,
     )
 
 
@@ -748,6 +756,8 @@ def collect(
     pool_ledger: str | None = POOL_LEDGER_FILE,
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
+    aa_cache: dict[str, Any] | None = None,
+    aa_3d_cache: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
     """Run every source and return the results, the extra samples, and the context."""
     moment = wall_clock() if now is None else now
@@ -778,6 +788,8 @@ def collect(
         moment,
         t3_home=t3_home,
         state_path=state_path,
+        aa_cache=aa_cache,
+        aa_3d_cache=aa_3d_cache,
     )
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
@@ -904,6 +916,14 @@ def main(argv: list[str] | None = None) -> int:
         help="The cached Artificial Analysis feed, written by the daily procedure.",
     )
     parser.add_argument(
+        "--aa-3d-cache",
+        default="",
+        help=(
+            "The bounded Artificial Analysis 3D snapshot (Elo, source, date and "
+            "benchmark conditions). Absent means no 3D rank."
+        ),
+    )
+    parser.add_argument(
         "--snapshot",
         default=SNAPSHOT_PATH,
         help="Where the canonical ranking and eligibility snapshot is written.",
@@ -912,8 +932,14 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.monotonic()
     now = wall_clock() if args.now is None else args.now
-    results, extra, context = collect(now, state_path=args.state)
     aa_cache = aa.load_cache(args.aa_cache, now)
+    aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)
+    results, extra, context = collect(
+        now,
+        state_path=args.state,
+        aa_cache=aa_cache,
+        aa_3d_cache=aa_3d_cache,
+    )
     duration = time.monotonic() - started
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -930,6 +956,7 @@ def main(argv: list[str] | None = None) -> int:
         facts=read_facts(args.facts),
         free_models=context.get("free_models") or set(),
         promo_models=context.get("promo_models") or set(),
+        aa_3d_cache=aa_3d_cache,
     )
     text = render(results, extra, now, duration, snapshot)
     if args.stdout:

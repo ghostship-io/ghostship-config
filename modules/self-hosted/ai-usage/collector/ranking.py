@@ -785,7 +785,10 @@ def _three_d_values(entry: Any) -> tuple[float, float, bool]:
     if tokens is None:
         tokens = _as_float(entry.get("tokens"))
     eligible = bool(entry.get("eligible", False))
-    return 0.0, (tokens or 0.0), eligible
+    # The score is the measured AA-3D Elo. No Elo means no 3D rank; the
+    # general intelligence index is never a stand-in.
+    score = _as_float(entry.get("elo"))
+    return (score or 0.0), (tokens or 0.0), eligible
 
 
 def _three_d_usage_score(tokens: float) -> float:
@@ -1325,7 +1328,7 @@ def rank_models(
         # Explicit visual capability and a verified workload admission put a
         # model in the tier; a measured record lets it hold a rank. Nothing
         # else does: no family prior, no token volume, no attachment.
-        if candidate.available and candidate.three_d_eligible and candidate.quality is not None
+        if candidate.available and candidate.three_d_eligible and candidate.three_d_score > 0.0
     }
 
     entries: list[RankedModel] = []
@@ -1379,10 +1382,10 @@ def rank_models(
                 1.0 + 0.5 * candidate.capacity_bonus + pace_bonus
             )
         if "3d" in tiers:
-            # The tier ranks the measured Artificial Analysis index, with its
-            # condition published. It does not rank a 3D prior, and token
-            # volume is displayed beside it, never ranked as competence.
-            scores["3d"] = quality or 0.0
+            # The tier ranks the measured AA-3D Elo, with its source, date and
+            # conditions published. It does not rank a prior, the general
+            # intelligence index, or token volume.
+            scores["3d"] = candidate.three_d_score
 
         if not tiers:
             entries.append(

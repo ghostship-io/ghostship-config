@@ -309,7 +309,7 @@ class ThreeDTests(unittest.TestCase):
         ]
         self.three_d = {
             ("deepseek", "deepseek-pro-v3"): {
-                "score": 0.9,
+                "elo": 1150.0,
                 "usage_tokens": 250000,
                 "eligible": True,
             }
@@ -828,7 +828,7 @@ class ThreeDLimitTests(unittest.TestCase):
             models[model_id] = entry(model_id, "printing")
             records.append(ranking.ModelRecord("printer", model_id))
             three_d[("printer", model_id)] = {
-                "score": 0.5 + number / 100.0,
+                "elo": 1000.0 + number,
                 "usage_tokens": 0,
                 "eligible": True,
             }

@@ -302,6 +302,7 @@ class ThreeDVisualTests(unittest.TestCase):
             three_d_scores={
                 ("antigravity", "gemini-3.8-flash"): {
                     "usage_tokens": 0.0,
+                    "elo": 1200.0,
                     "eligible": True,
                 }
             },
@@ -320,6 +321,7 @@ class ThreeDVisualTests(unittest.TestCase):
             three_d_scores={
                 ("antigravity", "gemini-3.8-flash"): {
                     "usage_tokens": 9_000_000_000.0,
+                    "elo": 1200.0,
                     "eligible": True,
                 }
             },
@@ -327,8 +329,9 @@ class ThreeDVisualTests(unittest.TestCase):
             now=NOW,
         )
         three_d = [entry for entry in ranked if entry.tier == "3d"][0]
-        # The measured index, never the token volume and never a prior.
-        self.assertAlmostEqual(three_d.score, 42.7, places=3)
+        # The measured AA-3D Elo, never the token volume, never the general
+        # intelligence index and never a prior.
+        self.assertAlmostEqual(three_d.score, 1200.0, places=3)
 
 
 class _Catalog:
