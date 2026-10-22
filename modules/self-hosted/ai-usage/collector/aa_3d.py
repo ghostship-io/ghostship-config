@@ -76,9 +76,18 @@ def _record(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     elif isinstance(interval, (list, tuple)) and len(interval) == 2:
         low = _finite(interval[0]) if low is None else low
         high = _finite(interval[1]) if high is None else high
-    cost = _finite(raw.get("cost_per_task"))
-    if cost is not None and (cost < 0.0 or not math.isfinite(cost)):
-        cost = None
+    if (low is None) != (high is None) or (
+        low is not None and high is not None and low > high
+    ):
+        # A half interval or an inverted one is malformed; both absent is an
+        # interval the source did not publish.
+        return None
+    raw_cost = raw.get("cost_per_task")
+    cost = _finite(raw_cost)
+    if raw_cost is not None and (cost is None or cost < 0.0):
+        # A present but unusable cost is malformed; an absent one is an
+        # unpublished value.
+        return None
     normalised = _finite(raw.get("normalized"))
     if normalised is not None and not 0.0 <= normalised <= 1.0:
         normalised = None
@@ -186,53 +195,140 @@ def normalize(elo: float | None, normalization: Mapping[str, Any] | None) -> flo
     return None
 
 
-def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
-    """The validated AA-3D snapshot, or None when it is absent or unusable."""
-    if not path:
+SOURCE_URL = "https://artificialanalysis.ai/evaluations/aa-3d"
+SCHEMA = "ghostship.aa3d.evidence"
+BENCHMARK = "AA-3D"
+MAX_BYTES = 2 * 1024 * 1024
+MAX_RECORDS = 256
+MAX_FUTURE_SECONDS = 300.0
+PUBLIC_CONDITION = (
+    "AA-3D evaluates interactive Three.js 3D scenes; it is not CAD or "
+    "printable-geometry suitability"
+)
+
+
+def _rejected(reason: str) -> dict[str, Any]:
+    """A whole-snapshot refusal. Never a partial board."""
+    return {
+        "status": "invalid",
+        "reason": reason,
+        "source": SOURCE_URL,
+        "source_url": SOURCE_URL,
+        "benchmark": BENCHMARK,
+        "benchmark_version": None,
+        "attribution": None,
+        "completeness": None,
+        "bounds": None,
+        "fingerprint": None,
+        "normalization": None,
+        "records": [],
+    }
+
+
+def _bounded_read(path: str) -> str | None:
+    """Read at most MAX_BYTES, and refuse a larger file instead of slicing."""
+    try:
+        with Path(path).open("rb") as handle:
+            data = handle.read(MAX_BYTES + 1)
+    except OSError:
+        return None
+    if len(data) > MAX_BYTES:
         return None
     try:
-        document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
+    """The validated AA-3D snapshot, or None when it is absent.
+
+    The whole snapshot is accepted or refused: a truncated board, a duplicate
+    or missing record, a bad cost, interval or rank, a future or non-finite
+    time, a foreign source or an incomplete scope is an `invalid` snapshot,
+    never a rebased subset. The fields are allowlisted, and the published
+    source and conditions are the fixed public ones, not whatever the file
+    says.
+    """
+    if not path:
+        return None
+    raw = _bounded_read(str(path))
+    if raw is None:
+        return None
+    try:
+        document = json.loads(raw)
+    except ValueError:
         return None
     if not isinstance(document, Mapping):
         return None
+    if document.get("schema") != SCHEMA or document.get("schema_version") != 1:
+        return _rejected("unexpected schema")
+    if document.get("benchmark") != BENCHMARK:
+        return _rejected("unexpected benchmark")
+    version = str(document.get("benchmark_version") or "").strip()
+    if not version:
+        return _rejected("missing benchmark version")
+    if str(document.get("source_url") or "").strip() != SOURCE_URL:
+        return _rejected("unexpected source url")
+    completeness = document.get("completeness")
+    raw_records = document.get("records")
+    if not isinstance(completeness, Mapping) or completeness.get("complete") is not True:
+        return _rejected("incomplete snapshot")
+    if str(completeness.get("scope") or "") != "entire_displayed_leaderboard":
+        return _rejected("unexpected scope")
+    if not isinstance(raw_records, list) or not raw_records:
+        return _rejected("no records")
+    if len(raw_records) > MAX_RECORDS:
+        return _rejected("too many records")
+    if not isinstance(completeness.get("records"), int) or completeness.get(
+        "records"
+    ) != len(raw_records):
+        return _rejected("record count does not match the declared board")
+    observed = _iso_epoch(document.get("observed_at"))
+    if observed is None or not math.isfinite(observed):
+        return _rejected("missing observation time")
+    if observed > float(now) + MAX_FUTURE_SECONDS:
+        return _rejected("observation time is in the future")
+    age = max(0.0, float(now) - observed)
+    if age > MAX_AGE_SECONDS:
+        return _rejected("snapshot is older than the feed age")
+
     records: list[dict[str, Any]] = []
-    for raw in document.get("records") or ():
-        if not isinstance(raw, Mapping):
-            continue
-        record = _record(raw)
-        if record is not None:
-            records.append(record)
-    source_url = str(
-        document.get("source_url") or document.get("source") or ""
-    ).strip()[:200]
-    for record in records:
-        if not record["source"]:
-            record["source"] = source_url or "artificialanalysis"
-    observed = _iso_epoch(
-        document.get("fetched_at_epoch")
-        or document.get("fetched_at")
-        or document.get("observed_at")
-    )
-    age = None if observed is None else max(0.0, now - observed)
-    status = "ok" if observed is not None and age is not None and age <= MAX_AGE_SECONDS else "stale"
-    if not records:
-        status = "missing"
+    seen: set[str] = set()
+    for raw_record in raw_records:
+        if not isinstance(raw_record, Mapping):
+            return _rejected("malformed record")
+        record = _record(raw_record)
+        if record is None:
+            return _rejected("malformed record")
+        key = record["model"].strip().lower()
+        if key in seen:
+            return _rejected("duplicate measurement")
+        seen.add(key)
+        # The published source and condition are the fixed public ones; no
+        # arbitrary condition key or private URL is forwarded.
+        record["source"] = SOURCE_URL
+        record["conditions"] = {"benchmark": BENCHMARK, "scope": PUBLIC_CONDITION}
+        records.append(record)
+    if len(records) != len(raw_records):
+        return _rejected("record was dropped")
+
     elos = [float(record["elo"]) for record in records]
     bounds = {
-        "min_elo": min(elos) if elos else None,
-        "max_elo": max(elos) if elos else None,
+        "min_elo": min(elos),
+        "max_elo": max(elos),
         "count": len(elos),
     }
     for record in records:
-        if record.get("normalized") is None:
-            record["normalized"] = normalize(record["elo"], bounds)
+        record["normalized"] = normalize(record["elo"], bounds)
+        record["source_normalized"] = False
     fingerprint = hashlib.sha256(
         json.dumps(
             {
-                "source_url": source_url,
-                "benchmark": document.get("benchmark"),
-                "benchmark_version": document.get("benchmark_version"),
+                "schema": SCHEMA,
+                "benchmark": BENCHMARK,
+                "benchmark_version": version,
+                "source_url": SOURCE_URL,
                 "observed_at": document.get("observed_at"),
                 "board": [[record["model"], record["elo"]] for record in records],
             },
@@ -240,17 +336,18 @@ def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
         ).encode("utf-8")
     ).hexdigest()
     return {
-        "status": status,
-        "source": str(
-            document.get("source") or document.get("source_url") or "artificialanalysis"
-        )[:120],
-        "source_url": source_url,
-        "benchmark": str(document.get("benchmark") or "aa-3d")[:60],
-        "benchmark_version": str(document.get("benchmark_version") or "")[:20] or None,
-        "attribution": str(document.get("attribution") or "")[:200] or None,
-        "completeness": document.get("completeness")
-        if isinstance(document.get("completeness"), Mapping)
-        else None,
+        "status": "ok",
+        "reason": "",
+        "source": SOURCE_URL,
+        "source_url": SOURCE_URL,
+        "benchmark": BENCHMARK,
+        "benchmark_version": version[:20],
+        "attribution": str(document.get("attribution") or "Artificial Analysis")[:200],
+        "completeness": {
+            "complete": True,
+            "records": len(records),
+            "scope": "entire_displayed_leaderboard",
+        },
         "bounds": bounds,
         "fingerprint": fingerprint,
         "normalization": {
@@ -263,18 +360,11 @@ def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
             "fingerprint": fingerprint,
             "not": "a win probability, an AA intelligence index or a zero-ability claim",
         },
-        "normalization": _normalization(document.get("normalization")),
-        "conditions": str(
-            document.get("conditions")
-            or "interactive Three.js scenes; not a CAD or printable-geometry test"
-        )[:160],
-        "fetched_at": (
-            datetime.fromtimestamp(observed, tz=timezone.utc).isoformat().replace("+00:00", "Z")
-            if observed is not None
-            else None
-        ),
+        "fetched_at": datetime.fromtimestamp(observed, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "fetched_at_epoch": observed,
-        "age_seconds": None if age is None else round(age, 1),
+        "age_seconds": round(age, 1),
         "records": records,
     }
 

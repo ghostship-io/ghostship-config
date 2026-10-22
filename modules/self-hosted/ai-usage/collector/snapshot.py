@@ -1007,8 +1007,10 @@ CALCULATION = {
             "not ahead of the line"
         ),
         "free": (
-            "a free route is the lowest intelligence tier: bounded research, "
-            "cheap and easy tasks, and bulk metadata updates only"
+            "a free route is an access and cost classification, not a "
+            "capability tier: a workload takes it only with the admission "
+            "evidence that workload requires, and the private data and "
+            "frontier review gates still apply"
         ),
         "review": (
             "the review class waits for the frontier authority; it never takes "
