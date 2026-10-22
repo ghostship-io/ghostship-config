@@ -1444,10 +1444,10 @@ def _fill_value(
     alignment = dict(runtime.get("alignment") or {})
     alignment_meta = {
         "option": runtime.get("option"),
-        "value": REASONING_DEFAULT if alignment else None,
+        "value": runtime.get("default") if alignment else None,
         "recommended": bool(alignment),
         "applied": (
-            runtime.get("current") == REASONING_DEFAULT
+            runtime.get("current") == runtime.get("default")
             if runtime.get("current") is not None
             else False
         ),
@@ -1484,8 +1484,10 @@ def _fill_value(
         "fetched_at": intelligence.get("fetched_at"),
         "condition": {
             "measured_variant": measured_variant,
-            "execution_default": REASONING_DEFAULT,
+            "execution_default": runtime.get("default") or REASONING_DEFAULT,
             "execution_escalation": REASONING_ESCALATION,
+            "execution_exception": bool(runtime.get("exception")),
+            "execution_basis": str(runtime.get("basis") or ""),
             "native_variant": intelligence.get("native_variant") or "",
             "variant_match": intelligence.get("variant_match") or "",
             # True only when the native setting is the measured one, or when
@@ -1513,8 +1515,10 @@ def _fill_value(
         "alignment_meta": alignment_meta,
         "runtime_policy": runtime,
         "execution": {
-            "default": REASONING_DEFAULT,
+            "default": runtime.get("default") or REASONING_DEFAULT,
             "escalation": REASONING_ESCALATION,
+            "exception": bool(runtime.get("exception")),
+            "basis": str(runtime.get("basis") or ""),
             "state": runtime["state"],
             "reason": runtime.get("reason") or "",
             "is_benchmark_condition": False,
@@ -1745,6 +1749,30 @@ REASONING_DEFAULT = "medium"
 REASONING_ESCALATION = "high"
 REASONING_LEVEL_OPTIONS = ("variant", "reasoningeffort", "effort")
 
+# The owner-approved High default for the exact DeepSeek V4.1 Flash models.
+# The id is compared exactly after the provider namespace is stripped; there
+# is no substring, family or suffix rule, and no other model inherits it.
+REASONING_HIGH_EXCEPTION_MODELS = (
+    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash:1017",
+)
+
+
+def _reasoning_default(model: str) -> tuple[str, str]:
+    """The runtime reasoning default of a model and its published basis."""
+    name = str(model or "").strip().lower().rsplit("/", 1)[-1]
+    if name in REASONING_HIGH_EXCEPTION_MODELS:
+        return (
+            "high",
+            "owner-approved High execution default for the exact DeepSeek "
+            "V4.1 Flash model; the AA reference and its Max condition are "
+            "unchanged",
+        )
+    return (
+        REASONING_DEFAULT,
+        "owner runtime policy: medium by default, high for escalations",
+    )
+
 
 def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
     """The runtime reasoning policy of a model, from its stock options.
@@ -1756,6 +1784,7 @@ def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
     policy. The AA benchmark condition is reported beside this, never as the
     condition we run.
     """
+    default, default_basis = _reasoning_default(str(row.get("model") or ""))
     options = (row.get("native") or {}).get("options") or []
     effort_options = [
         option
@@ -1764,18 +1793,19 @@ def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
         and str(option.get("id") or "").lower() in REASONING_LEVEL_OPTIONS
     ]
     policy = {
-        "default": REASONING_DEFAULT,
+        "default": default,
         "escalation": REASONING_ESCALATION,
-        "basis": (
-            "owner runtime policy: reason independently of Artificial "
-            "Analysis; AA is used for model selection only"
-        ),
+        "basis": default_basis,
+        "exception": default != REASONING_DEFAULT,
+        "not_from_aa": True,
     }
     if not effort_options:
         return {
             "state": "not_applicable",
             "reason": "the model publishes no reasoning level option",
             "policy": policy,
+            "default": default,
+            "exception": policy["exception"],
             "option": None,
             "supported": [],
             "default_supported": None,
@@ -1793,27 +1823,30 @@ def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
     current = option.get("current_value")
     if not values and isinstance(current, str):
         values = [current.strip().lower()]
-    default_supported = REASONING_DEFAULT in values
+    default_supported = default in values
     escalation_supported = REASONING_ESCALATION in values
     state = "selectable" if default_supported else "capability_mismatch"
     reason = (
-        f"the model lists {REASONING_DEFAULT} for {identifier}"
+        f"the model lists {default} for {identifier}"
         if default_supported
         else (
             f"the model lists {', '.join(values) or 'no levels'} for {identifier} "
-            f"and not {REASONING_DEFAULT}; no level is substituted"
+            f"and not {default}; no level is substituted"
         )
     )
     return {
         "state": state,
         "reason": reason,
         "policy": policy,
+        "default": default,
+        "exception": policy["exception"],
+        "basis": default_basis,
         "option": identifier,
         "supported": values,
         "current": current if isinstance(current, str) else None,
         "default_supported": default_supported,
         "escalation_supported": escalation_supported,
-        "alignment": {identifier: REASONING_DEFAULT} if default_supported else {},
+        "alignment": {identifier: default} if default_supported else {},
         "escalation_alignment": {identifier: REASONING_ESCALATION}
         if escalation_supported
         else {},
