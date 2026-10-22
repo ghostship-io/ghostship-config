@@ -107,6 +107,36 @@ Android delivery may be unavailable until an Access-compatible method is approve
 do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
 `ghostship-notify --topic informational --source test --title 'Ghostship notification test'` checks delivery after rollout; run as root.
 
+`ghostship-newsletter-health.timer` checks the canonical newsletter checkout every
+ten minutes as user 3000 inside `t3code`, through its pinned Nix environment.
+Install newsletter 0.5.18 or later first: the command is
+`ghostship-am-monitor-status --runtime-only --json --fail-on-unhealthy`.
+Newsletter code owns due times, artifact validation and the Gmail delivery ledger.
+A failed or unavailable monitor opens one alert episode in `operations` and queues
+the stable `newsletter-runtime` incident through `ghostship-notify`; the coordinator
+reuses that incident's T3 thread with its existing daily launch limit. The monitor
+persists a distinct event ID for each episode before handing it off, then calls
+`ghostship-notify --incident-only --incident-id ID` separately from ntfy publishing.
+Exit zero from this operation acknowledges a spool file and directory fsync, not
+T3 completion. The same ID produces the same coordinator event key after a lost
+acknowledgement, even if its previous spool file was consumed. Spool and ntfy
+failures retry independently; a pending handoff is retained even if runtime health
+recovers. Observed recovery closes the episode even while ntfy is unavailable, so
+a relapse gets a fresh persisted incident ID. One pending resolution is retained
+across flaps and delivered before a current firing notification, so ntfy's shared
+dedupe key cannot suppress that firing. Undelivered incidents use a stable ID
+prefix and sequence range instead of a growing episode list; existing episode IDs
+are adopted unchanged. Pending handoffs drain one per observation, including healthy
+observations, without discarding episodes during an extended spool outage.
+Episode state uses file fsync, atomic
+replacement and directory fsync; this is local persistence, not a guarantee
+against disk loss or a claim of exactly-once remote effects. This host job never
+collects, prepares, repairs or sends mail. Its ledger evidence confirms Gmail
+acceptance/reconciliation, not recipient receipt. Inspect with
+`journalctl -u ghostship-newsletter-health`; stop/start the timer to pause/resume,
+or start its service for a manual check. State lives in
+`/var/lib/ghostship-newsletter-health/state.json`.
+
 ### Notification coverage
 
 `modules/self-hosted/notify-coverage.nix` attaches `ghostship-failure@` to
@@ -451,3 +481,284 @@ allowing recovery after the window expires.
 - [Kuma v2 server API](https://github.com/louislam/uptime-kuma/blob/2.0.0/server/server.js)
 - [Seerr settings API](https://github.com/seerr-team/seerr/blob/develop/server/routes/settings/index.ts)
 - [Cloudflare custom tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+
+## Autonomous work overview (Grafana)
+
+Grafana's provisioned home is `/d/ghostship-autonomous-work`, with direct links to
+host, security and SIEM pipeline dashboards and to the separate AI usage
+dashboard (`/d/ghostship-ai-usage`, owned and provisioned by the ai-usage
+package). All pages share the same link bar and UTC defaults; work/security
+default to today, host/pipeline to six hours. The configured `users.home_page`
+points to the provisioned overview UID and `dashboards.default_home_dashboard_path`
+loads the same JSON as the home fallback. It is an observation surface only;
+Cloudflare Access, Viewer access, vmauth query-only routes and UI network isolation
+remain the existing boundary. Datasource provisioning uses the existing
+restricted `vmauth.env` credential through `$GRAFANA_VMAUTH_PASSWORD`; INI
+`$__file{...}` expansion does not apply to datasource provisioning. No secret
+values enter the Nix store. There are no dashboard management actions or new
+plugins. `ghostship-autonomous-work.timer` runs every minute; its Python collector
+reads existing SQLite projections with `mode=ro`, `query_only`, live-WAL support,
+one-second query deadlines and 200 rows per source. The systemd sandbox makes the
+stores read-only, permits only Unix sockets (the systemd timer inventory), and
+limits memory to 128 MiB, CPU to 10% and execution to 30 seconds.
+
+The current JSONL snapshot in `/run/ghostship-autonomous-work` and node textfile
+`autonomous-work.prom` are replaced atomically, not appended. Vector sends the
+allowlisted snapshot through existing redaction and disk buffering. VictoriaLogs
+and VictoriaMetrics own history and retention; there is no new database or cursor.
+Counts are bounded snapshot gauges, not incremented event counters. Lists select
+the latest observation per durable identity, so polling does not multiply entries.
+Source failures omit counts and success timestamps, and emit `source_up=0`; check
+coverage, last-success age and snapshot age before interpreting empty tables.
+The link bar is built from a fixed page list, so rebuilding a dashboard cannot
+append a second copy of a link; exactly one link per page is verified.
+The agents table shows `Model`, `Provider`, `Branch`, `State`, `T3 thread` and
+`Parent`; the queues table keeps explicit waiting and background jobs.
+Current tables expire observations after three minutes. Lists are capped at 200
+rows per source, and no panel claims a complete enumeration: a truncated source
+is a lower bound and is counted as such. The default timeline is
+today in UTC; source history is limited to the preceding 24 hours and 200 rows
+per source. Timeline state transitions deduplicate by identity, state and source
+change time; current tables select only the latest state.
+Every native project is queried, including manual threads and projects without
+broker activity; caps are disclosed rather than presented as complete enumeration.
+
+Stock T3 v0.1.0 provides `scheduledTasks.list` and the orchestration shell HTTP
+read. Its installed schema was verified against the stock migrations, and the
+collector reads all native project, ordinary/manual thread, pending runtime
+request, launch workflow, PR artifact, `scheduled_tasks`, run, subagent and
+webhook-delivery projections from
+`/srv/apps/t3code/home/.t3/userdata/statev2.sqlite`. It also reads coordinator
+`events` and `owners` from `/var/lib/ghostship-github/state/github.sqlite`, runtime
+job receipts from the T3 home and MCP persistent state, and host systemd timers.
+The live MCP job store was verified at
+`/srv/apps/ghostship-private-integrations/ghostship/ghostship-agent/runtime/jobs.sqlite`.
+Only that path and the fixed shared-backend / relay `.local/state` alternatives
+are read during layout transitions; duplicate job IDs retain the newest receipt.
+Missing alternatives are never created and homes are not recursively scanned.
+It does not read prompts, titles, error/note bodies, arguments, environment,
+webhook URLs/bodies/headers, messages or transcripts. Work identifiers are hashed;
+validated T3 UUID links and GitHub issue links permit opening source details.
+Coordinator incident daily-limit holds are classified from the exact known result
+`over daily limit`, without exporting the note. A native active run is recorded
+state, not PID liveness; CI status does not establish objective completion.
+
+### Time selection: what each panel means
+
+Every dashboard follows the native Grafana time picker; there are no custom time
+buttons, presets or hand-rolled selectors, and navigation links keep the selected
+range and filters (`keepTime`/`includeVars`).
+
+| Panel kind | Semantics | Example |
+| --- | --- | --- |
+| Selected-range history | `stream:=autonomous-work _time:$__range` — the window is the picker, never a literal | work state timeline, webhook fires |
+| Current state | last collector snapshot (one-minute poll), explicitly labelled "snapshot", not a range total | next up, attention, in flight, schedules, projects, threads, handoffs |
+| UTC-day card | counted on the collector's UTC day and labelled as such, with a pointer to the range view | work today, webhooks today |
+| Rolling rate | five-minute rolling average over the selected range, labelled "rolling" | CPU total, CPU per core, container CPU/transmit, load |
+| As-of value | instant query at the end of the selected range | host memory/disk stats, quota and status cards |
+| Counter increase | only for a cumulative `_total` counter, never a summed rolling gauge | kernel audit records lost (`increase(..._total[10m])`) |
+
+Where the producer only exposes a rolling gauge, no panel claims a range total:
+the panel says what it is instead. This is enforced by
+`tests/test_siem_dashboard_time_semantics.py`, which also pins the selected-range
+panels to `$__range` and requires every `increase()` to name a `_total` counter.
+
+### Provider page: decisions first, exceptions only, units that read
+
+The provider page is ordered for a ten-second read: the review banner, then the
+winners grouped by tier, then the decision inputs, then the exceptions, then the
+long usage and ranking reference tables. Winners show the tier, provider, model,
+value and its source (`measured` or `prior`), quality, capacity as a share and
+expiry as a duration, so a free-tier prior value is never read as frontier
+intelligence. A provider filter is a native variable, so the selection and the
+time range stay in the URL.
+
+`Providers with no fresh reading` is an exception table: every target is
+restricted to providers whose source is not ok, not successful, has no success
+within fifteen minutes, or has no reading at all. A healthy provider cannot
+appear; an empty table means every source is ok and fresh. The rule is covered by
+a fixture regression that proves a healthy source is excluded while partial,
+stale, failed and missing sources remain visible.
+
+Two coverage gaps are stated instead of implied. Calculation gates have no
+series: the producer publishes the formula and weights only, so the calculation
+panel shows no gate rows and says so. The compared candidate set (the ranked
+rows) is narrower than the provider catalogs; `Compared vs catalog` publishes
+both counts and the candidate table stays anchored to the compared set.
+
+Known missing inputs, not faked: white-line pace and per-component benchmark
+metrics are not exported by the producer, so no panel queries them; a contract
+change on the producer side is needed before they can be shown.
+
+Pending producer contract for the per-quota widgets (schema owned by the ai-usage
+producer; not deployed yet, so no panel queries it): `expected_used_ratio =
+elapsed / duration`, and `pace_delta_ratio = expected_used − actual_used`, so a
+**positive** value is spare budget (under the line) and a negative value is over
+budget; the model-level `pace_delta_ratio` keeps the same sign. A seven-day window
+with five days left has 28.6 % expected use, so 20 % used reads as +8.6 pp spare,
+never as over budget. The widgets will show the used bar with a white expected
+line per quota and each reset separately; a per-row marker inside a table is not a
+native Grafana feature and will not be implied. Free-tier ranking follows the
+provider, not the price: zero-price promotional models (OpenCode Go) are bulk
+candidates, while dedicated free-provider integrations prefer their best eligible
+capability tier with fallback and cooldown/unknown capacity shown; a higher
+complexity tier needs explicit admission and is never inferred from a model suffix
+or a zero price.
+
+### Host resources: CPU over all cores and the real memory split
+
+The host page is the primary resource view for the agents and the server:
+total CPU utilisation over every core (`100 × (1 − avg(rate(node_cpu_seconds_total{mode="idle"}))`),
+per-core utilisation (`100 × (1 − avg by (cpu)(rate(...)))`), and memory as
+`total`, `used = total − available` and `available`, all in bytes from the same
+exporter. Percent is 0–100 and memory uses IEC bytes, so the panels read the same
+way as the host's own tools. `Host writers` counts the exporters reporting
+`MemTotal` and `CPUs reporting` counts the distinct idle counter series: on the
+live host there is no `instance` or `job` label, one series per cpu and exactly one
+`MemTotal` series, so nothing is double counted and a second writer would be
+visible instead of silently blended. A stale or empty sample stays unknown; the
+sample age is next to the values for exactly that reason.
+
+### Agents: who is running, on which branch, with which model
+
+The overview answers "what is running now" from the native execution projection, not
+from titles. One row exists per native thread, ordinary or app-owned child, across
+every project:
+
+- state is the current run's recorded state (`running`, `waiting`, `queued`, plus the
+  terminal states), with `waiting` when the thread has a pending native request; it
+  is a recorded state, never process liveness. The projection stores no
+  authoritative active-run binding, so execution authority decides: an executing run
+  outranks queued work, queued work outranks terminal history, and a newer queued
+  model switch can never hide the run that is actually executing;
+- provider and model come from the current run's `modelSelection` (falling back to the
+  run's own provider), never from the thread's configured default after a switch;
+- branch comes from the thread projection (`payload_json.branch`), not from a title;
+- the parent link comes from the subagent projection (`child_thread_id` → parent
+  thread), and the row is omitted when no parent is recorded;
+- absent fields stay absent, so the table shows them as unknown instead of inventing
+  a value.
+
+Active work is enumerated in bounded pages (four pages of 500) so the two-hundred-row
+history cap can never hide a running agent. The real active total is published on the
+`t3_agents` coverage row, so a collector cap is disclosed instead of silently dropping
+agents. Terminal threads are a separate windowed source (`t3_agent_history`, last 24
+hours, bounded like every other list). Branch and model are private operational values:
+they travel only through the authenticated Grafana and the private VictoriaLogs
+datasource, never as Prometheus labels, and no title, prompt, transcript, raw error or
+personal value is exported.
+
+The environment id is read from the stock runtime file the server already writes
+(`stateDir/environment-id`, under the read-only T3 userdata mount) and accepted only
+as a UUID; a missing or malformed file keeps the app deep link. No id is baked into
+configuration, and no secret service or network call is involved.
+
+Thread ids are opaque: ordinary threads are UUIDs, app-owned children look like
+`thread:delegated-task:command%3Amcp%3A...`, and some rows use `mcp:<uuid>`. The link
+uses the coordinator's stock contract (a plain path join of the environment and the
+raw id, or the `t3-thread://v1/...` app link when the environment is unknown) and
+fails closed on any other shape, so a child link is kept instead of being dropped by
+a UUID-only check.
+
+### What the overview reports, and what it refuses to claim
+
+- Schedules keep four separate facts: the enable flag, the next run, the last run
+  and the last result. A disabled schedule keeps the outcome of its previous run
+  and is listed in the inventory, not in "next up".
+- Completion claims are classified, never merged: `model_report` for a provider or
+  runtime report about work, `ci` for a CI/check/workflow-run receipt, `review`
+  for a submitted review receipt, `pr_closed` for a closed pull request receipt,
+  `deployment` for a deployment status receipt and `ci_proof` for the coordinator
+  CI proof. The dashboard counts the classes separately and links them from one
+  table.
+- The coordinator CI proof (`pull_progress`) is read as scalars on the exact
+  revision: the outcome, the merge flag, the required check count and the
+  failing check count. It proves the configured checks on that revision and
+  nothing else. A failing required check wins, and a stale revision is
+  invalidated before any evidence read, so the proof fails closed. The table is
+  optional: a coordinator without it is an explicit gap, not an empty result.
+- The owner state of the coordinator is read only in its compact safe values
+  (`incomplete`, `uncertain`, `closed_unverified`). The raw note is never read.
+- Objective completion has no source. It is published as an explicit coverage gap,
+  never as a zero count of completed objectives.
+- The frontier approval and the deployed health of a change have no source in
+  this collector. They stay explicit unsupported gaps until such a source
+  exists; they are never rendered green.
+- A thread state is the current one: an active or queued run wins, otherwise the
+  latest executed run by completion time. The highest run ordinal alone can mask
+  a run that started and failed later. A recorded active state is not process
+  liveness.
+- AI provider usage, limits and model rankings belong to the separate ai-usage
+  package and dashboard. This collector does not read provider token usage at all
+  and publishes `ai_usage` as a gap owned elsewhere, not as a claim about its
+  deployment state. The page links to `/d/ghostship-ai-usage` directly.
+- Per-source counts are gated on that source being readable and on a fresh
+  snapshot. A missing source shows as unknown, not as zero, and a truncated source
+  is shown as a lower bound with the truncation count on the same screen.
+- "Today" is the UTC day computed at collection time (`event_today`,
+  `fired_today`), not a dashboard macro: Grafana expands no `$__from`/`$__to`
+  macro for this datasource, and a stale clock would otherwise widen the window.
+- ChatGPT Tasks has no local inventory. Only a prior UI observation exists, and
+  no count from it is published as a current measurement. External GitHub hook
+  subscriptions have an explicit inventory gap and are not inferred from
+  receipts; a push fire appears only after an actual subscribed receipt.
+- The optional coordinator `automatic_reviews` table is nonfatal when absent
+  on older deployments. It preserves queued/requested/native-running/terminal/
+  reported/superseded/blocked states; `reported` is a model report, not objective, CI
+  or deployment proof. Native PR links and review PR/thread links lead to the exact
+  source artifacts; deployment readiness/completion is unknown without source
+  evidence. Optional router provenance in coordinator `meta` is selected only from
+  known scalar fields under `model-route:%` keys: selected provider, first-choice
+  quota/reason, selected/wait state, fallback flag and cooldown expiry. Stale
+  cooldowns expire; absent or different schemas show a gap. Optional
+  `model-continuation:%` meta selects only state, provider, project/thread IDs,
+  update time, acceptance flags and bounded native/executing run counts. Review
+  `occupied` is shown as a reserved slot. Neither a reservation nor accepted
+  switch/message receipt establishes objective completion; frozen command/text,
+  notes and native run payloads are excluded. No raw meta values,
+  review tasks, notes or receipts are exported.
+
+### Verification
+
+Re-run the dedicated suite in the repository Nix environment:
+`python3 -m unittest discover -s tests -p test_siem_autonomous_work.py`.
+Set `GHOSTSHIP_TEST_VLOGS` / `GHOSTSHIP_TEST_VMETRICS` to native store executables
+to include the all-dashboard query check: every panel of every page is executed
+against disposable VictoriaLogs and VictoriaMetrics instances, every list panel
+must return fixture rows, every count panel must count them, and a second poll
+must not multiply either list entries or counts. Set `GHOSTSHIP_TEST_GRAFANA` to
+the Grafana package root and `GHOSTSHIP_TEST_PROVISIONING` to the realised
+provisioning output for the native home, four-dashboard and datasource-auth
+regression.
+
+Verified in a disposable Grafana with the provisioned dashboards and fixture
+observations: the home opens the overview, the single link bar reaches every page,
+the summary panels show real values, and the list panels show real rows with their
+label columns (schedules with next/last/result, attention items, in-flight runs,
+queued jobs, webhook receipts, CI proofs). The table recipe is the datasource's
+documented one: extract the log labels, replace the raw log fields, keep the row
+time, then rename the columns. A `fields` pipe must keep `_time` and `_msg`,
+otherwise the datasource cannot give the panel a row time or a line.
+
+A headless browser without a font configuration is a trap for this check: Skia
+aborts with `SkFontMgr_FontConfigInterface ... Not implemented` and the renderer
+dies mid-paint, which shows every list panel as headers with empty rows even
+though the data arrived. Set `FONTCONFIG_FILE` to a local fontconfig that points
+at a store font directory before taking the screenshot; no network font is
+involved. This is an environment fault, not a dashboard or datasource defect: the
+same panels render rows once fonts resolve, and the existing `security.json` log
+panels behave identically.
+
+Deployment and browser rendering require separate target-host verification.
+
+Existing dashboard checks use read-only VictoriaMetrics/VictoriaLogs queries; no
+log bodies leave the host. AppArmor `ALLOWED` learning events and enforced
+`DENIED` events are separate. Falco log rows retain `_msg` (without it, the
+plugin's log line is empty unless JSON packing is enabled). Firing-alert labels
+use an instant Prometheus table result. Zero alerts is gated on fresh watchdog
+and node samples plus active vmalert units; empty denial/alert tables can be a
+valid zero, while missing collector freshness remains unknown. Grafana 13's
+provisioned dashboards are in its unified `resource` table, so an empty legacy
+`dashboard` table does not prove provisioning failed. A `fields` pipe must keep
+`_time` and `_msg`, otherwise the datasource cannot give the panel a row time or
+a line.

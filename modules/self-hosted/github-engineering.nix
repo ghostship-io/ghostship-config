@@ -17,10 +17,13 @@ let
   network = "ghostship_github_net";
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
-    "ghostship-io/ghostship-config".project_id = "the owner's local area";
+    "ghostship-io/ghostship-config" = {
+      project_id = "the owner's local area";
+      required_checks = [ "check" "browser" ];
+    };
     "ghostship-io/ghostship-agent".project_id = "the owner's local area";
     "ghostship-io/ghostship-3dprinting".project_id = "the owner's local area";
-    "ghostship-io/goship-roms".project_id = "the owner's local area";
+    "ghostship-io/ghostship-roms".project_id = "the owner's local area";
     "ghostship-io/ghostship-xplus4".project_id = "the owner's local area";
     "ghostship-io/ghostship-newsletter".project_id = "the owner's local area";
     "ghostship-io/ghostship-orca".project_id = "the owner's local area";
@@ -29,8 +32,38 @@ let
     allowed_user_ids = [ a local store id ];
     ntfy_url = "http://ntfy:8080";
     t3_environment_id = "the owner's local area";
-    model_selection = { instanceId = "codex"; model = "gpt-6.1-sol"; };
-    repositories = lib.mapAttrs (_: r: r // { base = "main"; }) repositories;
+    # The chief reviewer leads launched threads; the backup reviewer stands in
+    # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
+    # remains delegated under the canonical engineering/routing policy.
+    model_selection = {
+      instanceId = "claudeAgent"; model = "claude-opus-5-5";
+      options = [ { id = "effort"; value = "high"; } ];
+    };
+    frontier_models = [
+      { instanceId = "claudeAgent"; model = "claude-opus-5-5"; }
+      { instanceId = "codex"; model = "gpt-6.1-sol"; }
+    ];
+    # Existing authenticated subscriptions only. Each provider owns its options;
+    # measured exhaustion skips it, and an unknown balance is shown as unknown.
+    model_routes = [
+      { instanceId = "claudeAgent"; model = "claude-opus-5-5";
+        options = [ { id = "effort"; value = "high"; } ]; }
+      { instanceId = "codex"; model = "gpt-6.1-sol";
+        options = [ { id = "reasoningEffort"; value = "high"; } ]; }
+    ];
+    review_max_active = 2;
+    model_rankings_path = "/run/ghostship-integrations/model-routing.json";
+    repositories = lib.mapAttrs (_: r: r // {
+      base = "main";
+      # Off until the owner approves the ranking for routing: the review
+      # routes are frontier (Codex/Claude) and their quota is reserved.
+      automatic_review = {
+        enabled = false;
+        debounce_seconds = 30;
+        max_active = 1;
+        timeout_seconds = 1800;
+      };
+    }) repositories;
     # Host incidents launch bounded repair threads in the fleet's own project.
     incidents = { repository = "ghostship-io/ghostship-config"; daily_limit = 3; };
   });
