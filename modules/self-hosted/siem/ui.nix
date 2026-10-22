@@ -28,11 +28,20 @@ let
     url = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.33.1/victoriametrics-logs-datasource-v0.33.1.zip";
     sha256 = "73e7ce379ae9a9ce6fdb978e5d6d43f67029b4c3e4d970f1ca8f7f4617f331c5";
   };
+  # The Business Text panel (the Dynamic Text panel under its current name),
+  # pinned by version and hash. The artifact is the signed release of 6.3.0,
+  # the same pin nixpkgs carries, so the host never fetches a plugin.
+  businessTextPluginZip = pkgs.fetchurl {
+    url = "https://grafana.com/api/plugins/marcusolsson-dynamictext-panel/versions/6.3.0/download";
+    sha256 = "sha256-nobTHc/GucfwyDGMsxPpDim9txzfygi1UFjd6XR+nLc=";
+  };
   plugins = pkgs.runCommand "grafana-siem-plugins" { nativeBuildInputs = [ pkgs.unzip ]; } ''
     mkdir -p $out
     # Unmodified: the signed MANIFEST covers every file, so pruning the other
     # platforms' backends fails Grafana's signature check.
     unzip -q ${logsPluginZip} -d $out
+    # The Business Text panel, pinned above. Its own directory, signed.
+    unzip -q ${businessTextPluginZip} -d $out
   '';
 
   heartbeat = pkgs.pkgsStatic.runCommandCC "ghostship-heartbeat" { } ''

@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.67] - 2026-10-22
+
+- The Grafana Business Text panel is vendored by hash. The panel (`marcusolsson-dynamictext-panel`, 6.3.0) is fetched by `fetchurl` with a fixed sha256, the same pin nixpkgs carries, and unpacked into the read-only plugin bundle next to the VictoriaLogs datasource, so the UI never downloads a plugin at runtime. The artifact is the signed release, so Grafana's signature check still passes.
+
 ## [3.17.66] - 2026-10-22
 
 - The 3D tier gets its AA-3D evidence. The public pull returned early whenever the main Artificial Analysis cache was fresh, so the AA-3D file it writes was never created and every model read "no usable AA-3D snapshot": the 3D tier was empty, and the 3D reserve could not apply, so a 3D-qualified model led the bulk tier. The pull now skips only when both caches are usable.
