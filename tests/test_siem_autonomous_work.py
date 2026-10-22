@@ -1274,7 +1274,8 @@ class NativeStoreTests(unittest.TestCase):
         self.assertTrue(card(49, 1, fresh_esc), 'Paced Availability must be non-empty for a staggered sample')
         facts = query(by_id[31]['targets'][0]['expr'].replace('$provider', '.*'))
         models = {row['metric']['model'] for row in facts}
-        self.assertIn('claude-opus-5-5', models)
+        # The table names the model the way a person would say it.
+        self.assertIn('Claude Opus 5.5', models)
         self.assertNotIn('stale-model', models)
 
     def server(self, binary, directory):
