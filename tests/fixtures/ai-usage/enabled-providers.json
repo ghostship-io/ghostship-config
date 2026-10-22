@@ -1,0 +1,50 @@
+{
+  "schema": "ghostship.ai-usage.enabled-providers",
+  "checked_at": "2026-10-22",
+  "basis": "the provider accounts the collector reads and the routes they serve",
+  "providers": [
+    {
+      "provider": "opencode-go",
+      "source": "opencode-go",
+      "models": [
+        "minimax-m3.1-flash-free",
+        "minimax-m3.1"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "source": "openrouter",
+      "models": [
+        "cohere/north-mini-code:free"
+      ]
+    },
+    {
+      "provider": "ollama",
+      "source": "ollama",
+      "models": [
+        "deepseek-v4.1-flash"
+      ]
+    },
+    {
+      "provider": "codex",
+      "source": "t3",
+      "models": [
+        "gpt-6.1-sol"
+      ]
+    },
+    {
+      "provider": "claude",
+      "source": "t3",
+      "models": [
+        "claude-opus-5-5"
+      ]
+    },
+    {
+      "provider": "grok",
+      "source": "grok",
+      "models": [
+        "grok-code"
+      ]
+    }
+  ]
+}
