@@ -120,6 +120,8 @@ class OwnerIdentityWiringTests(unittest.TestCase):
     def test_the_templates_keep_only_the_placeholder_names(self):
         source = (MODULES / "private-integrations.nix").read_text(encoding="utf-8")
         self.assertIn('"@GHOSTSHIP_KEEP_PERSONAL_EMAIL@"', source)
+        self.assertIn('"@GHOSTSHIP_KEEP_AGENT_EMAIL@"', source)
+        self.assertNotIn('@gmail.com', source)
         self.assertIn('"@GHOSTSHIP_KUMA_USERNAME@"', source)
         engineering = (MODULES / "github-engineering.nix").read_text(encoding="utf-8")
         self.assertIn('"@GHOSTSHIP_GITHUB_ACCOUNT@/', engineering)
