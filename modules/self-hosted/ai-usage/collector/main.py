@@ -1394,7 +1394,7 @@ def collect(
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
     events_cache: str = EVENTS_CACHE_FILE,
-    opencode_db: str | None = None,
+    opencode_db: str = OPENCODE_DB_FILE,
     window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
     t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
@@ -1442,7 +1442,7 @@ def collect(
     routes = _known_routes(offered, pool_models, extra)
     inferred = usage_inference.read_and_infer(
         moment,
-        opencode_db=opencode_db or f"{t3_home}/{usage_inference.OPENCODE_DB_RELATIVE}",
+        opencode_db=opencode_db,
         events_cache=events_cache,
         pool_ledger=pool_ledger,
         routes=routes,
