@@ -54,7 +54,7 @@ def Catalog(models):
     return catalog_module.Catalog(document)
 
 
-def build(models, records, *, windows=None, facts_map=None, policy=None, aa_3d=None):
+def build(models, records, *, windows=None, facts_map=None, policy=None, aa_3d=None, native_options=None):
     catalog = Catalog(models)
     pairs = list(models)
     ranked = ranking.rank_models(
@@ -75,7 +75,7 @@ def build(models, records, *, windows=None, facts_map=None, policy=None, aa_3d=N
             key: {
                 "providerInstance": key[0],
                 "modelId": key[1],
-                "options": [],
+                "options": (native_options or {}).get(key, []),
             }
             for key in pairs
         },
@@ -572,7 +572,7 @@ class AA3DContractTests(unittest.TestCase):
         cache = self._load(
             self._document(
                 [
-                    self._record(model="Low", elo=1000, rank=2),
+                    self._record(model="Low", elo=1000, rank=2, ci95_low=980, ci95_high=1020),
                     self._record(model="High", elo=1200, rank=1),
                 ]
             )
@@ -580,20 +580,73 @@ class AA3DContractTests(unittest.TestCase):
         self.assertEqual(cache["bounds"], {"min_elo": 1000.0, "max_elo": 1200.0, "count": 2})
         self.assertEqual(cache["records"][0]["normalized"], 0.0)
         self.assertEqual(cache["records"][1]["normalized"], 1.0)
-        self.assertEqual(cache["records"][0]["elo_interval"]["low"], 1180.0)
+        self.assertEqual(cache["records"][0]["elo_interval"]["low"], 980.0)
         self.assertEqual(cache["records"][0]["source"], aa_3d.SOURCE_URL)
 
     def test_no_record_normalized_or_linear_transform_is_accepted(self):
         # The old free-form fields are ignored: the board policy decides.
         cache = self._load(
             self._document(
-                [self._record(model="A", elo=1000, normalized=0.2)],
+                [self._record(model="A", elo=1000, ci95_low=980, ci95_high=1020, normalized=0.2)],
                 normalization={"kind": "linear", "offset": 10, "scale": 100},
             )
         )
         self.assertEqual(cache["status"], "ok")
         self.assertEqual(cache["normalization"]["kind"], "relative-minmax")
         self.assertEqual(cache["records"][0]["normalized"], 1.0)
+
+    def test_duplicate_ranks_are_rejected(self):
+        dup = [
+            self._record(model="A", rank=1),
+            self._record(model="B", rank=1, elo=1100, ci95_low=1080, ci95_high=1120),
+        ]
+        self.assertEqual(self._load(self._document(dup))["status"], "invalid")
+
+    def test_an_interval_that_does_not_contain_the_point_is_rejected(self):
+        bad = self._record(elo=1197, ci95_low=1, ci95_high=2)
+        self.assertEqual(self._load(self._document([bad]))["status"], "invalid")
+
+    def test_a_non_finite_rank_rejects_without_raising(self):
+        bad = self._record(rank=float("inf"))
+        self.assertEqual(self._load(self._document([bad]))["status"], "invalid")
+
+    def test_the_published_attribution_is_fixed_and_raw_fields_are_not_forwarded(self):
+        cache = self._load(
+            self._document(
+                [
+                    self._record(
+                        model="GPT-6.1 Sol (Max)",
+                        id="private-id",
+                        slug="private-slug",
+                        source="https://private.example/leaderboard",
+                        normalization="private",
+                        released_at="PRIVATE",
+                    )
+                ],
+                attribution="PRIVATE_SENTINEL",
+            )
+        )
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(cache["attribution"], "Artificial Analysis (https://artificialanalysis.ai/)")
+        record = cache["records"][0]
+        self.assertEqual(
+            set(record),
+            {
+                "model",
+                "elo",
+                "elo_interval",
+                "rank",
+                "rank_range",
+                "anchor",
+                "cost_per_task",
+                "normalized",
+                "source_normalized",
+                "conditions",
+                "source",
+            },
+        )
+        self.assertEqual(record["source"], aa_3d.SOURCE_URL)
+        self.assertEqual(record["conditions"], {"benchmark": "AA-3D", "scope": aa_3d.PUBLIC_CONDITION})
 
     def test_the_3d_value_is_cost_aware_with_the_explicit_proxy(self):
         models = visual_model("codex", "gpt-6.1-sol")
@@ -722,3 +775,159 @@ class ProviderCapacityUnknownTests(unittest.TestCase):
             values[("ghostship_ai_provider_capacity_remaining_ratio", "weekly", None)],
             0.8,
         )
+
+
+class StockDescriptorTests(unittest.TestCase):
+    """The stock orchestrator option descriptors, end to end."""
+
+    def _source_options(self):
+        import t3source
+
+        return t3source._model_options(
+            {
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "effort",
+                            "options": [
+                                {"id": "low", "label": "Low"},
+                                {"id": "medium", "label": "Medium"},
+                                {"id": "high", "label": "High"},
+                                {"id": "xhigh", "label": "Xhigh"},
+                                {"id": "max", "label": "Max"},
+                                {"id": "ultracode", "label": "Ultracode"},
+                                {"id": "ultrathink", "label": "Ultrathink"},
+                            ],
+                        },
+                        {"id": "thinking", "options": [{"id": "on"}, {"id": "off"}]},
+                    ]
+                }
+            }
+        )
+
+    def test_a_descriptor_without_a_current_value_is_kept_with_its_choices(self):
+        options = self._source_options()
+        effort = [option for option in options if option["id"] == "effort"][0]
+        self.assertNotIn("currentValue", effort)
+        self.assertEqual(
+            effort["values"],
+            ["low", "medium", "high", "xhigh", "max", "ultracode", "ultrathink"],
+        )
+        native = snapshot._native_record(
+            "claude", "claude-opus-5-5", {"providerInstance": "claudeAgent", "modelId": "claude-opus-5-5", "options": options}
+        )
+        self.assertFalse(native["options"][0]["current_published"])
+        self.assertIsNone(native["options"][0]["current_value"])
+        self.assertEqual(native["options"][0]["values"][4], "max")
+
+    def test_the_measured_condition_aligns_through_the_stock_option(self):
+        self.assertEqual(aa_bind.alignment_option(self._source_options(), "max"), ("effort", "max"))
+        models = visual_model("claude", "claude-opus-5-5")
+        data = build(
+            models,
+            [record("claude-opus-5-5", 57.6, 0.5, name="Claude Opus 5.5 (Max)")],
+            native_options={("claude", "claude-opus-5-5"): self._source_options()},
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["aa"]["condition"]["variant_match"], "unconfirmed")
+        self.assertTrue(row["aa"]["selectable"])
+        self.assertEqual(row["aa"]["alignment"], {"effort": "max"})
+        self.assertEqual(row["aa"]["alignment_meta"]["option"], "effort")
+        self.assertTrue(row["aa"]["alignment_meta"]["recommended"])
+        self.assertFalse(row["aa"]["alignment_meta"]["applied"])
+        self.assertFalse(row["aa"]["alignment_meta"]["actual"] is not None)
+
+    def test_an_unsupported_condition_is_not_selectable(self):
+        models = visual_model("claude", "claude-opus-5-5")
+        data = build(
+            models,
+            [record("claude-opus-5-5", 57.6, 0.5, name="Claude Opus 5.5 (Ultra)")],
+            native_options={("claude", "claude-opus-5-5"): self._source_options()},
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["aa"]["alignment"], {})
+        self.assertFalse(row["aa"]["selectable"])
+        self.assertEqual(row["aa"]["alignment_meta"], {})
+
+    def test_the_condition_without_a_stock_descriptor_is_not_selectable(self):
+        models = visual_model("claude", "claude-opus-5-5")
+        data = build(
+            models,
+            [record("claude-opus-5-5", 57.6, 0.5, name="Claude Opus 5.5 (High)")],
+        )
+        row = data["candidates"][0]
+        # No native option was passed at all: unknown condition, no select.
+        self.assertFalse(row["aa"]["selectable"])
+        self.assertEqual(row["aa"]["alignment"], {})
+
+    def test_the_codex_actual_current_value_is_distinguished_from_the_recommendation(self):
+        import t3source
+
+        options = t3source._model_options(
+            {
+                "capabilities": {
+                    "optionDescriptors": [
+                        {
+                            "id": "reasoningEffort",
+                            "currentValue": "low",
+                            "options": [
+                                {"id": "low"},
+                                {"id": "medium"},
+                                {"id": "high"},
+                                {"id": "xhigh"},
+                                {"id": "max"},
+                                {"id": "ultra"},
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+        models = visual_model("codex", "gpt-6.1-sol")
+        # The snapshot receives the raw stock options.
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, 0.4, name="GPT-6.1 Sol (Max)")],
+            native_options={("codex", "gpt-6.1-sol"): options},
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["aa"]["alignment"], {"reasoningEffort": "max"})
+        self.assertTrue(row["aa"]["alignment_meta"]["recommended"])
+        self.assertFalse(row["aa"]["alignment_meta"]["applied"])
+        # The actual low is still published beside the recommendation.
+        self.assertEqual(row["native"]["options"][0]["current_value"], "low")
+
+
+class CatalogCoverageReconciliationTests(unittest.TestCase):
+    def test_the_inventory_and_the_excluded_models_are_published(self):
+        models = text_model("codex", "gpt-6.1-sol")
+        catalog = Catalog(models)
+        cache_doc = cache([record("gpt-6-1-sol", 51.8, 0.4)])
+        ranked = ranking.rank_models(
+            models=[ranking.ModelRecord("codex", "gpt-6.1-sol")],
+            catalog=catalog,
+            quota_windows={},
+            free_models=set(),
+            promo_models={("codex", "gpt-6.1-sol")},
+            usage_tokens={},
+            aa_cache=cache_doc,
+            now=NOW,
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=ranked,
+            native_models={},
+            policy={"frontierPrimeModels": (), "allowedGptModels": (), "backgroundProviderInstances": ("codex",)},
+            catalog=catalog,
+            facts={},
+            aa_cache=cache_doc,
+            free_models=set(),
+            promo_models={("codex", "gpt-6.1-sol")},
+            inventory=[("codex", "gpt-6.1-sol"), ("codex", "not-offered")],
+        )
+        ranking_coverage = data["coverage"]["ranking"]
+        self.assertEqual(ranking_coverage["inventory"], 2)
+        self.assertEqual(ranking_coverage["candidates"], 1)
+        self.assertEqual(ranking_coverage["excluded"], 1)
+        self.assertEqual(ranking_coverage["excluded_models"], [["codex", "not-offered"]])

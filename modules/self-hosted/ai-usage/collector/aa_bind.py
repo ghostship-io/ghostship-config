@@ -198,6 +198,22 @@ def variant_of(name: str) -> tuple[str, str]:
     return text, ""
 
 
+def annotation_unknown(name: str) -> bool:
+    """True when the record's trailing annotation is not a known condition.
+
+    A parenthetical the feed uses for something else (a release, a capability)
+    is not a measurement condition, so the record's condition is unknown. It
+    must never be presented as the model's exact condition.
+    """
+    match = re.search(r"\(([^)]+)\)\s*$", str(name or "").strip())
+    if not match:
+        return False
+    for part in match.group(1).split(","):
+        if part.strip().lower() in VARIANT_MARKERS:
+            return False
+    return True
+
+
 def default_condition(name: str) -> bool:
     """True when the feed itself says the measured condition is the default.
 
@@ -269,10 +285,15 @@ def alignment_option(options: Any, variant: str) -> tuple[str, str] | None:
             or option.get("allowedValues")
             or option.get("choices")
             or option.get("enum")
+            or option.get("options")
         )
         if not isinstance(values, (list, tuple)):
             continue
         for value in values:
+            if isinstance(value, Mapping):
+                value = value.get("id")
+            if value is None:
+                continue
             if str(value).strip().lower() in aliases:
                 return name, str(value)
     return None
@@ -609,7 +630,9 @@ def resolve(
         "native_variant": target["variant"],
         "variant_match": match_kind,
         "variant_mismatch": match_kind == "variant_mismatch",
-        "condition_confirmed": match_kind in ("exact", "default"),
+        "condition_confirmed": match_kind in ("exact", "default")
+        and not annotation_unknown(record.get("name") or ""),
+        "condition_unknown": annotation_unknown(record.get("name") or ""),
         "variants": variants,
         "date": target["date"],
         "matched_by": record.get("matched_by"),
@@ -625,7 +648,9 @@ def resolve(
             "measured_variant": record["variant"],
             "native_variant": target["variant"],
             "variant_match": match_kind,
-            "condition_confirmed": match_kind in ("exact", "default"),
+            "condition_confirmed": match_kind in ("exact", "default")
+            and not annotation_unknown(record.get("name") or ""),
+            "condition_unknown": annotation_unknown(record.get("name") or ""),
             "matched_by": record.get("matched_by"),
             "identity_match": record.get("match_kind"),
             "checkpoint": checkpoint,

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import codes
 from metrics import SourceResult, Sample
@@ -236,20 +236,37 @@ def _model_options(model: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(identifier, str) or not identifier:
             continue
         value = descriptor.get("currentValue")
+        # A descriptor without a current value is still the option's published
+        # descriptor: the model offers it, the run setting is simply not
+        # reported.
+        option: dict[str, Any] = {"id": identifier}
         if isinstance(value, (str, bool, int, float)):
-            option: dict[str, Any] = {"id": identifier, "currentValue": value}
-            for key in ("values", "allowed", "allowedValues", "choices", "enum"):
-                allowed = descriptor.get(key)
-                if isinstance(allowed, (list, tuple)) and 0 < len(allowed) <= 64:
-                    cleaned = [
-                        item
-                        for item in allowed
-                        if isinstance(item, (str, int, float, bool))
-                    ]
-                    if cleaned:
-                        option["values"] = cleaned
-                        break
-            options.append(option)
+            option["currentValue"] = value
+        for key in ("values", "allowed", "allowedValues", "choices", "enum"):
+            allowed = descriptor.get(key)
+            if isinstance(allowed, (list, tuple)) and 0 < len(allowed) <= 64:
+                cleaned = [
+                    item
+                    for item in allowed
+                    if isinstance(item, (str, int, float, bool))
+                ]
+                if cleaned:
+                    option["values"] = cleaned
+                    break
+        # The stock shape lists the allowed choices as objects:
+        # options=[{id, label, ...}]. The id is the value.
+        choices = descriptor.get("options")
+        if "values" not in option and isinstance(choices, list) and 0 < len(choices) <= 64:
+            cleaned = [
+                str(entry.get("id"))
+                for entry in choices
+                if isinstance(entry, Mapping)
+                and isinstance(entry.get("id"), str)
+                and entry.get("id")
+            ]
+            if cleaned:
+                option["values"] = cleaned
+        options.append(option)
     return options
 
 
