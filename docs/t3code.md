@@ -440,7 +440,9 @@ three idle-gated restarts. Each failed start alerts through
 `ghostship-failure@`; after the third the deployer stops, whether that image is running, exited, or
 never started, until a new image is desired or an operator runs `t3code-safe-restart`. A host switch does not
 restart an in-flight deploy. Operators can also queue a safe idle-aware restart at any time
-with `t3code-safe-restart` (or pass `--force` to bypass). Backups include the
+with `t3code-safe-restart`. A forced restart bypasses the idle gate and interrupts the work in
+flight, so it needs the owner's own deploy or activate instruction, recorded with
+`--owner-request "<short quote or reference>"`; without it the tool refuses the restart. Backups include the
 home and projects but exclude the Docker and Nix stores.
 
 ```sh

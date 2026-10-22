@@ -30,6 +30,26 @@ python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
+printf 'Checking the agent SSH command guard\n'
+python3 -m unittest discover -s tests -p test_ssh_command_guard.py
+
+printf 'Checking the boot generation drift check\n'
+python3 -m unittest discover -s tests -p test_boot_generation_drift.py
+
+printf 'Checking the host activation helper\n'
+python3 -m unittest discover -s tests -p test_activate_host.py
+
+printf 'Checking the agent pin against a regression\n'
+python3 scripts/check-agent-pin.py
+python3 -m unittest discover -s tests -p test_agent_pin_guard.py
+
+printf 'Checking the T3 restart guard\n'
+python3 -m unittest discover -s tests -p test_t3code_restart_guard.py
+
+printf 'Checking that the tests read only committed fixtures\n'
+python3 scripts/check-test-fixtures.py tests
+python3 -m unittest discover -s tests -p test_test_fixture_lint.py
+
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py

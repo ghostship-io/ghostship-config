@@ -2,6 +2,7 @@
 
 import argparse
 import fcntl
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +16,8 @@ DEPLOYMENT_LABEL = "io.ghostship.t3code.deployment"
 TOOL_LOCK = Path(".local/state/t3code-tool-update/tool-update.lock")
 # Restarting cannot repair a broken image; stop after this many failed starts.
 MAX_DEPLOY_ATTEMPTS = 3
+# The ledger of the restarts that interrupted T3 Code without waiting for idle.
+RESTART_LEDGER = "/var/lib/t3code-restarts/ledger.jsonl"
 
 
 def utcnow_iso():
@@ -369,6 +372,81 @@ def run_deployment(
             pass
 
 
+def actor():
+    """Who asked for a restart, for the ledger."""
+    return {
+        "user": os.environ.get("USER") or os.environ.get("LOGNAME") or "",
+        "uid": os.getuid(),
+        "host": os.uname().nodename,
+        "ssh_client": os.environ.get("SSH_CLIENT", ""),
+        "pid": os.getpid(),
+    }
+
+
+def container_identity(podman_bin):
+    """The identity of the running container, before and after a restart."""
+    try:
+        res = subprocess.run(
+            [podman_bin, "inspect", "t3code", "--format",
+             "{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception:
+        return {}
+    if res.returncode != 0:
+        return {}
+    fields = res.stdout.strip().split()
+    if not fields:
+        return {}
+    return {
+        "id": fields[0],
+        "image": fields[1] if len(fields) > 1 else "",
+        "started_at": fields[2] if len(fields) > 2 else "",
+        "health": fields[3] if len(fields) > 3 else "",
+    }
+
+
+def record_restart(ledger_path, entry):
+    """Append one restart to the ledger."""
+    ledger = Path(ledger_path)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(ledger.parent, 0o700)
+    with ledger.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, sort_keys=True) + "\n")
+    os.chmod(ledger, 0o600)
+
+
+def journal_message(journal_bin, message):
+    """Record the restart in the journal."""
+    try:
+        subprocess.run([journal_bin, "-t", "t3code-restart", "-p", "warning", message],
+                       check=False, timeout=10)
+    except Exception:
+        pass
+
+
+def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin, audit_log):
+    """Restart T3 Code now, on the owner's explicit instruction."""
+    pre = container_identity(podman_bin)
+    print(f"Forcing immediate restart of podman-t3code.service (owner request: {reference})...",
+          flush=True)
+    subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True)
+    post = container_identity(podman_bin)
+    entry = {"time": utcnow_iso(), "mode": "forced", "actor": actor(),
+             "reference": reference, "pre": pre, "post": post}
+    record_restart(ledger_path, entry)
+    journal_message(journal_bin,
+                    f"forced T3 Code restart by {entry['actor']['user']}@{entry['actor']['host']}: "
+                    f"{reference} (before {pre.get('id', 'unknown')}, "
+                    f"after {post.get('id', 'unknown')})")
+    log(audit_log, f"action=forced-restart reference={reference!r} "
+                   f"before={pre.get('id', '')} after={post.get('id', '')}")
+    print("Restart issued.", flush=True)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="T3 Code deploy when idle")
     parser.add_argument("--state-dir", default="/var/lib/ghostship/t3code-deployment")
@@ -382,18 +460,32 @@ def main():
     parser.add_argument("--safe-restart", action="store_true", help="Schedule a safe restart")
     parser.add_argument("--force", "--now", action="store_true", help="Force immediate restart")
     parser.add_argument("--wait", action="store_true", help="Wait for scheduled restart to finish")
+    parser.add_argument("--owner-request", default="",
+                        help="The owner's deploy or activate instruction that authorizes a forced restart")
+    parser.add_argument("--restart-ledger", default=RESTART_LEDGER,
+                        help="The ledger of restarts that interrupted T3 Code")
+    parser.add_argument("--journal-bin", default="systemd-cat",
+                        help="The journal writer used for a forced restart")
 
     args = parser.parse_args()
 
     state_dir = Path(args.state_dir)
     pending_file = state_dir / "restart.pending"
+    audit_path = Path(args.audit_log) if args.audit_log else None
+
+    if args.force and not args.owner_request.strip():
+        # A forced restart interrupts the work in flight. Only the owner's own
+        # deploy or activate instruction authorizes one.
+        print("Refusing to force a T3 Code restart: the owner's instruction is missing.", flush=True)
+        print("A forced restart interrupts active work. It needs the owner's deploy or activate",
+              flush=True)
+        print("instruction, recorded with --owner-request \"<short quote or reference>\".", flush=True)
+        return 2
 
     if args.safe_restart:
         if args.force:
-            print("Forcing immediate restart of podman-t3code.service...", flush=True)
-            subprocess.run([args.systemctl_bin, "restart", "podman-t3code.service"], check=True)
-            print("Restart issued.", flush=True)
-            return 0
+            return force_restart(args.systemctl_bin, args.podman_bin, args.owner_request.strip(),
+                                 args.restart_ledger, args.journal_bin, audit_path)
 
         state_dir.mkdir(parents=True, exist_ok=True)
         tmp = state_dir / "restart.pending.tmp"
@@ -416,7 +508,6 @@ def main():
             print("Restart completed successfully.", flush=True)
         return 0
 
-    audit_path = Path(args.audit_log) if args.audit_log else None
     sys.exit(
         run_deployment(
             state_dir=args.state_dir,
@@ -432,4 +523,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

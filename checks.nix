@@ -21,6 +21,12 @@ let
   # deletes it and the unit silently fails (e.g. the retention timer).
   t3codeImagePreStart =
     self.nixosConfigurations.chill-penguin.config.systemd.services.podman-t3code.preStart;
+  # The switch restarts every unit with restartIfChanged. The T3 Code
+  # container must never be one of them: an activation that interrupts an
+  # active session breaks the work in flight.
+  t3codeRestartedBySwitch = builtins.filter
+    (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}.restartIfChanged)
+    (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codeImageSeedsRetention = pkgs.lib.hasInfix "t3code-retention" t3codeImagePreStart;
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
@@ -69,6 +75,7 @@ in
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
     assert t3codeImageSeedsRetention;
+    assert !(builtins.elem "podman-t3code" t3codeRestartedBySwitch);
     # Temporary CAD checkouts once filled a 32 GiB tmpfs and stalled the
     # shared T3 cgroup. Check the evaluated mount and its writable sticky mode.
     assert builtins.elem "/srv/apps/t3code/tmp:/tmp:rw"
