@@ -24,6 +24,7 @@ from typing import Any, Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
+import aa_3d  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
@@ -664,6 +665,7 @@ def ranking_samples(
         "usage_tokens": usage,
         "three_d_scores": three_d_scores,
         "aa_cache": aa_cache,
+        "native_models": context.get("native_models") or {},
         "now": now,
         "state_path": state_path,
     }
@@ -712,6 +714,8 @@ def build_snapshot(
     catalog: Any = None,
     facts: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
+    free_models: set[tuple[str, str]] | None = None,
+    promo_models: set[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -750,6 +754,8 @@ def build_snapshot(
         catalog=catalog,
         facts=facts,
         aa_3d_cache=aa_3d_cache,
+        free_models=free_models or set(),
+        promo_models=promo_models or set(),
     )
 
 

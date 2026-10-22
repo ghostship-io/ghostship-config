@@ -225,7 +225,7 @@ def native_variant(options: Any) -> str:
         if not isinstance(option, Mapping):
             continue
         name = str(option.get("id") or "").lower()
-        value = option.get("current_value")
+        value = option.get("current_value", option.get("currentValue"))
         if name not in ("variant", "reasoningeffort", "effort", "thinking"):
             continue
         if isinstance(value, bool):
@@ -263,7 +263,13 @@ def alignment_option(options: Any, variant: str) -> tuple[str, str] | None:
         name = str(option.get("id") or "")
         if not name:
             continue
-        values = option.get("values") or option.get("allowed") or option.get("allowedValues")
+        values = (
+            option.get("values")
+            or option.get("allowed")
+            or option.get("allowedValues")
+            or option.get("choices")
+            or option.get("enum")
+        )
         if not isinstance(values, (list, tuple)):
             continue
         for value in values:
