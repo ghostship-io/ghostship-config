@@ -1001,11 +1001,15 @@ class DesignContractTests(unittest.TestCase):
             self.assertNotIn('ghostship_ai_model_paced_availability', order, pid)
             self.assertNotIn('pace_delta_ratio', order, pid)
             self.assertIn(self.TOLERANCE, order, pid)
-            # The panel still sorts on that key, descending.
+            # The panel still sorts on that key, descending. Frontier's two
+            # rows are the owner's roles, not a ranking, and read Chief then
+            # Backup as the concept shows; the order key is still the
+            # collector's, and nothing re-ranks it.
             sorts = [t for t in panel['transformations'] if t['id'] == 'sortBy']
             self.assertEqual(len(sorts), 1, pid)
+            expected = 'role' if tier == 'frontier' else 'order'
             self.assertEqual(sorts[0]['options']['sort'],
-                             [{'field': 'order', 'desc': True}], pid)
+                             [{'field': expected, 'desc': True}], pid)
 
     def test_paced_availability_label_percent_left_and_freshness_tolerance(self):
         """Defect: ordering labelled as something other than Paced Availability, remaining shown as used, or snapshot equality drops live entitlement/fact series."""
