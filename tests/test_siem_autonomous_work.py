@@ -741,6 +741,26 @@ class CollectorTests(unittest.TestCase):
 
 
 class DashboardContractTests(unittest.TestCase):
+    def test_candidate_columns_name_the_quantity_the_query_returns(self):
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        panel = next(p for p in page['panels'] if p['id'] == 29)
+        names = next(t['options']['renameByName'] for t in panel['transformations']
+                     if t['id'] == 'rename')
+        quantities = {names['Value #' + t['refId']]: t['expr'] for t in panel['targets']}
+        self.assertIn('ghostship_ai_model_cost_per_task', quantities['Cost per task'])
+        self.assertIn('ghostship_ai_model_available', quantities['Available'])
+        self.assertNotIn('Capacity', quantities, 'A task price is not quota capacity')
+
+    def test_ai_usage_panel_rectangles_do_not_overlap(self):
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        for i, left in enumerate(page['panels']):
+            a = left['gridPos']
+            for right in page['panels'][i+1:]:
+                b = right['gridPos']
+                overlap = (a['x'] < b['x']+b['w'] and b['x'] < a['x']+a['w']
+                           and a['y'] < b['y']+b['h'] and b['y'] < a['y']+a['h'])
+                self.assertFalse(overlap, (left['title'], right['title']))
+
     def test_actual_json_queries_use_provisioned_datasources_and_bounded_deduplicated_lists(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
         self.assertFalse(dashboard['editable'])
