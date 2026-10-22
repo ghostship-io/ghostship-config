@@ -966,14 +966,21 @@ class NativeStoreTests(unittest.TestCase):
         import re
         now = int(time.time())
         stamp = now * 1000
-        rows = [f'ghostship_ai_provider_coverage{{provider="claude",source="t3"}} 1 {stamp}',
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp}',
+                f'ghostship_ai_provider_coverage{{provider="claude",source="t3"}} 1 {stamp}',
                 f'ghostship_ai_provider_coverage{{provider="cursor",source="t3"}} 1 {stamp}',
                 f'ghostship_ai_provider_capacity_remaining_ratio{{provider="claude"}} 0 {stamp}']
         for quota, used in [('seven_day', 1.0), ('seven_day_fable', .05)]:
-            labels = f'provider="claude",account="account.test",model="",window="weekly",quota="{quota}",source="t3"'
+            # MetricWriter normalizes an empty model scope to "_".
+            labels = f'provider="claude",account="account.test",model="_",window="weekly",quota="{quota}",source="t3"'
             for metric, value in [('used_ratio', used), ('expected_used_ratio', 2/7),
                                   ('pace_delta_ratio', 2/7-used)]:
                 rows.append(f'ghostship_ai_quota_{metric}{{{labels}}} {value} {stamp}')
+        rows += [f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="current"}} 1 {stamp}',
+                 f'ghostship_ai_model_capacity_remaining{{provider="ollama",model="current"}} .8 {stamp}',
+                 f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="unknown"}} 2 {stamp}',
+                 f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="obsolete"}} 1 {stamp-120000}',
+                 f'ghostship_ai_model_capacity_remaining{{provider="ollama",model="obsolete"}} .9 {stamp-120000}']
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
@@ -982,7 +989,7 @@ class NativeStoreTests(unittest.TestCase):
         urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
         by_id = {panel['id']: panel for panel in page['panels']}
-        identity = 'claude / account.test /  / weekly / seven_day_fable / t3'
+        identity = 'claude / account.test / _ / weekly / seven_day_fable / t3'
         escaped = re.sub(r'([.*/])', r'\\\1', identity)
 
         def query(target):
@@ -1005,6 +1012,13 @@ class NativeStoreTests(unittest.TestCase):
         self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
                          {'claude': 0, 'cursor': -1},
                          'Exhausted and unknown providers must remain distinct')
+        for target, expected in zip(by_id[41]['targets'],
+                                    [{'current': 1, 'unknown': 2}, {'current': .8, 'unknown': -1}]):
+            expr = target['expr'].replace('$provider', '.*')
+            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+                result = json.load(response)['data']['result']
+            self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result}, expected,
+                             'Old series inside the lookback must not become current recommendations')
 
     def server(self, binary, directory):
         with socket.socket() as sock:
