@@ -102,6 +102,10 @@ METRIC_HELP = {
     "ghostship_ai_quota_reset_timestamp_seconds": "When a quota window resets.",
     "ghostship_ai_quota_observed_timestamp_seconds": "When a quota reading was observed.",
     "ghostship_ai_quota_state": "One for the state a provider reports for a window.",
+    "ghostship_ai_quota_entitlement": (
+        "One for every reading of a quota entitlement; a verified alias of "
+        "the same window shares the entitlement id and keeps its own source."
+    ),
     "ghostship_ai_account_amount": "Reported balance, usage, cap, or request count.",
     "ghostship_ai_account_flag": "One for a reported account flag.",
     "ghostship_ai_account_observed_timestamp_seconds": "When an account reading was observed.",
@@ -744,7 +748,7 @@ def build_snapshot(
                 ),
             }
         )
-    return snapshot_module.build_snapshot(
+    snapshot = snapshot_module.build_snapshot(
         now=now,
         sources=sources,
         ranked=ranked,
@@ -759,6 +763,13 @@ def build_snapshot(
         promo_models=promo_models or set(),
         inventory=context.get("ranking_inventory") or [],
     )
+    if isinstance(snapshot, dict):
+        quota_block = snapshot.setdefault("quota", {})
+        if isinstance(quota_block, dict):
+            quota_block["entitlements"] = quota_module.entitlements(
+                measured_windows or [], now
+            )
+    return snapshot
 
 
 def collect(
@@ -879,6 +890,8 @@ def render(
     for result in results:
         measured.extend(result.windows)
     for name, labels, value in quota_module.quota_pace_samples(measured, now):
+        writer.add(name, labels, value)
+    for name, labels, value in quota_module.entitlement_samples(measured, now):
         writer.add(name, labels, value)
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
