@@ -561,11 +561,12 @@ ceiling does not depend on the quality score.
 
 The Artificial Analysis feed is the external quality input: the intelligence,
 coding, agentic, and engineering indices, the cost per task, and the median
-performance. The feed is read once a day by the daily procedure and cached;
-the collector only reads the cache, so the free request budget belongs to one
-place. The cost per task and the token price are different things and are
-never used for each other. The endpoint is the free one; there is no paid
-plan and no account.
+performance. It is pulled from the public pages with ordinary GETs once a
+day by the `ghostship-ai-usage-feed` timer and cached; the collector only
+reads the cache, so the read belongs to one place. There is no key, no
+account and no paid plan. A page that is blocked is recorded as blocked and
+the last good snapshot is kept. The cost per task and the token price are
+different things and are never used for each other.
 
 The role and the tier are explicit, and the rule fails closed: an
 implementation by a bulk model needs a review by the frontier authority

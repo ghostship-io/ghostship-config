@@ -25,6 +25,7 @@ network: it reads the cache the pull wrote.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.error
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import aa
+import aa_diff
 
 # The public pages the pull reads.
 SOURCES = (
@@ -334,6 +336,51 @@ def parse_leaderboard(html: str) -> dict[str, dict[str, Any]]:
     return found
 
 
+def parse_model_page(html: str) -> dict[str, Any]:
+    """The model of a model page.
+
+    A model page carries the whole model, including the deprecated ones the
+    leaderboard omits. The page is one model, so the record is read as one
+    object and never as a window of a text page.
+    """
+    buffer = _flight_buffer(html)
+    index = buffer.find('"currentModel":{')
+    if index < 0:
+        return {}
+    try:
+        record, _offset = json.JSONDecoder().raw_decode(
+            buffer[index + len('"currentModel":'):]
+        )
+    except ValueError:
+        return {}
+    if not isinstance(record, Mapping):
+        return {}
+    release = record.get("release") if isinstance(record.get("release"), Mapping) else {}
+    creator = record.get("creator") if isinstance(record.get("creator"), Mapping) else {}
+    cost = record.get("intelligenceIndexCostPerTask")
+    cost_per_task = None
+    if isinstance(cost, Mapping) and isinstance(cost.get("cost"), Mapping):
+        cost_per_task = cost["cost"].get("total")
+    return {
+        "slug": str(record.get("slug") or ""),
+        "name": str(record.get("name") or ""),
+        "creator": str(creator.get("name") or ""),
+        "intelligence": record.get("intelligenceIndex"),
+        "estimated": bool(record.get("intelligenceIndexIsEstimated")),
+        "cost_per_task": cost_per_task,
+        "price_input": record.get("price1mInputTokens"),
+        "price_output": record.get("price1mOutputTokens"),
+        "cache_hit": record.get("cacheHitPrice"),
+        "cache_write": record.get("cacheWritePrice"),
+        "speed": record.get("medianCanonicalAnswerOutputSpeed"),
+        "release_date": record.get("releaseDate"),
+        "deprecated": bool(record.get("deprecated")),
+        "reasoning": record.get("suffix"),
+        "deprecated_to": str(release.get("deprecatedTo") or ""),
+        "elo": record.get("aa3dElo"),
+    }
+
+
 def parse_models(html: str) -> dict[str, dict[str, Any]]:
     """The releases, the variants and the detailed models of the models page."""
     buffer = _flight_buffer(html)
@@ -349,8 +396,16 @@ def parse_models(html: str) -> dict[str, dict[str, Any]]:
         if {"slug", "suffix", "creator", "releaseDate", "intelligenceIndexCost"} <= keys:
             detailed = array
             break
-    release_by_slug = {str(row.get("slug")): row for row in releases if row.get("slug")}
-    variant_by_slug = {str(row.get("slug")): row for row in variants if row.get("slug")}
+    release_by_slug = {
+        str(row.get("slug")): row
+        for row in releases
+        if isinstance(row, Mapping) and row.get("slug")
+    }
+    variant_by_slug = {
+        str(row.get("slug")): row
+        for row in variants
+        if isinstance(row, Mapping) and row.get("slug")
+    }
     found: dict[str, dict[str, Any]] = {}
     for row in detailed:
         if not isinstance(row, Mapping):
@@ -544,9 +599,8 @@ def pull(
                 "low": entry.get("ci95_lower"),
                 "high": entry.get("ci95_upper"),
             }
-    # A deprecated or leaderboard-absent model that the models page knows
-    # and the leaderboard does not: its own page publishes the cost per
-    # task. One GET per model, and the published number, never an
+    # A deprecated or leaderboard-absent model: its own page publishes the
+    # cost per task. One GET per model, and the published number, never an
     # estimate.
     if model_pages is not None:
         for slug, entry in sorted(records.items()):
@@ -557,7 +611,16 @@ def pull(
             page = model_pages(slug)
             if not page:
                 continue
-            cost = _cost_in_text(str(page.get("text") or ""))
+            text = str(page.get("text") or "")
+            model = parse_model_page(text) if text else {}
+            if model.get("slug") and not entry.get("deprecated"):
+                # The page carries a model the leaderboard did not list.
+                entry["deprecated"] = bool(model.get("deprecated"))
+                if entry.get("intelligence_index") is None:
+                    entry["indices"]["intelligence_index"] = _number(
+                        model.get("intelligence")
+                    )
+            cost = _cost_in_text(text)
             if cost is None:
                 continue
             entry["cost_per_task"] = cost
@@ -607,4 +670,131 @@ def write_snapshot(path: str | Path, document: Mapping[str, Any]) -> bool:
     return True
 
 
-import os  # noqa: E402  (used by write_snapshot, kept next to its use)
+def read_model_page(url: str) -> dict[str, Any]:
+    """Read one model page, or say why it could not be read.
+
+    The model page publishes the cost per task of a model the leaderboard
+    does not carry. One GET per model, and the published number: a cost is
+    never estimated.
+    """
+    return _fetch(url)
+
+
+def refresh(
+    cache_path: str | Path,
+    *,
+    now: float | None = None,
+    read: Any = None,
+    model_pages: Any = None,
+) -> dict[str, Any]:
+    """Refresh the cache from the public pages, at most once a day.
+
+    A cache that is still fresh is left alone. A fetch that is blocked or
+    that fails keeps the last good snapshot: the cache is not replaced with
+    an empty one, and the blocked state is recorded.
+    """
+    moment = time.time() if now is None else float(now)
+    current = aa.load_cache(cache_path, moment)
+    if current.get("status") == "ok":
+        # The cache is fresh: the pull runs once a day, and the collector
+        # reads it every five minutes.
+        return {
+            "status": "ok",
+            "reason": "the cache is still fresh",
+            "changed": False,
+            "new_models": 0,
+            "changed_models": 0,
+        }
+    document = pull(read=read, model_pages=model_pages)
+    if document.get("blocked"):
+        # A page was blocked. The last good snapshot is kept: a blocked
+        # page is not a reason to publish an empty cache, and nothing is
+        # retried to get around it.
+        return {
+            "status": "blocked",
+            "reason": "a public page answered with a challenge",
+            "blocked": list(document.get("blocked") or []),
+            "changed": False,
+            "new_models": 0,
+            "changed_models": 0,
+        }
+    previous = {}
+    try:
+        previous = json.loads(Path(cache_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        previous = {}
+    if not isinstance(previous, dict):
+        previous = {}
+    difference = aa_diff.diff(previous, document)
+    # The new and the changed models travel with the cache, so the
+    # collector publishes them without reading the old pull.
+    document = {
+        **document,
+        "new_models": list(difference.get("added") or []),
+        "changed_models": [
+            {"slug": slug, "name": entry.get("name") or ""}
+            for slug, entry in sorted((difference.get("changed") or {}).items())
+        ],
+    }
+    changed = write_snapshot(cache_path, document)
+    return {
+        "status": "ok",
+        "reason": "",
+        "changed": changed,
+        "records": len(document.get("records") or []),
+        "new_models": len(difference.get("added") or []),
+        "changed_models": len(difference.get("changed") or {}),
+        "removed_models": len(difference.get("removed") or []),
+        "new_model_names": [
+            entry.get("name") or entry.get("slug")
+            for entry in (difference.get("added") or [])
+        ],
+        "diff": difference,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pull the public pages into the cache."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="aa_pull.py",
+        description="Pull the Artificial Analysis public pages into the cache.",
+    )
+    parser.add_argument("--output", required=True, help="The cache to write.")
+    parser.add_argument(
+        "--model-pages",
+        action="store_true",
+        help=(
+            "Read the model page of every model the leaderboard does not "
+            "carry, for the cost per task the page publishes."
+        ),
+    )
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    def pages(slug: str) -> dict[str, Any]:
+        if not args.model_pages:
+            return {}
+        return read_model_page(f"https://artificialanalysis.ai/models/{slug}")
+
+    if args.dry_run:
+        document = pull(model_pages=pages if args.model_pages else None)
+        print(
+            json.dumps(
+                {
+                    "status": document.get("status"),
+                    "records": len(document.get("records") or []),
+                    "blocked": document.get("blocked") or [],
+                }
+            )
+        )
+        return 0
+    result = refresh(args.output, model_pages=pages if args.model_pages else None)
+    print(json.dumps({key: value for key, value in result.items() if key != "diff"}))
+    return 0 if result.get("status") == "ok" else 2
+
+
+if __name__ == "__main__":  # pragma: no cover - the CLI entry point
+    raise SystemExit(main())
+

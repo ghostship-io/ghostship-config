@@ -213,6 +213,19 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
         "fetched_at_epoch": fetched,
         "age_seconds": int(age),
         "records": [record for record in records if isinstance(record, Mapping)],
+        # The models the last pull found that the one before it did not
+        # carry, and the models whose measurement changed. They are the
+        # re-ranking trigger, and they are published with the snapshot.
+        "new_models": [
+            entry
+            for entry in (document.get("new_models") or [])
+            if isinstance(entry, Mapping)
+        ],
+        "changed_models": [
+            entry
+            for entry in (document.get("changed_models") or [])
+            if isinstance(entry, Mapping)
+        ],
     }
 
 
