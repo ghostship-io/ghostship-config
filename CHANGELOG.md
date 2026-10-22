@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.94] - 2026-10-22
+
+- Providers page: the 3D panel has room for its four live winners at 390 px (the fourth row was cut at the panel edge), and the Bulk panel loses the empty space under its winners. The panels below move with them; a test keeps the top-level panels from overlapping.
+
 ## [3.17.93] - 2026-10-22
 
 - Providers page: the header renders again. Business Text runs panel helpers as `new Function("context", code)`, so a helper registers through `context.handlebars`; the header's helper used a bare `handlebars` and the panel showed "handlebars is not defined". The test now runs the helper exactly that way.

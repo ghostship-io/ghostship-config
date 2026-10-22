@@ -332,6 +332,25 @@ class ProvidersPageTests(unittest.TestCase):
             [rule["fieldName"] for rule in filters[0]["options"]["filters"]], ["rank"]
         )
 
+    def test_the_3d_table_has_room_for_its_live_rows_on_a_phone(self):
+        """Live, 3D has four winners; at 390 px the fourth row was cut at the panel edge.
+
+        Measured on the live page: a height of 8 grid rows gave a 296 px panel
+        for a 231 px table plus its title and subtitle. Eleven rows hold it.
+        """
+        self.assertGreaterEqual(section(self.page, "3D")["gridPos"]["h"], 11)
+
+    def test_no_two_top_level_panels_overlap(self):
+        """Resizing a panel moves the panels below it; none of them overlap."""
+        boxes = [
+            (p["gridPos"]["x"], p["gridPos"]["y"], p["gridPos"]["w"], p["gridPos"]["h"], p.get("title", ""))
+            for p in self.page["panels"]
+        ]
+        for i, (x1, y1, w1, h1, t1) in enumerate(boxes):
+            for x2, y2, w2, h2, t2 in boxes[i + 1:]:
+                overlap = x1 < x2 + w2 and x2 < x1 + w1 and y1 < y2 + h2 and y2 < y1 + h1
+                self.assertFalse(overlap, f"{t1!r} overlaps {t2!r}")
+
     def test_the_sections_are_in_the_owner_s_order(self):
         """The owner reads the page from the top: Bulk, Free, Frontier, 3D, Providers."""
         titles = [
