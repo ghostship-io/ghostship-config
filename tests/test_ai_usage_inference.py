@@ -249,3 +249,55 @@ class Tiling(unittest.TestCase):
         self.assertAlmostEqual(result.reset_at, at(0, 23, 30))
         self.assertEqual(result.state, "in_window")
 
+class ScopeModel(unittest.TestCase):
+    """Case 9: another model of the same provider succeeded in the span."""
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 8), usage=1000.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 11), usage=500.0),
+            event("acme", "alpha", at(0, 13), usage=0.0),
+        ]
+        self.now = at(0, 14)
+
+    def test_the_scope_is_the_model(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "model")
+        self.assertEqual(result.window, "5h")
+        self.assertEqual(result.budget, 1000.0)
+
+    def test_the_other_route_is_unknown(self):
+        result = route(self.events, self.now, model="beta")
+        self.assertEqual(result.scope, "unknown")
+        self.assertIsNone(result.share)
+
+
+class ScopeAccount(unittest.TestCase):
+    """Case 10: only failures of the other models inside the span."""
+
+    def test_the_scope_is_the_account(self):
+        events = [
+            event("acme", "alpha", at(0, 8), usage=1000.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 11), outcome="limit"),
+            event("acme", "alpha", at(0, 13), usage=0.0),
+        ]
+        result = route(events, at(0, 14), model="alpha")
+        self.assertEqual(result.scope, "account")
+        self.assertEqual(result.window, "5h")
+        self.assertEqual(result.budget, 1000.0)
+
+    def test_no_other_model_in_the_span_is_unknown(self):
+        events = [
+            event("acme", "alpha", at(0, 8), usage=1000.0),
+            event("acme", "beta", at(0, 9), usage=500.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "alpha", at(0, 13), usage=0.0),
+        ]
+        result = route(events, at(0, 14), model="alpha")
+        self.assertEqual(result.scope, "unknown")
+
+
+if __name__ == "__main__":
+    unittest.main()
