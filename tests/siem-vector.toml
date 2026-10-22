@@ -112,7 +112,7 @@ name = "Plex requests keep the client and network class, without tokens"
 insert_at = "plex_shape"
 type = "log"
 [tests.inputs.log_fields]
-message = "Oct 21, 2026 02:12:57.564 [130269293146336] DEBUG - Request: [203.0.113.9:34652 (WAN)] GET /player/timeline?X-Plex-Token=SECRET123&state=playing (14 live) #4c13 Signed-in Token (owner)"
+message = "Oct 21, 2026 02:12:57.564 [130269293146336] DEBUG - Request: [203.0.113.9:34652 (WAN)] GET /player/timeline?X-Plex-Token=SECRET123&state=playing (14 live) #4c13 Signed-in Token (plex-viewer)"
 [[tests.outputs]]
 extract_from = "redacted"
 [[tests.outputs.conditions]]
