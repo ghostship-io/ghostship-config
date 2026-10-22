@@ -762,6 +762,38 @@ class WorkedCasesTests(unittest.TestCase):
                 if flag:
                     self.assertLess(order[provider], order[other], f"{provider} before {other}")
 
+    def test_a_tier_lists_its_winners_and_the_routes_that_are_out(self):
+        """Bulk and Free list the ranked winners and the spent routes, nothing else.
+
+        Live, a tier has a few winners and many more members; listing every
+        member made the Bulk table about thirty rows long and scroll inside
+        its panel. The other members stay in the collapsed evidence rows.
+        """
+        for title in ("Bulk", "Free"):
+            panel = section(self.page, title)
+            filters = [
+                step for step in panel["transformations"] if step["id"] == "filterByValue"
+            ]
+            self.assertEqual(len(filters), 1, title)
+            options = filters[0]["options"]
+            self.assertEqual((options["type"], options["match"]), ("include", "any"))
+            self.assertEqual(
+                sorted(
+                    (rule["fieldName"], rule["config"]["id"], rule["config"]["options"]["value"])
+                    for rule in options["filters"]
+                ),
+                [("out", "greater", 0), ("rank", "greater", 0)],
+            )
+            rank = self.rows(panel, target_by_field(panel, "rank"))
+            out = self.rows(panel, target_by_field(panel, "out"))
+            kept = {route for route in rank if rank[route] > 0 or out.get(route, 0) > 0}
+            dropped = set(rank) - kept
+            if title == "Free":
+                # The fixture's available non-winner is dropped; its spent
+                # route stays, sunk at the bottom.
+                self.assertIn("gpt-oss-120b", dropped)
+                self.assertIn("gemma-3-27b", kept)
+
     def test_a_sunk_route_keeps_no_place(self):
         """A route that cannot be used keeps no place: its rank cell reads '–'."""
         panel = section(self.page, "Free")
