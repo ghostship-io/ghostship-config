@@ -35,8 +35,12 @@ assert pkgs.nixVersions.stable.src == pkgs.nix.src;
 assert pkgs.nixVersions.nix_2_34.src == pkgs.nix.src;
 assert pkgs.nix.passthru.nix-cli.version == nixFixedVersion;
 
-# The upstream test suite is carried over and bound to the pinned build, and
-# the upstream fallback-path coherence check is retained rather than replaced.
+# The upstream test suite is carried over and bound to the pinned build. The
+# fallback-path check keeps its slot in that suite and is not the upstream
+# comparison any more: that comparison cannot pass against a pinned input,
+# because it reads a file of the input and compares it with the release this
+# repository pins. The check that replaced it proves that the difference
+# between the file and the installed Nix cannot reach a runtime consumer.
 assert pkgs.nixVersions.stable.tests ? srcVersion;
 assert pkgs.nixVersions.stable.tests ? nixpkgs-lib;
 assert pkgs.nixVersions.stable.tests ? nix-fallback-paths;
