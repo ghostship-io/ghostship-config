@@ -966,7 +966,8 @@ class NativeStoreTests(unittest.TestCase):
         import re
         now = int(time.time())
         stamp = now * 1000
-        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp}',
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp-120000}',
+                f'ghostship_ai_collection_duration_seconds 1 {stamp}',
                 f'ghostship_ai_provider_coverage{{provider="claude",source="t3"}} 1 {stamp}',
                 f'ghostship_ai_provider_coverage{{provider="cursor",source="t3"}} 1 {stamp}',
                 f'ghostship_ai_provider_capacity_remaining_ratio{{provider="claude"}} 0 {stamp}']
@@ -981,6 +982,9 @@ class NativeStoreTests(unittest.TestCase):
                  f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="unknown"}} 2 {stamp}',
                  f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="obsolete"}} 1 {stamp-120000}',
                  f'ghostship_ai_model_capacity_remaining{{provider="ollama",model="obsolete"}} .9 {stamp-120000}']
+        rows += [f'ghostship_ai_model_rank{{tier="bulk",provider="ollama",model="current"}} 1 {stamp}',
+                 f'ghostship_ai_model_rank{{tier="bulk",provider="claude",model="other-provider"}} 1 {stamp}',
+                 f'ghostship_ai_model_rank{{tier="bulk",provider="ollama",model="obsolete"}} 1 {stamp-120000}']
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
@@ -1019,6 +1023,13 @@ class NativeStoreTests(unittest.TestCase):
                 result = json.load(response)['data']['result']
             self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result}, expected,
                              'Old series inside the lookback must not become current recommendations')
+        expr = by_id[10]['targets'][0]['expr'].replace('$provider', 'ollama')
+        for selected_time, expected in [(now, {'current'}), (now-60, {'obsolete'})]:
+            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode(
+                    {'query': expr, 'time': selected_time}), timeout=3) as response:
+                result = json.load(response)['data']['result']
+            self.assertEqual({r['metric']['model'] for r in result}, expected,
+                             'Details respect both the Provider filter and the selected end time')
 
     def server(self, binary, directory):
         with socket.socket() as sock:
@@ -1123,6 +1134,8 @@ class NativeStoreTests(unittest.TestCase):
         panel = next(p for p in page['panels'] if p['title'] == 'Providers with no fresh reading')
 
         def query(expr):
+            # The Provider filter at All substitutes its allValue.
+            expr = expr.replace('$provider', '.*')
             url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
             with urllib.request.urlopen(url, timeout=5) as response:
                 return json.load(response)['data']['result']

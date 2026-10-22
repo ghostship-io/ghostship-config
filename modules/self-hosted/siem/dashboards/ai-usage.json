@@ -45,7 +45,7 @@
     "w": 12,
     "h": 8
    },
-   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time. Empty selection has no eligible measured model; internal table columns are not models.",
    "targets": [
     {
      "refId": "A",
@@ -120,7 +120,7 @@
      "min": 0,
      "max": 1,
      "decimals": 0,
-     "noValue": "Quota unknown",
+     "noValue": "Unavailable",
      "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
       "mode": "thresholds"
@@ -175,7 +175,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 48,
@@ -199,7 +199,7 @@
     "w": 12,
     "h": 8
    },
-   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time. Empty selection has no eligible measured model; internal table columns are not models.",
    "targets": [
     {
      "refId": "A",
@@ -274,7 +274,7 @@
      "min": 0,
      "max": 1,
      "decimals": 0,
-     "noValue": "Quota unknown",
+     "noValue": "Unavailable",
      "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
       "mode": "thresholds"
@@ -329,7 +329,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 48,
@@ -353,7 +353,7 @@
     "w": 12,
     "h": 8
    },
-   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time. Empty selection has no eligible measured model; internal table columns are not models.",
    "targets": [
     {
      "refId": "A",
@@ -428,7 +428,7 @@
      "min": 0,
      "max": 1,
      "decimals": 0,
-     "noValue": "Quota unknown",
+     "noValue": "Unavailable",
      "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
       "mode": "thresholds"
@@ -483,7 +483,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 48,
@@ -507,7 +507,7 @@
     "w": 12,
     "h": 8
    },
-   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time. Empty selection has no eligible measured model; internal table columns are not models.",
    "targets": [
     {
      "refId": "A",
@@ -582,7 +582,7 @@
      "min": 0,
      "max": 1,
      "decimals": 0,
-     "noValue": "Quota unknown",
+     "noValue": "Unavailable",
      "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
       "mode": "thresholds"
@@ -637,7 +637,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 48,
@@ -1226,7 +1226,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}))",
+     "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1237,7 +1237,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"frontier\"})",
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1248,7 +1248,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1259,7 +1259,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1270,7 +1270,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1281,7 +1281,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"frontier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1433,7 +1433,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}))",
+     "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1444,7 +1444,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"bulk\"})",
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1455,7 +1455,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1466,7 +1466,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1477,7 +1477,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1488,7 +1488,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"bulk\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1640,7 +1640,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"free\"}))",
+     "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1651,7 +1651,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"free\"})",
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1662,7 +1662,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"free\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1673,7 +1673,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"free\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1684,7 +1684,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"free\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1695,7 +1695,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"free\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"free\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1847,7 +1847,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"3d\"}))",
+     "expr": "sort(max by (tier, provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1858,7 +1858,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"3d\"})",
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_score{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1869,7 +1869,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1880,7 +1880,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1891,7 +1891,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -1902,7 +1902,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "expr": "max by (tier, provider, model) (label_replace((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model) ((ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_rank{tier=\"3d\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -2054,7 +2054,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_usage_tokens)",
+     "expr": "max by (provider, model) ((ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_usage_tokens{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -2065,7 +2065,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (time() - ghostship_ai_three_d_observed_timestamp_seconds)",
+     "expr": "max by (provider, model) (time() - (ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_three_d_observed_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -2111,7 +2111,7 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model, source) (ghostship_ai_model_winner * on(provider, model) group_left(source) ghostship_ai_model_value)"
+     "expr": "max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))"
     },
     {
      "refId": "B",
@@ -2121,7 +2121,7 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_capacity_remaining)"
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider, model) group_left() (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))"
     }
    ],
    "transformations": [
@@ -2274,7 +2274,7 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model, source) (ghostship_ai_model_winner * on(provider, model) group_left(source) ghostship_ai_model_value)"
+     "expr": "max by (tier, provider, model, source) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider, model) group_left(source) (ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))"
     },
     {
      "refId": "B",
@@ -2284,7 +2284,7 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_quality)"
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider, model) group_left() (ghostship_ai_model_quality{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quality{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))"
     },
     {
      "refId": "C",
@@ -2294,7 +2294,7 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_capacity_expires_in_seconds)"
+     "expr": "max by (tier, provider, model) ((ghostship_ai_model_winner{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider, model) group_left() (ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_expires_in_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))"
     }
    ],
    "transformations": [
@@ -2476,7 +2476,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, source) (ghostship_ai_model_value{provider=~\"$provider\"})",
+     "expr": "max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     },
@@ -2486,7 +2486,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, source) (ghostship_ai_model_strength{provider=~\"$provider\"})",
+     "expr": "max by (provider, model, source) ((ghostship_ai_model_strength{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_strength{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     },
@@ -2496,7 +2496,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, source) (ghostship_ai_model_cost_per_task{provider=~\"$provider\"})",
+     "expr": "max by (provider, model, source) ((ghostship_ai_model_cost_per_task{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_cost_per_task{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     },
@@ -2506,7 +2506,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, source) (ghostship_ai_model_available and on(provider, model) max by (provider, model, source) (ghostship_ai_model_value{provider=~\"$provider\"}))",
+     "expr": "max by (provider, model, source) ((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) and on(provider, model) max by (provider, model, source) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "format": "table"
     }
@@ -2704,7 +2704,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "count(max by (provider, model) (ghostship_ai_model_value))",
+     "expr": "count(max by (provider, model) ((ghostship_ai_model_value{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_value{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "legendFormat": "compared"
     },
@@ -2714,7 +2714,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "count(max by (provider, model) (ghostship_ai_model_available))",
+     "expr": "count(max by (provider, model) ((ghostship_ai_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "legendFormat": "catalog"
     }
@@ -2787,7 +2787,7 @@
      "format": "table"
     }
    ],
-   "description": "Formula and component weights, with the configured scope. Gates are unavailable: the producer publishes only the rule body and no gate series, so no gate rows are shown and none are implied. Missing benchmark components are omitted and known weights are renormalized.",
+   "description": "Formula and component weights, with the configured scope. Gates are unavailable: the producer publishes only the rule body and no gate series, so no gate rows are shown and none are implied. Missing benchmark components are omitted and known weights are renormalized. Collector-wide signals; independent of the Provider filter.",
    "fieldConfig": {
     "defaults": {},
     "overrides": []
@@ -2820,7 +2820,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, status, variant) (ghostship_ai_model_fact)",
+     "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     },
@@ -2830,7 +2830,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, status, variant) (ghostship_ai_model_fact_confidence)",
+     "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact_confidence{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_confidence{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     },
@@ -2840,7 +2840,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, status, variant) (ghostship_ai_model_fact_fetched_timestamp_seconds)",
+     "expr": "max by (provider, model, status, variant) ((ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_fact_fetched_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     }
@@ -2910,7 +2910,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, source) (ghostship_ai_provider_coverage unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))",
+     "expr": "max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))",
      "instant": true,
      "format": "table"
     },
@@ -2920,7 +2920,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, source, status) ((ghostship_ai_provider_coverage * on(source) group_left(status) ghostship_ai_source_status) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+     "expr": "max by (provider, source, status) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} * on(source) group_left(status) ghostship_ai_source_status) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
      "instant": true,
      "format": "table"
     },
@@ -2930,7 +2930,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+     "expr": "max by (provider, source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
      "instant": true,
      "format": "table"
     },
@@ -2940,7 +2940,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, source) ((time() - ghostship_ai_source_observed_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
+     "expr": "max by (provider, source) ((time() - ghostship_ai_source_observed_timestamp_seconds) and on(source) (max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"} unless on(source) (ghostship_ai_source_status{status=\"ok\"} and on(source) (ghostship_ai_source_success == 1) and on(source) ((time() - ghostship_ai_source_last_success_timestamp_seconds) < 900)))))",
      "instant": true,
      "format": "table"
     }
@@ -3031,7 +3031,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_provider_status{state=\"disabled\"}",
+     "expr": "(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "format": "table"
     },
@@ -3041,7 +3041,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "count(ghostship_ai_provider_status{state=\"disabled\"})",
+     "expr": "count((ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_status{state=\"disabled\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "format": "table"
     }
@@ -3152,7 +3152,8 @@
     "graphMode": "none",
     "textMode": "value_and_name",
     "justifyMode": "auto"
-   }
+   },
+   "description": " Collector-wide signals; independent of the Provider filter."
   },
   {
    "id": 4,
@@ -3230,7 +3231,8 @@
     "graphMode": "none",
     "textMode": "value_and_name",
     "justifyMode": "auto"
-   }
+   },
+   "description": " Collector-wide signals; independent of the Provider filter."
   },
   {
    "id": 19,
@@ -3253,7 +3255,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, source) (ghostship_ai_provider_coverage)",
+     "expr": "max by (provider, source) (ghostship_ai_provider_coverage{provider=~\"$provider\"})",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3350,7 +3352,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort_desc(max by (provider, account, model, window, quota, source) (100 * ghostship_ai_quota_used_ratio))",
+     "expr": "sort_desc(max by (provider, account, model, window, quota, source) (100 * (ghostship_ai_quota_used_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_used_ratio{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3361,7 +3363,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, account, model, window, quota, source) (1000 * ghostship_ai_quota_reset_timestamp_seconds)",
+     "expr": "max by (provider, account, model, window, quota, source) (1000 * (ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3372,7 +3374,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, account, model, window, quota, source) (ghostship_ai_quota_reset_timestamp_seconds - time())",
+     "expr": "max by (provider, account, model, window, quota, source) ((ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) - time())",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3383,7 +3385,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, account, model, window, quota, source) (time() - ghostship_ai_quota_observed_timestamp_seconds)",
+     "expr": "max by (provider, account, model, window, quota, source) (time() - (ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_observed_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3516,7 +3518,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider) (ghostship_ai_quota_used_ratio)",
+     "expr": "max by (provider) ((ghostship_ai_quota_used_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_quota_used_ratio{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "legendFormat": "{{provider}}"
@@ -3600,7 +3602,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sum by (provider, kind) (ghostship_ai_usage_tokens{window=\"24h\", basis=\"api_equivalent\"})",
+     "expr": "sum by (provider, kind) ((ghostship_ai_usage_tokens{window=\"24h\", basis=\"api_equivalent\",provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_tokens{window=\"24h\", basis=\"api_equivalent\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": false,
      "range": true,
      "legendFormat": "{{provider}} {{kind}}"
@@ -3611,7 +3613,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sum by (provider, kind) (ghostship_ai_usage_tokens{window=\"24h\", basis=\"ledger\"})",
+     "expr": "sum by (provider, kind) ((ghostship_ai_usage_tokens{window=\"24h\", basis=\"ledger\",provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_tokens{window=\"24h\", basis=\"ledger\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": false,
      "range": true,
      "legendFormat": "{{provider}} {{kind}} (pool ledger)"
@@ -3703,7 +3705,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort_desc(max by (provider, model, window, source, basis) (ghostship_ai_usage_cost_usd))",
+     "expr": "sort_desc(max by (provider, model, window, source, basis) ((ghostship_ai_usage_cost_usd{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_cost_usd{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3714,7 +3716,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, window, source) (ghostship_ai_usage_unpriced_records)",
+     "expr": "max by (provider, model, window, source) ((ghostship_ai_usage_unpriced_records{provider=~\"$provider\"} and (timestamp(ghostship_ai_usage_unpriced_records{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -3836,7 +3838,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_account_amount{provider=\"openrouter\", kind=\"balance\"}",
+     "expr": "(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"balance\",provider=~\"$provider\"} and (timestamp(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"balance\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "range": false,
      "legendFormat": "balance ({{window}})"
@@ -3847,7 +3849,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_account_amount{provider=\"openrouter\", kind=\"usage\"}",
+     "expr": "(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"usage\",provider=~\"$provider\"} and (timestamp(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"usage\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "range": false,
      "legendFormat": "usage ({{window}})"
@@ -3858,7 +3860,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_account_amount{provider=\"openrouter\", kind=\"cap\"}",
+     "expr": "(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"cap\",provider=~\"$provider\"} and (timestamp(ghostship_ai_account_amount{provider=\"openrouter\", kind=\"cap\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "range": false,
      "legendFormat": "cap ({{window}})"
@@ -3869,7 +3871,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_account_flag{provider=\"openrouter\", flag=\"free_tier\"}",
+     "expr": "(ghostship_ai_account_flag{provider=\"openrouter\", flag=\"free_tier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_account_flag{provider=\"openrouter\", flag=\"free_tier\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "range": false,
      "legendFormat": "free tier account"
@@ -3965,7 +3967,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "ghostship_ai_account_amount{provider=\"ollama\", kind=\"requests\"}",
+     "expr": "(ghostship_ai_account_amount{provider=\"ollama\", kind=\"requests\",provider=~\"$provider\"} and (timestamp(ghostship_ai_account_amount{provider=\"ollama\", kind=\"requests\",provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))",
      "instant": true,
      "range": false,
      "legendFormat": "{{window}}"
@@ -4037,7 +4039,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, tier, source) (ghostship_ai_free_model)",
+     "expr": "max by (provider, model, tier, source) ((ghostship_ai_free_model{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4048,7 +4050,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, tier, source) (ghostship_ai_free_model_available)",
+     "expr": "max by (provider, model, tier, source) ((ghostship_ai_free_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4059,7 +4061,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, tier, source) (time() - ghostship_ai_free_model_observed_timestamp_seconds)",
+     "expr": "max by (provider, model, tier, source) (time() - (ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_free_model_observed_timestamp_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4166,7 +4168,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, family, developer_country, operator_country) (ghostship_ai_pool_model_info)",
+     "expr": "max by (provider, model, family, developer_country, operator_country) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4177,7 +4179,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (ghostship_ai_pool_model_available)",
+     "expr": "max by (provider, model) ((ghostship_ai_pool_model_available{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_available{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4188,7 +4190,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (ghostship_ai_pool_model_selected)",
+     "expr": "max by (provider, model) ((ghostship_ai_pool_model_selected{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_selected{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4199,7 +4201,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (ghostship_ai_pool_model_cooldown_until_seconds)",
+     "expr": "max by (provider, model) ((ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_cooldown_until_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4210,7 +4212,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, state) (ghostship_ai_pool_model_info * on(provider) group_left(state) topk by (provider) (1, ghostship_ai_pool_provider_state))",
+     "expr": "max by (provider, model, state) ((ghostship_ai_pool_model_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_model_info{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))) * on(provider) group_left(state) topk by (provider) (1, (ghostship_ai_pool_provider_state{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_provider_state{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4323,7 +4325,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, limit, scope) (ghostship_ai_pool_limit)",
+     "expr": "max by (provider, model, limit, scope) ((ghostship_ai_pool_limit{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_limit{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4334,7 +4336,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, result) (ghostship_ai_pool_health_events)",
+     "expr": "max by (provider, model, result) ((ghostship_ai_pool_health_events{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_health_events{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4345,7 +4347,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model) (ghostship_ai_pool_latency_seconds)",
+     "expr": "max by (provider, model) ((ghostship_ai_pool_latency_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_latency_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4356,7 +4358,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, kind, unit) (ghostship_ai_pool_quota_amount)",
+     "expr": "max by (provider, model, kind, unit) ((ghostship_ai_pool_quota_amount{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_amount{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4367,7 +4369,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, unit) (1000 * ghostship_ai_pool_quota_reset_seconds)",
+     "expr": "max by (provider, model, unit) (1000 * (ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_quota_reset_seconds{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4492,7 +4494,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, account, kind) (ghostship_ai_pool_concurrency)",
+     "expr": "max by (provider, account, kind) ((ghostship_ai_pool_concurrency{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_concurrency{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4577,7 +4579,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, worker, client, status) (ghostship_ai_pool_recent_jobs)",
+     "expr": "max by (provider, worker, client, status) ((ghostship_ai_pool_recent_jobs{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_recent_jobs{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
@@ -4663,7 +4665,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "max by (provider, model, window) (ghostship_ai_pool_ledger_requests)",
+     "expr": "max by (provider, model, window) ((ghostship_ai_pool_ledger_requests{provider=~\"$provider\"} and (timestamp(ghostship_ai_pool_ledger_requests{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
      "instant": true,
      "range": false,
      "format": "table"
