@@ -98,7 +98,7 @@ useful later addition.
 
 ntfy denies anonymous access and signup. `publisher` can write only to the
 `security`, `operations` and `informational` topics; `android` can read only
-those topics; `the owner` administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
+those topics; the owner administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
 `KUMA_PASSWORD` is the initial Kuma and ntfy administrator password;
 `NTFY_READER_PASSWORD` is the Android subscriber password. In the Android ntfy
 app, the configured server is `https://ntfy.ghostship.io`, user `android`, and topic

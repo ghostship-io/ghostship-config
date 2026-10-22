@@ -66,7 +66,8 @@ def render(template: str, environ: dict | None = None) -> str:
     return rendered
 
 
-def write(template_path: str, output_path: str, environ: dict | None = None) -> None:
+def write(template_path: str, output_path: str, environ: dict | None = None,
+          mode: int = 0o600) -> None:
     """Render a template file into an output file, atomically."""
     template = Path(template_path).read_text(encoding="utf-8")
     rendered = render(template, environ)
@@ -78,21 +79,28 @@ def write(template_path: str, output_path: str, environ: dict | None = None) -> 
             stream.write(rendered)
             stream.flush()
             os.fsync(stream.fileno())
-        os.chmod(temporary, 0o600)
+        os.chmod(temporary, mode)
         os.replace(temporary, target)
     finally:
         Path(temporary).unlink(missing_ok=True)
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         print(
-            "Usage: render-owner-config.py <template> <output>",
+            "Usage: render-owner-config.py <template> <output> [mode]",
             file=sys.stderr,
         )
         return 1
+    mode = 0o600
+    if len(sys.argv) == 4:
+        try:
+            mode = int(sys.argv[3], 8)
+        except ValueError:
+            print("error: the output mode must be an octal number", file=sys.stderr)
+            return 1
     try:
-        write(sys.argv[1], sys.argv[2])
+        write(sys.argv[1], sys.argv[2], mode=mode)
     except MissingIdentity as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
