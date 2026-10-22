@@ -118,16 +118,22 @@ ghostship_ai_entitlement_info{provider="opencode-go",account="default",model="mi
 ghostship_ai_model_capacity_basis{provider="opencode-go",model="minimax_minimax-m3.1-flash",basis="published",state="",window="unlimited__limited-time_promotion_",scope="model",unit="requests",weights=""} 1
 
 # The routes with a measured allowance.
+ghostship_ai_model_capacity_basis{provider="nvidia",model="glm-5.3-flash",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="nvidia",model="glm-5.3-flash",tier="free"} 0.8
 ghostship_ai_model_paced_availability{provider="nvidia",model="glm-5.3-flash"} 0.12
+ghostship_ai_model_capacity_basis{provider="groq",model="qwen3.8-27b",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="groq",model="qwen3.8-27b",tier="free"} 0.75
 ghostship_ai_model_paced_availability{provider="groq",model="qwen3.8-27b"} 0.05
+ghostship_ai_model_capacity_basis{provider="deepseek",model="deepseek-v4.1-flash",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="deepseek",model="deepseek-v4.1-flash",tier="free"} 0.88
 ghostship_ai_model_paced_availability{provider="deepseek",model="deepseek-v4.1-flash"} 0.2
+ghostship_ai_model_capacity_basis{provider="azure",model="phi-4-mini",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="azure",model="phi-4-mini",tier="free"} 0.71
 ghostship_ai_model_paced_availability{provider="azure",model="phi-4-mini"} 0.03
+ghostship_ai_model_capacity_basis{provider="cohere",model="command-r-plus",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="cohere",model="command-r-plus",tier="free"} 0.66
 ghostship_ai_model_paced_availability{provider="cohere",model="command-r-plus"} 0.01
+ghostship_ai_model_capacity_basis{provider="openrouter",model="gpt-oss-120b",basis="reported",state="",window="",scope="model",unit="requests",weights=""} 1
 ghostship_ai_model_capacity_remaining{provider="openrouter",model="gpt-oss-120b",tier="free"} 0.59
 ghostship_ai_model_paced_availability{provider="openrouter",model="gpt-oss-120b"} -0.01
 

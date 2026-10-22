@@ -410,6 +410,15 @@ class ProvidersPageTests(unittest.TestCase):
             spent = target_by_field(panel, "out")["expr"]
             self.assertIn(inner(spent), order, title)
 
+    def test_the_basis_cell_reads_the_basis_of_the_collector(self):
+        """The basis column names where the limit of a route comes from."""
+        panel = section(self.page, "Free")
+        content = panel["options"]["content"]
+        self.assertIn("{{#if basis}}{{basis}}{{else}}unknown{{/if}}", content)
+        # The limit of a provider is not the basis of a route.
+        self.assertNotIn("limitBasis", content)
+        self.assertNotIn("ghostship_ai_provider_limit", expressions(panel))
+
 
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
@@ -596,6 +605,17 @@ class WorkedCasesTests(unittest.TestCase):
                 if flag:
                     continue
                 self.assertLess(order[provider], order[other], f"{provider} before {other}")
+
+    def test_the_basis_of_a_route_is_the_one_the_collector_publishes(self):
+        """The basis of a route is published, inferred, reported or unknown."""
+        panel = section(self.page, "Free")
+        target = target_by_field(panel, "capacityBasisValue")
+        rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        bases = {row["metric"]["model"]: row["metric"].get("basis") for row in rows}
+        self.assertEqual(bases.get("minimax_minimax-m3.1-flash"), "published")
+        self.assertEqual(bases.get("llama-4.3-8b"), "inferred")
+        self.assertEqual(bases.get("nemotron-3.5-super-vl"), "unknown")
+        self.assertEqual(bases.get("glm-5.3-flash"), "reported")
 
     def test_a_route_with_unknown_limits_is_flagged_and_never_zero(self):
         """A route with no measured allowance reads unknown, and its share is not a zero."""
