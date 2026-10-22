@@ -4,6 +4,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+printf 'Checking personal and account data in the tracked tree\n'
+python3 scripts/check-privacy.py
+python3 -m unittest discover -s tests -p test_privacy_check.py
+python3 -m unittest discover -s tests -p test_render_config.py
+
 printf 'Checking tracked Nix syntax and workflow scripts\n'
 while IFS= read -r -d '' source; do
   nix-instantiate --parse "$source" >/dev/null

@@ -197,7 +197,7 @@ in
       cache-file: /var/lib/ntfy/cache.db
       cache-duration: 72h
       auth-users:
-        - 'the owner:$NTFY_ADMIN_HASH:admin'
+        - ''${NTFY_ADMIN_USER:?}:$NTFY_ADMIN_HASH:admin'
         - 'publisher:$NTFY_PUBLISH_HASH:user'
         - 'android:$NTFY_READER_HASH:user'
       auth-access:

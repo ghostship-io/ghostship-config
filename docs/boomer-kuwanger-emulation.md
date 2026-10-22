@@ -290,7 +290,7 @@ for the selected disc tests: `scph5500.bin` for Japanese PlayStation,
 
 The official PICO-8 zip is consumed with `pkgs.requireFile`:
 
-- Expected source: `/mnt/c/Users/the owner/Downloads/pico-8_0.2.7_amd64.zip`
+- Expected source: `/mnt/c/Users/<windows-user>/Downloads/pico-8_0.2.7_amd64.zip`
 - Hash: `sha256-1alyii0bc9r9j2519q3jhxn8xazrcffy0kl8k07mnn208y2wxwpd`
 
 The package wraps the Linux PICO-8 binary with `steam-run` so it can launch on

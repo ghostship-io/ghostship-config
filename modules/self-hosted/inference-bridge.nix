@@ -34,6 +34,16 @@ let
   # own tmpfs /run instead, refreshed whenever the host projection changes.
   hostProjection = "/run/ghostship-secrets/t3code.env";
   projection = "/run/ghostship-free-inference/credentials.env";
+  # /run and this directory belong to root inside the existing container.
+  # The inference account can read the configuration, but cannot replace or
+  # modify it. Configuration publication never traverses the account's home.
+  containerConfig = "/run/ghostship-free-inference-config/pool.json";
+  writeConfig = pkgs.writeShellScript "ghostship-inference-config-render" ''
+    set -eu
+    ${pkgs.coreutils}/bin/install -d -m0750 -o0 -g62020 ${builtins.dirOf containerConfig}
+    exec ${pkgs.python3}/bin/python3 ${./render-config.py} ${poolConfig} /dev/stdin \
+      ${containerConfig} --owner 0:62020 --mode 0440
+  '';
   writeProjection = pkgs.writeShellScript "ghostship-inference-credentials-write" ''
     set -eu
     umask 077
@@ -65,13 +75,14 @@ let
       systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride}
+      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride} ${writeConfig}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
     ln -sfn ${broker} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/package
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
     ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
     ln -sfn ${syncOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync-override
+    ln -sfn ${writeConfig} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/config-renderer
     ${syncCredentials}
     install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
     ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
@@ -90,9 +101,10 @@ let
     mv -fT /run/ghostship-integrations/inference-token.new /run/ghostship-integrations/inference-token
     install -m0444 ${endpoint} /run/ghostship-integrations/inference-server.json.new
     mv -fT /run/ghostship-integrations/inference-server.json.new /run/ghostship-integrations/inference-server.json
-    install -d -m0700 -o3000 -g3000 ${hostHome}/.config/ghostship
-    install -m0600 -o3000 -g3000 ${poolConfig} ${hostHome}/.config/ghostship/free-inference.json.new
-    mv -fT ${hostHome}/.config/ghostship/free-inference.json.new ${hostHome}/.config/ghostship/free-inference.json
+    # The Cloudflare account id is an account identifier, so the pool
+    # configuration is rendered from stdin inside the existing container.
+    # Directory mounts and the active T3 runtime need no changes.
+    ${pkgs.podman}/bin/podman exec -i --user 0:0 t3code ${writeConfig} < ${hostProjection}
     # Seed public toy code only on first setup; preserve an existing Git history.
     if ! test -e ${hostHome}/${fixture}; then
       install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/ghostship/free-inference
@@ -125,7 +137,7 @@ in
           "${pkgs.podman}/bin/podman" "exec" "--user" "3000:62020"
           "--env" "HOME=${containerHome}"
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
-          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerConfig}"
           "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
           "t3code" "${broker}/bin/ghostship-free-inference-bridge"
           "--token-file" "${containerHome}/${state}/token"
@@ -154,7 +166,7 @@ in
           "${pkgs.podman}/bin/podman" "exec" "--user" "3000:62020"
           "--env" "HOME=${containerHome}"
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
-          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerConfig}"
           "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
           "t3code" "${scheduler}/bin/agent" "free-inference" "serve"
           "--workers" "8" "--max-jobs" "8" "--poll-seconds" "60"

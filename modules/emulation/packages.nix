@@ -383,7 +383,7 @@ EOF
     src = pkgs.requireFile {
       name = "pico-8_0.2.7_amd64.zip";
       sha256 = "1alyii0bc9r9j2519q3jhxn8xazrcffy0kl8k07mnn208y2wxwpd";
-      url = "file:///mnt/c/Users/the owner/Downloads/pico-8_0.2.7_amd64.zip";
+      url = "file:///mnt/c/Users/$(cat /etc/ghostship/windows-user 2>/dev/null || echo default)/Downloads/pico-8_0.2.7_amd64.zip";
     };
     nativeBuildInputs = [
       pkgs.makeWrapper

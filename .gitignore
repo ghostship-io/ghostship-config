@@ -37,3 +37,6 @@ secrets.dec.yaml
 # Python test artifacts
 __pycache__/
 *.pyc
+
+# The placeholder for the private source carries no lock of its own.
+private-agent-source/flake.lock
