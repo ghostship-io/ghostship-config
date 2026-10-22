@@ -370,7 +370,7 @@ if __name__ == "__main__":
 
 
 class ValuePolicyTests(unittest.TestCase):
-    """The owner's combined value: 0.80 * intelligence + 0.20 * efficiency."""
+    """The owner's combined value: 0.70 * intelligence + 0.30 * efficiency."""
 
     def _cache(self, records):
         return {
@@ -480,8 +480,8 @@ class ValuePolicyTests(unittest.TestCase):
         self.assertAlmostEqual(
             minimax["value"]["value"],
             round(
-                0.8 * minimax_components["intelligence"]["value"]
-                + 0.2 * minimax_components["cost_per_task"]["value"],
+                0.7 * minimax_components["intelligence"]["value"]
+                + 0.3 * minimax_components["cost_per_task"]["value"],
                 6,
             ),
             places=6,
@@ -496,13 +496,13 @@ class ValuePolicyTests(unittest.TestCase):
         self.assertAlmostEqual(
             deepseek["value"]["value"],
             round(
-                0.8 * deepseek_components["intelligence"]["value"]
-                + 0.2 * deepseek_components["cost_per_task"]["value"],
+                0.7 * deepseek_components["intelligence"]["value"]
+                + 0.3 * deepseek_components["cost_per_task"]["value"],
                 6,
             ),
             places=6,
         )
-        self.assertEqual(minimax["value"]["weights"], {"intelligence": 0.8, "cost_per_task": 0.2})
+        self.assertEqual(minimax["value"]["weights"], {"intelligence": 0.7, "cost_per_task": 0.3})
         self.assertIn("transforms", minimax["value"])
         self.assertTrue(minimax["value"]["transforms"]["cost_per_task"])
         self.assertEqual(minimax["aa"]["indices"]["intelligence"], 42.7)
@@ -514,8 +514,8 @@ class ValuePolicyTests(unittest.TestCase):
     def test_the_policy_is_published_with_the_snapshot(self):
         rows = self._build(self._catalog(), self._cache(self._records()))
         policy = snapshot.VALUE_POLICY
-        self.assertEqual(policy["formula"], "0.80 * I + 0.20 * E")
-        self.assertEqual(policy["weights"], {"intelligence": 0.8, "cost_per_task": 0.2})
+        self.assertEqual(policy["formula"], "0.70 * I + 0.30 * E")
+        self.assertEqual(policy["weights"], {"intelligence": 0.7, "cost_per_task": 0.3})
         self.assertIn("units", policy)
         self.assertIn("not_aa_claim", policy)
 
@@ -538,7 +538,7 @@ class ValuePolicyTests(unittest.TestCase):
         rows = self._build(self._catalog(), self._cache(records))
         minimax = rows["minimax-m3.1-flash"]
         self.assertEqual(minimax["value"]["components"]["cost_per_task"]["value"], 1.0)
-        expected = 0.8 * (42.7 / 100.0) + 0.2 * 1.0
+        expected = 0.7 * (42.7 / 100.0) + 0.3 * 1.0
         self.assertAlmostEqual(minimax["value"]["value"], round(expected, 6), places=6)
 
     def test_a_negative_or_infinite_cost_is_unknown_not_free(self):

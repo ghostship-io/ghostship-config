@@ -15,8 +15,10 @@
     ./reliability.nix
     ./backup.nix
     ./monitoring.nix
+    ./boot-generation-drift.nix
     ./newsletter-health.nix
     ./notify-coverage.nix
+    ./ssh-command-guard.nix
     ./storage-health.nix
     ./synology-health.nix
     ./seerr.nix

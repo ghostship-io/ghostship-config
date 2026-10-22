@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Activate a built system generation and record it in the system profile.
+#
+# A bare `switch-to-configuration switch` on a built toplevel does not record
+# the system generation: /run/current-system then names a generation that the
+# system profile does not, and a reboot reverts to the profile's generation.
+# This helper sets the system profile first, switches to the generation, and
+# then verifies that the running system and the profile name the same store
+# path. Use it instead of calling switch-to-configuration directly.
+set -euo pipefail
+
+system_profile="${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+current_system="${GHOSTSHIP_CURRENT_SYSTEM:-/run/current-system}"
+toplevel=""
+verify_only=0
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/activate-host [--toplevel PATH] [--verify-only]
+
+  --toplevel PATH  the built system generation to activate (default ./result)
+  --verify-only    only check that the running system and the system profile
+                   name the same generation
+
+The system profile is set before the switch, so the activation records the
+system generation. The paths can be overridden with GHOSTSHIP_SYSTEM_PROFILE
+and GHOSTSHIP_CURRENT_SYSTEM.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --toplevel)
+      toplevel="${2:?--toplevel needs a path}"
+      shift 2
+      ;;
+    --verify-only)
+      verify_only=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      toplevel="$1"
+      shift
+      ;;
+  esac
+done
+
+verify() {
+  local running profile
+  running=$(readlink -f "$current_system" 2>/dev/null || true)
+  profile=$(readlink -f "$system_profile" 2>/dev/null || true)
+  if [ -z "$running" ] || [ -z "$profile" ]; then
+    echo "activate-host: cannot read the generation links $current_system and $system_profile" >&2
+    return 1
+  fi
+  if [ "$running" != "$profile" ]; then
+    echo "activate-host: the running system $running does not match the system profile $profile" >&2
+    return 1
+  fi
+  echo "activate-host: the running system and the system profile name $running"
+}
+
+if [ "$verify_only" -eq 1 ]; then
+  verify
+  exit $?
+fi
+
+if [ -z "$toplevel" ]; then
+  toplevel="./result"
+fi
+toplevel=$(readlink -f "$toplevel")
+if [ ! -x "$toplevel/bin/switch-to-configuration" ]; then
+  echo "activate-host: $toplevel is not a built system generation" >&2
+  exit 1
+fi
+
+echo "activate-host: recording the system generation in $system_profile"
+nix-env -p "$system_profile" --set "$toplevel"
+echo "activate-host: switching to $toplevel"
+"$toplevel/bin/switch-to-configuration" switch
+verify
