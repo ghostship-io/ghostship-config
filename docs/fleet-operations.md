@@ -543,6 +543,33 @@ Coordinator incident daily-limit holds are classified from the exact known resul
 `over daily limit`, without exporting the note. A native active run is recorded
 state, not PID liveness; CI status does not establish objective completion.
 
+### Provider page: decisions first, exceptions only, units that read
+
+The provider page is ordered for a ten-second read: the review banner, then the
+winners grouped by tier, then the decision inputs, then the exceptions, then the
+long usage and ranking reference tables. Winners show the tier, provider, model,
+value and its source (`measured` or `prior`), quality, capacity as a share and
+expiry as a duration, so a free-tier prior value is never read as frontier
+intelligence. A provider filter is a native variable, so the selection and the
+time range stay in the URL.
+
+`Providers with no fresh reading` is an exception table: every target is
+restricted to providers whose source is not ok, not successful, has no success
+within fifteen minutes, or has no reading at all. A healthy provider cannot
+appear; an empty table means every source is ok and fresh. The rule is covered by
+a fixture regression that proves a healthy source is excluded while partial,
+stale, failed and missing sources remain visible.
+
+Two coverage gaps are stated instead of implied. Calculation gates have no
+series: the producer publishes the formula and weights only, so the calculation
+panel shows no gate rows and says so. The compared candidate set (the ranked
+rows) is narrower than the provider catalogs; `Compared vs catalog` publishes
+both counts and the candidate table stays anchored to the compared set.
+
+Known missing inputs, not faked: white-line pace and per-component benchmark
+metrics are not exported by the producer, so no panel queries them; a contract
+change on the producer side is needed before they can be shown.
+
 ### Host resources: CPU over all cores and the real memory split
 
 The host page is the primary resource view for the agents and the server:
