@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.60] - 2026-10-22
+
+- The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
+
 ## [3.17.58] - 2026-10-22
 
 - Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
