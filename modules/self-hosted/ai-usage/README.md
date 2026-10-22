@@ -584,6 +584,23 @@ reason `account_usage_limit` until a later run of it succeeds. The text of the
 error is only read to pick the code; the provider's own words never reach a
 metric, a label or a log line.
 
+A model the provider retired is gone, and that is not a broken route and not
+a spent account. The markers are "has been deprecated", "has been retired",
+"free launch period", "reached its end of life" and "is no longer
+available". Such a failure is scoped to one route: the model itself, on the
+account that serves it. The other models of the same provider are not
+affected by it. The route is not available, with the reason
+`model_retired`, and it holds no tier at all - not the bulk tier, not the
+free tier - whatever window it has, including the published unlimited
+promotion of the Go free routes.
+
+A retirement outlives the window of a failure. A failure older than 24 hours
+is a past event, and a model that was retired yesterday is still retired
+today, so the collector keeps the retired routes in its own state file, with
+the provider, the model and the moment the retirement was first seen. A
+later successful run of the same route clears it: the provider serves the
+model again, and the route is usable once more.
+
 ### The model ranking
 
 The ranking is the collector's opinion layer. It turns the model inventory,
@@ -669,8 +686,9 @@ value.
 * `ghostship_ai_model_quality{provider,model}` - the quality score, 0 to 100.
 * `ghostship_ai_model_available{provider,model,reason}` - whether the model
   can be used right now, with the reason it cannot: a spent allowance, an
-  unknown headroom, a route that failed, or a route that is not offered.
-  The reason is a fixed label, never the provider's own text.
+  unknown headroom, a route that failed, a route that is not offered, or a
+  model the provider retired (`model_retired`). The reason is a fixed label
+  or a fixed code, never the provider's own text.
 * `ghostship_ai_model_capacity_remaining{tier,provider,model}` - the remaining
   share of the model's account capacity, 0 to 1. A spent allowance is
   published as 0; an unknown capacity is not published at all, because an
