@@ -39,7 +39,7 @@ in
     };
     ".ssh/id_ed25519_dev.pub" = {
       text = ''
-        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev
+        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner-workstation
       '';
       force = true;
     };

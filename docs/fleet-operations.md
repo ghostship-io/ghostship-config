@@ -98,7 +98,7 @@ useful later addition.
 
 ntfy denies anonymous access and signup. `publisher` can write only to the
 `security`, `operations` and `informational` topics; `android` can read only
-those topics; `the owner` administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
+those topics; the operator administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
 `KUMA_PASSWORD` is the initial Kuma and ntfy administrator password;
 `NTFY_READER_PASSWORD` is the Android subscriber password. In the Android ntfy
 app, the configured server is `https://ntfy.ghostship.io`, user `android`, and topic
@@ -285,7 +285,7 @@ The reconciler validates that coverage and refuses unexpected bypass policies;
 it does not rewrite shared wildcard or identity rules. ntfy's former native-auth
 bypass was revoked on 2026-10-18 and its specific Access application now requires
 the approved Google identity. The reconciler never creates bypass applications.
-The one approved exception is `hooks.ghostship.io` (the owner 2026-10-19): a
+The one approved exception is `hooks.ghostship.io` (owner approval, 2026-10-19): a
 path-scoped Access application for exactly `/github` and `/cloudflare` whose only
 policy is bypass-everyone, recorded in the registry as `cloudflareBypassPaths`
 with `cloudflareBypassApproval`. The receiver authenticates those requests itself

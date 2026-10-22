@@ -5,6 +5,12 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# The provisioner reads the approved identity provider id from the Cloudflare
+# management projection, so the environment carries it before the module loads.
+import os
+
+os.environ.setdefault("GOOGLE_IDP", "test-identity-provider")
+
 SPEC = importlib.util.spec_from_file_location(
     "t3_worker_tunnel",
     ROOT / "modules/agent-worker/cloudflare-tunnel.py",

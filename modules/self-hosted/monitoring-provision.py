@@ -107,13 +107,13 @@ def main():
     try:
         # Query setup state explicitly; startup load can delay the setup event.
         if client.call("needSetup", timeout=20):
-            call("setup", ("the owner", os.environ["KUMA_PASSWORD"]))
+            call("setup", (os.environ["KUMA_USERNAME"], os.environ["KUMA_PASSWORD"]))
         # Kuma establishes an automatic session on connection when auth is off.
         settings_result = client.call("getSettings", timeout=20)
         if not settings_result or not settings_result.get("ok"):
             call(
                 "login",
-                {"username": "the owner", "password": os.environ["KUMA_PASSWORD"]},
+                {"username": os.environ["KUMA_USERNAME"], "password": os.environ["KUMA_PASSWORD"]},
             )
         enforce_access_only_auth(call, os.environ["KUMA_PASSWORD"])
         call("getMonitorList")

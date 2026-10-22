@@ -32,7 +32,7 @@ class PinGuardTests(unittest.TestCase):
         self.agent = self.root / "agent"
         self.agent.mkdir()
         git(self.agent, "init", "-q", "-b", "main")
-        git(self.agent, "config", "user.email", "agent@ghostship.io")
+        git(self.agent, "config", "user.email", "agent@example.invalid")
         git(self.agent, "config", "user.name", "Agent")
         (self.agent / "line.txt").write_text("root\n")
         git(self.agent, "add", "line.txt")
@@ -57,7 +57,7 @@ class PinGuardTests(unittest.TestCase):
 
     def lock(self, revision):
         return {"nodes": {guard.INPUT: {"locked": {
-            "type": "github", "owner": "example-org", "repo": "example-agent", "rev": revision}}}}
+            "type": "git", "url": "https://example.invalid/agent", "rev": revision}}}}
 
     def write_lock(self, name, revision):
         path = self.root / name
@@ -120,7 +120,7 @@ class PullRequestEventTests(unittest.TestCase):
         self.agent = self.root / "agent"
         self.agent.mkdir()
         git(self.agent, "init", "-q", "-b", "main")
-        git(self.agent, "config", "user.email", "agent@ghostship.io")
+        git(self.agent, "config", "user.email", "agent@example.invalid")
         git(self.agent, "config", "user.name", "Agent")
         (self.agent / "line.txt").write_text("root\n")
         git(self.agent, "add", "line.txt")
@@ -139,7 +139,7 @@ class PullRequestEventTests(unittest.TestCase):
         self.repository = self.root / "nixos-config"
         self.repository.mkdir()
         git(self.repository, "init", "-q", "-b", "main")
-        git(self.repository, "config", "user.email", "agent@ghostship.io")
+        git(self.repository, "config", "user.email", "agent@example.invalid")
         git(self.repository, "config", "user.name", "Agent")
         self.write_lock(self.repository / "flake.lock", self.pinned)
         git(self.repository, "add", "flake.lock")

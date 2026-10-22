@@ -144,7 +144,7 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `wslpath -w /home/nixos/...` returns a `\\wsl.localhost\NixOS\...` UNC path
   for WSL-native files rather than a `C:\...` path.
 - Docker Desktop stores its WSL disk at
-  `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
+  `C:\Users\<windows-user>\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
 - WSL FHS shim changes can require a full WSL distro restart after a
@@ -169,23 +169,12 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   local `git push origin main`;
   remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
   remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `scripts/activate-host --toplevel ./result`.
-  `scripts/activate-host` sets the system profile before the switch and
-  verifies that `/run/current-system` and the system profile name the same
-  generation. A bare `switch-to-configuration switch` does not record the
-  system generation, and a reboot then reverts to the profile's generation.
+  remote `./result/bin/switch-to-configuration switch`.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
   `services.openssh.macs` including plain `hmac-sha2-256` and
   `hmac-sha2-512` in addition to the `*-etm` variants.
-- The agent SSH key runs `ghostship-ssh-command-guard` as its forced command
-  (`modules/self-hosted/ssh-command-guard.nix`). It refuses a recursive content
-  read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` with exit status
-  126 and a journal line under the `ghostship-ssh-command-guard` tag, and runs
-  every other command unchanged. Read named files only; a search of the host is
-  not a named file. The owner's own keys are authorized without a forced
-  command.
 
 ## Nix, Builds, and Host Boot
 
@@ -583,3 +572,45 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   it is missing.
 - `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
   host integration. Remove it after Codex finishes integrating the host.
+
+## Public Tree Privacy
+
+- Every repository in this fleet is treated as public. Personal identifiers,
+  account identifiers, and private repository names live in age-encrypted
+  units under `secrets/`, never in tracked source, documentation, tests,
+  fixtures, logs, or pull request text.
+- `scripts/check-privacy.py` fails on anything that reads as a person's
+  identity or a private account, using category detectors that name no
+  private value. It runs in `scripts/check` and in continuous integration.
+  `scripts/privacy-allowlist.txt` records the values that are deliberately
+  public, each with its reason, so a new value is reviewed.
+- A configuration that needs a personal value is rendered at activation time
+  from a secret projection. `modules/self-hosted/render-config.py` substitutes
+  placeholders in a JSON template and fails closed when a value is missing.
+- The renderer requires a publication directory owned by its effective user.
+  It walks all ancestors without following symlinks, requiring root or that
+  user as owner and rejecting writable ancestors except root-owned sticky
+  directories. Creation, cleanup, and atomic rename use the validated
+  directory descriptor. Ownership and mode use the open file descriptor
+  before publication, so a changed pathname cannot redirect them.
+- The inference bridge publishes its pool inside the existing container at
+  `/run/ghostship-free-inference-config/pool.json`, owned by root with mode
+  `0440` and group `62020`. The directory is root-owned `0750`. Broker and
+  scheduler receive that path through `GHOSTSHIP_FREE_INFERENCE_CONFIG`;
+  the inference user can read it but cannot edit or replace it. Rendering
+  reads the host projection over stdin and needs no container restart.
+- The privacy check reports a category, a path, and a line. It never reports
+  the value it found, so a continuous integration log cannot become a
+  disclosure channel. It also reports what it cannot see: the boundaries are
+  listed in its own output.
+- The check distinguishes two kinds of finding. A category heuristic says the
+  shape of a value looks like personal or account data, and a reviewer
+  decides. A proven private mapping is an exact match against a value set the
+  operator holds privately, which is never tracked. Neither is a claim that a
+  value is private.
+- A private flake source is supplied out of band; see
+  [agent revision pinning](agent-revision-pinning.md). The committed tree
+  names no private repository, revision, or hash.
+- Never relocate a private value into another tracked plaintext file. Put it
+  in an encrypted unit, or leave it in a private specification outside the
+  repository.

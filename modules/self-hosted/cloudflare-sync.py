@@ -13,7 +13,10 @@ from pathlib import Path
 
 ZONE = "ghostship.io"
 MARKER = "Managed by nixos-config ghostship.apps"
-GOOGLE_IDP = "c694da42-b799-4706-983b-35fa9eb91236"
+# The approved identity provider client id is an integration detail of this
+# account. It arrives from the Cloudflare management projection, which the
+# service wrapper sources before this script starts.
+GOOGLE_IDP = os.environ.get("GOOGLE_IDP", "")
 # Reads retry transient Cloudflare failures; writes never retry, so a POST
 # that timed out after Cloudflare applied it is never sent twice.
 READ_RETRY_DELAYS = (5, 20)
@@ -324,6 +327,11 @@ def main():
     )
     parser.add_argument("--state-dir", default="/var/lib/ghostship-cloudflare")
     args = parser.parse_args()
+    if not GOOGLE_IDP:
+        raise SystemExit(
+            "the approved identity provider id is missing; source the Cloudflare "
+            "management projection before running the reconciler"
+        )
     registry = json.loads(Path(args.registry).read_text())
     routes = {
         app["hostname"]: app for app in registry.values() if app["hostname"]

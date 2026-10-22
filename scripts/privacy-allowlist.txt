@@ -1,0 +1,121 @@
+# Intentionally public identifiers.
+#
+# Every repository in this fleet is treated as public, so the privacy check
+# fails on anything that reads as a person's identity or a private account.
+# This file records the values that are deliberately public, with the reason,
+# so a new value is reviewed rather than silently added.
+#
+# A line is "value  #  reason". A value of the form "suffix:<text>" allows
+# any value ending in that text.
+
+# --- system account identities -------------------------------------------
+suffix:@3000.service                 # systemd template account for the container runtime
+suffix:@tty1.service                 # getty unit account
+suffix:@openssh.com                  # OpenSSH host key algorithm identifier
+suffix:@users.noreply.github.com     # GitHub commit attribution, no account behind it
+suffix:@home.local                   # the deployment's own service account
+suffix:@example.com                  # documentation placeholder
+suffix:@example.org                  # test fixture
+suffix:@example.invalid              # test fixture
+git@github.com                       # the forge transport form
+
+# --- service and image identifiers ---------------------------------------
+# The service name and the registry path are the same string, and the
+# service is already named in the public application registry.
+suffix:ghcr.io/ghostship-io/honcho           # deployed service image
+suffix:ghcr.io/ghostship-io/ghostship-openchamber  # deployed service image
+suffix:ghcr.io/ghostship-io/ghostship-agent-zero    # deployed service image
+suffix:ghcr.io/ghostship-io/ghostship-hermes        # deployed service image
+suffix:/ghcr.io/ghostship-io/honcho             # public container image suffix
+suffix:/ghcr.io/ghostship-io/ghostship-openchamber # public container image suffix
+suffix:/ghcr.io/ghostship-io/ghostship-agent-zero # public container image suffix
+suffix:/ghcr.io/ghostship-io/ghostship-hermes   # public container image suffix
+ghostship-io/honcho                         # deployed service image, service name already public
+ghostship-io/ghostship-openchamber         # deployed service image, service name already public
+
+# --- upstream and public sources -----------------------------------------
+ryantm/agenix                        # public transitive flake dependency
+ipetkov/crane                        # public transitive flake dependency
+lnl7/nix-darwin                      # public transitive flake dependency
+nix-community/flake-compat           # public transitive flake dependency
+edolstra/flake-compat                # public transitive flake dependency
+numtide/flake-utils                  # public transitive flake dependency
+oxalica/rust-overlay                 # public transitive flake dependency
+nix-systems/default                 # public transitive flake dependency
+NixOS/nixpkgs                         # upstream source
+NixOS/nixos-hardware                  # upstream source
+nix-community/home-manager            # upstream source
+nix-community/NixOS-WSL               # upstream source
+nix-community/nixos-apple-silicon     # upstream source
+yaxitech/ragenix                      # upstream source
+Mic92/nix-index-database              # upstream source
+pingdotgg/t3code                      # upstream source
+agentclientprotocol/registry          # upstream source
+cursor/plugins                        # upstream source
+mattpocock/skills                     # upstream source
+dondai44423/bladebro                  # upstream source
+linuxserver/webtop                    # upstream source
+linuxserver/bookstack                 # upstream source
+docker.io/cloakhq/cloakbrowser-manager:latest  # upstream image
+docker.io/lscr.io/linuxserver/bookstack:latest  # upstream image
+lscr.io/linuxserver/bookstack:latest  # upstream image
+docker.io/jlesage/jdownloader-2:latest  # upstream image
+docker.io/bentopdf/bentopdf:latest    # upstream image
+docker.io/corentinth/it-tools:latest  # upstream image
+docker.io/iib0011/omni-tools:latest   # upstream image
+docker.io/rssbridge/rss-bridge:latest # upstream image
+docker.io/n8nio/n8n:latest            # upstream image
+ghcr.io/firecrawl/firecrawl:latest    # upstream image
+ghcr.io/c4illin/convertx:latest       # upstream image
+ghcr.io/alexta69/metube:latest        # upstream image
+flaresolverr/flaresolverr            # upstream source
+gethomepage/homepage                  # upstream source
+journeydocker/plex-auto-languages    # upstream source
+recyclarr/recyclarr                    # upstream source
+seerr-team/seerr                       # upstream source
+haveagitgat/tdarr                      # upstream source
+louislam/uptime-kuma                  # upstream source
+dgtlmoon/changedetection.io           # upstream source
+hatchet-dev/hatchet                    # upstream source
+berriai/litellm                        # upstream source
+alexta69/metube                        # upstream source
+c4illin/convertx                       # upstream source
+firecrawl/firecrawl                    # upstream source
+firecrawl/nuq-postgres                # upstream source
+firecrawl/playwright-service           # upstream source
+VueTorrent/VueTorrent                  # upstream source
+vuetorrent/vuetorrent-lsio-mod         # upstream source
+VictoriaMetrics/victorialogs-datasource # upstream source
+gemini-cli-extensions/security        # upstream source
+ghostship-io/ghostship-config.git                # this repository, public by design
+ghostship-io/ghostship-config                     # this repository, public by design
+ghostship-io/ghostship-hermes                 # public repository
+ghostship-io/ghostship-agent-zero             # public repository
+
+# --- deployment account paths --------------------------------------------
+suffix:/home/nixos/                   # the deployment account
+suffix:/home/t3code/                   # the container account
+suffix:/home/kiosk/                    # the emulation account
+suffix:/home/codex/                    # the automation account
+suffix:/home/hermes/                   # the service account
+suffix:/home/openchamber/              # the service account
+suffix:/home/seeds/                    # the service account
+suffix:/home/booklore/                 # the service account
+suffix:/home/config/                   # the configuration account
+
+# --- public format and release identifiers --------------------------------
+# A public first-party client identifier. It identifies a published client,
+# not a person, and the forge serves it in the clear.
+AIzaSyDE7NHMUZfMoJVu-YNkK-7AXFSuL1Q9gKE # gitleaks:allow -- published first-party client identifier, matching the existing broker configuration
+
+# Recyclarr custom format identifiers from a published format database.
+c9eafd50846d299b862ca9bb6ea91950         # public TRaSH Guides custom format identifier in recyclarr
+cddfb4e32db826151d97352b8e37c648         # public TRaSH Guides custom format identifier in recyclarr
+9170d55c319f4fe40da8711ba9d8050d         # public TRaSH Guides custom format identifier in recyclarr
+2899d84dc9372de3408e6d8cc18e9666         # public TRaSH Guides custom format identifier in recyclarr
+
+# Emulation device and controller identifiers from a published database.
+0500d71f7e0500000920000001800000         # public SDL gamepad controller GUID in emulation launchers
+030077557e0500000920000000026803         # public SDL gamepad controller GUID in emulation launchers
+agent-workspace@ghostship            # public agent workspace key comment from PR 197
+en/github-models                     # public GitHub models documentation path on docs.github.com

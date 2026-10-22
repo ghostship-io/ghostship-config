@@ -12,7 +12,10 @@ from pathlib import Path
 
 ZONE = "ghostship.io"
 MARKER = "Managed by nixos-config T3 WSL worker"
-GOOGLE_IDP = "c694da42-b799-4706-983b-35fa9eb91236"
+# The approved identity provider client id is an integration detail of this
+# account, so it arrives from the Cloudflare management projection instead of
+# being committed here. The provisioner fails closed when it is absent.
+GOOGLE_IDP = os.environ.get("GOOGLE_IDP", "")
 
 
 class Cloudflare:
@@ -204,6 +207,12 @@ def main():
         raise ValueError(f"hostname must be an exact name inside {ZONE}")
     if not 1 <= args.port <= 65535:
         raise ValueError("port must be between 1 and 65535")
+
+    if not GOOGLE_IDP:
+        raise RuntimeError(
+            "the approved identity provider id is missing; source the Cloudflare "
+            "management projection before running the provisioner"
+        )
 
     api = Cloudflare(os.environ["CLOUDFLARED_API_TOKEN"])
     account_id = os.environ["CLOUDFLARED_ACCOUNT_ID"]

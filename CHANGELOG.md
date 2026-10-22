@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.58] - 2026-10-22
+
+- Privacy: the public tree no longer publishes personal or account data. The operator's name, the two account addresses, the Drive folder ids, the account and environment ids, the private repository list, the cloud account id, the identity provider client id, the service account names, the private flake source, and the personal path segments now live in age-encrypted units and are substituted into their configurations at activation time. The private flake source is supplied from a specification that is private to continuous integration and to the host, so the committed tree names no private repository, revision, or hash. A privacy check fails on any new personal or account value in the tracked tree, and records the intentionally public values with the reason they are public. The check reports a category, a path, and a line, never the value, so a build log cannot become a disclosure channel, and it reports the boundaries it cannot see. It distinguishes a category heuristic, which says a value has the shape of personal or account data, from a proven private mapping, which is an exact match against a value set the operator holds privately; neither is a claim that a value is private.
+
+A rendered configuration is published into a directory another account cannot write, through an exclusive temporary file whose final mode and ownership are applied before it is renamed into place, so a planted path cannot capture a privileged write and a published file is never briefly readable with the wrong mode or owner. The private flake importer copies the pinned source into the Nix store and points the lock at the store path, so the evaluation that follows the importer still resolves after the importer has exited, and it refuses to run unless the committed tree carries the placeholder.
+
+The placeholder for the private source is a small committed flake, so it resolves. The repository therefore evaluates on its own: a check that does not use the private source, such as the browser tests, needs no credential at all, and a check that does use it fails with a message that says the source was not supplied and names the procedure, instead of a path that does not exist. The placeholder declares the same input the private source declares, so the lock keeps one node for it and the substituted evaluation is unchanged.
+
 ## [3.17.57] - 2026-10-22
 
 - Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
@@ -556,7 +564,7 @@
 ## [3.15.132] - 2026-10-19
 
 - Add `hooks.ghostship.io`, the webhook receiver for GitHub-driven T3 engineering and Cloudflare alerts (ghostship-agent 0.25.0, pinned at `d61a5415`):
-  - Cloudflare Access bypasses exactly `POST /github` and `POST /cloudflare` (the owner 2026-10-19, recorded as `cloudflareBypassApproval`); every other path still requires Google identity. The receiver verifies GitHub's HMAC signature or the Cloudflare webhook secret itself, runs AppArmor-confined in complain mode, and shares an internal network only with cloudflared. It has no egress.
+  - Cloudflare Access bypasses exactly `POST /github` and `POST /cloudflare` (owner approval 2026-10-19, recorded as `cloudflareBypassApproval`); every other path still requires Google identity. The receiver verifies GitHub's HMAC signature or the Cloudflare webhook secret itself, runs AppArmor-confined in complain mode, and shares an internal network only with cloudflared. It has no egress.
   - The registry gains `cloudflareBypassPaths`, which requires an approval and an AppArmor profile. `ghostship-cloudflare-sync` accepts a path-scoped Access app only when every domain is an approved exact path and the app's only policy is bypass-everyone.
   - The coordinator re-reads each GitHub event from GitHub and routes your issues, comments, reviews and PRs to one T3 thread per issue. It files regression issues for failing base-branch CI and publishes Cloudflare alerts to ntfy.
   - New encrypted unit `hooks` (`GITHUB_WEBHOOK_SECRET`, `CLOUDFLARE_WEBHOOK_SECRET`; copy in Bitwarden `hooks.ghostship.io`).
@@ -625,7 +633,7 @@
 - Pool accounts:
   - Add Upstage, Inception, Poolside, OVH (anonymous) and Z.ai; enable OrcaRouter; open Mistral to all workloads.
   - Billing attestations for Upstage, Mistral and Inception.
-  - `china_hosting_workloads: ["research"]` on the aggregator and research accounts (the owner 2026-10-18: free research may include China providers; Singapore is fine).
+  - `china_hosting_workloads: ["research"]` on the aggregator and research accounts (owner approval 2026-10-18: free research may include China providers; Singapore is fine).
 - Project Z.ai's key (`ZHIPU_API_KEY`) from a new encrypted provider unit.
 
 ## [3.15.121] - 2026-10-18
@@ -756,7 +764,7 @@
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
-- The MCP container reads health documents only from the owner's "the owner" and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
+- The MCP container reads health documents only from the owner's personal folder and the HealthConnect Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
 
 ## [3.15.100] - 2026-10-12
 

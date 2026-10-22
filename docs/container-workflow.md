@@ -137,9 +137,7 @@ interruption. `podman-t3code.service` does not restart on configuration switch.
 Instead, image updates and restarts are queued and applied by
 `t3code-deploy-when-idle` only after confirming sustained idle across active turns
 and pending tasks. If a manual host restart is required, use `t3code-safe-restart`
-rather than restarting `podman-t3code.service` directly. A forced restart needs the
-owner's own deploy or activate instruction, recorded with
-`--owner-request "<short quote or reference>"`.
+rather than restarting `podman-t3code.service` directly.
 
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
@@ -240,9 +238,17 @@ host checkout at `/home/nixos/nixos-config` to run these commands as root:
 ```sh
 git -C /home/nixos/nixos-config pull --ff-only origin main
 cd /home/nixos/nixos-config
+# The private flake source is supplied from a root-only specification, so the
+# committed tree stays free of the repository name, revision, and hash.
+python3 scripts/private-inputs.py apply --spec /etc/ghostship/private-sources.json
 nixos-rebuild build -L --impure --flake .#chill-penguin
 ./result/bin/switch-to-configuration switch
+python3 scripts/private-inputs.py restore
 ```
+
+The specification at `/etc/ghostship/private-sources.json` is root-only and is
+never tracked. See [agent revision pinning](agent-revision-pinning.md) for its
+format and for the procedure that changes it.
 
 Run long or prompt-driven remote work in detached tmux, then inspect its output
 with `capture-pane` and provide input with `send-keys`. The `--impure` flag on

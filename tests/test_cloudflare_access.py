@@ -8,6 +8,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+# The reconciler reads the approved identity provider id from the Cloudflare
+# management projection, so the environment carries it before the module loads.
+os.environ.setdefault("GOOGLE_IDP", "test-identity-provider")
+
 spec = importlib.util.spec_from_file_location(
     "cloudflare_access_sync",
     Path(__file__).resolve().parents[1] / "modules/self-hosted/cloudflare-sync.py")
@@ -284,6 +288,9 @@ class AccessTests(unittest.TestCase):
                         "CLOUDFLARED_API_TOKEN": "test",
                         "CLOUDFLARED_ACCOUNT_ID": "a",
                         "CLOUDFLARED_TUNNEL_ID": "t",
+                        # The reconciler reads the approved identity provider
+                        # id from the Cloudflare management projection.
+                        "GOOGLE_IDP": "test-identity-provider",
                     },
                 ),
             ):

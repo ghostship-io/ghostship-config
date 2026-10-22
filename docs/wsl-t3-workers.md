@@ -87,6 +87,8 @@ Provision the dedicated tunnel with the Cloudflare management projection on
 set -a
 . /run/ghostship-secrets/cloudflare-management.env
 set +a
+# The management projection also carries the approved identity provider id,
+# so the provisioner can confirm the Access application requires it.
 python modules/agent-worker/cloudflare-tunnel.py \
   --name t3-worker-armored-armadillo \
   --hostname armored-armadillo-t3.ghostship.io \
