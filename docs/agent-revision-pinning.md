@@ -44,7 +44,7 @@ conservative unknown limits), which descends from the previous pin
 renamed at the same time — `nixos-config` became `ghostship-config` and
 `orca-advanced-calibration` became `ghostship-orca` — while local checkout
 paths and T3 project identifiers stayed the same.
-The pinned revision is now `af089700` (agent 0.43.1 restores the MCP server's agent browser; GitHub review capabilities are CLI-only), descending from `f6a415dd`.
+The pinned revision is now `af089700` (agent 0.43.1 restores the MCP server's agent browser; GitHub review capabilities are CLI-only), descending from `f6a415dd`. The next pin, `2318134e` (0.43.2), makes handler imports lazy, which is what actually restores the MCP browser.
 
 The coordinator's repository map, its incident repository and the webhook
 receiver's allowlist now name the canonical repositories. The receiver also
