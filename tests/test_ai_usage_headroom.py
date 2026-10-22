@@ -33,6 +33,7 @@ ranking = load("ai_usage_headroom_ranking", "ranking.py")
 main = load("ai_usage_headroom_main", "main.py")
 catalog_module = load("ai_usage_headroom_catalog", "catalog.py")
 published = load("ai_usage_headroom_published", "published.py")
+runtime_state = load("ai_usage_headroom_runtime_state", "runtime_state.py")
 
 NOW = 1_800_000_000.0
 DAY = 86400.0
@@ -647,6 +648,46 @@ class PublishedAvailabilityTests(unittest.TestCase):
             if name == "ghostship_ai_model_rank"
         ]
         self.assertEqual(len(ranks), 1)
+
+
+class PaymentStatusTests(unittest.TestCase):
+    """A refused payment is an exhausted account, and only a refused one.
+
+    The status of the refusal is read in the shape a provider writes it. A
+    bare "402" is not a status: a count of processed items, a line number
+    and a model id carry the same three digits without anything being
+    wrong, and reading them as a spent account would hide every route of
+    that provider.
+    """
+
+    def _reason(self, text):
+        return runtime_state._classify(text)
+
+    def test_a_refused_payment_marks_the_account_spent(self):
+        for text in (
+            "HTTP 402",
+            "status code: 402",
+            "402 Payment Required",
+            "API error (status 402 Payment Required): Grok Build usage balance exhausted",
+        ):
+            self.assertEqual(
+                self._reason(text),
+                runtime_state.REASON_ACCOUNT_USAGE_LIMIT,
+                text,
+            )
+
+    def test_a_bare_number_is_not_a_refused_payment(self):
+        for text in (
+            "processed 402 items",
+            "line 4021",
+            "model-402b",
+            "the request took 402 ms",
+        ):
+            self.assertNotEqual(
+                self._reason(text),
+                runtime_state.REASON_ACCOUNT_USAGE_LIMIT,
+                text,
+            )
 
 
 if __name__ == "__main__":
