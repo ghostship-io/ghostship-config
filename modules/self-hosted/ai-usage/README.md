@@ -119,6 +119,15 @@ are pruned. The cache is written beside itself and renamed over the old
 one, so a reader never sees half of it, and it never holds the text of a
 provider's error.
 
+The history is filled a slice at a time. With no cache, a run reads the
+newest slice of three days. With a cache whose history starts later than
+the window allows, a run reads one slice of at most three days, walking
+back from the start of the history, inside the same cap. The reading is
+`partial` until the history reaches the whole window, and it carries the
+instant the history is complete from. A slice that runs out of time leaves
+the cache as it was and is read again by the next run; the part that was
+read still counts.
+
 The text of a provider's error is read in memory, to pick the outcome, and
 it never leaves the process: it is not stored, not returned, not logged and
 not in an event. A real limit message names the account it belongs to.

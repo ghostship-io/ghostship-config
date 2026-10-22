@@ -803,7 +803,7 @@ class CacheTests(unittest.TestCase):
 
     def test_the_cache_is_written_and_read_back(self):
         result = self.run_reader()
-        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["status"], "partial")
         self.assertTrue(self.cache_path.exists())
         cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
         self.assertEqual(cache["cursor"], int((self.now - 3600) * 1000))
@@ -822,13 +822,13 @@ class CacheTests(unittest.TestCase):
                 result = reader().collect_events(path, self.cache_path, self.now)
             finally:
                 connection.close()
-        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["status"], "partial")
         self.assertNotIn("example-user", self.cache_path.read_text(encoding="utf-8"))
 
     def test_the_next_run_reads_only_the_overlap(self):
         self.run_reader()
         result = self.run_reader()
-        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["status"], "partial")
         # The window the cursor covers: the overlap and nothing older.
         self.assertEqual(result["counts"]["rows_read"], 3)
 
@@ -837,11 +837,12 @@ class CacheTests(unittest.TestCase):
         self.run_reader()
         statements = capture_statements(module, self)
         self.run_reader()
-        bounds = [text for text in statements if "session_message" in text]
-        self.assertTrue(bounds)
+        queries = [text for text in statements if "session_message" in text]
+        self.assertTrue(queries)
+        incremental = [text for text in queries if "time_created <" not in text]
+        self.assertEqual(len(incremental), 1)
         expected = int((self.now - 3600 - 7200) * 1000)
-        for statement in bounds:
-            self.assertIn(str(expected), statement)
+        self.assertIn(str(expected), incremental[0])
 
     def test_the_new_rows_are_added_to_the_history(self):
         self.run_reader()
@@ -899,6 +900,156 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(result["events"], [])
         cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
         self.assertEqual(cache["events"], [])
+
+
+class BackfillTests(unittest.TestCase):
+    """The history is filled a slice at a time, never in one giant read."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.state = Path(self.directory.name) / "state"
+        self.state.mkdir()
+        self.cache_path = self.state / "opencode-events.json"
+        self.now = 1800000000.0
+        self.content = fixture()
+        self.path, self.connection = build_database(
+            self.directory.name, self.content["rows"]
+        )
+        self.addCleanup(self.connection.close)
+
+    def run_reader(self, now=None):
+        return reader().collect_events(
+            self.path, self.cache_path, self.now if now is None else now
+        )
+
+    def add_row_at(self, moment_ms, identifier):
+        self.connection.execute(
+            "INSERT INTO session_message (id, session_id, type, time_created, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                identifier,
+                "ses_example_9",
+                "assistant",
+                moment_ms,
+                json.dumps(
+                    {
+                        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+                        "time": {"created": moment_ms},
+                        "tokens": {"input": 7, "output": 3, "reasoning": 0},
+                        "finish": "stop",
+                    }
+                ),
+            ),
+        )
+        self.connection.commit()
+
+    def test_the_first_run_reads_only_the_newest_slice(self):
+        result = self.run_reader()
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+        for event in result["events"]:
+            self.assertGreaterEqual(event["at"], self.now - 3 * 86400)
+
+    def test_the_first_run_leaves_the_old_rows_alone(self):
+        result = self.run_reader()
+        moments = [event["at"] for event in result["events"]]
+        self.assertNotIn(1796544000.0, moments)
+
+    def test_the_next_run_reads_the_next_slice_back(self):
+        first = self.run_reader()
+        self.assertEqual(first["complete_since"], self.now - 3 * 86400)
+        older = int((self.now - 5 * 86400) * 1000)
+        self.add_row_at(older, "msg_older_slice")
+        second = self.run_reader()
+        self.assertEqual(second["status"], "partial")
+        self.assertEqual(second["complete_since"], self.now - 6 * 86400)
+        moments = [event["at"] for event in second["events"]]
+        self.assertIn(older / 1000, moments)
+
+    def test_the_next_run_reads_the_new_rows_as_well(self):
+        self.run_reader()
+        newest = int((self.now - 600) * 1000)
+        self.add_row_at(newest, "msg_newest")
+        second = self.run_reader()
+        moments = [event["at"] for event in second["events"]]
+        self.assertIn(newest / 1000, moments)
+
+    def test_the_next_run_queries_the_slice_before_the_complete_history(self):
+        module = reader()
+        self.run_reader()
+        statements = capture_statements(module, self)
+        self.run_reader()
+        queries = [text for text in statements if "session_message" in text]
+        slices = [text for text in queries if "time_created <" in text]
+        self.assertEqual(len(slices), 1)
+        self.assertIn(str(int((self.now - 6 * 86400) * 1000)), slices[0])
+        self.assertIn(str(int((self.now - 3 * 86400) * 1000)), slices[0])
+
+    def test_the_backfill_ends_with_a_complete_history(self):
+        result = None
+        for _run in range(13):
+            result = self.run_reader()
+        self.assertEqual(result["status"], "ok")
+        self.assertLessEqual(result["complete_since"], self.now - 35 * 86400)
+
+    def test_a_timeout_during_the_backfill_keeps_the_complete_since(self):
+        module = reader()
+        original = module.read_events
+
+        def failing(path, now, **options):
+            if options.get("until") is not None:
+                return {
+                    "status": "unreadable",
+                    "reason": "timeout",
+                    "events": [],
+                    "counts": {
+                        "rows_read": 0,
+                        "rows_unmapped": 0,
+                        "outcomes": {"success": 0, "limit": 0, "other": 0},
+                    },
+                    "cursor": None,
+                }
+            return original(path, now, **options)
+
+        module.read_events = failing
+        self.addCleanup(setattr, module, "read_events", original)
+        first = self.run_reader()
+        before = first["complete_since"]
+        result = self.run_reader()
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["reason"], "timeout")
+        self.assertEqual(result["complete_since"], before)
+        cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.assertEqual(cache["complete_since"], before)
+
+    def test_the_incremental_part_still_counts_after_a_backfill_timeout(self):
+        module = reader()
+        original = module.read_events
+
+        def failing(path, now, **options):
+            if options.get("until") is not None:
+                return {
+                    "status": "unreadable",
+                    "reason": "timeout",
+                    "events": [],
+                    "counts": {
+                        "rows_read": 0,
+                        "rows_unmapped": 0,
+                        "outcomes": {"success": 0, "limit": 0, "other": 0},
+                    },
+                    "cursor": None,
+                }
+            return original(path, now, **options)
+
+        module.read_events = failing
+        self.addCleanup(setattr, module, "read_events", original)
+        self.run_reader()
+        newest = int((self.now - 600) * 1000)
+        self.add_row_at(newest, "msg_after_the_timeout")
+        result = self.run_reader()
+        moments = [event["at"] for event in result["events"]]
+        self.assertIn(newest / 1000, moments)
 
 
 class ConnectionTests(unittest.TestCase):

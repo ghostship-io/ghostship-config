@@ -718,7 +718,8 @@ def collect_events(
     now = float(now)
     horizon = now - float(days) * DAY_SECONDS
     cache = load_cache(cache_path, now)
-    if cache is None:
+    fresh_cache = cache is None
+    if fresh_cache:
         complete_since = now - BACKFILL_S
         cursor: int | None = None
         cached: list[dict[str, Any]] = []
@@ -743,6 +744,32 @@ def collect_events(
     merged = [
         event for event in cached if float(event.get("at") or 0.0) < since
     ] + list(fresh["events"])
+
+    counts = fresh["counts"]
+    reason = REASON_OK
+    if not fresh_cache and complete_since > horizon:
+        # The history is not complete yet. Read one older slice, at most
+        # three days, walking back from the start of the complete history.
+        slice_start = complete_since - BACKFILL_S
+        older = read_events(
+            path,
+            now,
+            since=slice_start,
+            until=complete_since,
+            days=days,
+            timeout_s=_remaining(deadline),
+        )
+        if older["status"] == STATUS_OK:
+            merged = list(older["events"]) + merged
+            complete_since = slice_start
+            counts["rows_read"] += older["counts"]["rows_read"]
+            counts["rows_unmapped"] += older["counts"]["rows_unmapped"]
+        else:
+            # The slice is not read. The cache keeps the history it has, the
+            # slice is read again by the next run, and the part that was
+            # read still counts.
+            reason = older["reason"]
+
     # The history the collector keeps is the window itself.
     merged = [event for event in merged if float(event.get("at") or 0.0) >= horizon]
 
@@ -763,11 +790,13 @@ def collect_events(
     except OSError:
         written = False
 
-    counts = fresh["counts"]
     counts["outcomes"] = _event_outcomes(merged)
+    complete = complete_since <= horizon
+    if not written:
+        reason = REASON_CACHE
     return {
-        "status": STATUS_OK if written else STATUS_PARTIAL,
-        "reason": REASON_OK if written else REASON_CACHE,
+        "status": STATUS_OK if complete and written else STATUS_PARTIAL,
+        "reason": reason,
         "events": merged,
         "counts": counts,
         "complete_since": complete_since,
