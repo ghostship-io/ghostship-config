@@ -890,7 +890,7 @@ The contract, version 1:
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
-| `quota.accounts` | the measured windows, once per account |
+| `quota.accounts` | the windows of each account, once per account: the ones the provider reported, and the ones learned from the limit failures of its routes (`evidence: inferred`, with the learned window, budget, unit, scope and episodes) |
 | `quality_feed` | the Artificial Analysis feed: its status, the intelligence index version, the fetch time, the age, and the attribution. A missing feed is a coverage gap, never an empty quality |
 | `workload_policy` | the workload classes, their complexity ceiling, and the free route rule |
 | `recommendations` | the recommended model per workload class, with its native identity, its role, and the reason |
