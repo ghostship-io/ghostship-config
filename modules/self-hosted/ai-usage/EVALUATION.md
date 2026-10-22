@@ -15,14 +15,16 @@ already keeps.
    and the benchmark sources of the providers we use, and record what is new:
    the model, the provider, the release date, the source, and the date of
    the read. The record is a fact with a source, never a conclusion.
-2. **Read the Artificial Analysis feed.** The free endpoint
-   `GET /api/v2/language/models/free` is paginated and needs a key. The key
-   belongs to the service library, which owns the clients of the APIs the
-   fleet uses; this procedure calls it and writes the cache the collector
-   reads. The free tier allows a hundred requests in twenty four hours, so
-   the feed is read once a day and never more. The cache records the
-   intelligence index version, the exact model names, the fetch time, and
-   the source. A model the feed does not list is unknown, not bad.
+2. **Pull the Artificial Analysis public pages.** The public pages carry
+   the models, their intelligence index, their cost per task and their token
+   prices. The pull reads them with ordinary GETs: there is no key, no
+   account and no paid feature. The pages are read once a day and never
+   more. A page that is blocked, or that answers with a challenge, is
+   recorded as blocked and the last good snapshot is kept: nothing is
+   retried to get around it. The cache records the intelligence index
+   version, the exact model names, the fetch time, and the source, and the
+   models the pull found that the one before it did not carry. A model the
+   pages do not list is unknown, not bad.
 3. **Read the measured admission results.** The free inference pool already
    runs revisioned workload benches and keeps their results in its own
    store. They are read through the broker's read surface

@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -28,9 +28,11 @@ import aa_3d  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
+import pool_published  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
+import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
@@ -45,6 +47,10 @@ SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
+# The T3 Code state, read only. It carries the observed failures of the
+# routes: a child that could not start, a provider that reported its
+# allowance spent, a model that was refused.
+T3_STATE_FILE = f"{T3_HOME}/.t3/userdata/statev2.sqlite"
 CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
 # The smallest 3D prior that earns a place in the 3D tier.
 
@@ -54,6 +60,10 @@ OWNER_POLICY = {
     "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-sol"),
     "allowedGptModels": ("gpt-6.1-sol",),
     "backgroundProviderInstances": ("opencode",),
+    # The models the owner excludes from every selection. They stay visible
+    # in the usage and the quota readings; they are never a winner and never
+    # a recommendation.
+    "excludedModels": ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1"),
     # The frontier authority reviews every implementation before it is
     # integrated. A review by a bulk model is never a final approval, and a
     # required frontier that is unavailable is waited for, never replaced.
@@ -72,6 +82,11 @@ SNAPSHOT_PATH = "/var/lib/ghostship-ai-usage/routing.json"
 # writes the cache; the collector only reads the cache, so the free request
 # budget belongs to one place.
 AA_CACHE_PATH = "/var/lib/ghostship-ai-usage/artificial-analysis.json"
+
+# The AA-3D board, written by the same pull of the public pages. Without
+# the board there is no 3D rank: the 3D tier stays empty and the models
+# that qualify for it are not reserved.
+AA_3D_CACHE_PATH = "/var/lib/ghostship-ai-usage/aa-3d.json"
 
 # The durable facts of the models, written by the daily procedure.
 FACTS_PATH = "/var/lib/ghostship-ai-usage/facts.json"
@@ -142,6 +157,25 @@ METRIC_HELP = {
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
     "ghostship_ai_pool_model_admission": "Whether a pool model is admitted for a workload.",
     "ghostship_ai_pool_limit": "A local admission limit of the free pool.",
+    "ghostship_ai_pool_observed_limit": (
+        "A limit the provider's own response headers carried, as observed."
+    ),
+    "ghostship_ai_pool_published_limit": (
+        "A limit the provider itself publishes, with the source it was read "
+        "from."
+    ),
+    "ghostship_ai_provider_limit": (
+        "A limit of a free provider, with the basis it was read with: "
+        "published, configured, observed or unknown."
+    ),
+    "ghostship_ai_pool_cooldown_invalid": (
+        "One for a cooldown of a pool route that cannot be true; the route is "
+        "not blocked by it."
+    ),
+    "ghostship_ai_pool_admission": (
+        "Whether a pool route is admitted for a workload, with the score the "
+        "pool's own bench gave it."
+    ),
     "ghostship_ai_pool_provider_state": "One for the current state of a pool provider.",
     "ghostship_ai_pool_health_events": "Successes and failures recorded for a pool model.",
     "ghostship_ai_pool_latency_seconds": "Observed latency of a pool model.",
@@ -153,6 +187,13 @@ METRIC_HELP = {
     "ghostship_ai_pool_ledger_requests": "Requests the free pool reserved over a window.",
     "ghostship_ai_pool_catalog_updated_timestamp_seconds": "When the pool catalog was refreshed.",
     "ghostship_ai_provider_coverage": "One for every provider the dashboard covers.",
+    "ghostship_ai_route_unavailable": (
+        "One for a route the T3 Code state says is unavailable, with the "
+        "scope of the failure and the reason code."
+    ),
+    "ghostship_ai_route_unavailable_observed_timestamp_seconds": (
+        "When the T3 Code state observed the failure of a route."
+    ),
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
     "ghostship_ai_model_quality": "The quality score of a model.",
@@ -183,8 +224,63 @@ METRIC_HELP = {
     "ghostship_ai_model_fact_confidence": "The confidence a fact carries.",
     "ghostship_ai_model_winner": "One for the winner of a provider and tier.",
     "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
+    "ghostship_ai_policy_frontier_workhorse": (
+        "One for every model the owner's policy names a frontier workhorse."
+    ),
+    "ghostship_ai_policy_excluded_model": (
+        "One for every model the owner's policy excludes from selection; it "
+        "stays visible in the usage and the quota readings."
+    ),
+    "ghostship_ai_model_new": (
+        "One for a model the Artificial Analysis pull found that the last "
+        "pull did not carry. It is the re-ranking trigger."
+    ),
+    "ghostship_ai_model_changed": (
+        "One for a model whose Artificial Analysis measurement changed since "
+        "the last pull."
+    ),
+    "ghostship_ai_feed_status": (
+        "The state of the Artificial Analysis pull: the source, the state and "
+        "the number of records."
+    ),
+    "ghostship_ai_model_aa_condition": (
+        "The reasoning condition the benchmark measured the model under, and "
+        "whether that condition is confirmed."
+    ),
+    "ghostship_ai_model_execution_reasoning": (
+        "The execution reasoning the owner's policy proposes for a model: the "
+        "default, the escalation, and whether the model supports them."
+    ),
+    "ghostship_ai_model_capacity_binding": (
+        "The window that binds the capacity of a model, and the share of it "
+        "that is left."
+    ),
+    "ghostship_ai_model_pace_binding": (
+        "The window that binds the pace of a model, and the pace itself."
+    ),
+    "ghostship_ai_frontier_member": (
+        "One for a model the owner's policy admits to the frontier, with the "
+        "state it is in."
+    ),
+    "ghostship_ai_frontier_wait_seconds": (
+        "The seconds until the frontier model becomes available again."
+    ),
+    "ghostship_ai_three_d_elo": "The measured AA-3D Elo of a model.",
+    "ghostship_ai_model_value_3d": (
+        "The value of a model for 3D work: the intelligence, the AA-3D "
+        "capability and the cost, with the weights of the policy."
+    ),
+    "ghostship_ai_model_reserved": (
+        "One for a model that is reserved for the 3D tier: it ranks after "
+        "every other winner of the tier, and it is not used for the work of "
+        "the tier while its provider's capacity is low."
+    ),
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
+    "ghostship_ai_calculation_transform": (
+        "The transform of a calculated input, with the name of the transform in "
+        "force."
+    ),
     "ghostship_ai_calculation_gate": "One for each gate of the tiers.",
     "ghostship_ai_quota_duration_seconds": "The length of a quota window.",
     "ghostship_ai_quota_expected_used_ratio": (
@@ -195,6 +291,19 @@ METRIC_HELP = {
     ),
     "ghostship_ai_model_pace_delta_ratio": (
         "The most constraining pace among the windows of a model."
+    ),
+    "ghostship_ai_provider_paced_availability": (
+        "The Paced Availability of a provider: the share left minus the "
+        "expected share left in its most constraining window. Positive means "
+        "the provider is ahead of the pace the window draws, and a higher "
+        "number ranks first. It is the same number as the pace delta of that "
+        "window."
+    ),
+    "ghostship_ai_model_paced_availability": (
+        "The Paced Availability of a model: the share left minus the expected "
+        "share left in its most constraining window. Positive means the model "
+        "is ahead of the pace the window draws, and a higher number ranks "
+        "first. It is the same number as the model's pace delta ratio."
     ),
     "ghostship_ai_provider_capacity_remaining_ratio": (
         "The lowest applicable account window of a provider; a spent window "
@@ -456,6 +565,25 @@ WINDOW_SCOPES = (
 )
 
 
+# A cooldown further out than this cannot be true. A millisecond timestamp
+# read as seconds lands tens of thousands of years out, and a value like
+# that is a broken reading, not a park. It is reported as an issue and it
+# never blocks a route.
+MAX_COOLDOWN_SECONDS = 366 * 24 * 3600.0
+
+# The providers whose zero-price listing is a free route of its own. The
+# OpenRouter free models and the Go subscription's free models cost nothing
+# by construction, so they are dedicated free routes and they may hold the
+# free tier.
+FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
+
+# The providers whose zero-price listing is a promotional route of a paid
+# account. It costs nothing right now, it is not a free route of its own,
+# and it competes in bulk. A model that is in both sets is a promotional
+# route: the promotional zero price is checked first.
+PROMO_PROVIDERS = ("opencode", "ollama")
+
+
 def _window_scope(quota_id: str) -> tuple[str, ...]:
     """The model families a quota window applies to."""
     text = str(quota_id or "").lower()
@@ -463,6 +591,65 @@ def _window_scope(quota_id: str) -> tuple[str, ...]:
         if marker in text:
             return families
     return ()
+
+
+def provider_limit_samples(
+    inputs: Mapping[str, Any],
+) -> list[Sample]:
+    """The limits of every free provider, with the basis of each reading.
+
+    A limit is published once per basis it was read with: the number the
+    provider itself publishes, the ceiling the pool enforces, the number
+    the provider's response headers carried, and the fact that a limit
+    exists but no number is known for it. The bases are never mixed: a
+    reader sees which reading a number came from.
+    """
+    samples: list[Sample] = []
+    pool_providers = set(inputs.get("pool_providers") or ())
+    limits = inputs.get("pool_limits") or {}
+    for (provider, model, limit, scope), entry in sorted(limits.items()):
+        value, basis = entry if isinstance(entry, tuple) else (entry, "configured")
+        samples.append(
+            (
+                "ghostship_ai_provider_limit",
+                {
+                    "provider": provider,
+                    "model": model,
+                    "limit": limit,
+                    "scope": scope,
+                    "basis": basis,
+                },
+                float(value),
+            )
+        )
+    for provider in sorted(pool_providers):
+        for name, value, basis in pool_published.published_limits(provider):
+            samples.append(
+                (
+                    "ghostship_ai_provider_limit",
+                    {
+                        "provider": provider,
+                        "model": "*",
+                        "limit": name,
+                        "scope": "account",
+                        "basis": basis,
+                    },
+                    float(value),
+                )
+            )
+            samples.append(
+                (
+                    "ghostship_ai_pool_published_limit",
+                    {
+                        "provider": provider,
+                        "limit": name,
+                        "source": pool_published.PUBLISHED_SOURCE,
+                        "checked_at": pool_published.PUBLISHED_CHECKED_AT,
+                    },
+                    float(value),
+                )
+            )
+    return samples
 
 
 def free_route_accounts(
@@ -513,15 +700,11 @@ def ranking_inputs(
     catalog: catalog_module.Catalog,
     context: dict[str, Any],
     measured_windows: list[dict[str, Any]] | None = None,
-) -> tuple[
-    list[tuple[str, str]],
-    set[tuple[str, str]],
-    dict[tuple[str, str], float],
-    dict[str, list[Any]],
-    set[str],
-]:
+    now: float | None = None,
+) -> dict[str, Any]:
     """Derive the ranking inputs from what the sources reported."""
     measured_windows = measured_windows or []
+    moment = time.time() if now is None else float(now)
     inventory: set[tuple[str, str]] = set()
     for provider, model in context.get("offered_models") or []:
         inventory.add((str(provider), str(model)))
@@ -530,6 +713,7 @@ def ranking_inputs(
     external: dict[tuple[str, str], bool] = {}
     usage: dict[tuple[str, str], float] = {}
     pool_providers: set[str] = set()
+    pool_models: set[tuple[str, str]] = set()
     quota_used: dict[tuple[str, str, str, str], float] = {}
     quota_reset: dict[tuple[str, str, str, str], float] = {}
     for name, labels, value in _iter_samples(results):
@@ -539,10 +723,17 @@ def ranking_inputs(
             inventory.add((provider, model))
             free.add((provider, model))
             pool_providers.add(provider)
+            pool_models.add((provider, model))
         elif name == "ghostship_ai_pool_model_available":
             external[(provider, model)] = value > 0
         elif name == "ghostship_ai_free_model":
-            free.add((provider, model))
+            # A free route of a free-route provider is a dedicated free
+            # route; the zero-price listing of a paid account is a
+            # promotional route that competes in bulk.
+            if provider in PROMO_PROVIDERS:
+                promo.add((provider, model))
+            else:
+                free.add((provider, model))
         elif name == "ghostship_ai_usage_tokens" and labels.get("window") == "7d":
             key = (provider, model)
             usage[key] = usage.get(key, 0.0) + value
@@ -583,9 +774,14 @@ def ranking_inputs(
                 labels.get("source", ""),
             )
             quota_reset[key] = value
-    # A provider's promotional zero-price model is a paid route that costs
-    # nothing right now. It belongs to bulk, not to the dedicated free tier.
-    for provider in ("opencode-go", "opencode", "openrouter", "ollama"):
+    # The free routes of the T3 accounts, and the promotional zero-price
+    # routes of the paid accounts. The two sets are kept apart: a model that
+    # is in both is a promotional route, and the promotional zero price is
+    # checked before the dedicated free class.
+    for provider in FREE_ROUTE_PROVIDERS:
+        for entry in catalog.free_models(provider):
+            free.add((entry["provider"], entry["model"]))
+    for provider in PROMO_PROVIDERS:
         for entry in catalog.free_models(provider):
             promo.add((entry["provider"], entry["model"]))
     windows: dict[str, list[Any]] = {}
@@ -596,6 +792,11 @@ def ranking_inputs(
         reset = measured.get("resetEpoch")
         duration = measured.get("durationSeconds")
         quota_id = str(measured.get("quotaId") or "default")
+        # A window the source publishes but does not read is visible and it
+        # does not constrain the route: an unknown reading is not evidence
+        # that the account is exhausted. The provider stays visible, and the
+        # lockout it reports is observed instead of inferred.
+        gating = measured.get("gating")
         window = ranking_module.QuotaWindow(
             kind=str(measured.get("kind") or "other"),
             used_ratio=float(used) if isinstance(used, (int, float)) else None,
@@ -612,13 +813,119 @@ def ranking_inputs(
                 if isinstance(measured.get("observedAtEpoch"), (int, float))
                 else None
             ),
+            gating=gating is not False,
         )
         if model == "*":
             windows.setdefault(provider, []).append(window)
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
-    return sorted(inventory), free, promo, external, usage, windows, pool_providers
+    # The free pool's own evidence: the admissions of a route, its limits
+    # and its cooldown. The admission is what lets a pool route hold the
+    # free tier and take a workload.
+    pool_admissions: dict[tuple[str, str, str], bool] = {}
+    pool_limits: dict[tuple[str, str, str, str], float] = {}
+    pool_cooldowns: dict[tuple[str, str], float] = {}
+    for name, labels, value in _iter_samples(results):
+        pool_provider = str(labels.get("provider") or "")
+        pool_model = str(labels.get("model") or "")
+        if name == "ghostship_ai_pool_model_admission":
+            workload = str(labels.get("workload") or "")
+            if workload:
+                pool_admissions[(pool_provider, pool_model, workload)] = value > 0
+        elif name == "ghostship_ai_pool_limit":
+            key = (
+                pool_provider,
+                pool_model,
+                str(labels.get("limit") or ""),
+                str(labels.get("scope") or "account"),
+            )
+            pool_limits[key] = (float(value), "configured")
+        elif name == "ghostship_ai_pool_observed_limit":
+            # A limit the provider's own response headers carried.
+            key = (
+                pool_provider,
+                pool_model,
+                str(labels.get("limit") or ""),
+                str(labels.get("scope") or "account"),
+            )
+            pool_limits.setdefault(key, (float(value), "observed"))
+        elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
+            pool_cooldowns[(pool_provider, pool_model)] = float(value)
+    # The cooldown is the pool's own evidence that a route is parked. A
+    # cooldown that cannot be true is a broken reading, not a park: it is
+    # reported as an issue and it never blocks a route.
+    provider_cooldown = {
+        provider: value
+        for (provider, model), value in pool_cooldowns.items()
+        if model == "*"
+    }
+    model_cooldown = {
+        key: value
+        for key, value in pool_cooldowns.items()
+        if key[1] != "*"
+    }
+    pool_issues: dict[tuple[str, str], list[str]] = {}
+    for (pool_provider, pool_model) in sorted(pool_models):
+        cooldown = model_cooldown.get(
+            (pool_provider, pool_model), provider_cooldown.get(pool_provider)
+        )
+        if cooldown is None:
+            continue
+        if cooldown > moment + MAX_COOLDOWN_SECONDS:
+            pool_issues.setdefault((pool_provider, pool_model), []).append(
+                "invalid_cooldown"
+            )
+            # The route is not blocked by a cooldown that cannot be true.
+            external[(pool_provider, pool_model)] = True
+        elif cooldown > moment:
+            external[(pool_provider, pool_model)] = False
+    pool_evidence: dict[tuple[str, str], dict[str, Any]] = {}
+    for route in sorted(pool_models):
+        pool_evidence.setdefault(
+            route, {"admission": [], "limits": [], "issues": []}
+        )
+    for key, cooldown in sorted(pool_cooldowns.items()):
+        pool_evidence.setdefault(
+            (key[0], key[1]), {"admission": [], "limits": [], "issues": []}
+        )
+    for (pool_provider, pool_model, workload), admitted in sorted(pool_admissions.items()):
+        entry = pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )
+        entry["admission"].append({"workload": workload, "admitted": admitted})
+    for (pool_provider, pool_model, limit, scope), value in sorted(pool_limits.items()):
+        entry = pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )
+        entry["limits"].append(
+            {
+                "limit": limit,
+                "value": value[0],
+                "scope": scope,
+                "basis": value[1],
+            }
+        )
+    for key, entry in pool_evidence.items():
+        # A provider-wide cooldown belongs to every route of that provider.
+        cooldown = pool_cooldowns.get(key)
+        if cooldown is None:
+            cooldown = provider_cooldown.get(key[0])
+        entry["cooldown_until"] = cooldown
+        entry["issues"] = list(pool_issues.get(key, []))
+    return {
+        "inventory": sorted(inventory),
+        "free": free,
+        "promo": promo,
+        "external": external,
+        "usage": usage,
+        "windows": windows,
+        "pool_providers": pool_providers,
+        "pool_models": sorted(pool_models),
+        "pool_evidence": pool_evidence,
+        "pool_issues": pool_issues,
+        "pool_limits": pool_limits,
+    }
 
 
 def ranking_samples(
@@ -631,6 +938,7 @@ def ranking_samples(
     state_path: str | None = None,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
+    t3_state: str = T3_STATE_FILE,
 ) -> tuple[list[Sample], list[Any]]:
     """Rank every model we can use.
 
@@ -640,12 +948,31 @@ def ranking_samples(
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
-    inventory, free, promo, external, usage, windows, pool_providers = ranking_inputs(
-        results, catalog, context, measured_windows
-    )
+    inputs = ranking_inputs(results, catalog, context, measured_windows, now=now)
+    inventory = inputs["inventory"]
+    free = inputs["free"]
+    promo = inputs["promo"]
+    external = inputs["external"]
+    usage = inputs["usage"]
+    windows = inputs["windows"]
+    pool_providers = inputs["pool_providers"]
     context["free_models"] = free
     context["promo_models"] = promo
+    context["pool_evidence"] = inputs["pool_evidence"]
     samples: list[Sample] = []
+    # The limits of every free provider, with the basis of each reading.
+    samples.extend(provider_limit_samples(inputs))
+    # A cooldown that cannot be true is an issue, not a park. The route is
+    # not blocked by it, and the issue is published so a reader sees it.
+    for (provider, model), issues in sorted((inputs.get("pool_issues") or {}).items()):
+        for issue in issues:
+            samples.append(
+                (
+                    "ghostship_ai_pool_cooldown_invalid",
+                    {"provider": provider, "model": model, "issue": issue},
+                    1.0,
+                )
+            )
     three_d_scores: dict[tuple[str, str], dict[str, Any]] = {}
     try:
         three_d = threed_module.collect(t3_home, catalog, inventory, now) or {}
@@ -704,6 +1031,44 @@ def ranking_samples(
         rank_kwargs["free_route_accounts"] = sorted(
             free_route_accounts(results, context, measured_windows)
         )
+    if "frontier_workhorses" in inspect.signature(ranking_module.rank_models).parameters:
+        # The owner's list of frontier workhorses comes from the runtime
+        # policy, so the producer and the reader share one list.
+        rank_kwargs["frontier_workhorses"] = sorted(
+            OWNER_POLICY.get("frontierPrimeModels") or ()
+        )
+    # The observed failures of the routes, read from the T3 Code state. A
+    # route that is known to be broken does not win a tier, and it stays
+    # visible with the reason and the moment it was observed.
+    observed_failures = runtime_state_module.read_failures(t3_state, now)
+    if "observed_failures" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["observed_failures"] = observed_failures
+    for failure in observed_failures:
+        samples.append(
+            (
+                "ghostship_ai_route_unavailable",
+                {
+                    "scope": str(failure.get("scope") or ""),
+                    "target": str(failure.get("target") or ""),
+                    "reason": str(failure.get("reason") or ""),
+                },
+                1.0,
+            )
+        )
+        observed_at = failure.get("observed_at")
+        if isinstance(observed_at, (int, float)) and not isinstance(observed_at, bool):
+            samples.append(
+                (
+                    "ghostship_ai_route_unavailable_observed_timestamp_seconds",
+                    {
+                        "scope": str(failure.get("scope") or ""),
+                        "target": str(failure.get("target") or ""),
+                        "reason": str(failure.get("reason") or ""),
+                    },
+                    float(observed_at),
+                )
+            )
+    context["observed_failures"] = observed_failures
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
     samples.extend(ranking_module.rank_samples(ranked, now=now))
@@ -780,6 +1145,7 @@ def build_snapshot(
         aa_3d_cache=aa_3d_cache,
         free_models=free_models or set(),
         promo_models=promo_models or set(),
+        pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
     )
     if isinstance(snapshot, dict):
@@ -846,6 +1212,207 @@ def _iter_samples(results: Iterable[SourceResult]):
         yield from result.metrics
 
 
+def feed_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
+    """The state of the Artificial Analysis pull, and what it found.
+
+    The pull runs once a day, and a model that is new or whose measurement
+    changed is the trigger for a re-ranking. The names are published so a
+    reader can see which models the last pull brought in.
+    """
+    samples: list[Sample] = []
+    quality = snapshot.get("quality_feed") or {}
+    status = str(quality.get("status") or "missing")
+    records = quality.get("records")
+    samples.append(
+        (
+            "ghostship_ai_feed_status",
+            {
+                "source": "artificialanalysis",
+                "status": status,
+                "reason": str(quality.get("reason") or ""),
+            },
+            float(records) if isinstance(records, (int, float)) else 0.0,
+        )
+    )
+    coverage = snapshot.get("aa_coverage") or {}
+    states = coverage.get("states") or {}
+    for state, count in sorted(states.items()):
+        samples.append(
+            (
+                "ghostship_ai_feed_status",
+                {
+                    "source": "artificialanalysis",
+                    "status": str(state),
+                    "reason": "",
+                },
+                float(count) if isinstance(count, (int, float)) else 0.0,
+            )
+        )
+    for entry in coverage.get("new_models") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        samples.append(
+            (
+                "ghostship_ai_model_new",
+                {
+                    "provider": str(entry.get("provider") or ""),
+                    "model": str(entry.get("model") or ""),
+                },
+                1.0,
+            )
+        )
+    for entry in coverage.get("changed_models") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        samples.append(
+            (
+                "ghostship_ai_model_changed",
+                {
+                    "provider": str(entry.get("provider") or ""),
+                    "model": str(entry.get("model") or ""),
+                },
+                1.0,
+            )
+        )
+    return samples
+
+
+def decision_input_samples(
+    snapshot: Mapping[str, Any],
+) -> list[Sample]:
+    """The inputs a decision was made on, as gauges.
+
+    The benchmark condition and the execution reasoning are two different
+    statements and both are published: the condition is what the benchmark
+    measured, the reasoning is what the owner's policy proposes to run. The
+    window that binds the capacity and the window that binds the pace are
+    published apart, and the frontier membership carries its wait and its
+    reset.
+    """
+    samples: list[Sample] = []
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        labels = {"provider": provider, "model": model}
+        aa = row.get("aa") or {}
+        condition = aa.get("condition") or {}
+        measured_variant = str(condition.get("measured_variant") or "")
+        if measured_variant:
+            samples.append(
+                (
+                    "ghostship_ai_model_aa_condition",
+                    {
+                        **labels,
+                        "variant": measured_variant,
+                        "confirmed": (
+                            "confirmed" if condition.get("confirmed") else "unconfirmed"
+                        ),
+                    },
+                    1.0,
+                )
+            )
+        execution = aa.get("execution") or {}
+        default = str(execution.get("default") or "")
+        escalation = str(execution.get("escalation") or "")
+        if default or escalation:
+            samples.append(
+                (
+                    "ghostship_ai_model_execution_reasoning",
+                    {
+                        **labels,
+                        "default": default,
+                        "escalation": escalation,
+                        "supported": str(execution.get("state") or ""),
+                    },
+                    1.0,
+                )
+            )
+        capacity = row.get("capacity") or {}
+        capacity_binding = str(capacity.get("capacity_binding_id") or "")
+        if capacity_binding:
+            samples.append(
+                (
+                    "ghostship_ai_model_capacity_binding",
+                    {**labels, "window": capacity_binding},
+                    1.0,
+                )
+            )
+        pace_binding = str(capacity.get("pace_binding_id") or "")
+        if pace_binding:
+            samples.append(
+                (
+                    "ghostship_ai_model_pace_binding",
+                    {**labels, "window": pace_binding},
+                    1.0,
+                )
+            )
+        three_d = row.get("three_d") or {}
+        elo = three_d.get("elo")
+        if isinstance(elo, (int, float)) and not isinstance(elo, bool):
+            samples.append(
+                ("ghostship_ai_three_d_elo", labels, float(elo))
+            )
+        value_3d = (row.get("value_3d") or {}).get("value")
+        if isinstance(value_3d, (int, float)) and not isinstance(value_3d, bool):
+            samples.append(
+                (
+                    "ghostship_ai_model_value_3d",
+                    {
+                        **labels,
+                        "cost_source": str(
+                            (row.get("value_3d") or {}).get("cost_source") or ""
+                        ),
+                        "proxy": (
+                            "proxy" if (row.get("value_3d") or {}).get("proxy") else "measured"
+                        ),
+                    },
+                    float(value_3d),
+                )
+            )
+        reserve = row.get("reserve") or {}
+        if reserve.get("3d"):
+            for tier in reserve.get("tiers") or ():
+                samples.append(
+                    (
+                        "ghostship_ai_model_reserved",
+                        {
+                            **labels,
+                            "tier": str(tier),
+                            "reserve": "3d",
+                            "withheld": (
+                                "withheld" if reserve.get("withheld") else "ordered_last"
+                            ),
+                        },
+                        1.0,
+                    )
+                )
+    frontier = (snapshot.get("coverage") or {}).get("frontier") or {}
+    for member in frontier.get("eligible") or ():
+        if not isinstance(member, Mapping):
+            continue
+        labels = {
+            "provider": str(member.get("provider") or ""),
+            "model": str(member.get("model") or ""),
+        }
+        samples.append(
+            (
+                "ghostship_ai_frontier_member",
+                {**labels, "state": str(member.get("state") or "")},
+                1.0,
+            )
+        )
+        wait = member.get("seconds_to_reset")
+        if isinstance(wait, (int, float)) and not isinstance(wait, bool):
+            samples.append(
+                ("ghostship_ai_frontier_wait_seconds", labels, float(wait))
+            )
+    return samples
+
+
 def render(
     results: list[SourceResult],
     extra: list[Sample],
@@ -904,6 +1471,10 @@ def render(
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in feed_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in decision_input_samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -968,10 +1539,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--aa-3d-cache",
-        default="",
+        default=AA_3D_CACHE_PATH,
         help=(
             "The bounded Artificial Analysis 3D snapshot (Elo, source, date and "
-            "benchmark conditions). Absent means no 3D rank."
+            "benchmark conditions), written by the pull of the public pages. "
+            "Absent means no 3D rank."
         ),
     )
     parser.add_argument(
@@ -1015,13 +1587,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")
     else:
         write_output(args.output, text)
+        log(f"wrote {len(text)} bytes to {args.output}")
     # The snapshot is the canonical answer for a consumer, so it is always
-    # written, atomically, even in the dry run. The runtime projections carry
-    # the same bytes: one producer, no second scorer, no history.
-    snapshot_module.write_snapshot(args.snapshot, snapshot)
-    if args.projection:
-        written = snapshot_module.publish(snapshot, args.projection)
-        log(f"published the snapshot to {len(written)} runtime projections")
+    # written, atomically, even in the dry run. A write that fails is an
+    # error: the unit must fail visibly, never pass with a stale file.
+    written = snapshot_module.write_snapshot(args.snapshot, snapshot)
+    log(f"wrote {written} bytes to {args.snapshot}")
+    for path, size in snapshot_module.publish(snapshot, args.projection):
+        log(f"wrote {size} bytes to {path}")
     for result in results:
         log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")

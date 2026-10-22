@@ -56,6 +56,7 @@ from typing import Any, Iterable, Mapping
 import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
+import value_policy
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -71,6 +72,9 @@ QUOTA_UNKNOWN = "unknown"
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
+
+# The tiers the snapshot reports, in the order the dashboard reads them.
+TIER_NAMES = ("frontier", "bulk", "free", "3d")
 
 
 def _finite(value: Any) -> float | None:
@@ -338,20 +342,31 @@ def _access_record(
     free_models: set[tuple[str, str]],
     promo_models: set[tuple[str, str]],
     prices: Mapping[str, Any] | None,
+    native_mapped: bool = False,
 ) -> dict[str, Any]:
     """How a model is reached, and what it costs.
 
-    The dedicated free routes are the ones this fleet runs itself, through the
-    free inference pool. A zero price elsewhere is a paid provider route that
-    costs nothing right now, and the two are not the same thing.
+    The promotional zero price is checked first: a paid provider's route
+    that costs nothing right now is a paid route, and it competes in bulk.
+    The dedicated free routes are the ones that cost nothing by
+    construction: the free inference pool's own integrations, and the routes
+    a provider lists at no cost. The two are not the same thing, and a
+    model that is in both sets is a promotional route.
+
+    A free route that the live instance catalog proves is a native route
+    runs as a provider-native thread; a free route the collector only knows
+    from the pool runs as an inference job.
     """
     pair = (provider, model)
-    if pair in free_models:
-        kind = ACCESS_DEDICATED_FREE
-        basis = "the dedicated free inference pool"
-    elif pair in promo_models:
+    if pair in promo_models:
         kind = ACCESS_PROVIDER_PROMO
         basis = "a paid provider route that costs nothing right now"
+    elif pair in free_models:
+        kind = ACCESS_DEDICATED_FREE
+        basis = (
+            "a free route: the dedicated free inference pool, or a route the "
+            "provider lists at no cost"
+        )
     elif isinstance(prices, Mapping) and any(
         isinstance(value, (int, float)) for value in prices.values()
     ):
@@ -365,9 +380,9 @@ def _access_record(
         "basis": basis,
         "price": dict(prices or {}),
         "execution": (
-            "inference_job"
-            if kind == ACCESS_DEDICATED_FREE
-            else "provider_native"
+            "provider_native"
+            if native_mapped or kind != ACCESS_DEDICATED_FREE
+            else "inference_job"
         ),
     }
 
@@ -509,6 +524,7 @@ def _candidate(
     actual: float | None = None
     raw_windows: list[Any] = []
     surplus: dict[str, Any] = {}
+    observed_failure: dict[str, Any] = {}
 
     for entry in entries:
         if entry.tier:
@@ -532,6 +548,9 @@ def _candidate(
             if reason not in reasons:
                 reasons.append(reason)
         raw_windows = list(entry.windows)
+        failure = getattr(entry, "observed_failure", None)
+        if failure:
+            observed_failure = dict(failure)
     for window in raw_windows:
         record = _window_record(window, now)
         if record not in windows:
@@ -548,6 +567,24 @@ def _candidate(
             )
 
     native_record = _native_record(provider, model, native)
+    # The owner's lists, read once from the runtime policy. Every consumer
+    # of them reads this block, so a policy change has one effect.
+    workhorses = policy.get(POLICY_WORKHORSES)
+    excluded = policy.get(POLICY_EXCLUDED)
+    selection = {
+        "frontier_workhorse": _frontier_workhorse(model, workhorses),
+        "excluded": _selection_excluded(model, excluded),
+        "workhorses": [
+            str(name) for name in (workhorses if isinstance(workhorses, (list, tuple)) else FRONTIER_WORKHORSES)
+        ],
+        "excluded_models": [
+            str(name)
+            for name in (
+                excluded if isinstance(excluded, (list, tuple)) else SELECTION_EXCLUDED_MODELS
+            )
+        ],
+        "basis": "the runtime policy of the owner",
+    }
     quota_state = _quota_state(remaining, windows)
     capacity_measured = bool(windows) and all(
         window["evidence"] == "provider_reported" for window in windows
@@ -578,19 +615,41 @@ def _candidate(
         "available": bool(available),
         "availability": {
             "state": "available" if available else "unavailable",
-            "evidence": "measured" if capacity_measured else "unknown",
+            "evidence": (
+                "observed"
+                if observed_failure
+                else ("measured" if capacity_measured else "unknown")
+            ),
             "reason": (
-                "every applicable window has headroom"
-                if available and capacity_measured
+                str(observed_failure.get("label") or "")
+                if observed_failure
                 else (
-                    "a window is spent"
-                    if quota_state == QUOTA_EXHAUSTED
+                    "every applicable window has headroom"
+                    if available and capacity_measured
                     else (
-                        "a window is unknown, stale, or missing"
-                        if windows
-                        else "the provider reports no quota for this account"
+                        "a window is spent"
+                        if quota_state == QUOTA_EXHAUSTED
+                        else (
+                            "a window is unknown, stale, or missing"
+                            if windows
+                            else "the provider reports no quota for this account"
+                        )
                     )
                 )
+            ),
+            # The observed failure of the route, when there is one. The
+            # reason is a code and a fixed label; the provider's own text
+            # never leaves the collector.
+            "observed_failure": (
+                {
+                    "scope": str(observed_failure.get("scope") or ""),
+                    "target": str(observed_failure.get("target") or ""),
+                    "reason": str(observed_failure.get("reason") or ""),
+                    "label": str(observed_failure.get("label") or ""),
+                    "observed_at": observed_failure.get("observed_at"),
+                }
+                if observed_failure
+                else None
             ),
         },
         "quota_state": quota_state,
@@ -637,6 +696,15 @@ def _candidate(
                 "pace is behind the line, and the most constraining window is the "
                 "smallest pace"
             ),
+            # The owner's name for the same number: the Paced Availability is
+            # the share left minus the expected share left in the most
+            # constraining window. It is the pace delta of that window.
+            "paced_availability": (
+                None if pace is None else round(pace, 4)
+            ),
+            "paced_availability_window": _binding_id(
+                getattr(entries[0], "pace_binding", None) if entries else None
+            ),
         },
         "usage": {
             "tokens_7d": round(used_tokens, 1),
@@ -676,6 +744,7 @@ def _candidate(
             "formula": CALCULATION["value"]["formula"],
         },
         "eligibility": _eligibility(provider, model, tiers, native_record, policy),
+        "selection": selection,
         "frontier_surplus": {
             "available": bool(surplus.get("available")),
             "reason": str(surplus.get("reason") or ""),
@@ -697,6 +766,7 @@ def _candidate(
             "state": "settled" if settled else "pending",
             "reason": pending_reason,
         },
+        "free_pool": _free_pool_record(None),
         "provenance": {
             "source": "collector",
             "observed_at": _iso(now),
@@ -749,15 +819,106 @@ WORKLOAD_CLASSES = (
 
 def _admitted_for(row: Mapping[str, Any], workload: str) -> bool:
     """True when a row has admission evidence for one workload class."""
-    evidence = row.get("admission_evidence")
-    if not isinstance(evidence, list):
-        return False
-    for entry in evidence:
-        if not isinstance(entry, Mapping):
-            continue
+    for entry in _admission_entries(row):
         if str(entry.get("workload") or "") == workload and entry.get("admitted") is True:
             return True
     return False
+
+
+def _admission_entries(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Every admission entry of a row: the durable fact and the free pool."""
+    entries: list[Mapping[str, Any]] = []
+    evidence = row.get("admission_evidence")
+    if isinstance(evidence, list):
+        entries.extend(entry for entry in evidence if isinstance(entry, Mapping))
+    pool = row.get("free_pool") or {}
+    admission = pool.get("admission")
+    if isinstance(admission, list):
+        entries.extend(entry for entry in admission if isinstance(entry, Mapping))
+    return entries
+
+
+def _admitted_for_any(row: Mapping[str, Any]) -> bool:
+    """True when a row has an admission for at least one workload."""
+    return any(entry.get("admitted") is True for entry in _admission_entries(row))
+
+
+def _is_pool_route(row: Mapping[str, Any]) -> bool:
+    """True when the route runs as a pool inference job, not as a native one.
+
+    A dedicated free route the live instance catalog proves is a native
+    route runs as a provider-native thread and may carry a delegate. A route
+    the collector only knows from the free pool has no native instance, so
+    it runs as an inference job and needs a current admission.
+    """
+    access = row.get("access") or {}
+    if access.get("kind") != ACCESS_DEDICATED_FREE:
+        return False
+    return not bool((row.get("native") or {}).get("mapped"))
+
+
+def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The free pool's own evidence about one route.
+
+    The limits keep the basis they were read with: the provider's own
+    documentation, the pool's own setting, an observation of the provider's
+    response headers, or unknown. A cooldown that cannot be true is an
+    issue, not a block: the route stays usable and the issue is published.
+    """
+    empty = {
+        "state": "not_a_pool_route",
+        "basis": "the route is not one of the free pool's integrations",
+        "admission": [],
+        "limits": [],
+        "cooldown_until": None,
+        "cooldown_basis": None,
+        "issues": [],
+    }
+    if not isinstance(evidence, Mapping):
+        return empty
+    admission = []
+    for entry in evidence.get("admission") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        admission.append(
+            {
+                "workload": str(entry.get("workload") or ""),
+                "admitted": entry.get("admitted") is True,
+            }
+        )
+    limits = []
+    for entry in evidence.get("limits") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        limits.append(
+            {
+                "limit": str(entry.get("limit") or ""),
+                "value": entry.get("value"),
+                "scope": str(entry.get("scope") or "account"),
+                "basis": str(entry.get("basis") or "unknown"),
+            }
+        )
+    issues = [str(issue) for issue in evidence.get("issues") or ()]
+    cooldown = evidence.get("cooldown_until")
+    cooldown_value = None
+    if isinstance(cooldown, (int, float)) and not isinstance(cooldown, bool):
+        cooldown_value = float(cooldown)
+    return {
+        "state": "pool_route",
+        "basis": (
+            "the free pool's own limits, admissions and cooldown; the limits "
+            "keep the basis they were read with"
+        ),
+        "admission": admission,
+        "limits": limits,
+        "cooldown_until": cooldown_value,
+        "cooldown_basis": (
+            "invalid" if "invalid_cooldown" in issues else (
+                "pool" if cooldown_value is not None else None
+            )
+        ),
+        "issues": issues,
+    }
 
 
 def _display_tier(tiers: list[str]) -> str:
@@ -766,6 +927,20 @@ def _display_tier(tiers: list[str]) -> str:
         if tier in tiers:
             return tier
     return (tiers or [""])[0]
+
+
+def _published_value(row: Mapping[str, Any]) -> float:
+    """The published value of a row, or zero when it has none.
+
+    The recommendation is chosen by the value the owner's policy defines,
+    never by a blended score: a name suffix, a catalog price, a capacity
+    term and a pace term are not in the decision, so they are not in the
+    choice either.
+    """
+    value = (row.get("value") or {}).get("value")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
 
 
 def _recommendations(
@@ -789,7 +964,7 @@ def _recommendations(
             if (row.get("availability") or {}).get("state") == "available"
             and row.get("rank")
             and (row.get("admission") or {}).get("state") == "settled"
-            and not _selection_excluded(str(row.get("model") or ""))
+            and not (row.get("selection") or {}).get("excluded")
         ]
         if entry.get("complexity") == "high":
             # A dedicated free route needs admission evidence for the workload
@@ -825,7 +1000,7 @@ def _recommendations(
             preferred,
             key=lambda row: (
                 1 if row["native"]["mapped"] else 0,
-                max(row["score"].values()) if row["score"] else 0.0,
+                _published_value(row),
             ),
             reverse=True,
         )
@@ -887,10 +1062,7 @@ def _recommendations(
                     "private_data": bool(entry["private_data"]),
                 }
                 continue
-            chosen = max(
-                frontier_rows,
-                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
-            )
+            chosen = max(frontier_rows, key=_published_value)
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
@@ -903,10 +1075,7 @@ def _recommendations(
             }
             continue
         if eligible:
-            chosen = max(
-                eligible,
-                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
-            )
+            chosen = max(eligible, key=_published_value)
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
@@ -935,24 +1104,21 @@ def _recommendations(
     return result
 
 
-# The components of the value of a model, and their weights. A component that
-# is unknown is left out and the weights of the known ones are renormalized:
-# an unknown is never a zero, and it never makes a model look worse than it is
-# measured to be.
 # The owner's transparent policy: the measured intelligence and the measured
-# cost per task, and nothing else. These are policy weights, not claims of the
-# feed; the raw inputs and the transforms are published beside them.
-VALUE_WEIGHTS = {
-    "intelligence": 0.80,
-    "cost_per_task": 0.20,
-}
-
+# cost per task, and nothing else. The weights and the transform live in
+# one place, value_policy, so a lead can set them without a change anywhere
+# else.
+VALUE_WEIGHTS = dict(value_policy.VALUE_WEIGHTS)
+VALUE_3D_WEIGHTS = dict(value_policy.VALUE_3D_WEIGHTS)
 VALUE_TRANSFORMS = {
     "intelligence": "I = the Artificial Analysis intelligence index / 100",
     "cost_per_task": "E = 1 / (1 + the Artificial Analysis cost per task in USD)",
 }
+# The transform of the cost input that is in force. It is swappable, and
+# the one in force is published with the snapshot and the metrics.
+COST_TRANSFORM = value_policy.DEFAULT_COST_TRANSFORM
 VALUE_POLICY = {
-    "formula": "0.80 * I + 0.20 * E",
+    "formula": "0.70 * I + 0.30 * E",
     "weights": dict(VALUE_WEIGHTS),
     "transforms": dict(VALUE_TRANSFORMS),
     "units": {
@@ -961,6 +1127,12 @@ VALUE_POLICY = {
     },
     "requires": "both measurements; a missing cost per task leaves the value unknown",
     "not_aa_claim": "the weights are an owner policy; the inputs are the feed's",
+    "cost_transform": COST_TRANSFORM,
+    "cost_transforms": dict(value_policy.COST_TRANSFORMS),
+    "basis": (
+        "both measurements are required and nothing is renormalized: a missing "
+        "input leaves the value unknown"
+    ),
 }
 
 # The calculation of a winner, published with the snapshot so every number
@@ -985,9 +1157,11 @@ CALCULATION = {
         "units": dict(VALUE_POLICY["units"]),
         "requires": VALUE_POLICY["requires"],
         "not_aa_claim": VALUE_POLICY["not_aa_claim"],
+        "cost_transform": COST_TRANSFORM,
+        "cost_transforms": dict(value_policy.COST_TRANSFORMS),
         "components": {
             "intelligence": "the verified intelligence index over 100",
-            "cost_per_task": "1 / (1 + the cost per task of the feed)",
+            "cost_per_task": "the efficiency of the measured cost per task",
         },
         "visible_not_ranked": {
             "coding": "the verified coding index, shown and not weighted",
@@ -1001,6 +1175,30 @@ CALCULATION = {
             "the value orders the candidates within one provider only"
         ),
     },
+    "value_3d": {
+        "formula": "0.45 * I + 0.25 * T + 0.30 * E",
+        "weights": dict(VALUE_3D_WEIGHTS),
+        "components": {
+            "intelligence": "the verified intelligence index over 100",
+            "three_d": (
+                "the AA-3D Elo under the source's own published normalization, "
+                "min-max over the complete AA-3D snapshot"
+            ),
+            "cost_per_task": "the efficiency of the measured cost per task",
+        },
+        "cost_transform": COST_TRANSFORM,
+        "requires": (
+            "all three measurements; a missing capability or a missing cost "
+            "leaves the value unknown"
+        ),
+        "note": (
+            "the AA-3D capability is beside the intelligence, not a "
+            "replacement for it: the owner asked for the two together for CAD "
+            "selection"
+        ),
+    },
+    "cost_transforms": dict(value_policy.COST_TRANSFORMS),
+    "cost_transform_in_force": COST_TRANSFORM,
     "relative_cost": {
         "formula": "3 * input + output + 0.1 * cache_read, per million tokens",
         "floor": 0.01,
@@ -1012,10 +1210,32 @@ CALCULATION = {
     },
     "provider_order": {
         "formula": (
-            "the providers are ordered by the pace of their window: the one "
-            "that is behind the line the window draws by now comes first"
+            "the providers are ordered by their Paced Availability: the one "
+            "with the most share left over the share it was expected to have "
+            "left comes first"
         ),
-        "source": "pace_delta of the account window",
+        "source": "Paced Availability of the account window",
+    },
+    "paced_availability": {
+        "name": "Paced Availability",
+        "formula": (
+            "the share left minus the expected share left in the most "
+            "constraining window of the provider"
+        ),
+        "sign": (
+            "positive means the provider is ahead of the pace the window "
+            "draws, negative means it is behind it; a higher number ranks "
+            "first"
+        ),
+        "equivalence": (
+            "this is the pace delta of the most constraining window: the "
+            "expected used share minus the measured used share is the same "
+            "number as the share left minus the expected share left"
+        ),
+        "window": (
+            "the most constraining window: the one whose own line the "
+            "provider is furthest behind"
+        ),
     },
     "gates": {
         "frontier": (
@@ -1078,19 +1298,40 @@ def _median(values: list[float]) -> float | None:
 def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
     """The combined value: the measured intelligence and the measured cost.
 
-    The policy is 0.80 * I + 0.20 * E with I the intelligence index over 100
-    and E = 1 / (1 + cost per task). Both measurements are required: a model
-    with no cost per task has an unknown efficiency and no combined value,
-    while its raw measured intelligence stays visible. Nothing is filled from
-    a cohort median and nothing is renormalized.
+    The policy is 0.70 * I + 0.30 * E with I the intelligence index over 100
+    and E the efficiency of the measured cost per task. Both measurements
+    are required: a model with no cost per task has an unknown efficiency
+    and no combined value, while its raw measured intelligence stays
+    visible. Nothing is filled from a cohort median and nothing is
+    renormalized.
+
+    The cost transform is the one in force in the policy, and the evidence
+    it was built from is published with the value.
     """
+    # The cohort the relative transforms need: the known costs of the
+    # models this snapshot compares.
+    cohort = value_policy.cost_cohort(
+        (row.get("_components") or {}).get("cost_per_task_raw")
+        for row in candidates
+    )
     for row in candidates:
         components = row.get("_components") or {}
         value_block = row.get("value") or {}
+        # The efficiency of the measured cost, under the transform that is in
+        # force. The transform and its evidence are published with the
+        # value.
+        raw = (components.get("cost_per_task_raw") or {}).get("value")
+        efficiency, evidence = value_policy.cost_transform(
+            raw, cohort, COST_TRANSFORM
+        )
         published = {}
         for name in VALUE_WEIGHTS:
             component = components.get(name) or {}
             value = component.get("value")
+            if name == "cost_per_task":
+                # The efficiency is the transform of the measured cost, not
+                # the raw cost and not a default.
+                value = efficiency
             published[name] = {
                 "value": (
                     round(float(value), 4)
@@ -1103,6 +1344,8 @@ def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
         value_block["weights"] = dict(VALUE_WEIGHTS)
         value_block["transforms"] = dict(VALUE_TRANSFORMS)
         value_block["cohort"] = {"basis": "", "values": {}}
+        value_block["cost_transform"] = COST_TRANSFORM
+        value_block["cost_transform_evidence"] = evidence
         intelligence = published["intelligence"]["value"]
         efficiency = published["cost_per_task"]["value"]
         if not isinstance(intelligence, (int, float)) or not isinstance(
@@ -1589,6 +1832,17 @@ def _fill_value(
         "coding": index("coding_index"),
         "agentic": index("agentic_index"),
         "engineering": index("engineering_index"),
+        # The raw cost per task, kept beside the efficiency: the transform
+        # that turns the cost into the efficiency may need the cohort, and
+        # the cohort is only known once every row is filled.
+        "cost_per_task_raw": (
+            float(cost_per_task)
+            if isinstance(cost_per_task, (int, float))
+            and not isinstance(cost_per_task, bool)
+            and math.isfinite(float(cost_per_task))
+            and float(cost_per_task) >= 0.0
+            else None
+        ),
         "cost_per_task": (
             1.0 / (1.0 + float(cost_per_task))
             if isinstance(cost_per_task, (int, float))
@@ -1635,7 +1889,12 @@ def _fill_value(
         for name in components
     }
     row["access"] = _access_record(
-        provider, model, free_set or set(), promo_set or set(), prices
+        provider,
+        model,
+        free_set or set(),
+        promo_set or set(),
+        prices,
+        native_mapped=bool((row.get("native") or {}).get("mapped")),
     )
     row["value"] = {
         "strength": None if strength is None else round(strength, 2),
@@ -1658,8 +1917,75 @@ def _fill_value(
     }
 
 
+# The capacity below which a reserved model is withheld from the work of
+# the other tiers. The owner decided that a model that qualifies for the 3D
+# tier is kept for CAD work while its provider has room.
+RESERVE_CAPACITY_FLOOR = 0.50
+
+# The tiers a reserve withholds a model from. The 3D tier is the tier the
+# model is reserved for.
+RESERVED_TIERS = ("bulk", "free")
+
+
+def _apply_reserve(
+    candidates: list[dict[str, Any]], provider_capacity: Mapping[str, Any]
+) -> None:
+    """Mark the models that are reserved for the 3D tier.
+
+    A model that qualifies for the 3D tier - an explicit visual input and a
+    measured AA-3D score - is reserved for CAD work. It ranks after every
+    other winner of the other tiers, and it is not used for their work at
+    all while its provider's remaining capacity is below the floor.
+
+    The reserve changes the order and the eligibility. It never changes the
+    value of a model.
+    """
+    for row in candidates:
+        three_d = row.get("three_d") or {}
+        reserved = str(three_d.get("state") or "") == "measured"
+        account = str(row.get("account") or "")
+        capacity = (provider_capacity.get(account) or {}).get("remaining_ratio")
+        if not reserved:
+            row["reserve"] = {
+                "3d": False,
+                "reason": "the model does not qualify for the 3D tier",
+                "capacity": capacity,
+            }
+            continue
+        withheld = (
+            isinstance(capacity, (int, float))
+            and not isinstance(capacity, bool)
+            and float(capacity) < RESERVE_CAPACITY_FLOOR
+        )
+        if withheld:
+            reason = (
+                "the model is reserved for the 3D tier and its provider has "
+                "less than half of its capacity left"
+            )
+        else:
+            reason = (
+                "the model is reserved for the 3D tier, so it ranks after "
+                "every other winner of the other tiers"
+            )
+        row["reserve"] = {
+            "3d": True,
+            "reason": reason,
+            "capacity": capacity,
+            "withheld": bool(withheld),
+            "tiers": list(RESERVED_TIERS),
+            "floor": RESERVE_CAPACITY_FLOOR,
+            "basis": (
+                "the owner reserves the models that qualify for the 3D tier "
+                "for CAD work; the reserve changes the order and the "
+                "eligibility, never the value"
+            ),
+        }
+
+
 def _winners(
-    candidates: list[dict[str, Any]], tiers: dict[str, list[str]]
+    candidates: list[dict[str, Any]],
+    tiers: dict[str, list[str]],
+    aa_cache: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     """One winner per provider and tier, ordered by the provider pacing.
 
@@ -1670,7 +1996,19 @@ def _winners(
     by_key = {_key(row["provider"], row["model"]): row for row in candidates}
     winners: dict[str, list[dict[str, Any]]] = {}
     coverage: dict[str, Any] = {}
-    for tier, members in tiers.items():
+    # The Artificial Analysis evidence is the gate of every tier. When it is
+    # missing, a tier has no winner for a reason that is not its own, and
+    # the tier says so instead of looking empty.
+    aa_evidence = "ok"
+    aa_reason = ""
+    if not isinstance(aa_cache, Mapping) or aa_cache.get("status") != "ok":
+        aa_evidence = "pending_aa_evidence"
+        aa_reason = (
+            "no current Artificial Analysis evidence: the feed cache is "
+            + str((aa_cache or {}).get("status") or "missing")
+        )
+    for tier in TIER_NAMES:
+        members = tiers.get(tier) or []
         considered = 0
         providers: set[str] = set()
         chosen: dict[str, dict[str, Any]] = {}
@@ -1690,11 +2028,15 @@ def _winners(
                 # its place.
                 continue
             current = chosen.get(row["provider"])
-            if current is None or _winner_key(row) > _winner_key(current):
+            if current is None or _winner_key(row, tier) > _winner_key(current, tier):
                 chosen[row["provider"]] = row
         ordered = sorted(
             chosen.values(),
             key=lambda row: (
+                # A model reserved for the 3D tier comes last in the tiers
+                # it is reserved away from. The reserve changes the order,
+                # never the value.
+                1 if (row.get("reserve") or {}).get("3d") else 0,
                 -(_pace_of(row) if _pace_of(row) is not None else 0.0),
                 row["provider"],
                 row["model"],
@@ -1711,6 +2053,15 @@ def _winners(
                 "strength_source": (row.get("value") or {}).get("strength_source"),
                 "relative_cost": (row.get("value") or {}).get("relative_cost"),
                 "pace_delta": (row.get("capacity") or {}).get("pace_delta"),
+                # The owner's name for the ordering measure: the Paced
+                # Availability of the provider, in its most constraining
+                # window. A higher number ranks first.
+                "paced_availability": (row.get("capacity") or {}).get(
+                    "paced_availability"
+                ),
+                "paced_availability_window": (row.get("capacity") or {}).get(
+                    "paced_availability_window"
+                ),
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
@@ -1727,6 +2078,24 @@ def _winners(
             "providers": len(providers),
             "winners": len(ordered),
             "providers_without_a_winner": len(providers) - len(ordered),
+            # The state of the tier itself: it is either held, it waits for
+            # the Artificial Analysis evidence, or no model of it is
+            # eligible. A tier with no winner never looks like a tier that
+            # was never measured.
+            "state": (
+                "ok"
+                if ordered
+                else (aa_evidence if aa_evidence != "ok" else "no_eligible_model")
+            ),
+            "reason": (
+                ""
+                if ordered
+                else (
+                    aa_reason
+                    if aa_evidence != "ok"
+                    else "no model of this tier is eligible right now"
+                )
+            ),
         }
     return winners, coverage
 
@@ -1734,8 +2103,16 @@ def _winners(
 # The owner's explicit selection exclusions. Astra and Fable remain in the
 # usage and quota readings, and they are never a winner or a recommendation in
 # any tier: the frontier workhorses are GPT-6.1 Sol and Claude Opus 5.5.
+#
+# These are the fallback, not the source: the runtime policy carries the
+# owner's lists, and the policy is what is read. The fallback keeps the
+# collector honest when the policy is absent.
 SELECTION_EXCLUDED_MODELS = ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1")
 FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
+
+# The names of the runtime policy fields that carry the owner's lists.
+POLICY_WORKHORSES = "frontierPrimeModels"
+POLICY_EXCLUDED = "excludedModels"
 
 
 def _normalised_model(model: str) -> str:
@@ -1854,16 +2231,19 @@ def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
-    """The cost-aware 3D value: 0.80 * normalized Elo + 0.20 * efficiency.
+    """The 3D value: 0.45 * intelligence + 0.25 * capability + 0.30 * efficiency.
 
     The capability input is the AA-3D Elo under the source's own explicit
-    normalization. The efficiency input is the AA-3D cost per task when the
-    feed publishes it. When it does not, the owner explicitly approved the
-    normal Artificial Analysis cost per task of the same model as a proxy:
-    it is published with `cost_source=artificialanalysis_intelligence` and
-    `proxy=true`, and it is never called a measured 3D cost. Missing both
-    costs leaves the combined value unknown, while the raw Elo, its interval
-    and the source stay visible.
+    normalization, min-max over the complete AA-3D snapshot. The
+    intelligence is beside it rather than replaced by it: the owner asked
+    for the two together for CAD selection. The efficiency input is the
+    AA-3D cost per task when the feed publishes it. When it does not, the
+    owner explicitly approved the normal Artificial Analysis cost per task
+    of the same model as a proxy: it is published with
+    `cost_source=artificialanalysis_intelligence` and `proxy=true`, and it
+    is never called a measured 3D cost. A missing input leaves the
+    combined value unknown, while the raw Elo, its interval and the source
+    stay visible.
     """
     three_d = row.get("three_d") or {}
     aa = row.get("aa") or {}
@@ -1883,26 +2263,27 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
             cost = None
             proxy = False
             cost_source = None
+    efficiency, evidence = value_policy.cost_transform(cost, (), COST_TRANSFORM)
+    intelligence = (aa.get("indices") or {}).get("intelligence")
     components = {
-        "elo": normalized if isinstance(normalized, (int, float)) else None,
-        "cost_per_task": (
-            1.0 / (1.0 + float(cost)) if cost is not None else None
+        "intelligence": (
+            max(0.0, min(1.0, float(intelligence) / 100.0))
+            if isinstance(intelligence, (int, float)) and not isinstance(intelligence, bool)
+            else None
         ),
+        "three_d": normalized if isinstance(normalized, (int, float)) else None,
+        "cost_per_task": efficiency,
     }
-    missing = [name for name, value in components.items() if value is None]
-    value = None
-    if not missing:
-        value = round(
-            0.80 * float(components["elo"]) + 0.20 * float(components["cost_per_task"]),
-            6,
-        )
+    value, missing = value_policy.combine(components, VALUE_3D_WEIGHTS)
     return {
-        "value": value,
+        "value": None if value is None else round(value, 6),
         "components": {
             name: None if component is None else round(float(component), 4)
             for name, component in components.items()
         },
-        "weights": {"elo": 0.80, "cost_per_task": 0.20},
+        "weights": dict(VALUE_3D_WEIGHTS),
+        "cost_transform": COST_TRANSFORM,
+        "cost_transform_evidence": evidence,
         "cost_source": cost_source,
         "proxy": proxy,
         "cost_basis": (
@@ -1936,12 +2317,29 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _selection_excluded(model: str) -> bool:
-    return _normalised_model(model) in SELECTION_EXCLUDED_MODELS
+def _selection_excluded(model: str, excluded: Any = None) -> bool:
+    """True when the owner's policy excludes a model from selection.
+
+    The excluded list is the runtime policy's, and the constant is only the
+    fallback for a collector that runs without one. An excluded model stays
+    visible in the usage and the quota readings; it is never a winner and
+    never a recommendation.
+    """
+    names = excluded if isinstance(excluded, (list, tuple)) else SELECTION_EXCLUDED_MODELS
+    wanted = {_normalised_model(str(name)) for name in names}
+    return _normalised_model(model) in wanted
 
 
-def _frontier_workhorse(model: str) -> bool:
-    return str(model or "").strip().lower() in FRONTIER_WORKHORSES
+def _frontier_workhorse(model: str, workhorses: Any = None) -> bool:
+    """True when the owner's policy names a model a frontier workhorse.
+
+    The list is the runtime policy's, and the constant is only the fallback
+    for a collector that runs without one. There is one list, so a policy
+    change cannot work in the producer and be ignored in the reader.
+    """
+    names = workhorses if isinstance(workhorses, (list, tuple)) else FRONTIER_WORKHORSES
+    wanted = {str(name).strip().lower() for name in names}
+    return str(model or "").strip().lower() in wanted
 
 
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
@@ -1950,6 +2348,11 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     The frontier tier takes the prime models of the owner policy. The other
     tiers take the delegates, and a delegate may not be a model the owner
     policy does not permit.
+
+    The free tier is an access tier: a dedicated free route may hold it
+    even when the collector has no native instance for it, because the pool
+    runs it as an inference job. A pool route needs a current admission; a
+    native free route is a provider-native thread and needs none.
     """
     aa = row.get("aa") or {}
     if aa.get("state") != "measured":
@@ -1964,21 +2367,44 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         # The runtime reasoning policy is not satisfiable: the mismatch stays
         # visible and the model is not selected.
         return False
-    if _selection_excluded(str(row.get("model") or "")):
+    selection = row.get("selection") or {}
+    if selection.get("excluded"):
         # Astra and Fable are read, counted and shown; they are never picked.
         return False
     eligibility = row.get("eligibility") or {}
     if tier == "frontier":
-        # The frontier is the owner's two workhorses and nothing else.
-        return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and (
-            _frontier_workhorse(str(row.get("model") or ""))
+        # The frontier is the owner's workhorses and nothing else.
+        return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and bool(
+            selection.get("frontier_workhorse")
         )
+    reserve = row.get("reserve") or {}
+    if tier in RESERVED_TIERS and reserve.get("3d") and reserve.get("withheld"):
+        # The model is reserved for the 3D tier, and its provider has too
+        # little capacity left to spend it on the other work.
+        return False
+    if tier == "free":
+        if (row.get("access") or {}).get("kind") != ACCESS_DEDICATED_FREE:
+            return bool((eligibility.get("delegate") or {}).get("allowed"))
+        if _is_pool_route(row):
+            # A pool route runs as an inference job: it needs a current
+            # admission before it may hold the tier.
+            return _admitted_for_any(row)
+        return True
     return bool((eligibility.get("delegate") or {}).get("allowed"))
 
 
-def _winner_key(row: dict[str, Any]) -> tuple:
-    """The order of the candidates of one provider: value, then quality."""
-    value = (row.get("value") or {}).get("value")
+def _winner_key(row: dict[str, Any], tier: str = "") -> tuple:
+    """The order of the candidates of one provider: value, then quality.
+
+    The 3D tier is ordered by the 3D value: the intelligence, the measured
+    AA-3D capability and the cost, with the weights of the policy. The
+    ordinary value is not a substitute for it, and it does not replace it
+    either.
+    """
+    if tier == "3d":
+        value = (row.get("value_3d") or {}).get("value")
+    else:
+        value = (row.get("value") or {}).get("value")
     quality = (row.get("quality") or {}).get("value")
     return (
         float(value) if isinstance(value, (int, float)) else 0.0,
@@ -2010,6 +2436,7 @@ def build_snapshot(
     facts: Mapping[str, Any] | None = None,
     free_models: Iterable[Any] | None = None,
     promo_models: Iterable[Any] | None = None,
+    pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
@@ -2072,6 +2499,7 @@ def build_snapshot(
             version=feed_version,
         )
         _fill_value(row, catalog, fact, now, free_set, promo_set, aa_3d_cache)
+        row["free_pool"] = _free_pool_record((pool_evidence or {}).get((provider, model)))
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -2105,15 +2533,94 @@ def build_snapshot(
             candidates.append(row)
         else:
             omitted += 1
+    provider_capacity: dict[str, Any] = {}
+    for account, windows in accounts.items():
+        # The provider's overall capacity is the account-level windows. A
+        # model-scoped subordinate window constrains that model only.
+        applicable = [
+            window for window in windows if not window.get("applies_to")
+        ]
+        reported = [
+            window
+            for window in applicable
+            if window.get("evidence") == "provider_reported"
+            and isinstance(window.get("remaining_ratio"), (int, float))
+            and not isinstance(window.get("remaining_ratio"), bool)
+        ]
+        unknown = [window for window in applicable if window not in reported]
+        spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
+        binding = None
+        remaining: float | None = None
+        if spent:
+            # A spent window blocks the provider even when another window
+            # still has room.
+            binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
+            remaining = 0.0
+        elif unknown:
+            # An unknown window is not room: a positive reading from the
+            # known windows is suppressed until the account is complete.
+            remaining = None
+        elif reported:
+            binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
+            remaining = float(binding["remaining_ratio"])
+        provider_capacity[account] = {
+            "remaining_ratio": None if remaining is None else round(remaining, 4),
+            "binding": None
+            if binding is None
+            else {
+                "kind": binding.get("kind"),
+                "quota": binding.get("quota"),
+                "reset_at": binding.get("reset_at"),
+            },
+            "windows": len(applicable),
+            "unknown_windows": len(unknown),
+            "basis": (
+                "the lowest applicable remaining share; any spent window "
+                "blocks the provider, and an unknown window is not room"
+            ),
+        }
+    _apply_reserve(candidates, provider_capacity)
+
+    # The order of a tier: the published value decides, and a model
+    # reserved for the 3D tier comes after every other member of the tiers
+    # it is reserved away from. The 3D tier is ordered by the 3D value.
+    reserve_of = {
+        _key(row["provider"], row["model"]): 1
+        if (row.get("reserve") or {}).get("3d")
+        else 0
+        for row in candidates
+    }
+    value_of: dict[str, Any] = {}
+    for tier_name in TIER_NAMES:
+        for row in candidates:
+            key = _key(row["provider"], row["model"])
+            value_of[(tier_name, key)] = (
+                (row.get("value_3d") or {}).get("value")
+                if tier_name == "3d"
+                else (row.get("value") or {}).get("value")
+            )
     for tier, members in tiers.items():
         order = {
             _key(entry.provider, entry.model): entry.rank
             for entry in ranked
             if entry.tier == tier
         }
-        tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
+        tiers[tier] = sorted(
+            set(members),
+            key=lambda key: (
+                reserve_of.get(key, 0) if tier in RESERVED_TIERS else 0,
+                -(
+                    float(value_of.get((tier, key)))
+                    if isinstance(value_of.get((tier, key)), (int, float))
+                    and not isinstance(value_of.get((tier, key)), bool)
+                    else 0.0
+                ),
+                order.get(key, 0),
+                key,
+            ),
+        )
     _calibrate_values(candidates)
-    winners, tier_coverage = _winners(candidates, tiers)
+    winners, tier_coverage = _winners(candidates, tiers, aa_cache=aa_cache)
     pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
     # provider. The whole membership stays beside them for the comparison
@@ -2184,53 +2691,12 @@ def build_snapshot(
         "states": aa_states,
         "reasons": aa_reasons,
         "candidates": aa_coverage_rows,
+        # The models the last pull found that the one before it did not
+        # carry, and the models whose measurement changed. They are the
+        # re-ranking trigger.
+        "new_models": list((aa_cache or {}).get("new_models") or ()),
+        "changed_models": list((aa_cache or {}).get("changed_models") or ()),
     }
-    provider_capacity: dict[str, Any] = {}
-    for account, windows in accounts.items():
-        # The provider's overall capacity is the account-level windows. A
-        # model-scoped subordinate window constrains that model only.
-        applicable = [
-            window for window in windows if not window.get("applies_to")
-        ]
-        reported = [
-            window
-            for window in applicable
-            if window.get("evidence") == "provider_reported"
-            and isinstance(window.get("remaining_ratio"), (int, float))
-            and not isinstance(window.get("remaining_ratio"), bool)
-        ]
-        unknown = [window for window in applicable if window not in reported]
-        spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
-        binding = None
-        remaining: float | None = None
-        if spent:
-            # A spent window blocks the provider even when another window
-            # still has room.
-            binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
-            remaining = 0.0
-        elif unknown:
-            # An unknown window is not room: a positive reading from the
-            # known windows is suppressed until the account is complete.
-            remaining = None
-        elif reported:
-            binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
-            remaining = float(binding["remaining_ratio"])
-        provider_capacity[account] = {
-            "remaining_ratio": None if remaining is None else round(remaining, 4),
-            "binding": None
-            if binding is None
-            else {
-                "kind": binding.get("kind"),
-                "quota": binding.get("quota"),
-                "reset_at": binding.get("reset_at"),
-            },
-            "windows": len(applicable),
-            "unknown_windows": len(unknown),
-            "basis": (
-                "the lowest applicable remaining share; any spent window "
-                "blocks the provider, and an unknown window is not room"
-            ),
-        }
 
     source_records = []
     for source in sources:
@@ -2343,6 +2809,7 @@ def build_snapshot(
         },
         "policy": {
             "frontier_prime_models": list(policy.get("frontierPrimeModels") or ()),
+            "excluded_models": list(policy.get(POLICY_EXCLUDED) or ()),
             "allowed_gpt_models": list(policy.get("allowedGptModels") or ()),
             "background_provider_instances": list(
                 policy.get("backgroundProviderInstances") or ()
@@ -2363,6 +2830,7 @@ def build_snapshot(
         "tier_winners": winners,
         "tier_members": tier_members,
         "calculation": CALCULATION,
+        "value_policy": value_policy.policy_document(COST_TRANSFORM),
         "quota": {
             "accounts": accounts,
             "provider_capacity": provider_capacity,
@@ -2425,7 +2893,10 @@ def build_snapshot(
             "pending_identities": pending_identities,
         },
         "pending": pending,
-        "value_policy": VALUE_POLICY,
+        "value_policy": {
+            **VALUE_POLICY,
+            **value_policy.policy_document(COST_TRANSFORM),
+        },
         "aa_coverage": aa_coverage,
         "counts": {
             "candidates": len(candidates),
@@ -2474,6 +2945,32 @@ def provider_capacity_samples(
                 "ghostship_ai_provider_capacity_windows",
                 {"provider": str(provider), "evidence": "unknown"},
                 float(unknown),
+            )
+        )
+    # The owner's ordering measure, per provider: the Paced Availability of
+    # the provider in its most constraining window. It is the pace delta of
+    # that window, and a higher number ranks first. The provider's own
+    # measure is the smallest one over its models: the most constraining
+    # window of the account.
+    by_provider: dict[str, tuple[float, str]] = {}
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        capacity = row.get("capacity") or {}
+        paced = capacity.get("paced_availability")
+        if not isinstance(paced, (int, float)) or isinstance(paced, bool):
+            continue
+        provider = str(row.get("provider") or "")
+        binding = str(capacity.get("paced_availability_window") or "")
+        current = by_provider.get(provider)
+        if current is None or float(paced) < current[0]:
+            by_provider[provider] = (float(paced), binding)
+    for provider, (paced, binding) in sorted(by_provider.items()):
+        samples.append(
+            (
+                "ghostship_ai_provider_paced_availability",
+                {"provider": provider, "binding": binding},
+                paced,
             )
         )
     return samples
@@ -2546,6 +3043,12 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
             samples.append(
                 ("ghostship_ai_model_pace_delta_ratio", labels, float(pace_delta))
             )
+            # The owner's name for the same number: the Paced Availability of
+            # the model. It is the pace delta of the model's most
+            # constraining window.
+            samples.append(
+                ("ghostship_ai_model_paced_availability", labels, float(pace_delta))
+            )
     facts = (snapshot.get("facts") or {}).get("records") or {}
     for fact in facts.values():
         if not isinstance(fact, Mapping):
@@ -2600,6 +3103,21 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                             float(weight),
                         )
                     )
+        # The transform of a calculated input, and the one in force. A
+        # reader can tell which transform built the value it sees.
+        transform = body.get("cost_transform")
+        if isinstance(transform, str) and transform:
+            samples.append(
+                (
+                    "ghostship_ai_calculation_transform",
+                    {
+                        "component": str(component),
+                        "transform": transform,
+                        "in_force": transform,
+                    },
+                    1.0,
+                )
+            )
         rule = body.get("rule")
         if isinstance(rule, str):
             samples.append(
@@ -2609,6 +3127,36 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                     1.0,
                 )
             )
+    for name, description in (snapshot.get("calculation") or {}).get(
+        "cost_transforms", {}
+    ).items():
+        samples.append(
+            (
+                "ghostship_ai_calculation_transform",
+                {
+                    "component": "cost_per_task",
+                    "transform": str(name),
+                    "in_force": str(
+                        (snapshot.get("calculation") or {}).get(
+                            "cost_transform_in_force", ""
+                        )
+                    ),
+                    "formula": str(description)[:120],
+                },
+                1.0,
+            )
+        )
+    # The owner's lists, published so a reader can filter on them instead of
+    # repeating them in a query.
+    policy = snapshot.get("policy") or {}
+    for model in policy.get("frontier_prime_models") or ():
+        samples.append(
+            ("ghostship_ai_policy_frontier_workhorse", {"model": str(model)}, 1.0)
+        )
+    for model in policy.get("excluded_models") or ():
+        samples.append(
+            ("ghostship_ai_policy_excluded_model", {"model": str(model)}, 1.0)
+        )
     for tier, winners in (snapshot.get("tier_winners") or {}).items():
         for position, winner in enumerate(winners, start=1):
             if not isinstance(winner, Mapping):
@@ -2629,43 +3177,67 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
     return samples
 
 
-def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) -> None:
-    """Write the snapshot atomically, so a reader never sees half a file."""
+def _json_safe(value: Any) -> Any:
+    """The snapshot with every number that cannot be written turned into null.
+
+    JSON has no NaN and no infinity, and a single one of them would make
+    the whole snapshot unwritable. A value that cannot be written is not a
+    measurement: it is published as null, and the gap stays visible.
+    """
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) -> int:
+    """Write the snapshot atomically, and return the bytes written.
+
+    A failure is raised, never swallowed: the snapshot is the canonical
+    answer for a consumer, and a collection that cannot write it must fail
+    visibly instead of leaving the previous file in place without a word.
+    """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".new")
     payload = json.dumps(
-        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
+        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
     )
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
     os.replace(temporary, target)
+    return len(payload) + 1
 
 
-def publish(snapshot: Mapping[str, Any], paths: Iterable[str | os.PathLike[str]]) -> list[str]:
+def publish(
+    snapshot: Mapping[str, Any], paths: Iterable[str | os.PathLike[str]]
+) -> list[tuple[str, int]]:
     """Publish the same bytes to every presentation of the snapshot.
 
     The canonical file and the runtime projections carry the same bytes: one
     producer, no second scorer, no history. Every write is atomic, and the
-    projections are credential free.
+    projections are credential free. A projection that cannot be written is
+    an error: a consumer would read the previous file and believe it.
     """
     payload = json.dumps(
-        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
-    ) + "\n"
-    written: list[str] = []
+        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
+    )
+    written: list[tuple[str, int]] = []
     for path in paths:
         target = Path(path)
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            temporary = target.with_name(target.name + ".new")
-            temporary.write_text(payload, encoding="utf-8")
-            os.chmod(temporary, 0o644)
-            os.replace(temporary, target)
-            written.append(str(target))
-        except OSError:
-            # A projection that cannot be written is not a reason to fail the
-            # collection: the canonical file is the answer.
-            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".new")
+        temporary.write_text(payload + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target)
+        written.append((str(target), len(payload) + 1))
     return written
 
 

@@ -290,6 +290,9 @@ path-scoped Access application for exactly `/github` and `/cloudflare` whose onl
 policy is bypass-everyone, recorded in the registry as `cloudflareBypassPaths`
 with `cloudflareBypassApproval`. The receiver authenticates those requests itself
 (GitHub HMAC, Cloudflare webhook secret); any other bypass still fails validation.
+`grafana.ghostship.io` has its own Access application allowing the owner identity
+and the agent identity (owner approval 2026-10-22) so agents can verify
+dashboards; read-only through vmauth.
 All existing and proposed tunnel hostnames, including unmanaged rules and
 path-specific overrides, require complete policy evidence and restrictive identity
 or explicitly scoped service-token selectors. Unauthenticated OPTIONS bypasses
