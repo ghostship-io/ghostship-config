@@ -4,7 +4,9 @@ The fixtures are the real pages the pull read, and the real snapshot it
 built from them. The tests therefore reproduce the real naming differences
 and the real cost per task of the published models.
 """
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -466,10 +468,15 @@ class PullBudgetTests(unittest.TestCase):
 
     def setUp(self):
         self.clock = FakeClock()
-        # The pull measures its budget with this clock. A test moves it by
-        # hand, so a slow page is a number and not a minute of waiting.
+        # The pull measures its deadline with this clock. A test moves it
+        # by hand, so a slow page is a number and not a minute of waiting.
         self.previous_clock = getattr(aa_pull, "CLOCK", None)
         aa_pull.CLOCK = self.clock
+        # The pull logs every read. The test keeps the log, and the console
+        # stays quiet.
+        self.log = io.StringIO()
+        self._stderr = contextlib.redirect_stderr(self.log)
+        self._stderr.__enter__()
         # The page reads, with the clock at the moment of the read.
         self.reads: list[tuple[str, float]] = []
         # The model page reads, with the clock at the moment of the read.
@@ -479,6 +486,7 @@ class PullBudgetTests(unittest.TestCase):
         self.board_at_first_page: bool | None = None
 
     def tearDown(self):
+        self._stderr.__exit__(None, None, None)
         aa_pull.CLOCK = self.previous_clock
 
     def _reading(self, url, text, *, blocked=False):
@@ -508,14 +516,19 @@ class PullBudgetTests(unittest.TestCase):
 
         return read
 
-    def _model_pages(self, board_path, *, page_seconds=120.0):
-        """The reader of the model pages, and the board that is already there."""
+    def _model_pages(self, board_path, *, page_seconds=5.0, stall=None):
+        """The reader of the model pages, and the board that is already there.
+
+        `stall` names the pages whose body never finishes: their read runs
+        past the limit of a read.
+        """
+        stalls = stall or {}
 
         def read(slug):
             self.model_reads.append((slug, self.clock.now))
             if self.board_at_first_page is None:
                 self.board_at_first_page = board_path.exists()
-            self.clock.advance(page_seconds)
+            self.clock.advance(float(stalls.get(slug, page_seconds)))
             return {
                 "url": f"https://artificialanalysis.ai/models/{slug}",
                 "http_status": 200,
@@ -549,7 +562,7 @@ class PullBudgetTests(unittest.TestCase):
                 cache,
                 now=NOW,
                 read=self._reader(),
-                model_pages=self._model_pages(board),
+                model_pages=self._model_pages(board, page_seconds=59.0),
                 aa3d_path=board,
                 catalog_slugs=list(self.DEPRECATED),
             )
@@ -557,16 +570,14 @@ class PullBudgetTests(unittest.TestCase):
             self.assertTrue(self.board_at_first_page)
             self.assertTrue(board.exists())
             self.assertTrue(json.loads(board.read_text(encoding="utf-8"))["records"])
-            # The model pages are read at 10, 130, 250 and 370 seconds of the
-            # budget, and the fifth and the sixth are not read: the budget
-            # has less than ninety seconds left.
-            started = self._budget_started()
+            # The three source pages took five seconds each, and the model
+            # pages took fifty-nine: the run is inside its deadline.
             self.assertEqual(
-                [moment - started for _slug, moment in self.model_reads],
-                [10, 130, 250, 370],
+                [moment for _slug, moment in self.model_reads],
+                [15, 74, 133, 192],
             )
-            # The run ends at 490 seconds of the budget.
-            self.assertEqual(self.clock.now - started, 490)
+            self.assertEqual(self.clock.now, 251)
+            self.assertLessEqual(float(result.get("total_seconds") or 0), 480.0)
             self.assertEqual(len(self.model_reads), 4)
             self.assertEqual(result.get("model_page_fetches"), 4)
             self.assertEqual(result.get("model_page_skipped"), 2)
@@ -583,6 +594,141 @@ class PullBudgetTests(unittest.TestCase):
             # cost that was not read is unknown, never zero.
             for slug in self.DEPRECATED[4:]:
                 self.assertIsNone(records[slug]["cost_per_task"])
+
+    def test_a_read_that_stalls_past_the_limit_is_abandoned(self):
+        # A read whose body never finishes is abandoned after the limit of
+        # a read, and the run goes on: the pages after it are still read.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            result = aa_pull.refresh(
+                cache,
+                now=NOW,
+                read=self._reader(),
+                model_pages=self._model_pages(
+                    board, stall={"claude-sonnet-4-5": 200.0}
+                ),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            # The run continued: the other model pages were read.
+            self.assertEqual(len(self.model_reads), 4)
+            self.assertEqual(result.get("model_page_fetches"), 4)
+            written = json.loads(cache.read_text(encoding="utf-8"))
+            records = {entry["slug"]: entry for entry in written["records"]}
+            # The stalled read was abandoned: its content was not used.
+            self.assertIsNone(records["claude-sonnet-4-5"]["cost_per_task"])
+            # The reads after it were used.
+            self.assertEqual(records["deepseek-v4-1"]["cost_per_task"], 1.0)
+            # The log says the read ran past its limit.
+            self.assertIn("outcome=deadline", self.log.getvalue())
+
+    def test_the_source_reads_count_against_the_deadline(self):
+        # Every read takes fifty-nine seconds. The source pages are reads
+        # too, so their time counts against the deadline of the run: the
+        # run ends inside it, it says what it skipped, it prints its line
+        # and it exits zero.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            catalog = Path(folder) / "models.json"
+            catalog.write_text(
+                json.dumps(
+                    {"provider": {"models": {slug: {} for slug in self.DEPRECATED}}}
+                ),
+                encoding="utf-8",
+            )
+            previous_fetch = aa_pull._fetch
+            aa_pull._fetch = self._slow_fetch()
+            stdout = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(stdout):
+                    code = aa_pull.main(
+                        [
+                            "--output",
+                            str(cache),
+                            "--aa3d-output",
+                            str(board),
+                            "--catalog",
+                            str(catalog),
+                            "--model-pages",
+                        ]
+                    )
+            finally:
+                aa_pull._fetch = previous_fetch
+            # The run exits zero and prints its line.
+            self.assertEqual(code, 0)
+            line = stdout.getvalue().strip().splitlines()[-1]
+            document = json.loads(line)
+            self.assertEqual(document.get("status"), "ok")
+            # The run ended inside the deadline of the run.
+            self.assertLessEqual(float(document.get("total_seconds") or 0), 480.0)
+            # The source pages took their time too: the run took much
+            # longer than the model pages alone.
+            self.assertGreater(float(document.get("total_seconds") or 0), 59.0 * 3)
+            # The reads that were not made are counted.
+            self.assertGreaterEqual(int(document.get("skipped_reads") or 0), 1)
+            # The board and the cache were written.
+            self.assertTrue(board.exists())
+            self.assertTrue(cache.exists())
+
+    def _slow_fetch(self, *, read_seconds=59.0):
+        """The reader of the CLI: every read takes the same time."""
+
+        def fetch(url):
+            self.reads.append((url, self.clock.now))
+            self.clock.advance(read_seconds)
+            if "aa-3d" in url:
+                return self._reading(url, page("aa3d.html"))
+            if "leaderboards" in url:
+                return self._reading(url, page("deprecated-leaderboard.html"))
+            if "/models/" in url:
+                slug = url.rstrip("/").rsplit("/", 1)[-1]
+                return {
+                    "url": url,
+                    "http_status": 200,
+                    "bytes": 10,
+                    "blocked": False,
+                    "error": None,
+                    "text": (
+                        f"<p>On average, it costs $1.00 per task to evaluate "
+                        f"Model {slug} on the Intelligence Index.</p>"
+                    ),
+                }
+            return self._reading(url, page("models.html"))
+
+        return fetch
+
+    def test_every_read_is_logged(self):
+        # One line per read: the page or the model, the time the read
+        # took, the bytes it brought and how it went. No page content.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            aa_pull.refresh(
+                cache,
+                now=NOW,
+                read=self._reader(),
+                model_pages=self._model_pages(board),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            lines = [
+                line
+                for line in self.log.getvalue().splitlines()
+                if line.startswith("aa-pull read ")
+            ]
+            # Three source pages and four model pages.
+            self.assertEqual(len(lines), 7)
+            self.assertIn("aa-pull read aa3d ", lines[0])
+            for line in lines:
+                self.assertIn("elapsed=", line)
+                self.assertIn("bytes=", line)
+                self.assertIn("outcome=", line)
+            # A model page is logged with its slug.
+            self.assertTrue(any("claude-sonnet-4-5" in line for line in lines))
+            # No page content in the log.
+            self.assertNotIn("Intelligence Index", self.log.getvalue())
 
     def test_a_fast_pull_reads_four_model_pages_and_writes_both_caches(self):
         # Every page is fast, so the run stops at the cap of the run: four
