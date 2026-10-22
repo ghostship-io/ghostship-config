@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic OpenCode request records for the reader's tests. Every row is invented: the handles are placeholders, the model ids are examples and the instants are offsets from now_epoch_ms. No row is copied from a live database.",
+  "_comment": "Synthetic OpenCode request records for the reader's tests. Every row is invented: the handles are placeholders, the model ids are examples and the instants are offsets from now_epoch_ms. No row is copied from a live database. The row named msg_unmapped_provider carries the bare provider id \"kilo\", which is not an alias of the free pool: the aliases are the \"-free\" integrations, so this row stays unmapped and the reader counts it.",
   "now_epoch_ms": 1800000000000,
   "rows": [
     {
@@ -414,7 +414,7 @@
       "type": "assistant",
       "time_created": 1799899200000,
       "data": {
-        "model": {"providerID": "kilo-free", "id": "example/kilo-model"},
+        "model": {"providerID": "kilo", "id": "example/kilo-model"},
         "time": {"created": 1799899200000},
         "tokens": {"input": 500, "output": 100, "reasoning": 0},
         "finish": "stop"
