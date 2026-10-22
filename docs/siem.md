@@ -166,6 +166,10 @@ everything it rotates before Vector reads it is lost. It is capped at 4 GiB
 (`storage-health.nix`, btrfs tradeoff). At the 2026-10-21 AppArmor flood rate
 1 GiB held only about 3 hours.
 
+The kernel audit backlog holds 131072 records (`security.audit.backlogLimit`):
+a container restart burst overflowed the previous 32768 and the kernel dropped
+70811 records, and a dropped record is a detection that never happened.
+
 On the host, `ghostship-siem-alerts --list` prints current alerts with their
 evidence queries. The bridge's T3 session token is reissued daily
 (`ghostship-siem-alerts-t3-token`).
