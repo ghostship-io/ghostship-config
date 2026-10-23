@@ -4,8 +4,7 @@
   "tags": [
     "ghostship",
     "ai",
-    "usage",
-    "free"
+    "usage"
   ],
   "timezone": "utc",
   "schemaVersion": 41,
@@ -18,37 +17,22 @@
   },
   "panels": [
     {
-      "id": 2200,
+      "id": 200,
       "type": "text",
       "title": "",
       "gridPos": {
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 2
+        "h": 3
       },
       "options": {
         "mode": "html",
-        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free model selection</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 Public work only. Free routes take only public work; China hosting restriction is lifted.</span></div>"
+        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free models and providers</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 Free worker pool and free provider accounts \u00b7 Public tasks only</span></div>"
       }
     },
     {
-      "id": 2230,
-      "type": "text",
-      "title": "",
-      "gridPos": {
-        "x": 0,
-        "y": 2,
-        "w": 24,
-        "h": 2
-      },
-      "options": {
-        "mode": "html",
-        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free worker models</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 Quality, trust and capacity \u00b7 public-only worker use</span></div>"
-      }
-    },
-    {
-      "id": 2231,
+      "id": 201,
       "type": "marcusolsson-dynamictext-panel",
       "title": "",
       "datasource": {
@@ -57,9 +41,88 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 3,
+        "w": 24,
+        "h": 4
+      },
+      "description": "Canonical picker selection; one model per card, preferred order supplied by the collector.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (source, status, reason, field) (label_replace((ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"} and (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"}) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"})))), \"field\", \"info\", \"\", \"\") or label_replace(ghostship_ai_collection_timestamp_seconds, \"field\", \"collected\", \"\", \"\"))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "value"
+            },
+            "indexByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div class=\"source-health\" aria-label=\"Collector source health\">{{#each (sourceHealth data (variable \"__to\"))}}<span class=\"source {{this.state}}\"><strong>{{this.name}}</strong> \u00b7 {{this.text}}</span>{{/each}}</div>",
+        "defaultContent": "<div class=\"source-health error\">Collector readings missing \u00b7 check collector service</div>",
+        "editor": {
+          "format": "none",
+          "language": "handlebars"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "contentPartials": [],
+        "helpers": "context.handlebars.registerHelper('sourceHealth', function(rows, now) {\n  const number = Number(now) / 1000;\n  const collected = (rows || []).find(row => row.field === 'collected');\n  const stamp = collected ? Number(collected.value) : NaN;\n  const stale = !Number.isFinite(stamp) || !Number.isFinite(number) || number - stamp > 600;\n  const result = [{name:'Collector', state:stale ? 'error' : 'ok',\n    text:!Number.isFinite(stamp) ? 'missing collection timestamp' : stale ? 'stale \u00b7 last collection over 10m ago' : 'current'}];\n  const names = {t3:'T3 providers',t3_usage:'T3 usage','opencode-go':'OpenCode Go'};\n  for (const [source, name] of Object.entries(names)) {\n    const info = (rows || []).find(row => row.source === source && row.field === 'info');\n    const missing = !info || stale;\n    result.push({name, state:missing || info.status !== 'ok' ? 'error' : 'ok',\n      text:missing ? 'missing or stale reading' : info.status === 'ok' ? 'current' : 'unavailable \u00b7 ' + (info.reason || info.status)});\n  }\n  return result;\n});\n",
+        "renderMode": "allRows",
+        "status": "",
+        "styles": ".source-health{display:flex;flex-wrap:wrap;gap:8px 18px;font:12px Inter,system-ui,sans-serif;overflow-wrap:anywhere}.source-health .source{min-width:0}.source-health .ok{color:#9da7b3}.source-health .error{color:#d9534f}",
+        "wrap": false
+      }
+    },
+    {
+      "id": 232,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free worker models</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 Public-only policy \u00b7 Exhausted routes greyed out \u00b7 Dynamic ordering by capacity</span></div>"
+      }
+    },
+    {
+      "id": 233,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
         "w": 6,
-        "h": 14
+        "h": 13
       },
       "description": "Canonical picker selection; one model per card, preferred order supplied by the collector.",
       "targets": [
@@ -95,7 +158,7 @@
       },
       "options": {
         "afterRender": "",
-        "content": "{{#each (selectionModels data (variable \"__to\"))}}<article class=\"selection-card {{#if this.restricted}}restricted{{/if}}\" data-selection-key=\"{{this.key}}\" data-category=\"{{this.category}}\" data-position=\"{{this.position}}\"><div class=\"ph\"><span class=\"ico\">{{this.icon}}</span><h3>{{this.display_name}}</h3></div><div class=\"meta\">{{this.providerName}} \u00b7 {{this.pool_label}}</div><div class=\"tags\"><span class=\"tag\">{{this.category}}</span><span class=\"tag\">{{this.trust}}</span><span class=\"tag policy\">public only</span>{{#if this.preferred}}<span class=\"tag selected\">pool first choice</span>{{/if}}{{#if this.defaultWorker}}<span class=\"tag selected\">default worker</span>{{/if}}</div><div class=\"model-capacity\"><div class=\"cap-hdr\"><span class=\"wl\">{{this.windowName}}</span><span class=\"pct\">{{this.percent}}</span></div><div class=\"bar\">{{#if this.hasLeft}}<div class=\"fill {{this.fillClass}}\" style=\"width:{{this.width}}%\"></div>{{/if}}</div><div class=\"pace-row\"><span class=\"sub {{this.paceClass}}\">{{this.paceText}}</span></div></div><table aria-label=\"Model selection details\"><tbody><tr><th>Preferred order</th><td>#{{this.providerPosition}} in provider \u00b7 #{{this.poolPosition}} in pool</td></tr><tr><th>Quality</th><td data-field=\"quality\">{{this.quality}} \u00b7 {{this.rounds}}</td></tr><tr><th>Effort</th><td>{{this.effortText}} \u00b7 standard tier</td></tr><tr><th>Status</th><td>{{this.statusText}}</td></tr></tbody></table><div class=\"reset\" data-field=\"reset\">{{#if this.resetText}}{{this.windowName}} \u00b7 {{this.resetText}}{{/if}}{{#if this.customReset}} \u00b7 <span class=\"custom\">custom reset</span>{{/if}}</div>{{#if this.reasonText}}<div class=\"reason\">{{this.reasonText}}</div>{{/if}}<div class=\"meta\">{{this.billing}} \u00b7 {{this.quality_basis}}</div></article>{{/each}}",
+        "content": "{{#each (selectionModels data (variable \"__to\"))}}<article class=\"selection-card {{#if this.restricted}}restricted{{/if}}\" data-selection-key=\"{{this.key}}\" data-category=\"{{this.category}}\" data-position=\"{{this.position}}\"><div class=\"ph\"><span class=\"ico\">{{this.icon}}</span><h3>{{this.display_name}}</h3></div><div class=\"meta\">{{this.providerName}} \u00b7 {{this.pool_label}}</div><div class=\"tags\"><span class=\"tag\">{{this.category}}</span><span class=\"tag\">{{this.trust}}</span>{{#if this.preferred}}<span class=\"tag selected\">pool first choice</span>{{/if}}{{#if this.defaultWorker}}<span class=\"tag selected\">default worker</span>{{/if}}</div><table aria-label=\"Model selection details\"><tbody><tr><th>Preferred order</th><td>#{{this.providerPosition}} in provider \u00b7 #{{this.poolPosition}} in pool</td></tr><tr><th>Quality</th><td data-field=\"quality\">{{this.quality}} \u00b7 {{this.rounds}}</td></tr><tr><th>Effort</th><td>{{this.effortText}} \u00b7 standard tier</td></tr><tr><th>{{this.windowName}}</th><td data-field=\"remaining\">{{this.percent}}</td></tr><tr><th>Pace</th><td class=\"{{this.paceClass}}\" data-field=\"pace\">{{this.paceText}}</td></tr><tr><th>Status</th><td>{{this.statusText}}</td></tr></tbody></table><div class=\"reset\" data-field=\"reset\">{{#if this.resetText}}{{this.windowName}} \u00b7 {{this.resetText}}{{/if}}{{#if this.customReset}} \u00b7 <span class=\"custom\">custom reset</span>{{/if}}</div>{{#if this.reasonText}}<div class=\"reason\">{{this.reasonText}}</div>{{/if}}<div class=\"meta\">{{this.billing}} \u00b7 {{this.quality_basis}}</div></article>{{/each}}",
         "defaultContent": "<div class=\"selection-card\">Selection unavailable \u00b7 check collector source health below.</div>",
         "editor": {
           "format": "none",
@@ -104,10 +167,10 @@
         "editors": [],
         "externalStyles": [],
         "contentPartials": [],
-        "helpers": "// Presentation only: order, quality, pace and availability come from the collector.\nfunction modelNumber(value) {\n  if (value === null || value === undefined || value === '') { return null; }\n  const number = Number(value);\n  return Number.isFinite(number) ? number : null;\n}\nfunction modelSpan(seconds) {\n  if (seconds <= 0) { return 'now'; }\n  const minutes = Math.max(1, Math.round(seconds / 60));\n  if (minutes < 60) { return minutes + 'm'; }\n  if (minutes < 1440) { return Math.floor(minutes / 60) + 'h ' + minutes % 60 + 'm'; }\n  return Math.round(minutes / 144) / 10 + 'd';\n}\nfunction modelPace(state, delta, left, window) {\n  if (left !== null && left <= 0) { return {text: '\u2715 spent', cls: 'spent'}; }\n  if (/session|hour|daily|minute/i.test(window)) { return {text: '', cls: 'on_pace'}; }\n  const magnitude = delta === null ? '' : (Math.round(Math.abs(delta) * 10) / 10) + ' ';\n  const states = {\n    ahead: {text: '\u25b2 ' + magnitude + 'ahead', cls: 'ahead'},\n    on_pace: {text: '\u25cf on pace', cls: 'on_pace'},\n    behind: {text: '\u25bc ' + magnitude + 'behind', cls: 'behind'},\n    far_behind: {text: '\u25bc ' + magnitude + 'behind', cls: 'far_behind'},\n  };\n  return states[state] || {text: '', cls: 'unknown'};\n}\ncontext.handlebars.registerHelper('selectionModels', function(rows, now) {\n  const models = new Map();\n  for (const row of rows || []) {\n    if (!row || !row.model || !row.provider) { continue; }\n    const key = row.category + '|' + row.provider + '|' + row.model;\n    let model = models.get(key);\n    if (!model) { model = {...row, numbers: {}}; models.set(key, model); }\n    model.numbers[row.field] = modelNumber(row.value);\n  }\n  const providerNames = {\n    google: 'Google', nvidia: 'NVIDIA', groq: 'Groq', kilo: 'Kilo', 'kilo-keyed': 'Kilo (keyed)',\n    openrouter: 'OpenRouter', 'cloudflare-workers-ai': 'Cloudflare', cohere: 'Cohere',\n    requesty: 'Requesty', orcarouter: 'OrcaRouter', zai: 'Z.ai', vercel: 'Vercel',\n    ovh: 'OVH', poolside: 'Poolside', upstage: 'Upstage', inception: 'Inception',\n    mistral: 'Mistral', opencode: 'OpenCode Zen', 'opencode-go': 'OpenCode Go',\n  };\n  const icons = {\n    google: 'G', nvidia: 'N', groq: 'q', kilo: 'K', 'kilo-keyed': 'K',\n    openrouter: '\u21c4', 'cloudflare-workers-ai': '\u2601', cohere: 'C', requesty: 'R',\n    orcarouter: 'O', zai: 'Z', vercel: '\u25b2', ovh: 'O', poolside: 'P',\n    upstage: 'U', inception: 'I', mistral: 'M', opencode: 'Z', 'opencode-go': '{}',\n  };\n  const status = {available:'Available',exhausted:'\u2715 quota spent',excluded:'Excluded',unavailable:'Unavailable'};\n  return Array.from(models.values()).sort((a,b) =>\n    (a.numbers.position || Number.MAX_SAFE_INTEGER) - (b.numbers.position || Number.MAX_SAFE_INTEGER)\n  ).map(model => {\n    const n = model.numbers;\n    const left = n.remaining_ratio;\n    const pace = modelPace(model.pace_state, n.pace_delta ?? null, left ?? null, model.window || '');\n    const reset = n.reset_timestamp_seconds;\n    const moment = modelNumber(now);\n    const relative = reset === undefined || reset === null || moment === null ? '' : modelSpan(reset - moment / 1000);\n    const resetText = relative ? (relative === 'now' ? 'resets now' : 'resets in ' + relative) : '';\n    const hasLeft = left !== undefined && left !== null;\n    const width = hasLeft ? Math.max(0, Math.min(100, Math.round(left * 100))) : 0;\n    const fillClass = left !== null && left <= 0 ? 'spent' : (pace.cls === 'behind' || pace.cls === 'far_behind' ? 'behind' : (pace.cls === 'ahead' ? 'ahead' : ''));\n    const isExhausted = model.state === 'exhausted' || (left !== null && left <= 0);\n    const isRestricted = model.state !== 'available' || model.trust !== 'trusted' || isExhausted;\n    return {\n      ...model,\n      key: model.provider + ':' + model.model,\n      providerName: providerNames[model.provider] || model.provider,\n      icon: icons[model.provider] || String(model.provider).charAt(0).toUpperCase(),\n      defaultWorker: n.default === 1,\n      preferred: n.pool_position === 1 && model.state === 'available',\n      position: n.position,\n      providerPosition: n.provider_position,\n      poolPosition: n.pool_position,\n      quality: n.quality === undefined || n.quality === null ? 'Unknown' : String(n.quality),\n      rounds: n.quality_rounds === undefined || n.quality_rounds === null ? 'rounds unknown' : (\n        n.quality_rounds === 0 ? 'no rounds yet' : n.quality_accepted + '/' + n.quality_rounds + ' accepted'),\n      percent: hasLeft ? (Math.round(left * 1000) / 10) + '% left' : 'No long-window reading',\n      hasLeft: hasLeft,\n      width: width,\n      fillClass: fillClass,\n      windowName: model.window ? String(model.window).replaceAll('_',' ') : 'Capacity',\n      paceText: pace.text,\n      paceClass: pace.cls,\n      resetText: resetText,\n      customReset: model.reset_source === 'custom' ? 'custom reset' : '',\n      statusText: isExhausted ? '\u2715 quota spent' : (status[model.state] || 'Unknown'),\n      reasonText: String(model.reason || '').replaceAll('_',' '),\n      restricted: isRestricted,\n      effortText: model.effort || 'not offered',\n    };\n  });\n});",
+        "helpers": "// Presentation only: order, quality, pace and availability come from the collector.\nfunction modelNumber(value) {\n  if (value === null || value === undefined || value === '') { return null; }\n  const number = Number(value);\n  return Number.isFinite(number) ? number : null;\n}\nfunction modelSpan(seconds) {\n  if (seconds <= 0) { return 'now'; }\n  const minutes = Math.max(1, Math.round(seconds / 60));\n  if (minutes < 60) { return minutes + 'm'; }\n  if (minutes < 1440) { return Math.floor(minutes / 60) + 'h ' + minutes % 60 + 'm'; }\n  return Math.round(minutes / 144) / 10 + 'd';\n}\nfunction modelPace(state, delta, left, window) {\n  if (left !== null && left <= 0) { return {text: '\u2715 spent', cls: 'spent'}; }\n  if (/session|hour|daily|minute/i.test(window)) { return {text: '', cls: 'on_pace'}; }\n  const magnitude = delta === null ? '' : (Math.round(Math.abs(delta) * 10) / 10) + ' ';\n  const states = {\n    ahead: {text: '\u25b2 ' + magnitude + 'ahead', cls: 'ahead'},\n    on_pace: {text: '\u25cf on pace', cls: 'on_pace'},\n    behind: {text: '\u25bc ' + magnitude + 'behind', cls: 'behind'},\n    far_behind: {text: '\u25bc ' + magnitude + 'behind', cls: 'far_behind'},\n  };\n  return states[state] || {text: '', cls: 'unknown'};\n}\ncontext.handlebars.registerHelper('selectionModels', function(rows, now) {\n  const models = new Map();\n  for (const row of rows || []) {\n    if (!row || !row.model || !row.provider) { continue; }\n    const key = row.category + '|' + row.provider + '|' + row.model;\n    let model = models.get(key);\n    if (!model) { model = {...row, numbers: {}}; models.set(key, model); }\n    model.numbers[row.field] = modelNumber(row.value);\n  }\n  return Array.from(models.values()).sort((a,b) =>\n    (a.numbers.position || Number.MAX_SAFE_INTEGER) - (b.numbers.position || Number.MAX_SAFE_INTEGER)\n  ).map(model => {\n    const n = model.numbers;\n    const left = n.remaining_ratio;\n    const pace = modelPace(model.pace_state, n.pace_delta ?? null, left ?? null, model.window || '');\n    const reset = n.reset_timestamp_seconds;\n    const moment = modelNumber(now);\n    const relative = reset === undefined || reset === null || moment === null ? '' : modelSpan(reset - moment / 1000);\n    const resetText = relative ? (relative === 'now' ? 'resets now' : 'resets in ' + relative) : '';\n    const providerNames = {claude:'Claude',codex:'Codex',ollama:'Ollama',grok:'Grok',antigravity:'Antigravity','opencode-go':'OpenCode Go',opencode:'OpenCode Zen'};\n    const icons = {claude:'\u2733',codex:'\u229b',ollama:'\u25c9',grok:'\u2298',antigravity:'A','opencode-go':'{}'};\n    const status = {available:'Available',exhausted:'\u2715 quota spent',excluded:'Excluded',unavailable:'Unavailable'};\n    return {...model, key: model.provider + ':' + model.model,\n      providerName: providerNames[model.provider] || model.provider,\n      icon: icons[model.provider] || String(model.provider).charAt(0).toUpperCase(),\n      defaultWorker: n.default === 1, preferred: n.pool_position === 1 && model.state === 'available',\n      position: n.position, providerPosition: n.provider_position, poolPosition: n.pool_position,\n      quality: n.quality === undefined || n.quality === null ? 'Unknown' : String(n.quality),\n      rounds: n.quality_rounds === undefined || n.quality_rounds === null ? 'rounds unknown' : (\n        n.quality_rounds === 0 ? 'no rounds yet' : n.quality_accepted + '/' + n.quality_rounds + ' accepted'),\n      percent: left === undefined || left === null ? 'No long-window reading' : (Math.round(left * 1000) / 10) + '% left',\n      windowName: model.window ? String(model.window).replaceAll('_',' ') : 'No long or quota window',\n      paceText: pace.text, paceClass: pace.cls, resetText: resetText,\n      customReset: model.reset_source === 'custom' ? 'custom reset' : '',\n      statusText: status[model.state] || 'Unknown',\n      reasonText: String(model.reason || '').replaceAll('_',' '),\n      restricted: model.state !== 'available' || model.trust !== 'trusted',\n      effortText: model.effort || 'not offered',\n    };\n  });\n});\n",
         "renderMode": "allRows",
         "status": "",
-        "styles": "\n.selection-card{font:13px Inter,system-ui,sans-serif;color:#e6e6ea;background:#181a20;border:1px solid #262932;border-radius:8px;padding:12px;min-width:0;overflow-wrap:anywhere}\n.selection-card .ph{display:flex;gap:8px;align-items:center}.selection-card .ico{width:22px;height:22px;background:#2b2f3a;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;font-weight:700}\n.selection-card h3{margin:0;font-size:13px;font-weight:600;line-height:1.4}.selection-card .meta{font-size:11px;color:#8b8f99;line-height:1.5;margin:5px 0}\n.selection-card table{width:100%;font-size:11px;margin:8px 0;border-collapse:collapse;table-layout:fixed}.selection-card th{width:37%;text-align:left;color:#8b8f99;font-weight:400}.selection-card td{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.selection-card th,.selection-card td{vertical-align:top;padding:3px 0}\n.selection-card .tags{display:flex;gap:5px;flex-wrap:wrap;font-size:10px}.selection-card .tag{background:#2a2d36;border-radius:4px;padding:2px 5px}.selection-card .selected{background:#1f3a55;color:#9cc3ea}\n.selection-card .ahead{color:#8fc98f}.selection-card .behind{color:#e0a03a}.selection-card .far_behind,.selection-card .spent{color:#d9534f}.selection-card .on_pace,.selection-card .unknown{color:#8b8f99}.selection-card .reason{font-size:10.5px;margin-top:7px;color:#f0a3a1;line-height:1.4}.selection-card .custom{color:#c9b3f0}\n.selection-card.restricted{border-color:#4a3437}.selection-card .reset{font-size:10.5px;line-height:1.5;color:#b5b8c0}\n\n.selection-card.restricted { border-color: #4a3437; opacity: 0.55; filter: grayscale(50%); }\n.selection-card .tag.policy { background: #1c2b38; color: #7db7ea; }\n.selection-card .model-capacity { margin: 8px 0; padding: 6px 8px; background: #13151a; border-radius: 6px; }\n.selection-card .cap-hdr { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }\n.selection-card .cap-hdr .wl { color: #8b8f99; text-transform: capitalize; }\n.selection-card .cap-hdr .pct { font-variant-numeric: tabular-nums; font-weight: 600; color: #e6e6ea; }\n.selection-card .bar { position: relative; height: 6px; background: #2a2d36; border-radius: 3px; overflow: hidden; }\n.selection-card .fill { position: absolute; left: 0; top: 0; bottom: 0; background: #5b9bd5; border-radius: 3px; }\n.selection-card .fill.ahead { background: #8fc98f; }\n.selection-card .fill.behind { background: #e0a03a; }\n.selection-card .fill.spent { background: #d9534f; }\n.selection-card .pace-row { font-size: 10px; margin-top: 3px; text-align: right; }\n",
+        "styles": "\n.selection-card{font:13px Inter,system-ui,sans-serif;color:#e6e6ea;background:#181a20;border:1px solid #262932;border-radius:8px;padding:12px;min-width:0;overflow-wrap:anywhere}\n.selection-card .ph{display:flex;gap:8px;align-items:center}.selection-card .ico{width:22px;height:22px;background:#2b2f3a;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none;font-weight:700}\n.selection-card h3{margin:0;font-size:13px;font-weight:600;line-height:1.4}.selection-card .meta{font-size:11px;color:#8b8f99;line-height:1.5;margin:5px 0}\n.selection-card table{width:100%;font-size:11px;margin:8px 0;border-collapse:collapse;table-layout:fixed}.selection-card th{width:37%;text-align:left;color:#8b8f99;font-weight:400}.selection-card td{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.selection-card th,.selection-card td{vertical-align:top;padding:3px 0}\n.selection-card .tags{display:flex;gap:5px;flex-wrap:wrap;font-size:10px}.selection-card .tag{background:#2a2d36;border-radius:4px;padding:2px 5px}.selection-card .selected{background:#1f3a55;color:#9cc3ea}\n.selection-card .ahead{color:#8fc98f}.selection-card .behind{color:#e0a03a}.selection-card .far_behind,.selection-card .spent{color:#d9534f}.selection-card .on_pace,.selection-card .unknown{color:#8b8f99}.selection-card .reason{font-size:10.5px;margin-top:7px;color:#f0a3a1;line-height:1.4}.selection-card .custom{color:#c9b3f0}\n.selection-card.restricted{border-color:#4a3437}.selection-card .reset{font-size:10.5px;line-height:1.5;color:#b5b8c0}\n",
         "wrap": false
       },
       "repeat": "worker_model",
@@ -115,22 +178,22 @@
       "maxPerRow": 4
     },
     {
-      "id": 2234,
+      "id": 234,
       "type": "text",
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 22,
         "w": 24,
-        "h": 2
+        "h": 3
       },
       "options": {
         "mode": "html",
-        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free provider capacity</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 % left and reset per provider. Short windows are blue above zero. Only weekly/monthly windows are paced.</span></div>"
+        "content": "<div style=\"font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere\"><strong>Free provider capacity</strong><span style=\"font-size:11px;color:#8b8f99\"> \u00b7 Short windows are blue above zero. Only weekly/monthly windows are paced.</span></div>"
       }
     },
     {
-      "id": 2210,
+      "id": 210,
       "type": "marcusolsson-dynamictext-panel",
       "title": "",
       "datasource": {
@@ -139,7 +202,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 25,
         "w": 6,
         "h": 14
       },
@@ -151,7 +214,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (account, kind, quota_id, label, evidence, provider, state, basis, reason, field) (\n          label_replace(ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"left\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_expected_remaining_ratio{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_expected_remaining_ratio{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"expected\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_reset_timestamp_seconds{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_reset_timestamp_seconds{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"resetAt\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_check_timestamp_seconds{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_check_timestamp_seconds{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"checked\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_rolling{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_rolling{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"rolling\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_order{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_order{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"order\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_learning{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_learning{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"learning\", \"\", \"\")\n          or label_replace(ghostship_ai_provider_free_models{provider=~\"${capacity_account:regex}\",} and (timestamp(ghostship_ai_provider_free_models{provider=~\"${capacity_account:regex}\",}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"free_models\", \"\", \"\")\n         or label_replace(ghostship_ai_account_window_pace_state{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_pace_state{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"pace_state\", \"\", \"\") or label_replace(ghostship_ai_account_availability{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_availability{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"availability\", \"\", \"\") or label_replace(ghostship_ai_account_availability_check_timestamp_seconds{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_availability_check_timestamp_seconds{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"availability_checked\", \"\", \"\")\n)\n or label_replace(ghostship_ai_account_window_pace_delta_points{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_pace_delta_points{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(ghostship_ai_account_window_missing{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_missing{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"reported_missing\", \"\", \"\")",
+          "expr": "max by (account, kind, quota_id, label, evidence, provider, state, basis, reason, not_used, field) (\n          label_replace(ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"left\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_expected_remaining_ratio{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_expected_remaining_ratio{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"expected\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_reset_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_reset_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"resetAt\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_check_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_check_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"checked\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_rolling{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_rolling{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"rolling\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_order{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_order{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"order\", \"\", \"\")\n          or label_replace(ghostship_ai_account_window_learning{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_learning{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"learning\", \"\", \"\")\n          or label_replace(ghostship_ai_provider_free_models{provider=~\"${capacity_account:regex}\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_provider_free_models{provider=~\"${capacity_account:regex}\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"free_models\", \"\", \"\")\n         or label_replace(ghostship_ai_account_window_pace_state{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_pace_state{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"pace_state\", \"\", \"\") or label_replace(ghostship_ai_account_availability{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_availability{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"availability\", \"\", \"\") or label_replace(ghostship_ai_account_availability_check_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_availability_check_timestamp_seconds{account=~\"${capacity_account:regex}\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"availability_checked\", \"\", \"\")\n)\n or label_replace(ghostship_ai_account_window_pace_delta_points{account=~\"${capacity_account:regex}\",account!=\"openrouter\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_pace_delta_points{account=~\"${capacity_account:regex}\",account!=\"openrouter\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(ghostship_ai_account_window_missing{account=~\"${capacity_account:regex}\",account!=\"openrouter\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_window_missing{account=~\"${capacity_account:regex}\",account!=\"openrouter\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90), \"field\", \"reported_missing\", \"\", \"\")",
           "instant": true,
           "range": false,
           "format": "table"
@@ -177,8 +240,8 @@
       },
       "options": {
         "afterRender": "",
-        "content": "<div class=\"capacity\"><div class=\"hdr\"><span class=\"chip\">% left \u00b7 tick = where you should be now</span><span class=\"asof\">live \u00b7 {{utcStamp (variable \"__to\")}} UTC</span></div><div class=\"grid\">{{#each (capacityCards data (variable \"__to\"))}}<div class=\"card\" data-provider=\"{{this.account}}\"><div class=\"ph\"><span class=\"ico\" style=\"background:{{this.background}};color:{{this.foreground}}\">{{this.icon}}</span><span class=\"pn\">{{this.name}}</span>{{#if this.read}}<span class=\"ra\">{{this.read}}</span>{{/if}}{{#if this.meta}}<span class=\"pm\">{{this.meta}}</span>{{/if}}</div>{{#each this.windows}}<div class=\"win\" data-window-label=\"{{this.label}}\"><span class=\"wl\">{{this.label}}{{#if this.inferred}}<span class=\"tag\">inferred</span>{{/if}}</span><div class=\"bar\">{{#if this.hasLeft}}<div class=\"fill {{this.fillClass}}\" style=\"width:{{this.width}}%\"></div>{{/if}}{{#if this.hasTick}}<div class=\"tick\" style=\"left:calc({{this.tick}}% - 1px)\"></div>{{/if}}</div><span class=\"pct\">{{this.pct}}</span><span class=\"sub {{this.paceClass}}\">{{#if this.sub}}<span class=\"wide\">{{this.sub}}</span><span class=\"brief\">{{this.brief}}</span>{{/if}}</span></div>{{/each}}{{#if this.free}}<div class=\"fr {{this.free.cls}}\">{{this.free.text}}</div>{{/if}}</div>{{/each}}</div></div>",
-        "defaultContent": "<div class=\"capacity\"><div class=\"hdr\"><span class=\"chip\">% left \u00b7 tick = where you should be now</span><span class=\"asof\">live \u00b7 {{utcStamp (variable \"__to\")}} UTC</span></div><div class=\"grid\">{{#each (capacityCards data (variable \"__to\"))}}<div class=\"card\"><div class=\"ph\"><span class=\"ico\" style=\"background:{{this.background}};color:{{this.foreground}}\">{{this.icon}}</span><span class=\"pn\">{{this.name}}</span>{{#if this.read}}<span class=\"ra\">{{this.read}}</span>{{/if}}{{#if this.meta}}<span class=\"pm\">{{this.meta}}</span>{{/if}}</div>{{#each this.windows}}<div class=\"win\"><span class=\"wl\">{{this.label}}{{#if this.inferred}}<span class=\"tag\">inferred</span>{{/if}}</span><div class=\"bar\">{{#if this.hasLeft}}<div class=\"fill {{this.fillClass}}\" style=\"width:{{this.width}}%\"></div>{{/if}}{{#if this.hasTick}}<div class=\"tick\" style=\"left:calc({{this.tick}}% - 1px)\"></div>{{/if}}</div><span class=\"pct\">{{this.pct}}</span><span class=\"sub {{this.paceClass}}\">{{#if this.sub}}<span class=\"wide\">{{this.sub}}</span><span class=\"brief\">{{this.brief}}</span>{{/if}}</span></div>{{/each}}{{#if this.free}}<div class=\"fr {{this.free.cls}}\">{{this.free.text}}</div>{{/if}}</div>{{/each}}</div></div>",
+        "content": "<div class=\"capacity\"><div class=\"hdr\"><span class=\"chip\">% left \u00b7 tick = where you should be now</span><span class=\"asof\">live \u00b7 {{utcStamp (variable \"__to\")}} UTC</span></div><div class=\"grid\">{{#each (capacityCards data (variable \"__to\"))}}<div class=\"card\" data-provider=\"{{this.account}}\"><div class=\"ph\"><span class=\"ico\" style=\"background:{{this.background}};color:{{this.foreground}}\">{{this.icon}}</span><span class=\"pn\">{{this.name}}</span>{{#if this.read}}<span class=\"ra\">{{this.read}}</span>{{/if}}{{#if this.meta}}<span class=\"pm\">{{this.meta}}</span>{{/if}}</div>{{#each this.windows}}<div class=\"win{{#if this.notUsed}} not-used{{/if}}\" data-window-label=\"{{this.label}}\"><span class=\"wl\">{{this.label}}{{#if this.inferred}}<span class=\"tag\">inferred</span>{{/if}}</span><div class=\"bar\">{{#if this.hasLeft}}<div class=\"fill {{this.fillClass}}\" style=\"width:{{this.width}}%\"></div>{{/if}}{{#if this.hasTick}}<div class=\"tick\" style=\"left:calc({{this.tick}}% - 1px)\"></div>{{/if}}</div><span class=\"pct\">{{this.pct}}</span><span class=\"sub {{this.paceClass}}\">{{#if this.sub}}<span class=\"wide\">{{this.sub}}</span><span class=\"brief\">{{this.brief}}</span>{{/if}}</span></div>{{/each}}{{#if this.free}}<div class=\"fr {{this.free.cls}}\">{{this.free.text}}</div>{{/if}}</div>{{/each}}</div></div>",
+        "defaultContent": "<div class=\"capacity\"><div class=\"hdr\"><span class=\"chip\">% left \u00b7 tick = where you should be now</span><span class=\"asof\">live \u00b7 {{utcStamp (variable \"__to\")}} UTC</span></div><div class=\"grid\">{{#each (capacityCards data (variable \"__to\"))}}<div class=\"card\"><div class=\"ph\"><span class=\"ico\" style=\"background:{{this.background}};color:{{this.foreground}}\">{{this.icon}}</span><span class=\"pn\">{{this.name}}</span>{{#if this.read}}<span class=\"ra\">{{this.read}}</span>{{/if}}{{#if this.meta}}<span class=\"pm\">{{this.meta}}</span>{{/if}}</div>{{#each this.windows}}<div class=\"win{{#if this.notUsed}} not-used{{/if}}\"><span class=\"wl\">{{this.label}}{{#if this.inferred}}<span class=\"tag\">inferred</span>{{/if}}</span><div class=\"bar\">{{#if this.hasLeft}}<div class=\"fill {{this.fillClass}}\" style=\"width:{{this.width}}%\"></div>{{/if}}{{#if this.hasTick}}<div class=\"tick\" style=\"left:calc({{this.tick}}% - 1px)\"></div>{{/if}}</div><span class=\"pct\">{{this.pct}}</span><span class=\"sub {{this.paceClass}}\">{{#if this.sub}}<span class=\"wide\">{{this.sub}}</span><span class=\"brief\">{{this.brief}}</span>{{/if}}</span></div>{{/each}}{{#if this.free}}<div class=\"fr {{this.free.cls}}\">{{this.free.text}}</div>{{/if}}</div>{{/each}}</div></div>",
         "editor": {
           "format": "none",
           "language": "handlebars"
@@ -186,10 +249,10 @@
         "editors": [],
         "externalStyles": [],
         "contentPartials": [],
-        "helpers": "// The capacity cards of the Providers page.\n//\n// One card per account, one row per window of the account. The numbers are\n// the collector's account window gauges, read in one query; the card order,\n// the names, the icons and the notes are the presentation the owner\n// approved.\nconst CAPACITY_ACCOUNTS = [\n  { account: 'google', name: 'Google', icon: 'G', background: '#4285f4', foreground: '#fff', meta: 'free' },\n  { account: 'nvidia', name: 'NVIDIA', icon: 'N', background: '#76b900', foreground: '#fff', meta: 'free' },\n  { account: 'groq', name: 'Groq', icon: 'q', background: '#f55036', foreground: '#fff', meta: 'free' },\n  { account: 'kilo', name: 'Kilo', icon: 'K', background: '#f5c518', foreground: '#111', meta: 'free' },\n  { account: 'kilo-keyed', name: 'Kilo (keyed)', icon: 'K', background: '#f5c518', foreground: '#111', meta: 'free' },\n  { account: 'openrouter', name: 'OpenRouter', icon: '\u21c4', background: '#6466f1', foreground: '#fff', meta: 'free' },\n  { account: 'cloudflare-workers-ai', name: 'Cloudflare', icon: '\u2601', background: '#f38020', foreground: '#fff', meta: 'free' },\n  { account: 'cohere', name: 'Cohere', icon: 'C', background: '#39594d', foreground: '#d18ee2', meta: 'free' },\n  { account: 'requesty', name: 'Requesty', icon: 'R', background: '#10b981', foreground: '#fff', meta: 'free' },\n  { account: 'orcarouter', name: 'OrcaRouter', icon: 'O', background: '#0e7490', foreground: '#fff', meta: 'free' },\n  { account: 'zai', name: 'Z.ai', icon: 'Z', background: '#1f2937', foreground: '#a5b4fc', meta: 'free' },\n  { account: 'vercel', name: 'Vercel', icon: '\u25b2', background: '#000', foreground: '#fff', meta: 'free' },\n  { account: 'ovh', name: 'OVH', icon: 'O', background: '#123f6d', foreground: '#fff', meta: 'free' },\n  { account: 'poolside', name: 'Poolside', icon: 'P', background: '#0b1020', foreground: '#7dd3fc', meta: 'free' },\n  { account: 'upstage', name: 'Upstage', icon: 'U', background: '#7c3aed', foreground: '#fff', meta: 'free' },\n  { account: 'inception', name: 'Inception', icon: 'I', background: '#111827', foreground: '#f9a8d4', meta: 'free' },\n  { account: 'mistral', name: 'Mistral', icon: 'M', background: '#fa520f', foreground: '#fff', meta: 'free' },\n  { account: 'opencode', name: 'OpenCode Zen', icon: 'Z', background: '#2b2f3a', foreground: '#7dd3fc', meta: 'free' },\n];\n\n// The name an account is read by, when the approved list does not name it.\nconst CAPACITY_NAMES = {\n  'cloudflare-workers-ai': 'Cloudflare',\n  'cohere': 'Cohere',\n  'deepseek': 'DeepSeek',\n  'google': 'Google',\n  'groq': 'Groq',\n  'inception': 'Inception',\n  'kilo': 'Kilo',\n  'kilo-keyed': 'Kilo (keyed)',\n  'mistral': 'Mistral',\n  'nvidia': 'NVIDIA',\n  'opencode': 'OpenCode Zen',\n  'orcarouter': 'Orcarouter',\n  'ovh': 'OVH',\n  'pi': 'Pi',\n  'poolside': 'Poolside',\n  'requesty': 'Requesty',\n  'upstage': 'Upstage',\n  'vercel': 'Vercel',\n  'zai': 'Zai',\n};\n\n// The order the accounts that are still learning are read in.\nconst CAPACITY_CHIPS = [\n  'google',\n  'requesty',\n  'kilo',\n  'nvidia',\n  'groq',\n  'cloudflare-workers-ai',\n];\n\n// The number a row holds, or nothing when the row holds no number.\nfunction capacityNumber(value) {\n  if (value === null || value === undefined || value === '') { return null; }\n  const number = Number(value);\n  return isFinite(number) ? number : null;\n}\n\n// The name an account is read by.\nfunction capacityName(account) {\n  const approved = CAPACITY_ACCOUNTS.find((entry) => entry.account === account);\n  if (approved) { return approved.name; }\n  if (CAPACITY_NAMES[account]) { return CAPACITY_NAMES[account]; }\n  return String(account || '').split(/[-_\\s]+/).filter(Boolean)\n    .map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n}\n\n// The span of a duration, as a card writes it.\nfunction capacitySpan(seconds) {\n  const minutes = Math.round(Math.max(0, seconds) / 60);\n  if (minutes < 60) { return minutes + 'm'; }\n  if (minutes < 2880) { return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'; }\n  return (minutes / 1440).toFixed(1) + 'd';\n}\n\n// How long a window has left before it resets, or 'now' once it is due.\nfunction capacityRelative(reset, now) {\n  if (reset === null) { return ''; }\n  const seconds = reset - now;\n  if (seconds <= 0) { return 'now'; }\n  return capacitySpan(seconds);\n}\n\n// The share that is left, with one decimal, so a card can be compared with\n// the provider's own site: the half point of a reading is kept, and a whole\n// reading keeps no trailing zero.\nfunction capacityShare(left) {\n  if (left === null) { return ''; }\n  const tenths = Math.round(left * 1000);\n  const text = tenths % 10 === 0 ? String(tenths / 10) : (tenths / 10).toFixed(1);\n  return text + '%';\n}\n\n// The width of the bar of a window, in percent.\nfunction capacityWidth(left) {\n  if (left === null) { return ''; }\n  return String(Math.round(left * 1000) / 10);\n}\n\n// The length a rolling window names, read from its label or its id.\nfunction capacityRollingSpan(label, quotaId) {\n  const parts = String(label || '').split('\\u00b7');\n  const tail = parts.length > 1 ? parts[parts.length - 1].trim() : '';\n  if (tail) { return tail; }\n  const identifier = String(quotaId || '');\n  const index = identifier.indexOf(':');\n  return index < 0 ? '' : identifier.slice(index + 1).trim();\n}\n\n// The windows of the accounts, read out of the rows of the page.\nfunction capacityRead(rows) {\n  const windows = new Map();\n  const learning = [];\n  const free = new Map();\n  const availability = new Map();\n  for (const row of rows || []) {\n    if (!row || row.account === 'openrouter' || row.provider === 'openrouter') { continue; }\n    if (row.field === 'reported_missing' && Number(row.value) === 1) {\n      availability.set(row.account, {state:'unavailable', basis:'reported_unavailable', reason:'Reported limits unavailable \u00b7 collector source read failed'});\n      continue;\n    }\n    if (row.field === 'availability') {\n      if (Number(row.value) === 1 && availability.get(row.account)?.basis !== 'reported_unavailable') { availability.set(row.account, row); }\n      continue;\n    }\n    if (row.field === 'availability_checked') { continue; }\n    if (row.field === 'free_models') {\n      const provider = String(row.provider || '');\n      const count = capacityNumber(row.value);\n      if (provider && count !== null) {\n        let entry = free.get(provider);\n        if (!entry) { entry = { available: 0, unavailable: 0 }; free.set(provider, entry); }\n        if (row.state === 'available') { entry.available = count; }\n        else if (row.state === 'unavailable') { entry.unavailable = count; }\n      }\n      continue;\n    }\n    if (!row.account) { continue; }\n    if (row.field === 'learning') {\n      if (capacityNumber(row.value) === 1 && learning.indexOf(row.account) < 0) {\n        learning.push(row.account);\n      }\n      continue;\n    }\n    const key = row.account + '|' + (row.kind || '') + '|' + (row.quota_id || '');\n    let entry = windows.get(key);\n    if (!entry) {\n      entry = {\n        account: row.account,\n        kind: row.kind || '',\n        paceDelta: null,\n        paceState: null,\n        reason: row.reason || '',\n        quota_id: row.quota_id || '',\n        label: row.label || '',\n        evidence: row.evidence || '',\n        left: null,\n        expected: null,\n        resetAt: null,\n        checked: null,\n        order: null,\n        rolling: false,\n      };\n      windows.set(key, entry);\n    }\n    const value = capacityNumber(row.value);\n    if (row.field === 'pace_delta') { entry.paceDelta = value; }\n    if (row.field === 'pace_state' && value === 1) { entry.paceState = row.state; }\n    if (row.field === 'left') { entry.left = value; }\n    else if (row.field === 'expected') { entry.expected = value; }\n    else if (row.field === 'resetAt') { entry.resetAt = value; }\n    else if (row.field === 'checked') { entry.checked = value; }\n    else if (row.field === 'order') { entry.order = value; }\n    else if (row.field === 'rolling') { entry.rolling = value === 1; }\n  }\n  return { windows: Array.from(windows.values()), learning: learning, free: free, availability: availability };\n}\n\n// The pace of a window: how far it is from the share it expects to be left.\nfunction capacityPace(left, state, longWindow, delta) {\n  if (left === null) { return { word: '', cls: '', fill: '' }; }\n  if (left <= 0) { return { word: '\u2715 spent', cls: 'spent', fill: 'spent' }; }\n  if (!longWindow) { return { word: '', cls: '', fill: '' }; }\n  const magnitude = delta === null || delta === undefined ? '' : (Math.round(Math.abs(delta) * 10) / 10) + ' ';\n  const words = {ahead: '\u25b2 ' + magnitude + 'ahead', on_pace: '\u25cf on pace', behind: '\u25bc ' + magnitude + 'behind', far_behind: '\u25bc ' + magnitude + 'behind'};\n  return {word: words[state] || '', cls: state || '',\n    fill: state === 'far_behind' ? 'spent' : state === 'behind' ? 'behind' : state === 'ahead' ? 'ahead' : ''};\n}\n\n// A reset time, read in UTC.\nfunction capacityClock(reset) {\n  if (reset === null) { return ''; }\n  const moment = new Date(reset * 1000);\n  if (isNaN(moment.getTime())) { return ''; }\n  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad = (n) => String(n).padStart(2, '0');\n  return moment.getUTCDate() + ' ' + months[moment.getUTCMonth()] + ' ' + pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n}\n\n// The free models of a provider, apart from its paid allowance: the line\n// says how many are available, or that none of them is.\nfunction capacityFreeLine(counts) {\n  if (!counts) { return null; }\n  const available = counts.available || 0;\n  const unavailable = counts.unavailable || 0;\n  if (available <= 0 && unavailable <= 0) { return null; }\n  if (available > 0) {\n    return {\n      text: 'Free models \\u00b7 available \\u00b7 ' + available + ' models',\n      cls: 'ok',\n    };\n  }\n  return {\n    text: 'Free models \\u00b7 none available \\u00b7 ' + unavailable + ' models',\n    cls: '',\n  };\n}\n\n// The age of the reading of a card, from its oldest window.\nfunction capacityAge(now, checked) {\n  if (checked === null) { return ''; }\n  const seconds = now - checked;\n  if (seconds < 60) { return 'read just now'; }\n  return 'read ' + capacitySpan(seconds) + ' ago';\n}\n\n// One card: the account, its identity and its windows.\nfunction capacityCard(account, entries, now, freeModels) {\n  const approved = CAPACITY_ACCOUNTS.find((entry) => entry.account === account) || {};\n  const name = capacityName(account);\n  const ordered = entries.slice().sort((a, b) => {\n    const first = a.order === null ? 99 : a.order;\n    const second = b.order === null ? 99 : b.order;\n    if (first !== second) { return first - second; }\n    if (a.label === b.label) { return 0; }\n    return a.label < b.label ? -1 : 1;\n  });\n  const checked = ordered\n    .map((entry) => entry.checked)\n    .filter((value) => value !== null);\n  const oldest = checked.length ? Math.min.apply(null, checked) : null;\n  const windows = ordered.map((entry) => {\n    const longWindow = !/session|hour|daily|minute/i.test(entry.kind) && (/weekly|monthly|seven_day|week|month/i.test(entry.kind) || entry.expected !== null);\n    const pace = capacityPace(entry.left, entry.paceState, longWindow, entry.paceDelta);\n    const rolling = entry.rolling === true;\n    const span = rolling ? capacityRollingSpan(entry.label, entry.quota_id) : '';\n    const rollingText = rolling ? 'rolling' + (span ? ' ' + span : '') : '';\n    const relative = capacityRelative(entry.resetAt, now);\n    const resetText = relative === '' ? '' : (relative === 'now' ? 'resets now' : 'resets in ' + relative);\n    const wide = [];\n    const brief = [];\n    if (rolling) {\n      if (pace.word) { wide.push(pace.word); brief.push(pace.word); }\n      wide.push(rollingText);\n      brief.push(rollingText);\n    } else {\n      if (pace.word) { wide.push(pace.word); brief.push(pace.word); }\n      if (resetText) {\n        wide.push(relative === 'now' ? resetText : resetText + ' (' + capacityClock(entry.resetAt) + ')');\n        brief.push(resetText);\n      }\n    }\n    return {\n      label: entry.label,\n      inferred: entry.evidence === 'inferred',\n      hasLeft: entry.left !== null || entry.unavailable,\n      width: entry.unavailable ? '100' : capacityWidth(entry.left),\n      pct: entry.unavailable ? 'Unavailable' : capacityShare(entry.left),\n      fillClass: entry.unavailable ? 'unavailable' : pace.fill,\n      hasTick: longWindow && entry.expected !== null && !rolling,\n      tick: entry.expected === null || rolling ? '' : String(Math.round(entry.expected * 1000) / 10),\n      paceClass: entry.unavailable ? 'unavailable' : rolling ? '' : pace.cls,\n      rolling: rolling,\n      sub: entry.reason || wide.join(' \\u00b7 '),\n      brief: brief.join(' \\u00b7 '),\n    };\n  });\n  return {\n    account: account,\n    name: name,\n    free: capacityFreeLine(freeModels),\n    icon: approved.icon || name.charAt(0).toUpperCase(),\n    background: approved.background || '#2b2f3a',\n    foreground: approved.foreground || '#fff',\n    meta: approved.meta || '',\n    read: capacityAge(now, oldest),\n    windows: windows,\n  };\n}\n\n// The accounts of the page, in the order the owner approved.\nfunction capacityOrder(accounts) {\n  const rank = (account) => {\n    const index = CAPACITY_ACCOUNTS.findIndex((entry) => entry.account === account);\n    return index < 0 ? CAPACITY_ACCOUNTS.length : index;\n  };\n  return accounts.slice().sort((a, b) => {\n    const first = rank(a);\n    const second = rank(b);\n    if (first !== second) { return first - second; }\n    if (a === b) { return 0; }\n    return capacityName(a) < capacityName(b) ? -1 : 1;\n  });\n}\n\ncontext.handlebars.registerHelper('capacityCards', function (rows, now) {\n  const read = capacityRead(rows);\n  const accounts = [];\n  const grouped = new Map();\n  for (const entry of read.windows) {\n    if (accounts.indexOf(entry.account) < 0) { accounts.push(entry.account); }\n    if (!grouped.has(entry.account)) { grouped.set(entry.account, []); }\n    grouped.get(entry.account).push(entry);\n  }\n  for (const [account, status] of read.availability) {\n    if (accounts.indexOf(account) >= 0) { continue; }\n    accounts.push(account);\n    const available = status.state === 'available';\n    grouped.set(account, [{account: account, label: available ?\n      'no published limit' :\n      (status.basis === 'reported_unavailable' ? 'Reported limits unavailable' : 'Unavailable'), left: available ? 1 : null, expected: null, resetAt: null,\n      checked: null, order: 0, evidence: 'provider_reported', reason: status.reason || '', unavailable: !available}]);\n  }\n  const moment = capacityNumber(now);\n  const seconds = moment === null ? 0 : moment / 1000;\n  return capacityOrder(accounts).map((account) => capacityCard(\n    account,\n    grouped.get(account) || [],\n    seconds,\n    read.free.get(account),\n  ));\n});\n\ncontext.handlebars.registerHelper('utcStamp', function (value) {\n  // The as-of time in UTC, from the dashboard's end time in epoch milliseconds.\n  // Only a number is formatted here; no label text is read.\n  const moment = new Date(Number(value));\n  if (isNaN(moment.getTime())) { return ''; }\n  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad = (n) => String(n).padStart(2, '0');\n  return moment.getUTCDate() + ' ' + months[moment.getUTCMonth()] + ' ' + pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n});\n",
+        "helpers": "// The capacity cards of the Providers page.\n//\n// One card per account, one row per window of the account. The numbers are\n// the collector's account window gauges, read in one query; the card order,\n// the names, the icons and the notes are the presentation the owner\n// approved.\nconst CAPACITY_ACCOUNTS = [\n  { account: 'claude', name: 'Claude', icon: '\\u2733', background: '#d97757', foreground: '#fff', meta: 'subscription' },\n  { account: 'codex', name: 'Codex', icon: '\\u229b', background: '#e8e8e8', foreground: '#111', meta: 'subscription' },\n  { account: 'ollama', name: 'Ollama', icon: '\\u25c9', background: '#f2f2f2', foreground: '#111', meta: 'subscription' },\n  { account: 'opencode-go', name: 'OpenCode Go', icon: '{}', background: '#2b2f3a', foreground: '#7dd3fc', meta: 'subscription' },\n  { account: 'antigravity', name: 'Antigravity', icon: 'A', background: 'linear-gradient(135deg,#4f8cff,#c86bfa)', foreground: '#fff', meta: 'subscription' },\n  { account: 'grok', name: 'Grok', icon: '\\u2298', background: '#000', foreground: '#fff', meta: 'subscription' },\n];\n\n// The name an account is read by, when the approved list does not name it.\nconst CAPACITY_NAMES = {\n  'cloudflare-workers-ai': 'Cloudflare',\n  'cohere': 'Cohere',\n  'deepseek': 'DeepSeek',\n  'google': 'Google',\n  'groq': 'Groq',\n  'inception': 'Inception',\n  'kilo': 'Kilo',\n  'kilo-keyed': 'Kilo (keyed)',\n  'mistral': 'Mistral',\n  'nvidia': 'NVIDIA',\n  'opencode': 'OpenCode Zen',\n  'orcarouter': 'Orcarouter',\n  'ovh': 'OVH',\n  'pi': 'Pi',\n  'poolside': 'Poolside',\n  'requesty': 'Requesty',\n  'upstage': 'Upstage',\n  'vercel': 'Vercel',\n  'zai': 'Zai',\n};\n\n// The order the accounts that are still learning are read in.\nconst CAPACITY_CHIPS = [\n  'google',\n  'requesty',\n  'kilo',\n  'nvidia',\n  'groq',\n  'cloudflare-workers-ai',\n];\n\n// The number a row holds, or nothing when the row holds no number.\nfunction capacityNumber(value) {\n  if (value === null || value === undefined || value === '') { return null; }\n  const number = Number(value);\n  return isFinite(number) ? number : null;\n}\n\n// The name an account is read by.\nfunction capacityName(account) {\n  const approved = CAPACITY_ACCOUNTS.find((entry) => entry.account === account);\n  if (approved) { return approved.name; }\n  if (CAPACITY_NAMES[account]) { return CAPACITY_NAMES[account]; }\n  return String(account || '').split(/[-_\\s]+/).filter(Boolean)\n    .map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n}\n\n// The span of a duration, as a card writes it.\nfunction capacitySpan(seconds) {\n  const minutes = Math.round(Math.max(0, seconds) / 60);\n  if (minutes < 60) { return minutes + 'm'; }\n  if (minutes < 2880) { return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'; }\n  return (minutes / 1440).toFixed(1) + 'd';\n}\n\n// How long a window has left before it resets, or 'now' once it is due.\nfunction capacityRelative(reset, now) {\n  if (reset === null) { return ''; }\n  const seconds = reset - now;\n  if (seconds <= 0) { return 'now'; }\n  return capacitySpan(seconds);\n}\n\n// The share that is left, with one decimal, so a card can be compared with\n// the provider's own site: the half point of a reading is kept, and a whole\n// reading keeps no trailing zero.\nfunction capacityShare(left) {\n  if (left === null) { return ''; }\n  const tenths = Math.round(left * 1000);\n  const text = tenths % 10 === 0 ? String(tenths / 10) : (tenths / 10).toFixed(1);\n  return text + '%';\n}\n\n// The width of the bar of a window, in percent.\nfunction capacityWidth(left) {\n  if (left === null) { return ''; }\n  return String(Math.round(left * 1000) / 10);\n}\n\n// The length a rolling window names, read from its label or its id.\nfunction capacityRollingSpan(label, quotaId) {\n  const parts = String(label || '').split('\\u00b7');\n  const tail = parts.length > 1 ? parts[parts.length - 1].trim() : '';\n  if (tail) { return tail; }\n  const identifier = String(quotaId || '');\n  const index = identifier.indexOf(':');\n  return index < 0 ? '' : identifier.slice(index + 1).trim();\n}\n\n// The windows of the accounts, read out of the rows of the page.\nfunction capacityRead(rows) {\n  const windows = new Map();\n  const learning = [];\n  const free = new Map();\n  const availability = new Map();\n  for (const row of rows || []) {\n    if (!row || row.account === 'openrouter' || row.provider === 'openrouter') { continue; }\n    if (row.field === 'reported_missing' && Number(row.value) === 1) {\n      availability.set(row.account, {state:'unavailable', basis:'reported_unavailable', reason:'Reported limits unavailable \u00b7 collector source read failed'});\n      continue;\n    }\n    if (row.field === 'availability') {\n      if (Number(row.value) === 1 && availability.get(row.account)?.basis !== 'reported_unavailable') { availability.set(row.account, row); }\n      continue;\n    }\n    if (row.field === 'availability_checked') { continue; }\n    if (row.field === 'free_models') {\n      const provider = String(row.provider || '');\n      const count = capacityNumber(row.value);\n      if (provider && count !== null) {\n        let entry = free.get(provider);\n        if (!entry) { entry = { available: 0, unavailable: 0 }; free.set(provider, entry); }\n        if (row.state === 'available') { entry.available = count; }\n        else if (row.state === 'unavailable') { entry.unavailable = count; }\n      }\n      continue;\n    }\n    if (!row.account) { continue; }\n    if (row.field === 'learning') {\n      if (capacityNumber(row.value) === 1 && learning.indexOf(row.account) < 0) {\n        learning.push(row.account);\n      }\n      continue;\n    }\n    const key = row.account + '|' + (row.kind || '') + '|' + (row.quota_id || '');\n    let entry = windows.get(key);\n    if (!entry) {\n      entry = {\n        account: row.account,\n        kind: row.kind || '',\n        paceDelta: null,\n        paceState: null,\n        reason: row.reason || '',\n        quota_id: row.quota_id || '',\n        label: row.label || '',\n        evidence: row.evidence || '',\n        left: null,\n        expected: null,\n        resetAt: null,\n        checked: null,\n        order: null,\n        rolling: false,\n      };\n      windows.set(key, entry);\n    }\n    if (row.not_used === 'true') { entry.paceState = 'not_used'; }\n    const value = capacityNumber(row.value);\n    if (row.field === 'pace_delta') { entry.paceDelta = value; }\n    if (row.field === 'pace_state' && value === 1) { entry.paceState = row.state; }\n    if (row.field === 'left') { entry.left = value; }\n    else if (row.field === 'expected') { entry.expected = value; }\n    else if (row.field === 'resetAt') { entry.resetAt = value; }\n    else if (row.field === 'checked') { entry.checked = value; }\n    else if (row.field === 'order') { entry.order = value; }\n    else if (row.field === 'rolling') { entry.rolling = value === 1; }\n  }\n  return { windows: Array.from(windows.values()), learning: learning, free: free, availability: availability };\n}\n\n// The pace of a window: how far it is from the share it expects to be left.\nfunction capacityPace(left, state, longWindow, delta) {\n  if (state === 'not_used') { return { word: 'Not used', cls: 'not_used', fill: 'not_used' }; }\n  if (left === null) { return { word: '', cls: '', fill: '' }; }\n  if (left <= 0) { return { word: '\u2715 spent', cls: 'spent', fill: 'spent' }; }\n  if (!longWindow) { return { word: '', cls: '', fill: '' }; }\n  const magnitude = delta === null || delta === undefined ? '' : (Math.round(Math.abs(delta) * 10) / 10) + ' ';\n  const words = {ahead: '\u25b2 ' + magnitude + 'ahead', on_pace: '\u25cf on pace', behind: '\u25bc ' + magnitude + 'behind', far_behind: '\u25bc ' + magnitude + 'behind'};\n  return {word: words[state] || '', cls: state || '',\n    fill: state === 'far_behind' ? 'spent' : state === 'behind' ? 'behind' : state === 'ahead' ? 'ahead' : ''};\n}\n\n// A reset time, read in UTC.\nfunction capacityClock(reset) {\n  if (reset === null) { return ''; }\n  const moment = new Date(reset * 1000);\n  if (isNaN(moment.getTime())) { return ''; }\n  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad = (n) => String(n).padStart(2, '0');\n  return moment.getUTCDate() + ' ' + months[moment.getUTCMonth()] + ' ' + pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n}\n\n// The free models of a provider, apart from its paid allowance: the line\n// says how many are available, or that none of them is.\nfunction capacityFreeLine(counts) {\n  if (!counts) { return null; }\n  const available = counts.available || 0;\n  const unavailable = counts.unavailable || 0;\n  if (available <= 0 && unavailable <= 0) { return null; }\n  if (available > 0) {\n    return {\n      text: 'Free models \\u00b7 available \\u00b7 ' + available + ' models',\n      cls: 'ok',\n    };\n  }\n  return {\n    text: 'Free models \\u00b7 none available \\u00b7 ' + unavailable + ' models',\n    cls: '',\n  };\n}\n\n// The age of the reading of a card, from its oldest window.\nfunction capacityAge(now, checked) {\n  if (checked === null) { return ''; }\n  const seconds = now - checked;\n  if (seconds < 60) { return 'read just now'; }\n  return 'read ' + capacitySpan(seconds) + ' ago';\n}\n\n// One card: the account, its identity and its windows.\nfunction capacityCard(account, entries, now, freeModels) {\n  const approved = CAPACITY_ACCOUNTS.find((entry) => entry.account === account) || {};\n  const name = capacityName(account);\n  const ordered = entries.slice().sort((a, b) => {\n    const first = a.order === null ? 99 : a.order;\n    const second = b.order === null ? 99 : b.order;\n    if (first !== second) { return first - second; }\n    if (a.label === b.label) { return 0; }\n    return a.label < b.label ? -1 : 1;\n  });\n  const checked = ordered\n    .map((entry) => entry.checked)\n    .filter((value) => value !== null);\n  const oldest = checked.length ? Math.min.apply(null, checked) : null;\n  const windows = ordered.map((entry) => {\n    const longWindow = !/session|hour|daily|minute/i.test(entry.kind) && (/weekly|monthly|seven_day|week|month/i.test(entry.kind) || entry.expected !== null);\n    const pace = capacityPace(entry.left, entry.paceState, longWindow, entry.paceDelta);\n    const rolling = entry.rolling === true;\n    const span = rolling ? capacityRollingSpan(entry.label, entry.quota_id) : '';\n    const rollingText = rolling ? 'rolling' + (span ? ' ' + span : '') : '';\n    const relative = capacityRelative(entry.resetAt, now);\n    const resetText = relative === '' ? '' : (relative === 'now' ? 'resets now' : 'resets in ' + relative);\n    const wide = [];\n    const brief = [];\n    if (rolling) {\n      if (pace.word) { wide.push(pace.word); brief.push(pace.word); }\n      wide.push(rollingText);\n      brief.push(rollingText);\n    } else {\n      if (pace.word) { wide.push(pace.word); brief.push(pace.word); }\n      if (resetText) {\n        wide.push(relative === 'now' ? resetText : resetText + ' (' + capacityClock(entry.resetAt) + ')');\n        brief.push(resetText);\n      }\n    }\n    return {\n      label: entry.label,\n      notUsed: entry.paceState === 'not_used',\n      inferred: entry.evidence === 'inferred',\n      hasLeft: entry.left !== null || entry.unavailable,\n      width: entry.unavailable ? '100' : capacityWidth(entry.left),\n      pct: entry.unavailable ? 'Unavailable' : capacityShare(entry.left),\n      fillClass: entry.unavailable ? 'unavailable' : pace.fill,\n      hasTick: longWindow && entry.expected !== null && !rolling && entry.paceState !== 'not_used',\n      tick: entry.expected === null || rolling ? '' : String(Math.round(entry.expected * 1000) / 10),\n      paceClass: entry.unavailable ? 'unavailable' : rolling ? '' : pace.cls,\n      rolling: rolling,\n      sub: entry.reason || wide.join(' \\u00b7 '),\n      brief: brief.join(' \\u00b7 '),\n    };\n  });\n  return {\n    account: account,\n    name: name,\n    free: capacityFreeLine(freeModels),\n    icon: approved.icon || name.charAt(0).toUpperCase(),\n    background: approved.background || '#2b2f3a',\n    foreground: approved.foreground || '#fff',\n    meta: approved.meta || '',\n    read: capacityAge(now, oldest),\n    windows: windows,\n  };\n}\n\n// The accounts of the page, in the order the owner approved.\nfunction capacityOrder(accounts) {\n  const rank = (account) => {\n    const index = CAPACITY_ACCOUNTS.findIndex((entry) => entry.account === account);\n    return index < 0 ? CAPACITY_ACCOUNTS.length : index;\n  };\n  return accounts.slice().sort((a, b) => {\n    const first = rank(a);\n    const second = rank(b);\n    if (first !== second) { return first - second; }\n    if (a === b) { return 0; }\n    return capacityName(a) < capacityName(b) ? -1 : 1;\n  });\n}\n\ncontext.handlebars.registerHelper('capacityCards', function (rows, now) {\n  const read = capacityRead(rows);\n  const accounts = [];\n  const grouped = new Map();\n  for (const entry of read.windows) {\n    if (accounts.indexOf(entry.account) < 0) { accounts.push(entry.account); }\n    if (!grouped.has(entry.account)) { grouped.set(entry.account, []); }\n    grouped.get(entry.account).push(entry);\n  }\n  for (const [account, status] of read.availability) {\n    if (accounts.indexOf(account) >= 0) { continue; }\n    accounts.push(account);\n    const available = status.state === 'available';\n    grouped.set(account, [{account: account, label: available ?\n      'no published limit' :\n      (status.basis === 'reported_unavailable' ? 'Reported limits unavailable' : 'Unavailable'), left: available ? 1 : null, expected: null, resetAt: null,\n      checked: null, order: 0, evidence: 'provider_reported', reason: status.reason || '', unavailable: !available}]);\n  }\n  const moment = capacityNumber(now);\n  const seconds = moment === null ? 0 : moment / 1000;\n  return capacityOrder(accounts).map((account) => capacityCard(\n    account,\n    grouped.get(account) || [],\n    seconds,\n    read.free.get(account),\n  ));\n});\n\ncontext.handlebars.registerHelper('utcStamp', function (value) {\n  // The as-of time in UTC, from the dashboard's end time in epoch milliseconds.\n  // Only a number is formatted here; no label text is read.\n  const moment = new Date(Number(value));\n  if (isNaN(moment.getTime())) { return ''; }\n  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad = (n) => String(n).padStart(2, '0');\n  return moment.getUTCDate() + ' ' + months[moment.getUTCMonth()] + ' ' + pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n});\n",
         "renderMode": "allRows",
         "status": "",
-        "styles": "\n.capacity { font-size: 13px; width: 100%; }\n.capacity .hdr { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }\n.capacity .chip { font-size: 11px; border: 1px solid #6b6f7a; border-radius: 999px; padding: 2px 8px; color: #c9ccd3; white-space: nowrap; }\n.capacity .asof { margin-left: auto; font-size: 11px; color: #8b8f99; }\n.capacity .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }\n.capacity .card { display: grid; grid-template-columns: max-content minmax(48px, 1fr) auto; column-gap: 8px; align-items: center; background: #181a20; border: 1px solid #262932; border-radius: 8px; padding: 12px; min-width: 0; }\n.capacity .ph { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0; }\n.capacity .ico { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: none; }\n.capacity .pn { font-weight: 600; font-size: 13px; white-space: nowrap; flex: none; }\n.capacity .ra { font-size: 10.5px; color: #8b8f99; white-space: nowrap; flex: none; }\n.capacity .pm { font-size: 11px; color: #8b8f99; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }\n.capacity .win { display: contents; }\n.capacity .wl { font-size: 11px; color: #b5b8c0; white-space: nowrap; margin-top: 7px; }\n.capacity .bar { position: relative; height: 8px; background: #2a2d36; border-radius: 4px; margin-top: 7px; }\n.capacity .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #5b9bd5; }\n.capacity .fill.behind { background: #e0a03a; }\n.capacity .fill.spent { background: #d9534f; }\n.capacity .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #e6e6ea; border-radius: 1px; }\n.capacity .pct { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 7px; }\n.capacity .sub { grid-column: 1 / -1; font-size: 10.5px; color: #8b8f99; white-space: nowrap; margin: 1px 0 2px; }\n.capacity .sub:empty { display: none; }\n.capacity .sub .ahead { color: #8fc98f; }\n.capacity .sub .behind { color: #e0a03a; }\n.capacity .sub .spent { color: #d9534f; }\n.capacity .sub .brief { display: none; }\n.capacity .tag { font-size: 10px; border-radius: 4px; padding: 1px 6px; margin-left: 6px; background: #3a3423; color: #e0c27a; white-space: nowrap; }\n.capacity .fr { grid-column: 1 / -1; font-size: 10.5px; color: #8b8f99; margin-top: 8px; white-space: nowrap; }\n.capacity .fr.ok { color: #8fc98f; }\n.capacity .learn { font-size: 11px; line-height: 1.55; color: #b5b8c0; margin-top: 10px; }\n.capacity .note { font-size: 11px; color: #8b8f99; margin-top: 6px; }\n@media (max-width: 520px) {\n  .capacity .asof { display: none; }\n  .capacity .card { grid-template-columns: max-content minmax(40px, 1fr) auto; }\n  .capacity .sub .wide { display: none; }\n  .capacity .sub .brief { display: inline; }\n}\n\n.capacity .hdr {display:none} .capacity .ph {flex-wrap:wrap} .capacity .sub,.capacity .fr {white-space:normal;overflow-wrap:anywhere} .capacity .sub.ahead {color:#8fc98f} .capacity .sub.behind {color:#e0a03a} .capacity .sub.far_behind,.capacity .sub.spent {color:#d9534f}\n\n.capacity .fill.ahead{background:#8fc98f}.capacity .fill.unavailable{background:#3a3d46}.capacity .sub.on_pace{color:#5b9bd5}.capacity .sub.ahead{color:#8fc98f}.capacity .sub.unavailable{color:#8b8f99}.capacity .pct{font-variant-numeric:tabular-nums}.capacity .wl{white-space:normal;overflow-wrap:anywhere}.capacity .pn{white-space:normal}.capacity .pm{white-space:normal}.capacity .bar{min-width:40px}\n",
+        "styles": "\n.capacity { font-size: 13px; width: 100%; }\n.capacity .hdr { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }\n.capacity .chip { font-size: 11px; border: 1px solid #6b6f7a; border-radius: 999px; padding: 2px 8px; color: #c9ccd3; white-space: nowrap; }\n.capacity .asof { margin-left: auto; font-size: 11px; color: #8b8f99; }\n.capacity .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }\n.capacity .card { display: grid; grid-template-columns: max-content minmax(48px, 1fr) auto; column-gap: 8px; align-items: center; background: #181a20; border: 1px solid #262932; border-radius: 8px; padding: 12px; min-width: 0; }\n.capacity .ph { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0; }\n.capacity .ico { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: none; }\n.capacity .pn { font-weight: 600; font-size: 13px; white-space: nowrap; flex: none; }\n.capacity .ra { font-size: 10.5px; color: #8b8f99; white-space: nowrap; flex: none; }\n.capacity .pm { font-size: 11px; color: #8b8f99; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }\n.capacity .win { display: contents; }\n.capacity .wl { font-size: 11px; color: #b5b8c0; white-space: nowrap; margin-top: 7px; }\n.capacity .bar { position: relative; height: 8px; background: #2a2d36; border-radius: 4px; margin-top: 7px; }\n.capacity .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #5b9bd5; }\n.capacity .fill.behind { background: #e0a03a; }\n.capacity .fill.spent { background: #d9534f; }\n.capacity .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #e6e6ea; border-radius: 1px; }\n.capacity .pct { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 7px; }\n.capacity .sub { grid-column: 1 / -1; font-size: 10.5px; color: #8b8f99; white-space: nowrap; margin: 1px 0 2px; }\n.capacity .sub:empty { display: none; }\n.capacity .sub .ahead { color: #8fc98f; }\n.capacity .sub .behind { color: #e0a03a; }\n.capacity .sub .spent { color: #d9534f; }\n.capacity .sub .brief { display: none; }\n.capacity .tag { font-size: 10px; border-radius: 4px; padding: 1px 6px; margin-left: 6px; background: #3a3423; color: #e0c27a; white-space: nowrap; }\n.capacity .fr { grid-column: 1 / -1; font-size: 10.5px; color: #8b8f99; margin-top: 8px; white-space: nowrap; }\n.capacity .fr.ok { color: #8fc98f; }\n.capacity .learn { font-size: 11px; line-height: 1.55; color: #b5b8c0; margin-top: 10px; }\n.capacity .note { font-size: 11px; color: #8b8f99; margin-top: 6px; }\n@media (max-width: 520px) {\n  .capacity .asof { display: none; }\n  .capacity .card { grid-template-columns: max-content minmax(40px, 1fr) auto; }\n  .capacity .sub .wide { display: none; }\n  .capacity .sub .brief { display: inline; }\n}\n\n.capacity .hdr {display:none} .capacity .ph {flex-wrap:wrap} .capacity .sub,.capacity .fr {white-space:normal;overflow-wrap:anywhere} .capacity .sub.ahead {color:#8fc98f} .capacity .sub.behind {color:#e0a03a} .capacity .sub.far_behind,.capacity .sub.spent {color:#d9534f}\n\n.capacity .fill.ahead{background:#8fc98f}.capacity .fill.unavailable{background:#3a3d46}.capacity .sub.on_pace{color:#5b9bd5}.capacity .sub.ahead{color:#8fc98f}.capacity .sub.unavailable{color:#8b8f99}.capacity .pct{font-variant-numeric:tabular-nums}.capacity .wl{white-space:normal;overflow-wrap:anywhere}.capacity .pn{white-space:normal}.capacity .pm{white-space:normal}.capacity .bar{min-width:40px}\n\n.capacity .fill.not_used{background:#6b6f7a}.capacity .sub.not_used,.capacity .win.not-used > *{color:#8b8f99}\n",
         "wrap": true
       },
       "repeat": "capacity_account",
@@ -197,19 +260,19 @@
       "maxPerRow": 4
     },
     {
-      "id": 2240,
+      "id": 240,
       "type": "row",
       "title": "Why this order \u00b7 evidence and source health",
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 39,
         "w": 24,
         "h": 1
       },
       "panels": [
         {
-          "id": 2241,
+          "id": 241,
           "type": "table",
           "title": "Collector source health",
           "datasource": {
@@ -218,78 +281,66 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 35,
+            "y": 55,
             "w": 24,
             "h": 8
           },
           "targets": [
             {
               "refId": "A",
+              "expr": "ghostship_ai_source_status and (timestamp(ghostship_ai_source_status) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status)))",
+              "instant": true,
+              "format": "table",
               "datasource": {
                 "type": "prometheus",
                 "uid": "victoriametrics"
-              },
-              "expr": "ghostship_ai_source_status and (timestamp(ghostship_ai_source_status) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status)))",
-              "instant": true,
-              "format": "table"
+              }
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "None reported"
-            },
-            "overrides": []
-          },
           "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false
-            }
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
           }
         },
         {
-          "id": 2242,
+          "id": 242,
           "type": "table",
-          "title": "Canonical free model order",
+          "title": "Canonical model order",
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
           "gridPos": {
             "x": 0,
-            "y": 43,
+            "y": 63,
             "w": 24,
             "h": 8
           },
           "targets": [
             {
               "refId": "A",
+              "expr": "ghostship_ai_picker_model_position{billing=~\"free|promotion\"}",
+              "instant": true,
+              "format": "table",
               "datasource": {
                 "type": "prometheus",
                 "uid": "victoriametrics"
-              },
-              "expr": "ghostship_ai_picker_model_position{category=\"worker\",billing=~\"free|promotion\",provider=~\"$provider\"} and (timestamp(ghostship_ai_picker_model_position{category=\"worker\",billing=~\"free|promotion\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)",
-              "instant": true,
-              "format": "table"
+              }
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "None reported"
-            },
-            "overrides": []
-          },
           "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false
-            }
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
           }
         },
         {
-          "id": 2243,
+          "id": 243,
           "type": "table",
           "title": "Reported capacity readings",
           "datasource": {
@@ -298,74 +349,62 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 51,
+            "y": 71,
             "w": 24,
             "h": 8
           },
           "targets": [
             {
               "refId": "A",
+              "expr": "ghostship_ai_account_window_remaining_ratio{account!=\"openrouter\"}",
+              "instant": true,
+              "format": "table",
               "datasource": {
                 "type": "prometheus",
                 "uid": "victoriametrics"
-              },
-              "expr": "ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\"} and (timestamp(ghostship_ai_account_window_remaining_ratio{account=~\"${capacity_account:regex}\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)",
-              "instant": true,
-              "format": "table"
+              }
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "None reported"
-            },
-            "overrides": []
-          },
           "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false
-            }
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
           }
         },
         {
-          "id": 2244,
+          "id": 244,
           "type": "table",
-          "title": "Pool recent task outcomes and health",
+          "title": "Provider quota source",
           "datasource": {
             "type": "prometheus",
             "uid": "victoriametrics"
           },
           "gridPos": {
             "x": 0,
-            "y": 59,
+            "y": 79,
             "w": 24,
             "h": 8
           },
           "targets": [
             {
               "refId": "A",
+              "expr": "ghostship_ai_quota_used_ratio{provider!=\"openrouter\"}",
+              "instant": true,
+              "format": "table",
               "datasource": {
                 "type": "prometheus",
                 "uid": "victoriametrics"
-              },
-              "expr": "ghostship_ai_pool_recent_jobs{provider=~\"$provider\"} or ghostship_ai_pool_health_events{provider=~\"$provider\"}",
-              "instant": true,
-              "format": "table"
+              }
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "noValue": "None reported"
-            },
-            "overrides": []
-          },
           "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false
-            }
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
           }
         }
       ]
@@ -373,58 +412,10 @@
   ],
   "links": [
     {
-      "title": "Overview",
-      "type": "link",
-      "url": "/d/ghostship-autonomous-work",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Work",
-      "type": "link",
-      "url": "/d/ghostship-autonomous-work",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
       "title": "Providers",
       "type": "link",
       "url": "/d/ghostship-ai-usage",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Host",
-      "type": "link",
-      "url": "/d/ghostship-host",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Security",
-      "type": "link",
-      "url": "/d/ghostship-security",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Pipeline",
-      "type": "link",
-      "url": "/d/ghostship-siem-pipeline",
-      "icon": "dashboard",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
+      "targetBlank": false
     }
   ],
   "templating": {
@@ -437,23 +428,22 @@
           "type": "prometheus",
           "uid": "victoriametrics"
         },
-        "query": "label_values(ghostship_ai_picker_model_info{billing=~\"free|promotion\"}, provider)",
+        "query": {
+          "query": "label_values(ghostship_ai_picker_model_info{billing=~\"free|promotion\"}, provider)",
+          "refId": "StandardVariableQuery"
+        },
         "refresh": 1,
         "multi": true,
         "includeAll": true,
         "allValue": ".*",
         "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "text": "All",
+          "value": "$__all"
         },
         "options": [],
         "hide": 0,
-        "skipUrlSync": false
+        "skipUrlSync": false,
+        "definition": "label_values(ghostship_ai_picker_model_info{billing=~\"free|promotion\"}, provider)"
       },
       {
         "name": "worker_model",
@@ -471,8 +461,8 @@
         "sort": 0,
         "refresh": 2,
         "hide": 2,
-        "multi": true,
         "includeAll": true,
+        "multi": true,
         "current": {
           "selected": true,
           "text": [
@@ -492,16 +482,16 @@
           "uid": "victoriametrics"
         },
         "query": {
-          "query": "query_result(sort((ghostship_ai_account_card_order{scope=\"free\"} or (ghostship_ai_account_card_order{scope=\"free\"} and on(account) ghostship_ai_account_window_missing)) and (timestamp((ghostship_ai_account_card_order{scope=\"free\"} or (ghostship_ai_account_card_order{scope=\"free\"} and on(account) ghostship_ai_account_window_missing))) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+          "query": "query_result(sort(ghostship_ai_account_card_order{scope=\"free\"} and (timestamp(ghostship_ai_account_card_order{scope=\"free\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
           "refId": "StandardVariableQuery"
         },
-        "definition": "query_result(sort((ghostship_ai_account_card_order{scope=\"free\"} or (ghostship_ai_account_card_order{scope=\"free\"} and on(account) ghostship_ai_account_window_missing)) and (timestamp((ghostship_ai_account_card_order{scope=\"free\"} or (ghostship_ai_account_card_order{scope=\"free\"} and on(account) ghostship_ai_account_window_missing))) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+        "definition": "query_result(sort(ghostship_ai_account_card_order{scope=\"free\"} and (timestamp(ghostship_ai_account_card_order{scope=\"free\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
         "regex": "/account=\"([^\"]+)\"/",
         "sort": 0,
         "refresh": 2,
         "hide": 2,
-        "multi": true,
         "includeAll": true,
+        "multi": true,
         "current": {
           "selected": true,
           "text": [
@@ -515,7 +505,7 @@
       }
     ]
   },
-  "description": "Free model selection first, free provider capacity below. Models use the canonical collector order with limiting capacity. Card design follows the approved provider and model-pane concepts.",
+  "description": "Free pool mirror of the Providers and models dashboard",
   "graphTooltip": 1,
   "fiscalYearStartMonth": 0
 }

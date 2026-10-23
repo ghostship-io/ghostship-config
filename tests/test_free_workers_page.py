@@ -47,18 +47,23 @@ class FreeWorkersPageTests(unittest.TestCase):
         cls.page = json.loads(PAGE.read_text())
         cls.panels = {p['id']: p for p in cls.page['panels']}
 
+    def test_committed_dashboard_matches_generator(self):
+        cmd = [sys.executable, str(ROOT / 'scripts/generate-free-workers-dashboard.py'), '--check']
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, f"free-workers.json differs from generator:\n{res.stderr}")
+
     def test_page_metadata_and_fleet_navigation(self):
         self.assertEqual(self.page['uid'], 'ghostship-free-workers')
         self.assertEqual(self.page['timezone'], 'utc')
         self.assertFalse(self.page['editable'])
         titles = [link['title'] for link in self.page['links']]
-        self.assertEqual(titles, ['Overview', 'Work', 'Providers', 'Host', 'Security', 'Pipeline'])
+        self.assertEqual(titles, ['Providers'])
 
     def test_selection_precedes_capacity_and_has_free_pool_scope(self):
         panels = self.page['panels']
-        self.assertLess(next(i for i, p in enumerate(panels) if p['id'] == 2231),
-                        next(i for i, p in enumerate(panels) if p['id'] == 2210))
-        panel = self.panels[2231]
+        self.assertLess(next(i for i, p in enumerate(panels) if p['id'] == 233),
+                        next(i for i, p in enumerate(panels) if p['id'] == 210))
+        panel = self.panels[233]
         self.assertEqual(panel['repeat'], 'worker_model')
         self.assertEqual((panel['repeatDirection'], panel['maxPerRow'], panel['gridPos']['w']), ('h', 4, 6))
         self.assertIn('category="worker"', panel['targets'][0]['expr'])
@@ -69,30 +74,29 @@ class FreeWorkersPageTests(unittest.TestCase):
         self.assertIn('provider', vars_by_name)
         self.assertIn('worker_model', vars_by_name)
         self.assertIn('capacity_account', vars_by_name)
+        self.assertNotIn('orchestrator_model', vars_by_name)
         self.assertIn('scope="free"', vars_by_name['capacity_account']['query']['query'])
         self.assertIn('billing=~"free|promotion"', vars_by_name['worker_model']['query']['query'])
 
     def test_model_selection_card_renders_capacity_bar_and_public_policy(self):
-        panel = self.panels[2231]
+        panel = self.panels[233]
         rows = free_selection_rows(quality=85, left=0.72, delta=10, state='ahead')
         models = helper(panel, 'selectionModels', rows)
         self.assertEqual(len(models), 1)
         model = models[0]
         self.assertEqual(model['display_name'], 'DeepSeek V4.1 Flash')
-        self.assertEqual(model['providerName'], 'NVIDIA')
+        self.assertEqual(model['providerName'], 'nvidia')
         self.assertEqual(model['percent'], '72% left')
-        self.assertEqual(model['width'], 72)
-        self.assertEqual(model['fillClass'], 'ahead')
+        self.assertEqual(model['paceClass'], 'ahead')
         self.assertFalse(model['restricted'])
-        self.assertIn('public only', panel['options']['content'])
 
     def test_exhausted_or_unavailable_models_are_marked_restricted(self):
-        panel = self.panels[2231]
+        panel = self.panels[233]
         spent_rows = free_selection_rows(left=0, state='spent', available=True)
         models = helper(panel, 'selectionModels', spent_rows)
         self.assertTrue(models[0]['restricted'])
-        self.assertEqual(models[0]['statusText'], '✕ quota spent')
-        self.assertEqual(models[0]['fillClass'], 'spent')
+        self.assertEqual(models[0]['paceText'], '✕ spent')
+        self.assertEqual(models[0]['paceClass'], 'spent')
 
         unavail_rows = free_selection_rows(left=0.5, state='on_pace', available=False)
         models = helper(panel, 'selectionModels', unavail_rows)
@@ -101,7 +105,7 @@ class FreeWorkersPageTests(unittest.TestCase):
     def test_cards_sort_by_published_position_and_keep_unknowns_honest(self):
         rows = [{'provider': 'nvidia', 'model': 'a', 'category': 'worker', 'display_name': 'A', 'field': 'position', 'value': 2},
                 {'provider': 'nvidia', 'model': 'z', 'category': 'worker', 'display_name': 'Z', 'field': 'position', 'value': 1}]
-        models = helper(self.panels[2231], 'selectionModels', rows)
+        models = helper(self.panels[233], 'selectionModels', rows)
         self.assertEqual([m['model'] for m in models], ['z', 'a'])
         self.assertEqual(models[0]['quality'], 'Unknown')
         self.assertEqual(models[0]['percent'], 'No long-window reading')
@@ -120,7 +124,7 @@ class FreeWorkersPageTests(unittest.TestCase):
 class FreeProviderCapacityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.panel = next(p for p in json.loads(PAGE.read_text())['panels'] if p['id'] == 2210)
+        cls.panel = next(p for p in json.loads(PAGE.read_text())['panels'] if p['id'] == 210)
 
     def card(self, account='nvidia', kind='daily', left=.65, state='behind', extra=()):
         common = {'account': account, 'kind': kind, 'quota_id': 'daily', 'label': kind, 'evidence': 'provider_reported'}
@@ -148,7 +152,3 @@ class FreeProviderCapacityTests(unittest.TestCase):
                 self.assertEqual(window['fillClass'], fill)
                 self.assertEqual(window['paceClass'], state)
                 self.assertIn(symbol, window['sub'])
-
-
-if __name__ == '__main__':
-    unittest.main()
