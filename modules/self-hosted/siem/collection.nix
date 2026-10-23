@@ -123,7 +123,12 @@ in
   # counters node_exporter exports (see podman-snapshot.py).
   systemd.services.ghostship-podman-snapshot = {
     description = "Container metadata snapshot and resource counters for the SIEM";
-    after = [ "podman.socket" ];
+    # Desktop ExecStartPre builds its image under Podman's storage write lock.
+    # A snapshot queued in the same activation must wait for that build rather
+    # than exhaust its bounded ps/inspect calls behind the lock.
+    after = [ "podman.socket" ] ++ lib.optional
+      (builtins.hasAttr "agent-desktop" config.virtualisation.oci-containers.containers)
+      "podman-agent-desktop.service";
     path = [ config.virtualisation.podman.package ];
     serviceConfig = {
       Type = "oneshot";
