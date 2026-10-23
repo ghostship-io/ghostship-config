@@ -60,6 +60,13 @@ assert !(cfg.systemd.services ? docker);
 assert !(cfg.users.users ? t3code-docker);
 assert builtins.elem "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw"
   cfg.virtualisation.oci-containers.containers.t3code.volumes;
+# A public hostname on the container also becomes a Podman DNS alias and a
+# self hosts-file entry. It shadows the Cloudflare HTTPS edge with port 3773's
+# HTTP-only origin for both the desktop and the container itself.
+assert builtins.elem "--hostname=t3code"
+  cfg.virtualisation.oci-containers.containers.t3code.extraOptions;
+assert
+  !(builtins.elem "--hostname=${cfg.ghostship.apps.t3code.hostname}" cfg.virtualisation.oci-containers.containers.t3code.extraOptions);
 # Force generation of actual system unit text, including the template drop-in.
 {
   system = cfg.system.build.toplevel.drvPath;
