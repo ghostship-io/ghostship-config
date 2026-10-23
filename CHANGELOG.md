@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.178] - 2026-10-23
+
+- Publish deployed agent release candidates while preserving monotonic managed refresh selection.
+
+PR #343.
+
 ## [3.17.177] - 2026-10-23
 
 - Keep precise model Quality ordering and free-route thresholds.
