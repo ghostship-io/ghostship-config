@@ -1467,51 +1467,34 @@ overrides fail visibly. Keep owner-specific reset times in runtime state.
 
 ### Announced resets
 
-`ghostship-ai-usage-announcements` checks the public Codex announcement profile
-through the personal identity's persistent Agent Desktop browser profile hourly,
-reading at most twenty visible recent posts without scrolling. It owns and closes
-one browser lease. A sign-in wall or challenge records `blocked`, sends one
-operations notice per blocked episode, and backs off to eight hours. Successful
-reads restore hourly checks. A locked cache deadline covers timer/manual starts
-and reserves eight hours before browsing in case of a crash. The check
-does not bypass it or use mirrors. Transport failures record `unavailable`.
-The scheduled checker connects to the deployed MCP over one stdio session,
-using its existing Desktop configuration and lease ownership. It does not run
-a second local browser backend or copy Desktop credentials into T3.
+The hourly `ghostship-ai-usage-announcements` check uses the persistent personal
+Agent Desktop profile and reads at most twenty visible recent posts without
+scrolling. Walls record blocked, notify once per episode and back off eight
+hours; transport failures record unavailable. Community prose is no longer an event input; legacy relay receipts migrate to
+their primary post URLs. No wall or protection is
+handled or bypassed, and no new service or credential copy is involved.
 
-When X is blocked, the same check searches the OpenAI community announcements
-category for reset topics at most once per eight hours and reads at most three
-matching topics. Each topic
-has its own blocked/unavailable status. A readable relay never clears the
-primary source's blocked status. The dashboard shows community relays as
-`announced (unverified)` with a source link, and an operations notice asks for
-confirmation. Notice receipts and publisher deduplication use the primary status
-URL, so a relay followed by direct discovery sends one notice. Explicit global
-reset posts also notify. A root operator can confirm global Codex scope and an explicit
-future time using `ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE`.
-Confirmed records survive later rediscovery and then use the normal announced
-reset path. See [confirmation and operations](../../../docs/ai-usage-announcements.md).
-Neither profile sign-ins nor private account details are stored in the cache.
+Only Codex/ChatGPT usage-limit reset announcements become events. Each keeps
+its primary post URL, post time, short public quote, products, plans, windows,
+effective time and confidence. Unrelated reset mentions are discarded.
+Explicit primary announcements are confirmed; ambiguous announcements remain
+unverified. Legacy keyword matches are removed from usable events and their
+primary links are queued for bounded rechecks. Notice receipts survive this
+migration and deduplicate by primary status URL.
 
-The separate runtime cache, `--announced-resets` (default
-`/var/lib/ghostship-ai-usage/announced-resets.json`), records reset time, scope,
-source post URL, confidence and observation time. The published routing snapshot
-includes this cache as `announced_resets`, including blocked-check status. Page
-prose is never stored. Repeated post URLs update one record; up to 100 records
-are retained and a failed check preserves previous announcements.
+Confirmed events affect only matching product/plan/window scopes. A weekly
+Codex event cannot reset a five-hour window. A completed event supersedes only
+a provider measurement from before that reset, retaining the original provider
+usage and timestamps as provenance. Its known duration determines the next
+window, and its observation time is the announced reset itself. Normal freshness,
+newer provider truth, other binding windows and owner overrides retain authority.
+An old announcement cannot create fresh headroom through rediscovery.
 
-Automatic application requires an explicit global Codex reset with a dated PT time.
-Operator-confirmed announcements use the explicitly supplied timezone-qualified time. Dates may
-be ISO dates or `today`/`tomorrow` relative to the post's publication date in
-Pacific time. PT observes daylight saving; contradictory PST/PDT is rejected.
-Vague timing, deadlines, banked resets, unclear scope and other authors remain
-ineligible until explicitly confirmed. Announcements change neither usage nor freshness and never grant
-capacity after the announced time. Future announcements within seven days use
-the existing custom-reset application path; owner overrides take precedence.
-Published quota windows, selection limits and dashboard metric labels say
-`reset_source: announced` and `reset_label: announced reset`, retain the provider
-reset, and pace against the announced reset. The collector reads the cache on
-its usual five-minute cadence; it never browses or restarts T3.
+The consolidated Providers page can consume
+`ghostship_ai_announced_reset_info{provider="codex"}` next to the Codex allowance
+bar. It includes the primary link, quote, scope, post/reset times and confidence.
+The routing snapshot retains the structured events and applied quota provenance.
+See [event contract and operations](../../../docs/ai-usage-announcements.md).
 
 ### Exact worker builds
 

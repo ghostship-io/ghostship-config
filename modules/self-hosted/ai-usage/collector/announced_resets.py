@@ -12,20 +12,14 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
+import reset_events
 
 SOURCE = "https://x.com/thsottiaux"
-RELAY = "https://community.openai.com/search?q=reset%20%23announcements%20order%3Alatest"
 PATH = "/var/lib/ghostship-ai-usage/announced-resets.json"
 INTERVAL = 3600
 BACKOFF = 8 * 3600
-POST_URL = re.compile(r"https://x\.com/thsottiaux/status/\d+$")
+POST_URL = reset_events.POST_URL
 TOPIC_URL = re.compile(r"https://community\.openai\.com/t/[a-zA-Z0-9_-]+/\d+(?:/\d+)?(?:#announcement-\d+)?$")
-GLOBAL_CODEX = re.compile(
-    r"\b(?:all\s+(?:paid\s+)?codex\s+(?:(?:usage|rate)\s+)?(?:limits|quotas|users|accounts)"
-    r"|global\s+codex\s+reset|codex\s+(?:limits|usage|quotas)\s+(?:will\s+)?reset\s+for\s+(?:all|everyone))\b",
-    re.I,
-)
 
 
 def load(path=PATH):
@@ -33,6 +27,26 @@ def load(path=PATH):
         value = json.loads(Path(path).read_text())
         if not isinstance(value, dict) or value.get("schema") != 1 or not isinstance(value.get("announcements"), list):
             raise ValueError("invalid announcement cache")
+        # Old keyword matches have no announcement evidence. Re-read their
+        # primary posts once, preserving notice receipts independently.
+        records = value["announcements"]
+        receipts = dict(value.get("notice_receipts") or {})
+        pending = list(value.get("recheck_urls") or [])
+        events = {}
+        for entry in records:
+            if not isinstance(entry, dict):
+                continue
+            url = notice_url(entry)
+            if url and entry.get("notice_sent_at"):
+                receipts[url] = entry["notice_sent_at"]
+            if reset_events.valid(entry):
+                events[entry["source_url"]] = entry
+            elif url and POST_URL.fullmatch(url):
+                pending.append(url)
+        value.pop("relay_checked_at", None)
+        value.update(announcements=list(events.values())[-100:],
+                     notice_receipts=receipts,
+                     recheck_urls=list(dict.fromkeys(pending))[-100:])
         return value
     except FileNotFoundError:
         return {"schema": 1, "status": "not_checked", "announcements": []}
@@ -41,83 +55,32 @@ def load(path=PATH):
 
 
 def parse(post):
-    """Accept only an explicit global Codex reset with an unambiguous PT time.
-
-    Hints and banked/manual resets remain visible at low confidence. They
-    cannot change pacing. No page prose is retained in runtime projections.
-    """
-    url = str(post.get("url", ""))
-    text = str(post.get("text", ""))[:8000]
-    if not POST_URL.fullmatch(url) or not re.search(r"\breset\b", text, re.I):
-        return None
-    result = {"source_url": url, "scope": "unknown", "reset_at": None,
-              "confidence": "low", "reason": "ambiguous_announcement"}
-    if (not GLOBAL_CODEX.search(text)
-            or re.search(r"\b(banked|manual|before|by|maybe|might|not|no)\b|\?", text, re.I)):
-        return result
-    result["scope"] = "codex"
-    clock = re.search(r"\b(1[0-2]|[1-9])(?::([0-5]\d))?\s*(am|pm)\s*(PT|PDT|PST)\b", text, re.I)
-    day = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
-    try:
-        if day:
-            date = datetime.strptime(day[1], "%Y-%m-%d").date()
-        else:
-            published = datetime.fromisoformat(post["published_at"].replace("Z", "+00:00"))
-            if published.tzinfo is None:
-                return result
-            date = published.astimezone(ZoneInfo("America/Los_Angeles")).date()
-            if re.search(r"\btomorrow\b", text, re.I):
-                date += timedelta(days=1)
-            elif not re.search(r"\btoday\b", text, re.I):
-                return result
-        if not clock:
-            return result
-        hour = int(clock[1]) % 12 + (12 if clock[3].lower() == "pm" else 0)
-        zone = ZoneInfo("America/Los_Angeles")
-        at = datetime.combine(date, datetime.min.time(), zone).replace(hour=hour, minute=int(clock[2] or 0))
-        # PT follows local daylight saving. Explicit PST/PDT must agree.
-        if clock[4].upper() != "PT" and clock[4].upper() != at.tzname():
-            return result
-        if at.fold or at.replace(fold=1).utcoffset() != at.utcoffset():
-            return result
-        result.update(reset_at=at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-                      confidence="high", reason="explicit_global_reset")
-    except (KeyError, ValueError, TypeError):
-        pass
-    return result
+    return reset_events.parse(post)
 
 
 def overrides(results, document, now):
-    """Resolve scope against actual quota IDs, then reuse custom-reset application."""
-    active = []
-    for entry in document.get("announcements", []):
-        primary = POST_URL.fullmatch(str(entry.get("source_url", "")))
-        confirmed = (entry.get("confidence") == "confirmed"
-                     and TOPIC_URL.fullmatch(str(entry.get("source_url", "")))
-                     and POST_URL.fullmatch(str(entry.get("primary_source_url", ""))))
-        if (entry.get("scope") != "codex"
-                or not ((entry.get("confidence") in {"high", "confirmed"} and primary) or confirmed)):
-            continue
-        try:
-            reset = datetime.fromisoformat(entry["reset_at"].replace("Z", "+00:00")).timestamp()
-        except (KeyError, ValueError, TypeError, AttributeError):
-            continue
-        if now < reset <= now + 7 * 86400:
-            active.append((reset, entry))
-    if not active:
-        return []
-    reset, entry = min(active, key=lambda pair: pair[0])
-    return [{"provider": "codex", "quota_id": window["quotaId"],
-             "model": str(window.get("model") or "*"), "reset_at": entry["reset_at"],
-             "reset_source": "announced", "source_url": entry["source_url"]}
-            for result in results for window in result.windows
-            if window.get("provider") == "codex" and window.get("quotaId")
-            and (not isinstance(window.get("resetEpoch"), (int, float))
-                 or window["resetEpoch"] > reset)]
+    """Future resets affect only the product, plans and windows announced."""
+    overrides = []
+    for result in results:
+        for window in result.windows:
+            candidates = []
+            for entry in document.get("announcements", []):
+                reset = reset_events.timestamp(entry.get("reset_at"))
+                if reset_events.matches(entry, window) and reset and now < reset.timestamp() <= now + 7 * 86400:
+                    candidates.append((reset.timestamp(), entry))
+            if not candidates or not window.get("quotaId"):
+                continue
+            reset, entry = min(candidates, key=lambda pair: pair[0])
+            if isinstance(window.get("resetEpoch"), (int, float)) and window["resetEpoch"] <= reset:
+                continue
+            overrides.append({"provider": window["provider"], "quota_id": window["quotaId"],
+                "model": str(window.get("model") or "*"), "reset_at": entry["reset_at"],
+                "reset_source": "announced", "source_url": entry["source_url"]})
+    return overrides
 
 
 def confirm(document, source_url, reset_at, now):
-    """An operator confirms a recorded relay and supplies its explicit reset time."""
+    """An operator confirms a scoped announcement without broadening its scope."""
     try:
         reset = datetime.fromisoformat(reset_at.replace("Z", "+00:00"))
         if reset.tzinfo is None or not now < reset.timestamp() <= now + 7 * 86400:
@@ -126,10 +89,10 @@ def confirm(document, source_url, reset_at, now):
         raise ValueError("confirmation needs a future timezone-qualified reset within seven days") from None
     record = next((entry for entry in document.get("announcements", [])
                    if entry.get("source_url") == source_url), None)
-    if (not record or not (POST_URL.fullmatch(source_url) or (TOPIC_URL.fullmatch(source_url)
-            and POST_URL.fullmatch(str(record.get("primary_source_url", "")))))):
+    if (not record or not reset_events.valid(record) or 'unknown' in record['windows']
+            or (len(record['products']) > 1 and len(record['windows']) > 1)):
         raise ValueError("confirmation must identify a recorded announcement")
-    record.update(confidence="confirmed", scope="codex", reason="operator_confirmed", confirmed_at=now,
+    record.update(confidence="confirmed", reason="operator_confirmed", confirmed_at=now,
                   reset_at=reset.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
     return document
 
@@ -138,6 +101,8 @@ def samples(document):
     """Public, bounded evidence rows for the dashboard, including unverified items."""
     from metrics import ExactLabel
     for entry in document.get("announcements", [])[-100:]:
+        if not reset_events.valid(entry):
+            continue
         url = str(entry.get("source_url", ""))
         if len(url) > 512 or not (POST_URL.fullmatch(url) or TOPIC_URL.fullmatch(url)):
             continue
@@ -151,12 +116,18 @@ def samples(document):
                 reset_at = reset.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         except (KeyError, ValueError, TypeError, AttributeError):
             pass
-        yield "ghostship_ai_announced_reset_info", {
-            "source_url": ExactLabel(url), "confidence": confidence,
-            "label": ExactLabel("announced (unverified)" if confidence == "low" else "announced reset"),
-            "scope": "codex" if entry.get("scope") == "codex" else "unknown",
-            "reset_at": ExactLabel(reset_at),
-        }, 1.0
+        for product in entry["products"]:
+            yield "ghostship_ai_announced_reset_info", {
+                "source_url": ExactLabel(url), "confidence": confidence,
+                "label": ExactLabel("announced (unverified)" if confidence == "low" else "announced reset"),
+                "scope": ExactLabel(entry["scope"]),
+                "provider": product,
+                "plans": ExactLabel(",".join(entry["plans"])),
+                "windows": ExactLabel(",".join(entry["windows"])),
+                "published_at": ExactLabel(entry["published_at"]),
+                "quote": ExactLabel(entry["quote"]),
+                "reset_at": ExactLabel(reset_at),
+            }, 1.0
 
 
 def primary_blocked(document):
@@ -201,12 +172,13 @@ def notify_pending(document, command, now):
             document["blocked_notice_sent_at"] = now
 
     records = document.get("announcements", [])[-100:]
-    receipts = {notice_url(entry): entry["notice_sent_at"] for entry in records
-                if notice_url(entry) and entry.get("notice_sent_at")}
+    receipts = dict(document.get("notice_receipts") or {})
+    receipts.update({notice_url(entry): entry["notice_sent_at"] for entry in records
+                     if notice_url(entry) and entry.get("notice_sent_at")})
     attempted = set()
     for entry in reversed(records):
         url = notice_url(entry)
-        if not url or entry.get("confidence") not in {"low", "high", "confirmed"}:
+        if not url or not reset_events.valid(entry):
             continue
         if url in receipts:
             entry.setdefault("notice_sent_at", receipts[url])
@@ -216,48 +188,36 @@ def notify_pending(document, command, now):
         attempted.add(url)
         key = "codex-reset-" + hashlib.sha256(url.encode()).hexdigest()[:24]
         low = entry["confidence"] == "low"
-        title = "Codex reset announcement needs confirmation" if low else "Codex reset announced"
+        product = " / ".join("Codex" if name == "codex" else "ChatGPT" for name in entry["products"])
+        title = product + (" reset announcement needs confirmation" if low else " reset announced")
         body = ("announced (unverified)\n" if low else "announced reset\n") + entry["source_url"]
+        body += "\n" + entry["quote"]
+        body += "\nScope: " + entry["scope"] + "; " + ",".join(entry["plans"]) + "; " + ",".join(entry["windows"])
+        body += "\nReset: " + (entry.get("reset_at") or "time needs confirmation")
         if url != entry["source_url"]:
             body += "\n" + url
         if low:
-            body += "\nConfirm the global Codex scope and reset time before pacing changes."
+            body += "\nConfirm the announced scope and reset time before pacing changes."
         if publish(key, title, body):
             entry["notice_sent_at"] = now
             receipts[url] = now
+    document["notice_receipts"] = receipts
     return document
 
 
-EXTRACT = r"""(() => ({
- blocked: /log in or sign up|sign in to|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
- posts: [...document.querySelectorAll('article')].slice(0, 20).map(a => ({
+EXTRACT = r"""(() => {
+ const blocked = /log in or sign up|sign in to|log in to continue|captcha|verify you are human/i.test(document.body.innerText);
+ if (blocked) return {blocked: true, posts: []};
+ return {blocked: false, posts: [...document.querySelectorAll('article')].slice(0, 20).map(a => ({
    text: a.querySelector('[data-testid="tweetText"]')?.innerText || '',
    url: a.querySelector('a:has(time)')?.href || '',
    published_at: a.querySelector('time')?.dateTime || ''
- }))
-}))()"""
-
-RELAY_EXTRACT = r"""(() => ({
- blocked: /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
- posts: [...document.querySelectorAll('.cooked a[href*="x.com/thsottiaux/status/"]')].slice(-40).map(a => ({
-   text: (a.closest('.cooked')?.innerText || a.innerText || '').slice(0, 3000),
-   url: a.href.split('?')[0],
-   published_at: ''
- }))
-}))()"""
-
-
-SEARCH_EXTRACT = r"""(() => ({
- blocked: /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
- topics: [...document.querySelectorAll('.fps-result')].map(row => ({
-   title: row.querySelector('a.search-link')?.innerText || '',
-   url: row.querySelector('a.search-link')?.href || ''
- })).filter(row => /\breset\b/i.test(row.title)).slice(0, 3).map(row => row.url.split('?')[0].split('#')[0])
-}))()"""
+ }))};
+})()"""
 
 
 def check(document, call, now):
-    """One lease, three relay topics at most, and no wall bypass or HTTP mirrors."""
+    """One primary timeline, bounded legacy rechecks, and no wall handling or mirrors."""
     if not due(document, now):
         return document
     updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE,
@@ -281,9 +241,10 @@ def check(document, call, now):
         previous = records.get(entry["source_url"], {})
         # A later scrape must not revoke an explicit operator confirmation
         # or cause a previously acknowledged item to push another notice.
-        if previous.get("confidence") == "confirmed":
+        if (previous.get("reason") == "operator_confirmed" and all(
+                previous.get(key) == entry.get(key) for key in ("products", "plans", "windows"))):
             entry.update({key: previous[key] for key in
-                          ("confidence", "scope", "reason", "confirmed_at", "reset_at")})
+                          ("confidence", "reason", "confirmed_at", "reset_at")})
         if previous.get("notice_sent_at"):
             entry["notice_sent_at"] = previous["notice_sent_at"]
         records[entry["source_url"]] = {**entry, "observed_at": now}
@@ -295,34 +256,35 @@ def check(document, call, now):
             entry = parse(post)
             if entry:
                 remember(entry)
+            elif POST_URL.fullmatch(str(post.get("url", ""))):
+                records.pop(post["url"], None)
+        pending = list(document.get("recheck_urls") or [])
+        if not page["blocked"]:
+            for url in pending[:5]:
+                if not POST_URL.fullmatch(str(url)):
+                    pending.remove(url)
+                    continue
+                recheck = read(url, 'article', EXTRACT)
+                if recheck["blocked"]:
+                    page = recheck
+                    break
+                for post in recheck.get("posts", []):
+                    if post.get("url") == url:
+                        entry = parse(post)
+                        if entry:
+                            remember(entry)
+                        else:
+                            records.pop(url, None)
+                if any(post.get("url") == url for post in recheck.get("posts", [])):
+                    pending.remove(url)
+        updated["recheck_urls"] = pending
         updated["status"] = "blocked" if page["blocked"] else "ok"
         if page["blocked"]:
+            updated["sources"][0]["status"] = "blocked"
             updated.setdefault("blocked_since", now)
         else:
             updated.pop("blocked_since", None)
             updated.pop("blocked_notice_sent_at", None)
-        # Relay discovery stays at eight hours, independently of hourly X reads.
-        relay_checked = document.get("relay_checked_at", max((entry.get("observed_at", 0)
-            for entry in records.values() if TOPIC_URL.fullmatch(entry["source_url"])), default=0))
-        if page["blocked"] and now - relay_checked >= BACKOFF:
-            updated["relay_checked_at"] = now
-            search = read(RELAY, '.fps-result', SEARCH_EXTRACT)
-            if not search["blocked"]:
-                updated["status"] = "partial"
-                topics = dict.fromkeys(url for url in search.get("topics", [])
-                                       if TOPIC_URL.fullmatch(str(url)) and "#" not in str(url))
-                for url in list(topics)[:3]:
-                    try:
-                        relay = read(url, '.cooked', RELAY_EXTRACT)
-                        for post in [] if relay["blocked"] else relay["posts"]:
-                            entry = parse(post)
-                            if entry:
-                                entry.update(primary_source_url=entry["source_url"],
-                                    source_url=url + "#announcement-" + entry["source_url"].rsplit('/', 1)[-1],
-                                    confidence="low", reason="community_relay")
-                                remember(entry)
-                    except (OSError, ValueError, KeyError, TypeError):
-                        continue
     except (OSError, ValueError, KeyError, TypeError):
         updated["status"] = "unavailable"
     finally:
@@ -395,7 +357,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=PATH)
     parser.add_argument("--notify-command", help="Host notification publisher")
-    parser.add_argument("--confirm", metavar="SOURCE_URL", help="Confirm a recorded announcement for global Codex limits (root only)")
+    parser.add_argument("--confirm", metavar="SOURCE_URL", help="Confirm a recorded announcement without broadening its parsed scope (root only)")
     parser.add_argument("--reset-at", help="Confirmed future reset, with an explicit timezone")
     parser.add_argument("command", nargs="*", help="Deployed MCP stdio connection command")
     args = parser.parse_args()
