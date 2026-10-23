@@ -1493,6 +1493,20 @@ def read_facts(facts_path: str | None) -> dict[str, Any]:
     return facts if isinstance(facts, dict) else {}
 
 
+def model_identities_path(explicit: str | None, runtime_policy: str | None) -> str:
+    """The model identities file: the one named, or the one beside the policy.
+
+    The runtime policy and the model identities ship together in the
+    owner's policy tree, so the default is the identities file in the
+    directory of the runtime policy. With neither, there is no file.
+    """
+    if explicit:
+        return str(explicit)
+    if runtime_policy:
+        return str(Path(runtime_policy).parent / MODEL_IDENTITIES_FILE)
+    return ""
+
+
 def read_outcomes(
     *,
     identities_path: str | None = None,
@@ -2219,14 +2233,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # The model identities sit beside the runtime policy, unless the caller
-    # names another file.
-    identities_path = args.model_identities or str(
-        Path(args.runtime_policy).parent / MODEL_IDENTITIES_FILE
-        if args.runtime_policy
-        else MODEL_IDENTITIES_FILE
-    )
-
     started = time.monotonic()
     routing_enabled = args.routing_enabled == "true"
     log(f"the routing switch is {'on' if routing_enabled else 'off'}")
@@ -2247,7 +2253,11 @@ def main(argv: list[str] | None = None) -> int:
         measured.extend(result.windows)
     catalog = catalog_module.Catalog.load(args.aa_catalog)
     outcomes = read_outcomes(
-        identities_path=args.model_identities,
+        # The model identities sit beside the runtime policy, unless the
+        # caller names another file.
+        identities_path=model_identities_path(
+            args.model_identities, args.runtime_policy
+        ),
         runtime_policy=args.runtime_policy,
         ledger=args.delegation_ledger,
         backfill=args.delegation_backfill,

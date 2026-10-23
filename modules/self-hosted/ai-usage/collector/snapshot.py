@@ -2418,24 +2418,23 @@ def _winners(
                 )
             return (1, 0.0, 0.0, -strength, row["provider"], row["model"])
 
-        # The best paid quality of every trust level of the tier. A free
-        # route leads while it is within the margin of the best paid route
-        # of its own trust level: it costs nothing, so being close is
-        # enough.
-        best_paid: dict[str, float] = {}
+        # The best quality of every trust level of the tier, over every
+        # route that holds it, free or paid. A free route leads while it is
+        # within the margin of the best available model of its own trust
+        # level: it costs nothing, so being close is enough, and among the
+        # free routes that lead the published value decides.
+        best_quality: dict[str, float] = {}
         if tier == "bulk":
             for key in members:
                 row = by_key.get(key)
                 if row is None or not _holds_the_tier(row, tier):
                     continue
-                if _is_free_route(row):
-                    continue
                 quality = _outcome_quality(row, tier)
                 if quality is None:
                     continue
                 level = _trust_level(row, tier)
-                if level not in best_paid or quality > best_paid[level]:
-                    best_paid[level] = quality
+                if level not in best_quality or quality > best_quality[level]:
+                    best_quality[level] = quality
 
         def _free_leads(row: dict[str, Any]) -> int:
             """Zero when a free route leads its trust level, one otherwise."""
@@ -2444,10 +2443,8 @@ def _winners(
             quality = _outcome_quality(row, tier)
             if quality is None:
                 return 1
-            best = best_paid.get(_trust_level(row, tier))
+            best = best_quality.get(_trust_level(row, tier))
             if best is None:
-                # No paid route of this trust level to compare with: the
-                # free route keeps its ordinary place.
                 return 1
             return 0 if value_policy.free_route_leads(quality, best) else 1
 
@@ -2474,7 +2471,7 @@ def _winners(
             its reason. A model reserved for the 3D tier follows the other
             members of the tiers it is reserved away from. The bulk tier
             then reads the published value, and a free route that is close
-            enough to the best paid route of its trust level leads it.
+            enough to the best route of its trust level leads it.
             """
             trust = value_policy.trust_rank(_trust_level(row, tier))
             if tier == "free":
@@ -3028,11 +3025,22 @@ def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
                 # the row stays unknown rather than invented.
                 quality = None
             efficiency = _efficiency_of(row)
-            value = (
-                value_policy.outcome_value(quality, efficiency)
-                if quality is not None
-                else None
-            )
+            if tier == "3d":
+                # The 3D tier is valued by its own measure: the intelligence,
+                # the measured AA-3D capability and the cost. The outcome of
+                # the model is published beside it, and its trust scales it.
+                three_d = (row.get("value_3d") or {}).get("value")
+                value = (
+                    float(three_d)
+                    if isinstance(three_d, (int, float)) and not isinstance(three_d, bool)
+                    else None
+                )
+            else:
+                value = (
+                    value_policy.outcome_value(quality, efficiency)
+                    if quality is not None
+                    else None
+                )
             published = value_policy.trust_adjusted_value(value, level)
             row["outcome"][tier] = {
                 "identity": identity,

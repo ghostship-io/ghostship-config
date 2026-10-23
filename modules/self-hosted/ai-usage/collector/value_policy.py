@@ -27,7 +27,7 @@ prior ``p0`` places the measured intelligence inside its own tier, ``p``
 shrinks that prior toward the outcomes that were actually measured, and the
 value combines ``p`` with the efficiency ``E`` under the same weights. The
 trust of a route then scales the value, and a free route may lead while it
-is close enough to the best paid one. The maths lives here, so the ranking
+is close enough to the best available one. The maths lives here, so the ranking
 only calls it: no second scorer.
 """
 
@@ -86,7 +86,7 @@ OUTCOME_PRIOR_CEILING = 0.9
 OUTCOME_PRIOR_SPAN = OUTCOME_PRIOR_CEILING - OUTCOME_PRIOR_FLOOR
 
 # A free route leads while its quality is within this margin of the best
-# paid one: it is not the best, it is close enough to cost nothing.
+# available model: it need not be the best, it is close enough to cost nothing.
 FREE_ROUTE_MARGIN = 0.10
 
 # The factor the value of an untrusted route is multiplied by.
@@ -305,11 +305,11 @@ def trust_adjusted_value(value: Any, level: Any) -> float | None:
 
 
 def free_route_leads(quality: Any, best_quality: Any) -> bool:
-    """Whether a free route leads against the best paid quality.
+    """Whether a free route leads against the best available quality.
 
     A free route leads while it is no more than the margin behind the best
-    paid one: it costs nothing, so being close is enough. A missing quality
-    on either side cannot lead.
+    available model of its trust level: it costs nothing, so being close is
+    enough. A missing quality on either side cannot lead.
     """
     p = _finite(quality)
     best = _finite(best_quality)

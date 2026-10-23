@@ -296,10 +296,11 @@ class ThreeDAdmissionTests(unittest.TestCase):
         self.assertEqual(row["aa"]["indices"]["intelligence"], 51.8)
         three_d_entry = [entry for entry in data["tier_winners"].get("3d", [])]
         self.assertTrue(three_d_entry)
-        # The winner of the 3D tier publishes the published value, which is
-        # the outcome-weighted value under the trust of the model, and the
-        # Artificial Analysis value it was built from beside it.
+        # The winner of the 3D tier publishes the 3D value (intelligence, the
+        # AA-3D Elo and the cost) under the trust of the model, never the
+        # general value; the general Artificial Analysis value is beside it.
         self.assertEqual(three_d_entry[0]["value_aa"], row["value"]["value"])
+        self.assertEqual(three_d_entry[0]["value"], row["value_3d"]["value"])
         self.assertEqual(
             three_d_entry[0]["value"], row["outcome"]["3d"]["published"]
         )

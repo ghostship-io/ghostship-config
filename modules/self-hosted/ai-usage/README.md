@@ -891,8 +891,9 @@ The order of a tier is then:
   an untrusted route comes last with the reason it holds;
 * the 3D reserve, for the tiers a reserved model is held away from;
 * the bulk tier reads the published value, and a free route leads it while
-  its quality is within `0.10` of the best paid route of its own trust
-  level;
+  its quality is within `0.10` of the best available route of its own
+  trust level, free or paid; the 3D tier is valued by its own 3D value under
+  the trust of the model;
 * the pace of the account window, and a route with no window has no pace: it
   waits behind every route that has one.
 
