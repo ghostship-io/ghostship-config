@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.103] - 2026-10-23
+
+- The Providers page opens with the capacity cards: one card per provider, with a small icon and every capacity window the account has, and a chip for every provider that publishes no window of its own yet. The numbers of a card are the collector's account window gauges, read in one query, so the page never recomputes a window: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The pace of a row reads the difference between the share that is left and the share the window expects to be left, a window that is spent says so, and a window the provider did not report carries the tag that it was inferred. The card order, the names, the icons and the notes are the presentation the owner approved.
+
 ## [3.17.102] - 2026-10-23
 
 - ai-usage: a Requesty request counts toward its learned limit. OpenCode records the request as "vendor/model", while the collector's route is the model alone, so every such event was unmatched and dropped, and the limit failures of the route never reached the inference. The matching now falls back to the model alone when the whole id is unknown, exactly and folded, within the same provider: the prefix is never taken from another provider, never added, and only one segment of it is ever stripped.

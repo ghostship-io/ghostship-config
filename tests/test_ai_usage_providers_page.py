@@ -1,11 +1,17 @@
 """The Providers page of the AI usage dashboard.
 
-The page is five sections, each one a Business Text panel, and the evidence
+The page is six sections, each one a Business Text panel, and the evidence
 below them in collapsed rows. The tests here pin the contract the page has
 with the owner: the order of a tier is the collector's own winner position,
 the fill of a bar is the share left now, the line in the bar is the share the
 window expects to be left now, and the pace reads the difference between the
 two.
+
+The page opens with the capacity cards: one card per account, one row per
+window of the account, and the accounts that publish no window of their own
+as a chip. The numbers of a card are the collector's account window gauges,
+and the card order, the names and the icons are the presentation the owner
+approved.
 
 The queries are executed against the committed review fixture, so the worked
 cases are the numbers the store returns and not a copy of them.
@@ -22,6 +28,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +37,25 @@ FIXTURE = ROOT / "tests/fixtures/ai-usage/providers-review.prom"
 FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on.prom"
 
 # The sections of the page, in the order the owner approved.
-SECTIONS = ("Bulk", "Free", "Frontier", "3D", "Providers")
+SECTIONS = ("Provider capacity", "Bulk", "Free", "Frontier", "3D", "Providers")
 TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
+
+# The account window gauges of the collector, and the field of a row each of
+# them fills. The panel reads them all in one query, and the field says
+# which one a row holds.
+CAPACITY_METRICS = {
+    "ghostship_ai_account_window_remaining_ratio": "left",
+    "ghostship_ai_account_window_expected_remaining_ratio": "expected",
+    "ghostship_ai_account_window_reset_timestamp_seconds": "resetAt",
+    "ghostship_ai_account_window_order": "order",
+    "ghostship_ai_account_window_learning": "learning",
+}
+
+# The moment the fixture was read. The resets of the fixture are counted
+# from it, so the worked cases are the rows of that moment.
+CAPACITY_NOW = int(
+    datetime(2026, 10, 22, 21, 1, 17, tzinfo=timezone.utc).timestamp() * 1000
+)
 
 # The name a provider is read by, as the mockup reads it. A provider that
 # is not named here keeps the identifier the collector publishes.
@@ -181,6 +205,61 @@ def provider_name_target(panel):
         if '"providerName"' in (target.get("expr") or ""):
             return target
     raise AssertionError(f"no target of {panel.get('title')!r} names the provider")
+
+
+def fixture_capacity_rows():
+    """The rows of the capacity panel, read from the committed fixture.
+
+    The panel reads the account window gauges in one query, so a row is one
+    series of one gauge: the labels of the window, the field the series
+    fills and its value.
+    """
+    rows = []
+    for line in FIXTURE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.match(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*)\})?\s+(\S+)$", line)
+        if not match:
+            continue
+        metric, inner, value = match.groups()
+        field = CAPACITY_METRICS.get(metric)
+        if field is None:
+            continue
+        labels = {}
+        for part in (inner or "").split(","):
+            if not part:
+                continue
+            key, _, label = part.partition("=")
+            labels[key.strip()] = label.strip().strip('"')
+        rows.append({**labels, "field": field, "value": float(value)})
+    return rows
+
+
+def run_panel_helper(panel, expression, env=None):
+    """The answer of a helper of the panel, run the way Business Text runs it.
+
+    Business Text runs the helpers code as new Function("context", code) and
+    hands it context.handlebars; the test runs it the same way.
+    """
+    node = shutil.which("node")
+    if node is None:
+        raise unittest.SkipTest("node is needed to run the helper")
+    script = (
+        "const helpers = {};\n"
+        "const context = { handlebars: { registerHelper: (name, fn) => { helpers[name] = fn; } } };\n"
+        "new Function('context', " + json.dumps(panel["options"]["helpers"]) + ")(context);\n"
+        + expression
+        + "\n"
+    )
+    result = subprocess.run(
+        [node, "-e", script],
+        capture_output=True,
+        text=True,
+        env=env or dict(os.environ),
+        check=True,
+    )
+    return json.loads(result.stdout)
 
 
 class Template:
@@ -690,6 +769,263 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertIn(".narrow { display: none; }", styles, title)
 
 
+class ProviderCapacityTests(unittest.TestCase):
+    """The capacity cards the page opens with.
+
+    One card per account, one row per window of the account, and the
+    accounts that publish no window of their own as a chip. The numbers are
+    the collector's account window gauges, so the worked cases are the rows
+    of the committed fixture and not a copy of them.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+        cls.rows = fixture_capacity_rows()
+
+    def setUp(self):
+        self.panel = section(self.page, "Provider capacity")
+
+    def cards(self, rows=None, now=CAPACITY_NOW, env=None):
+        """The cards of the page, as the helper of the panel builds them."""
+        expression = (
+            "const rows = "
+            + json.dumps(self.rows if rows is None else rows)
+            + ";\n"
+            + "const now = "
+            + json.dumps(now)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.capacityCards(rows, now)));"
+        )
+        return run_panel_helper(self.panel, expression, env=env)
+
+    def chips(self, rows=None, env=None):
+        """The chips of the accounts that are learning, as the helper builds them."""
+        expression = (
+            "const rows = "
+            + json.dumps(self.rows if rows is None else rows)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.learningChips(rows)));"
+        )
+        return run_panel_helper(self.panel, expression, env=env)
+
+    def card(self, cards, account):
+        for card in cards:
+            if card["account"] == account:
+                return card
+        raise AssertionError(f"no card for {account!r}")
+
+    def window(self, card, label):
+        for window in card["windows"]:
+            if window["label"] == label:
+                return window
+        raise AssertionError(f"no window {label!r} in the card of {card['account']!r}")
+
+    def test_the_page_opens_with_the_capacity_cards(self):
+        """The cards are the first thing the page shows, under the header."""
+        header = next(
+            panel for panel, _collapsed in panels(self.page) if panel.get("id") == 200
+        )
+        self.assertEqual(self.panel["title"], "Provider capacity")
+        self.assertEqual(
+            header["gridPos"]["y"] + header["gridPos"]["h"],
+            self.panel["gridPos"]["y"],
+        )
+
+    def test_the_cards_read_the_collector_s_account_windows(self):
+        """Every number of a card is a gauge the collector publishes."""
+        expression = expressions(self.panel)
+        for metric in CAPACITY_METRICS:
+            self.assertIn(metric, expression, metric)
+        # The freshness guard the other panels of the page read.
+        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+
+    def test_the_cards_are_in_the_approved_order(self):
+        """The order of the cards is the one the owner approved."""
+        cards = self.cards()
+        self.assertEqual(
+            [card["account"] for card in cards],
+            [
+                "claude",
+                "codex",
+                "ollama",
+                "opencode-go",
+                "antigravity",
+                "grok",
+                "openrouter",
+                # An account the approved list does not name follows it, by
+                # its name.
+                "example-free",
+            ],
+        )
+
+    def test_the_identity_of_a_card_is_the_approved_one(self):
+        """A card carries the name, the icon and the note the owner approved."""
+        cards = self.cards()
+        approved = {
+            "claude": ("Claude", "✳", "#d97757", "subscription"),
+            "codex": ("Codex", "⊛", "#e8e8e8", "subscription"),
+            "ollama": ("Ollama", "◉", "#f2f2f2", "subscription · shared with 3D"),
+            "opencode-go": ("OpenCode Go", "{}", "#2b2f3a", "subscription"),
+            "antigravity": ("Antigravity", "A", "linear-gradient", "subscription"),
+            "grok": ("Grok", "⊘", "#000", "subscription · 3D reserve"),
+            "openrouter": ("OpenRouter", "⇄", "#6466f1", "free daily"),
+        }
+        for account, (name, icon, background, meta) in approved.items():
+            card = self.card(cards, account)
+            self.assertEqual(card["name"], name, account)
+            self.assertEqual(card["icon"], icon, account)
+            self.assertIn(background, card["background"], account)
+            self.assertEqual(card["meta"], meta, account)
+
+    def test_the_worked_rows_read_the_collector_s_numbers(self):
+        """The three worked rows read exactly what the owner saw."""
+        cards = self.cards()
+        self.assertEqual(
+            self.window(self.card(cards, "claude"), "Session")["sub"],
+            "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)",
+        )
+        self.assertEqual(
+            self.window(self.card(cards, "ollama"), "Weekly")["sub"], "● on pace"
+        )
+        self.assertEqual(
+            self.window(self.card(cards, "opencode-go"), "Monthly")["sub"],
+            "✕ spent · resets in 8.1d (30 Oct 22:34)",
+        )
+
+    def test_a_spent_window_is_red_and_draws_an_empty_bar(self):
+        """A window that is spent reads spent, and its bar is empty."""
+        cards = self.cards()
+        window = self.window(self.card(cards, "grok"), "Weekly")
+        self.assertEqual(window["paceClass"], "spent")
+        self.assertEqual(window["fillClass"], "spent")
+        self.assertEqual(window["width"], "0")
+        self.assertEqual(window["pct"], "0%")
+        self.assertTrue(window["sub"].startswith("✕ spent · resets in "))
+
+    def test_a_window_with_no_expected_series_has_no_tick_and_no_pace_word(self):
+        """A window with no even-spend line draws no line and says no pace."""
+        cards = self.cards()
+        window = self.window(self.card(cards, "antigravity"), "Quota")
+        self.assertFalse(window["hasTick"])
+        self.assertEqual(window["tick"], "")
+        self.assertEqual(window["paceClass"], "")
+        self.assertEqual(window["sub"], "")
+        self.assertEqual(window["pct"], "100%")
+
+    def test_a_window_with_a_reset_and_no_expected_line_prints_the_reset_alone(self):
+        """The reset of a window is printed even when the window has no pace."""
+        rows = [
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "left",
+                "value": 0.5,
+            },
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "resetAt",
+                "value": CAPACITY_NOW / 1000 + 3600,
+            },
+        ]
+        window = self.window(self.card(self.cards(rows=rows), "example-free"), "Weekly")
+        self.assertEqual(window["sub"], "resets in 1h 0m (22 Oct 22:01)")
+        self.assertFalse(window["hasTick"])
+
+    def test_a_learning_account_is_a_chip_and_not_a_card(self):
+        """An account with no window of its own says so, and holds no card."""
+        chips = self.chips()
+        self.assertIn("Google", [chip["name"] for chip in chips])
+        self.assertNotIn(
+            "google", [card["account"] for card in self.cards()]
+        )
+        # The chip says what the account is doing.
+        self.assertIn(
+            "{{this.name}} · <i>learning window…</i>",
+            self.panel["options"]["content"],
+        )
+
+    def test_an_account_with_no_window_holds_no_card(self):
+        """A card is an account that has a window to show."""
+        learning = {
+            row["account"] for row in self.rows if row.get("field") == "learning"
+        }
+        self.assertEqual(len(learning), 17)
+        accounts = [card["account"] for card in self.cards()]
+        for account in learning:
+            self.assertNotIn(account, accounts)
+
+    def test_an_inferred_window_carries_its_tag(self):
+        """A window the provider did not report says that it was inferred."""
+        cards = self.cards()
+        window = self.window(self.card(cards, "example-free"), "Inferred · 5h")
+        self.assertTrue(window["inferred"])
+        self.assertFalse(self.window(self.card(cards, "claude"), "Session")["inferred"])
+
+    def test_a_window_with_no_remaining_is_never_a_zero_bar(self):
+        """A window the collector could not read is not a window that is spent."""
+        rows = [
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "order",
+                "value": 3,
+            }
+        ]
+        window = self.window(self.card(self.cards(rows=rows), "example-free"), "Weekly")
+        self.assertFalse(window["hasLeft"])
+        self.assertEqual(window["width"], "")
+        self.assertEqual(window["pct"], "")
+
+    def test_the_reset_time_is_written_in_utc(self):
+        """A reset time reads in UTC, whatever the viewer's zone."""
+        env = dict(os.environ, TZ="Etc/GMT+10")
+        cards = self.cards(env=env)
+        self.assertEqual(
+            self.window(self.card(cards, "claude"), "Session")["sub"],
+            "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)",
+        )
+        self.assertEqual(
+            self.window(self.card(cards, "opencode-go"), "Monthly")["sub"],
+            "✕ spent · resets in 8.1d (30 Oct 22:34)",
+        )
+
+    def test_no_window_of_the_page_is_a_fixed_value(self):
+        """The page reads every number of a window; it never holds one."""
+        page = json.dumps(self.panel)
+        for value in (
+            "0.67",
+            "0.429",
+            "0.4134",
+            "0.4463",
+            "0.9994",
+            "0.881",
+            "0.966",
+            "1792710599",
+            "1793399640",
+        ):
+            self.assertNotIn(value, page, value)
+
+    def test_the_panel_is_tall_enough_for_its_cards(self):
+        """The panel holds every card, every row and every chip of the set.
+
+        Measured in Playwright with the panel's own styles and the live set
+        of the fixture: the content is 1651 px tall at 390 px, and a grid
+        row of the dashboard is 37 px.
+        """
+        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 1651)
+
+
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
 
@@ -1037,6 +1373,58 @@ class WorkedCasesTests(unittest.TestCase):
         target = find_target(header, "ghostship_ai_routing_enabled")
         rows = self.store.query(target["expr"])
         self.assertEqual([float(row["value"][1]) for row in rows], [0.0])
+
+    def test_the_capacity_cards_are_read_from_the_collector_s_gauges(self):
+        """The panel's own query returns the windows of the live set.
+
+        The query reads every account window gauge in one go, so the rows
+        are the windows of the eight accounts that have one and the
+        seventeen accounts that are learning.
+        """
+        panel = section(self.page, "Provider capacity")
+        target = find_target(panel, "ghostship_ai_account_window_remaining_ratio")
+        rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        self.assertEqual(
+            {row["metric"].get("field") for row in rows},
+            {"left", "expected", "resetAt", "order", "learning"},
+        )
+        accounts = {row["metric"].get("account") for row in rows}
+        self.assertEqual(len(accounts), 25)
+        self.assertEqual(len(rows), 74)
+
+    def test_the_worked_rows_are_the_rows_the_store_returns(self):
+        """The cards of the page are the windows the store holds."""
+        panel = section(self.page, "Provider capacity")
+        target = find_target(panel, "ghostship_ai_account_window_remaining_ratio")
+        rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        expression = (
+            "const rows = "
+            + json.dumps(
+                [
+                    {**row["metric"], "value": float(row["value"][1])}
+                    for row in rows
+                ]
+            )
+            + ";\n"
+            + "const now = "
+            + json.dumps(CAPACITY_NOW)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.capacityCards(rows, now)));"
+        )
+        cards = run_panel_helper(panel, expression)
+        by_account = {card["account"]: card for card in cards}
+        session = next(
+            window
+            for window in by_account["claude"]["windows"]
+            if window["label"] == "Session"
+        )
+        self.assertEqual(session["sub"], "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)")
+        monthly = next(
+            window
+            for window in by_account["opencode-go"]["windows"]
+            if window["label"] == "Monthly"
+        )
+        self.assertEqual(monthly["sub"], "✕ spent · resets in 8.1d (30 Oct 22:34)")
 
 
 if __name__ == "__main__":
