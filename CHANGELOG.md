@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.17.155] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 5d5bcc6c; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #320.
+
+## [3.17.154] - 2026-10-23
+
+- Keep CI runners available for fast PR gates by running slow main coverage nightly and cancelling obsolete main checks.
+
+PR #317.
+
 ## [3.17.153] - 2026-10-23
 
 - Remove superseded engineering handoff and deployment instructions.
