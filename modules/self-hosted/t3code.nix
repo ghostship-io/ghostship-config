@@ -10,6 +10,7 @@ let
   providerManifest = import ../../packages/t3code/provider-manifest.nix { inherit lib; };
   t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
   t3codeHome = "/srv/apps/t3code/home";
+  hardened = config.ghostship.t3code.hardening.enable;
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeDocker = "/srv/apps/t3code/docker";
   t3codeTmp = "/srv/apps/t3code/tmp";
@@ -17,69 +18,78 @@ let
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   t3codeSecretsFile = "/run/secrets/t3code.env";
+  # The rootless engine manager must stay in its user-<UID>.slice because Moby
+  # resolves the delegated cgroup controllers through that path. The outer T3
+  # container joins the same slice so one pair of limits bounds both.
+  engineSlice = "user-${toString config.ghostship.t3codeDocker.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
   # Tool maintenance, the idle restart, the server monitor, and the host image
   # deployment share this lock through the persistent home bind mount.
   t3codeToolLock = "/home/t3code/.local/state/t3code-tool-update/tool-update.lock";
 
-  t3codePackages = with pkgs; [
-    nix
-    systemd
-    dbus
-    pam
-    docker
-    cloudflared
-    sudo
-    git
-    git-lfs
-    gh
-    openssh
-    curl
-    jq
-    ripgrep
-    fd
-    direnv
-    uv
-    python3
-    ruff
-    basedpyright
-    nil
-    nixfmt
-    shellcheck
-    shfmt
-    yq-go
-    buildkit
-    bubblewrap
-    fuse-overlayfs
-    nodejs_24
-    typescript-language-server
-    prettier
-    stdenv.cc
-    gnumake
-    pkg-config
-    cmake
-    binutils
-    coreutils
-    findutils
-    gnugrep
-    gnused
-    gnutar
-    gzip
-    lbzip2
-    unzip
-    p7zip
-    procps
-    iptables
-    iproute2
-    kmod
-    su-exec
-    which
-    file
-    bashInteractive
-    cacert
-    openssl
-  ];
+  t3codePackages =
+    (with pkgs; [
+      nix
+      systemd
+      dbus
+      pam
+      docker
+      cloudflared
+      sudo
+      git
+      git-lfs
+      gh
+      openssh
+      curl
+      jq
+      ripgrep
+      fd
+      direnv
+      uv
+      python3
+      ruff
+      basedpyright
+      nil
+      nixfmt
+      shellcheck
+      shfmt
+      yq-go
+      buildkit
+      bubblewrap
+      fuse-overlayfs
+      nodejs_24
+      typescript-language-server
+      prettier
+      stdenv.cc
+      gnumake
+      pkg-config
+      cmake
+      binutils
+      coreutils
+      findutils
+      gnugrep
+      gnused
+      gnutar
+      gzip
+      lbzip2
+      unzip
+      p7zip
+      procps
+      iptables
+      iproute2
+      kmod
+      su-exec
+      which
+      file
+      bashInteractive
+      cacert
+      openssl
+    ])
+    ++ lib.optionals hardened [
+      pkgs.acl
+      config.ghostship.t3codeDocker.bridgePackage
+    ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
 
@@ -1986,15 +1996,33 @@ let
 
     ${t3codeRuntimeEnv}
 
-    rm -f /var/run/docker.pid
-    exec dockerd \
-      --host=unix:///var/run/docker.sock \
-      --group=t3code \
-      --data-root=/var/lib/docker \
-      --storage-driver=vfs \
-      --iptables=false \
-      --ip-masq=false \
-      --bridge=none
+    ${
+      if hardened then
+        ''
+          # Keep the dependency unit alive while the separate engine is reachable.
+          # Failure restarts this readiness check; it never starts a rootful daemon.
+            until docker info >/dev/null 2>&1; do
+              sleep 2
+            done
+            systemd-notify --ready
+          while docker info >/dev/null 2>&1; do
+            sleep 15
+          done
+          exit 1
+        ''
+      else
+        ''
+          rm -f /var/run/docker.pid
+          exec dockerd \
+          --host=unix:///var/run/docker.sock \
+          --group=t3code \
+          --data-root=/var/lib/docker \
+          --storage-driver=vfs \
+          --iptables=false \
+          --ip-masq=false \
+          --bridge=none
+        ''
+    }
   '';
 
   t3codeEntrypoint = pkgs.writeShellScriptBin "t3code-systemd-entrypoint" ''
@@ -2003,38 +2031,45 @@ let
     exec ${pkgs.systemd}/lib/systemd/systemd
   '';
 
-  t3codeImageContents = t3codePackages ++ [
-    antigravityAcp
-    t3codeEntrypoint
-    t3codeContainerSetup
-    t3codeDockerdRun
-    t3codeDaemonRun
-    t3codeAccessProxy
-    t3codeProjectBootstrap
-    t3codeToolMaintenance
-    t3codeInstallT3Shim
-    t3codeAntigravityUpdate
-    t3codeInstallGhostshipAgent
-    t3codeToolAutoUpdate
-    t3codeToolUpdateRestart
-    t3codeProcessMemoryGuard
-    t3codeDaemonMonitor
-    t3codeRetention
-    t3codeContainerHealth
-    t3codeRunHooks
-    t3codeSharedAgents
-    t3codeDoctor
-    t3codeApplyConfig
-    t3codeUserUnits
-    t3codeBootstrap
-    t3codeSnapshotConfig
-    t3codeTunnel
-    pkgs.dockerTools.binSh
-    pkgs.dockerTools.usrBinEnv
-    pkgs.dockerTools.caCertificates
-  ];
+  t3codeImageContents =
+    t3codePackages
+    ++ lib.optional hardened (
+      pkgs.writeTextDir "share/t3code-docker-runtime" (
+        toString config.ghostship.t3codeDocker.runtimePackage
+      )
+    )
+    ++ [
+      antigravityAcp
+      t3codeEntrypoint
+      t3codeContainerSetup
+      t3codeDockerdRun
+      t3codeDaemonRun
+      t3codeAccessProxy
+      t3codeProjectBootstrap
+      t3codeToolMaintenance
+      t3codeInstallT3Shim
+      t3codeAntigravityUpdate
+      t3codeInstallGhostshipAgent
+      t3codeToolAutoUpdate
+      t3codeToolUpdateRestart
+      t3codeProcessMemoryGuard
+      t3codeDaemonMonitor
+      t3codeRetention
+      t3codeContainerHealth
+      t3codeRunHooks
+      t3codeSharedAgents
+      t3codeDoctor
+      t3codeApplyConfig
+      t3codeUserUnits
+      t3codeBootstrap
+      t3codeSnapshotConfig
+      t3codeTunnel
+      pkgs.dockerTools.binSh
+      pkgs.dockerTools.usrBinEnv
+      pkgs.dockerTools.caCertificates
+    ];
 
-  t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
+  t3codeImageArgs = {
     name = imageName;
     tag = imageTag;
     contents = t3codeImageContents;
@@ -2129,6 +2164,20 @@ let
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF
+      ${lib.optionalString hardened ''
+          mkdir -p etc/systemd/user/default.target.wants
+          cat > etc/systemd/user/t3code-docker-bridge.service <<'BRIDGE'
+        [Unit]
+        Description=Localhost access to isolated development Docker ports
+        [Service]
+        ExecStart=${config.ghostship.t3codeDocker.bridgePackage}/bin/t3code-docker-bridge bridge
+        Restart=always
+        RestartSec=2
+        [Install]
+        WantedBy=default.target
+        BRIDGE
+          ln -s ../t3code-docker-bridge.service etc/systemd/user/default.target.wants/t3code-docker-bridge.service
+      ''}
       ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/system/t3code-container-setup.service <<'EOF'
       [Unit]
@@ -2228,7 +2277,7 @@ let
       EOF
       cat > etc/systemd/system/dockerd.service <<'EOF'
       [Unit]
-      Description=T3 Code Docker daemon
+      Description=T3 Code Docker ${if hardened then "engine readiness" else "daemon"}
       DefaultDependencies=no
       After=t3code-container-setup.service
       Requires=t3code-container-setup.service
@@ -2236,11 +2285,13 @@ let
       Before=shutdown.target
 
       [Service]
-      Type=simple
+      Type=${if hardened then "notify" else "simple"}
+      ${lib.optionalString hardened "NotifyAccess=all"}
       ExecStart=${t3codeDockerdRun}/bin/t3code-dockerd-run
       Restart=always
       RestartSec=5
       TimeoutStopSec=30s
+      TimeoutStartSec=180s
       TasksMax=infinity
 
       [Install]
@@ -2642,6 +2693,7 @@ let
     };
   };
 
+  t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb t3codeImageArgs;
   t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
 
   t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
@@ -2693,6 +2745,22 @@ in
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
   system.build.t3codeServerMonitor = t3codeDaemonMonitor;
   system.build.t3codeToolMaintenance = t3codeToolMaintenance;
+  system.build.t3codeRuntimeClosure = pkgs.linkFarm "t3code-runtime-closure" (
+    lib.imap0 (i: path: {
+      name = toString i;
+      inherit path;
+    }) t3codeImageContents
+  );
+  # Candidate loading must never retag the production image beneath its updater.
+  system.build.t3codeCandidateImage = lib.mkIf hardened (
+    pkgs.dockerTools.buildLayeredImageWithNixDb (
+      t3codeImageArgs
+      // {
+        name = "${imageName}-candidate";
+        tag = "hardening";
+      }
+    )
+  );
 
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
@@ -2727,31 +2795,69 @@ in
       "io.ghostship.t3code.deployment" = t3codeDeploymentId;
     };
     ports = [ ];
-    extraOptions = [
-      "--privileged"
-      "--systemd=always"
-      "--pids-limit=-1"
-      "--stop-timeout=180"
-      "--hostname=t3code.ghostship.io"
-      "--network=ghostship_net"
-      "--network=agent_desktop_net"
-      "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
-      "--health-interval=30s"
-      "--health-timeout=15s"
-      "--health-retries=5"
-      "--health-start-period=5m"
-    ];
+    extraOptions =
+      (
+        if hardened then
+          [
+            "--cap-drop=ALL"
+            "--security-opt=unmask=/proc/*"
+          ]
+          ++ map (cap: "--cap-add=${cap}") (
+            builtins.fromJSON (builtins.readFile ../../packages/t3code/runtime-caps.json)
+          )
+        else
+          [ "--privileged" ]
+      )
+      ++ [
+        "--systemd=always"
+        "--stop-timeout=180"
+        "--hostname=t3code.ghostship.io"
+        "--network=ghostship_net"
+        "--network=agent_desktop_net"
+        "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
+        "--health-interval=30s"
+        "--health-timeout=15s"
+        "--health-retries=5"
+        "--health-start-period=5m"
+      ]
+      ++ (
+        if hardened then
+          [
+            "--pids-limit=${toString config.ghostship.t3code.hardening.containerPidsLimit}"
+            # The container joins the engine's user slice so the aggregate
+            # limits cover the container itself, not only conmon.
+            "--cgroup-parent=${engineSlice}"
+          ]
+        else
+          [ "--pids-limit=-1" ]
+      );
     volumes = [
       # Podman's systemd mode otherwise mounts /tmp as tmpfs. Temporary
       # checkouts must not consume the shared server/provider memory budget.
       "${t3codeTmp}:/tmp:rw"
-      "${t3codeDocker}:/var/lib/docker:rw"
       "${t3codeWorkspace}:/workspace:rw"
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
-      "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
-    ];
+    ]
+    ++ (
+      if hardened then
+        [
+          "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw"
+          "/run/t3code-docker/ports.sock:/var/run/t3code-docker-ports.sock:rw"
+        ]
+        ++ lib.mapAttrsToList (
+          path: readOnly:
+          "${config.ghostship.agentHost.sharedPath}/${path}:/mnt/share/${path}:${
+            if readOnly then "ro" else "rw"
+          },nosuid,nodev"
+        ) config.ghostship.t3code.hardening.sharedMounts
+      else
+        [
+          "${t3codeDocker}:/var/lib/docker:rw"
+          "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
+        ]
+    );
     environmentFiles = [ t3codeSecrets ];
   };
 
@@ -2770,9 +2876,17 @@ in
   systemd.services.podman-t3code = {
     restartIfChanged = false;
     stopIfChanged = false;
+    requires = lib.optionals hardened [
+      "t3code-docker.socket"
+      "t3code-docker-ports.socket"
+    ];
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
+    ]
+    ++ lib.optionals hardened [
+      "t3code-docker.socket"
+      "t3code-docker-ports.socket"
     ];
     wants = [
       "init-ghostship-net.service"

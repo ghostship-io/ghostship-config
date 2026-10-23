@@ -82,6 +82,7 @@ POLICY_SOURCES: dict[str, str] = {
     "ghostship-romm-db": "modules/self-hosted/apparmor/romm-db.profile",
     "ghostship-seerr": "modules/self-hosted/apparmor/seerr.profile",
     "ghostship-sonarr": "modules/self-hosted/apparmor/sonarr.profile",
+    "ghostship-t3code": "modules/self-hosted/apparmor/t3code.profile",
     "ghostship-tautulli": "modules/self-hosted/apparmor/tautulli.profile",
     "ghostship-tdarr": "modules/self-hosted/apparmor/tdarr.profile",
     "ghostship-uptime-kuma": "modules/self-hosted/apparmor/uptime-kuma.profile",
