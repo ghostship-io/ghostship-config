@@ -534,6 +534,7 @@ for field, description in {
 }.items():
     METRIC_HELP['ghostship_ai_picker_model_' + field] = description
 
+METRIC_HELP['ghostship_ai_announced_reset_info'] = 'Recorded public reset announcement, including unverified relays awaiting confirmation.'
 GAUGE_METRICS = tuple(METRIC_HELP)
 
 # How many dropped series a run names. A run that drops a handful of series
@@ -2224,6 +2225,8 @@ def render(
     for name, labels, value in extra:
         add(name, labels, value)
     for name, labels, value in model_selection.samples((snapshot or {}).get("model_selection") or {}):
+        add(name, labels, value)
+    for name, labels, value in announced_resets.samples((snapshot or {}).get("announced_resets") or {}):
         add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         add(name, labels, value)
