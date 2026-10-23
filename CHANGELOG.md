@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.172] - 2026-10-23
+
+- Prepare writable worker state and allow the nested sandbox to mount its private proc.
+
+PR #337.
+
 ## [3.17.171] - 2026-10-23
 
 - Pin the agent release with T3 selector parity and pyLoad query dispatch fixes.
