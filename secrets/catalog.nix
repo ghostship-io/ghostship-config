@@ -127,8 +127,15 @@ in
       ];
     };
 
+    # Engineering: Bitwarden github.com/TOKEN.
     github = mkUnit {
       relativeFile = "secrets/files/sources/providers/github.env.age";
+      exports = [ "TOKEN" ];
+    };
+
+    # Runner registration only: Bitwarden github.com/RUNNER_REGISTRATION_TOKEN.
+    github-runner-registration = mkUnit {
+      relativeFile = "secrets/files/sources/providers/github-runner-registration.env.age";
       exports = [ "TOKEN" ];
     };
 
