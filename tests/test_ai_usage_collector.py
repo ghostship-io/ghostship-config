@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "collector"
@@ -341,6 +342,23 @@ class PoolLedgerTests(unittest.TestCase):
 
 
 class T3UsageTests(unittest.TestCase):
+    def test_usage_transport_failure_keeps_its_fixed_reason(self):
+        class Failed:
+            def call(self, *_args):
+                raise t3source.T3Error('timeout')
+        result = t3source._collect_usage(Failed(), 1000)
+        self.assertEqual((result.status, result.reason), ('error', 'timeout'))
+        self.assertEqual(result.metrics, [])
+
+    def test_current_rpc_scan_uses_the_bounded_default_budget(self):
+        with patch.object(main, 'resolve_t3_base_url', return_value='http://localhost'), \
+             patch.object(main, 'read_session_token', return_value='synthetic'), \
+             patch.object(main, 'T3Client') as client, \
+             patch.object(main.t3source, 'collect', return_value=[]) as collect:
+            main.collect_t3(1000, None, {})
+        self.assertEqual(client.call_args.kwargs['timeout'], 60)
+        collect.assert_called_once()
+
     def test_opencode_models_are_split_by_provider(self):
         self.assertEqual(
             t3source.split_model("opencode", "opencode-go/minimax-m3.1-flash-free"),

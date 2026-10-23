@@ -1482,3 +1482,12 @@ The generated versioned preferences reach the collector through
 `--model-selection-preferences` and are published as `model_selection.worker_builds`.
 Candidate `selection_eligible` and `selection_reason` explain the choice separately
 from quota availability and Quality.
+
+The Providers page uses raw MetricsQL strings for repeated model regexes,
+so punctuation in exact model identities survives Grafana interpolation.
+Capacity repeat freshness timestamps each selector directly; a timestamp of a
+composite expression introduces an implicit subquery and can hide live cards.
+Source health is visible above the model panes. It labels missing/stale
+collections and T3 usage/provider failures independently of model quota data.
+Historical T3 usage scans use the bounded sixty-second transport budget;
+failures preserve their fixed reason (including timeout), never server text.

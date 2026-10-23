@@ -447,7 +447,7 @@ def _collect_usage(
         return SourceResult(
             source="t3_usage",
             status="error",
-            reason=codes.RPC_FAILED,
+            reason=codes.reason(error.reason),
             duration_s=time.monotonic() - started,
         )
     zone = _zone(timezone_name)
