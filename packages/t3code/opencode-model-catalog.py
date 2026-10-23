@@ -6,8 +6,9 @@ OpenCode's own models.dev cache, so newly released models appear on the next
 run and models age out without a maintained list. Only the enabled
 subscription providers are trimmed; every other provider passes through,
 less the retired ones. OpenRouter left T3 Code and stays in the free pool,
-which reads the untrimmed cache, so its provider is dropped here and from
-OpenCode's config, and a configured default naming it is repointed.
+which reads the untrimmed cache. Zen belongs only to the free worker. Both
+providers are dropped here and from T3's allowlist, and a configured default
+naming either is repointed. Native Console catalog entries are disabled too.
 """
 
 import argparse
@@ -19,7 +20,7 @@ import sys
 import tempfile
 
 TRIMMED = ("ollama-cloud", "opencode-go")
-RETIRED = ("openrouter",)
+RETIRED = ("openrouter", "opencode")
 REPLACEMENTS = {
     "model": "ollama-cloud/deepseek-v4.1-flash",
     "small_model": "ollama-cloud/minimax-m3.1-flash",
@@ -61,8 +62,8 @@ def trim(catalog, today, pins):
     return result
 
 
-def retire(config):
-    """The same config with OpenRouter and any default naming it removed."""
+def retire(config, zen_models=()):
+    """T3 exposes subscription routes; Zen belongs to the separate free worker."""
     result = dict(config)
     providers = result.get("enabled_providers")
     if isinstance(providers, list):
@@ -70,6 +71,15 @@ def retire(config):
     provider = result.get("provider")
     if isinstance(provider, dict) and any(name in provider for name in RETIRED):
         result["provider"] = {name: entry for name, entry in provider.items() if name not in RETIRED}
+    native = result.get("providers")
+    native = {name: entry for name, entry in (native or {}).items() if name not in RETIRED} if isinstance(native, dict) else {}
+    if zen_models:
+        # Native Console discovery can contribute models independently of the
+        # models.dev cache. Disable its catalog entries as well as removing the
+        # provider from the T3 allowlist and trimmed catalog.
+        native["opencode"] = {"models": {name: {"disabled": True} for name in sorted(zen_models)}}
+    if native or "providers" in result:
+        result["providers"] = native
     for key, replacement in REPLACEMENTS.items():
         value = result.get(key)
         if isinstance(value, str) and value.split("/", 1)[0] in RETIRED:
@@ -77,7 +87,7 @@ def retire(config):
     return result
 
 
-def config_edited(config_path):
+def config_edited(config_path, zen_models=()):
     """Retire the provider from OpenCode's config; return whether it changed."""
     try:
         text = config_path.read_text(encoding="utf-8")
@@ -94,7 +104,7 @@ def config_edited(config_path):
     if not isinstance(config, dict):
         log(f"config is not an object; kept {config_path}")
         return False
-    updated = retire(config)
+    updated = retire(config, zen_models)
     if updated == config:
         return False
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,7 +154,7 @@ def main(argv=None):
     counts = ", ".join(f"{p} {len(trimmed[p]['models'])}/{len(catalog[p]['models'])}"
                        for p in TRIMMED if p in trimmed and p in catalog)
     log(f"wrote {args.output}: {counts}")
-    config_edited(args.config)
+    config_edited(args.config, (catalog.get("opencode") or {}).get("models", {}))
     return 0
 
 
