@@ -25,6 +25,12 @@ let
   # Every flag that can place the container or change its task bound: the
   # parent cgroup, the cgroup mode, the cgroup namespace, and the raw cgroup
   # settings that can carry a task limit of their own.
+  # Every argument must carry its own value. Otherwise an unrelated flag
+  # such as --label consumes the following cgroup/pids token as its value,
+  # while a token-only security check mistakenly counts that token as active.
+  canonicalContainerOptions = lib.all (
+    element: builtins.match "--[a-z][a-z0-9-]*=.*" element != null
+  ) containerOptions;
   cgroupFlagOptions = lib.filter (
     element: lib.hasPrefix "--" element && lib.hasPrefix "cgroup" (flagName element)
   ) containerOptions;
@@ -114,6 +120,10 @@ in
   config = {
     ghostship.t3codeDocker.enable = lib.mkDefault cfg.enable;
     assertions = [
+      {
+        assertion = !cfg.enable || canonicalContainerOptions;
+        message = "Hardened T3 extraOptions must use canonical --flag=value tokens so option values cannot hide resource or security flags.";
+      }
       {
         assertion = !cfg.enable || config.ghostship.t3codeDocker.enable;
         message = "Unprivileged T3 requires the separate rootless development engine.";

@@ -377,13 +377,28 @@ EOF
     '';
   };
 
+  # The licensed PICO-8 archive is read from the Windows profile that keeps
+  # it. The profile is found on the host, so this repository never names it.
+  pico8Archive = "pico-8_0.2.7_amd64.zip";
+  windowsProfile =
+    let
+      usersRoot = "/mnt/c/Users";
+      profiles =
+        if builtins.pathExists usersRoot
+        then builtins.attrNames (builtins.readDir usersRoot)
+        else [ ];
+      holders = builtins.filter (
+        profile: builtins.pathExists "${usersRoot}/${profile}/Downloads/${pico8Archive}"
+      ) profiles;
+    in if holders == [ ] then "owner" else builtins.head holders;
+
   pico8Package = pkgs.stdenvNoCC.mkDerivation {
     pname = "pico-8";
     version = "0.2.7";
     src = pkgs.requireFile {
-      name = "pico-8_0.2.7_amd64.zip";
+      name = pico8Archive;
       sha256 = "1alyii0bc9r9j2519q3jhxn8xazrcffy0kl8k07mnn208y2wxwpd";
-      url = "file:///mnt/c/Users/the owner/Downloads/pico-8_0.2.7_amd64.zip";
+      url = "file:///mnt/c/Users/${windowsProfile}/Downloads/${pico8Archive}";
     };
     nativeBuildInputs = [
       pkgs.makeWrapper

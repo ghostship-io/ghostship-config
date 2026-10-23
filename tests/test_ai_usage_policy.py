@@ -296,7 +296,14 @@ class ThreeDAdmissionTests(unittest.TestCase):
         self.assertEqual(row["aa"]["indices"]["intelligence"], 51.8)
         three_d_entry = [entry for entry in data["tier_winners"].get("3d", [])]
         self.assertTrue(three_d_entry)
-        self.assertEqual(three_d_entry[0]["value"], row["value"]["value"])
+        # The winner of the 3D tier publishes the 3D value (intelligence, the
+        # AA-3D Elo and the cost) under the trust of the model, never the
+        # general value; the general Artificial Analysis value is beside it.
+        self.assertEqual(three_d_entry[0]["value_aa"], row["value"]["value"])
+        self.assertEqual(three_d_entry[0]["value"], row["value_3d"]["value"])
+        self.assertEqual(
+            three_d_entry[0]["value"], row["outcome"]["3d"]["published"]
+        )
 
     def test_a_text_only_record_can_never_be_ranked_for_3d(self):
         models = visual_model("ollama", "beam")
@@ -664,7 +671,12 @@ class AA3DContractTests(unittest.TestCase):
         self.assertEqual(value_3d["cost_source"], "artificialanalysis_intelligence")
         self.assertTrue(value_3d["proxy"])
         self.assertIn("not a measured 3D cost", value_3d["cost_basis"])
-        self.assertAlmostEqual(value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.1), 6), places=6)
+        # 0.45 * intelligence + 0.25 * the normalized Elo + 0.30 * efficiency.
+        self.assertAlmostEqual(
+            value_3d["value"],
+            round(0.45 * (51.8 / 100.0) + 0.25 * 1.0 + 0.3 * (1 / 1.1), 6),
+            places=6,
+        )
         self.assertEqual(row["three_d"]["elo"], 1200.0)
         normalization = row["three_d"]["normalization"]
         self.assertEqual(normalization["kind"], "relative-minmax")
@@ -1049,8 +1061,8 @@ class AAReferenceIndependenceTests(unittest.TestCase):
 
     def test_the_best_measured_value_is_the_reference_not_max(self):
         row = self._build("medium")["candidates"][0]
-        # High: 0.80 * 0.502 + 0.20 / 1.1 = 0.583... beats Max:
-        # 0.80 * 0.518 + 0.20 / 1.5 = 0.547...
+        # High: 0.70 * 0.502 + 0.30 / 1.1 = 0.624... beats Max:
+        # 0.70 * 0.518 + 0.30 / 1.5 = 0.563...
         self.assertEqual(row["aa"]["condition"]["measured_variant"], "high")
         self.assertEqual(row["aa"]["reference"]["condition"], "high")
         self.assertEqual(len(row["aa"]["alternatives"]), 2)

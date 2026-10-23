@@ -1,0 +1,29 @@
+{
+ "note": "A small Artificial Analysis cache for the model names. The records have the feed's own shape: the name carries the condition the feed measured the model under, and the identity of the record is its slug. Only the names are exercised here, so the cache holds one record.",
+ "status": "ok",
+ "index_version": "4.3",
+ "fetched_at": "2026-10-22T00:00:00Z",
+ "fetched_at_epoch": 1792627200.0,
+ "records": [
+  {
+   "id": "aa-fixture-glm-5-3-flash-high",
+   "slug": "glm-5-3-flash",
+   "model": "GLM-5.3 Flash (High)",
+   "provider": "Z AI",
+   "release_date": "2026-09-30",
+   "indices": {
+    "agentic_index": 21.5,
+    "coding_index": 46.2,
+    "engineering_index": 24.9,
+    "intelligence_index": 27.4
+   },
+   "cost_per_task": 0.31,
+   "median_performance": 88.0,
+   "prices": {
+    "input": 0.15,
+    "output": 0.5,
+    "cache_read": 0.03
+   }
+  }
+ ]
+}

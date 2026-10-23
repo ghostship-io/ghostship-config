@@ -41,6 +41,11 @@ let
       runtime.extraOptions ++ options
     );
   };
+  hiddenOption = prefix: failures {
+    virtualisation.oci-containers.containers.t3code.extraOptions = lib.mkForce (
+      lib.concatMap (option: lib.optional (lib.hasPrefix prefix option) "--label" ++ [ option ]) runtime.extraOptions
+    );
+  };
   conflictingParent = failures (withOptions [ "--cgroup-parent=other.slice" ]);
   conflictingPidsLimit = failures (withOptions [ "--pids-limit=-1" ]);
   splitParent = failures (withOptions [
@@ -70,6 +75,8 @@ let
       engineService.serviceConfig.TasksMax + containerPidsLimit;
   };
 in
+assert rejects "canonical --flag=value" (hiddenOption "--cgroup-parent=");
+assert rejects "canonical --flag=value" (hiddenOption "--pids-limit=");
 # A hardened candidate must not recover blanket host privileges through Docker
 # or an alternate runtime flag. The accepted root-SSH administration path stays.
 assert !(has "--privileged");

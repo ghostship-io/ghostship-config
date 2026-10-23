@@ -18,20 +18,38 @@ let
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
     "ghostship-io/ghostship-config" = {
-      project_id = "the owner's local area";
+      project_id = "@GHOSTSHIP_T3_PROJECT_CONFIG@";
       required_checks = [ "check" "browser" ];
     };
-    "ghostship-io/ghostship-agent".project_id = "the owner's local area";
-    "ghostship-io/ghostship-3dprinting".project_id = "the owner's local area";
-    "ghostship-io/ghostship-roms".project_id = "the owner's local area";
-    "ghostship-io/ghostship-xplus4".project_id = "the owner's local area";
-    "ghostship-io/ghostship-newsletter".project_id = "the owner's local area";
-    "ghostship-io/ghostship-orca".project_id = "the owner's local area";
+    "ghostship-io/ghostship-agent".project_id = "@GHOSTSHIP_T3_PROJECT_AGENT@";
+    "ghostship-io/ghostship-3dprinting".project_id = "@GHOSTSHIP_T3_PROJECT_3DPRINTING@";
+    "ghostship-io/ghostship-roms".project_id = "@GHOSTSHIP_T3_PROJECT_ROMS@";
+    "ghostship-io/ghostship-xplus4".project_id = "@GHOSTSHIP_T3_PROJECT_XPLUS4@";
+    "ghostship-io/ghostship-newsletter".project_id = "@GHOSTSHIP_T3_PROJECT_NEWSLETTER@";
+    "ghostship-io/ghostship-orca".project_id = "@GHOSTSHIP_T3_PROJECT_ORCA@";
   };
-  coordinatorConfig = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
-    allowed_user_ids = [ a local store id ];
+  # The previous owner and the two renamed repositories, so that existing
+  # issue owners, queued deliveries, CI issue mappings and pull request links
+  # survive the transfer. The alias targets are the canonical repositories
+  # above; the coordinator resolves a legacy name to its canonical one and
+  # keeps the pre-transfer identity for commands it has already sent. The
+  # previous owner is supplied by the deployment outside this repository.
+  repositoryAliases = {
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/nixos-config" = "ghostship-io/ghostship-config";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-agent" = "ghostship-io/ghostship-agent";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-3dprinting" = "ghostship-io/ghostship-3dprinting";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-roms" = "ghostship-io/ghostship-roms";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-xplus4" = "ghostship-io/ghostship-xplus4";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-newsletter" = "ghostship-io/ghostship-newsletter";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/orca-advanced-calibration" = "ghostship-io/ghostship-orca";
+  };
+  renderOwnerConfig = pkgs.writeShellScriptBin "ghostship-render-owner-config" ''
+    exec ${pkgs.python3}/bin/python3 ${./render-owner-config.py} "$@"
+  '';
+  coordinatorConfigTemplate = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
+    allowed_user_ids = [ "@GHOSTSHIP_GITHUB_USER_ID@" ];
     ntfy_url = "http://ntfy:8080";
-    t3_environment_id = "the owner's local area";
+    t3_environment_id = "@GHOSTSHIP_T3_ENVIRONMENT_ID@";
     # The chief reviewer leads launched threads; the backup reviewer stands in
     # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
     # remains delegated under the canonical engineering/routing policy.
@@ -64,6 +82,9 @@ let
         timeout_seconds = 1800;
       };
     }) repositories;
+    # The coordinator resolves a legacy repository name to its canonical one
+    # and keeps the pre-transfer identity for the commands it already sent.
+    repository_aliases = repositoryAliases;
     # Host incidents launch bounded repair threads in the fleet's own project.
     incidents = { repository = "ghostship-io/ghostship-config"; daily_limit = 3; };
   });
@@ -73,6 +94,16 @@ in
 {
   options.ghostship.githubEngineering.enable =
     lib.mkEnableOption "hooks.ghostship.io webhook receiver and T3 engineering coordinator";
+
+  # The coordinator can be held off while the receiver keeps spooling events.
+  # A runtime drop-in under /run does not survive an activation, so the hold
+  # lives here. Clear the spool and incidents before turning it back on, or
+  # it replays the backlog.
+  options.ghostship.githubEngineering.coordinatorAutoStart = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Start the GitHub coordinator at boot and on activation.";
+  };
 
   config = lib.mkIf cfg.enable {
     ghostship.notify.incidentSpool = "${root}/incidents";
@@ -178,7 +209,9 @@ in
       pull = "never";
       user = "62030:62032";
       cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
-              "--repositories" (lib.concatStringsSep "," (builtins.attrNames repositories)) ];
+              # The receiver serves the canonical repositories.
+              "--repositories" (lib.concatStringsSep ","
+                (builtins.attrNames repositories)) ];
       volumes = [
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-hooks.path}:/run/secrets/hooks.env:ro"
@@ -233,6 +266,7 @@ in
 
     virtualisation.oci-containers.containers.ghostship-github-coordinator = {
       image = "ghostship-github-coordinator:${github.coordinatorImage.imageTag}";
+      autoStart = cfg.coordinatorAutoStart;
       imageFile = github.coordinatorImage;
       pull = "never";
       user = "62031:62032";
@@ -242,7 +276,7 @@ in
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${root}/state:/state:rw,noexec,nosuid,nodev"
         "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
-        "${coordinatorConfig}:/etc/ghostship-github/config.json:ro"
+        "${root}/config.json:/etc/ghostship-github/config.json:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"
@@ -255,8 +289,10 @@ in
       after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
       requires = [ "init-ghostship-net.service" ];
       wants = [ "ghostship-github-t3-token.service" ];
+      serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       preStart = lib.mkBefore ''
         ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-github-coordinator
+        ${renderOwnerConfig}/bin/ghostship-render-owner-config ${coordinatorConfigTemplate} ${root}/config.json 644
       '';
     };
   };

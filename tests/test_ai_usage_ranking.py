@@ -1,6 +1,9 @@
 """Tests for the AI usage model ranking engine."""
 
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,6 +14,7 @@ if str(COLLECTOR) not in sys.path:
     sys.path.append(str(COLLECTOR))
 
 import catalog as catalog_module  # noqa: E402
+import metrics  # noqa: E402
 import ranking  # noqa: E402
 
 # A fixed clock, so the release dates below are stable.
@@ -62,7 +66,15 @@ def _rank_with_feed(**kwargs):
     return _rank_models(**kwargs)
 
 
-ranking.rank_models = _rank_with_feed
+def setUpModule():
+    # The feed is injected for this module's tests only. A patch left in place
+    # at import time leaks into every test module that runs after this one in
+    # the same process (CI runs them all in one), and changes their ranking.
+    ranking.rank_models = _rank_with_feed
+
+
+def tearDownModule():
+    ranking.rank_models = _rank_models
 
 
 def entry(
@@ -174,20 +186,31 @@ class CapacityTests(unittest.TestCase):
         ]
 
     def test_an_account_that_frees_up_soon_outranks_one_that_stays_used_up(self):
+        # The order across the providers comes from the pace of their own
+        # window: the account behind the line its window draws is the one
+        # that is used first. The score is the measured value and carries no
+        # capacity term, so the two models of equal measurement score the
+        # same.
         ranked = ranking.rank_models(
             models=self.models,
             catalog=self.catalog,
             quota_windows={
                 "claude": [
                     ranking.QuotaWindow(
-                        kind="weekly", used_ratio=0.5, reset_epoch=NOW + 3600.0
-                    , observed_at=NOW
+                        kind="weekly",
+                        used_ratio=0.5,
+                        reset_epoch=NOW + 3600.0,
+                        duration_seconds=2 * 3600.0,
+                        observed_at=NOW,
                     )
                 ],
                 "codex": [
                     ranking.QuotaWindow(
-                        kind="weekly", used_ratio=0.5, reset_epoch=NOW + 5 * DAY
-                    , observed_at=NOW
+                        kind="weekly",
+                        used_ratio=0.8,
+                        reset_epoch=NOW + 5 * DAY,
+                        duration_seconds=10 * DAY,
+                        observed_at=NOW,
                     )
                 ],
             },
@@ -200,8 +223,11 @@ class CapacityTests(unittest.TestCase):
         claude = frontier[0]
         codex = frontier[1]
         self.assertEqual(claude.remaining, 0.5)
-        self.assertEqual(codex.remaining, 0.5)
-        self.assertGreater(claude.score, codex.score)
+        self.assertAlmostEqual(codex.remaining, 0.2, places=6)
+        # The score is the value: the capacity is reported beside the rank,
+        # never folded into it.
+        self.assertAlmostEqual(claude.score, codex.score, places=6)
+        self.assertGreater(claude.pace, codex.pace)
 
     def test_an_exhausted_account_makes_its_models_unavailable(self):
         ranked = ranking.rank_models(
@@ -503,14 +529,24 @@ class UnknownModelTests(unittest.TestCase):
         self.assertFalse(found[0].available)
         samples = ranking.rank_samples(ranked, now=NOW)
         names = {name for name, _labels, _value in samples}
-        self.assertNotIn("ghostship_ai_model_rank", names)
+        # The model is not in a tier, so it holds no tier of its own. It
+        # keeps its rank and its availability, so a consumer can list it at
+        # the bottom with the reason it is not usable.
         self.assertNotIn("ghostship_ai_model_tier", names)
+        ranks = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_rank"
+        ]
+        self.assertEqual(len(ranks), 1)
+        self.assertEqual(ranks[0][1], 0.0)
         available = [
-            value
-            for name, _labels, value in samples
+            (labels, value)
+            for name, labels, value in samples
             if name == "ghostship_ai_model_available"
         ]
-        self.assertEqual(available, [0.0])
+        self.assertEqual([value for _labels, value in available], [0.0])
+        self.assertTrue(available[0][0]["reason"])
 
 
 class LineageFrontierTests(unittest.TestCase):
@@ -642,12 +678,17 @@ class LineageFrontierTests(unittest.TestCase):
         self.assertEqual(ranking._newness(None, "claude-opus-4-8", "anthropic")[2], (4, 8))
 
 
-class EconomyBulkTests(unittest.TestCase):
-    """The bulk tier prefers the economy models."""
+class HonestScoreTests(unittest.TestCase):
+    """The published score is the measured value, and nothing else.
+
+    A name suffix, a catalog price, a capacity term and a pace term are
+    all guesses. They are not in the score, and a model of equal measured
+    value keeps its place whatever it is called.
+    """
 
     def setUp(self):
         # Both models share a family, so both have the same quality and only
-        # the economy weighting of the bulk tier separates them.
+        # the economy weighting of the bulk tier used to separate them.
         self.catalog = make_catalog(
             {
                 "deepseek": {
@@ -675,18 +716,20 @@ class EconomyBulkTests(unittest.TestCase):
             now=NOW,
         )
 
-    def test_an_economy_model_outranks_a_premium_model_of_the_same_quality(self):
+    def test_a_name_suffix_does_not_change_the_score(self):
         bulk = tier_members(self.rank(), "bulk")
-        self.assertEqual(
-            [item.model for item in bulk], ["deepseek-v4.1-flash", "deepseek-v4-pro"]
-        )
+        self.assertEqual(len(bulk), 2)
         self.assertEqual(bulk[0].quality, bulk[1].quality)
+        # The measured value is the same, so the score is the same: the
+        # "flash" suffix buys nothing.
+        self.assertAlmostEqual(bulk[0].score, bulk[1].score, places=6)
         self.assertAlmostEqual(
-            bulk[0].score / bulk[1].score,
-            ranking.ECONOMY_BULK_FACTOR / ranking.PREMIUM_BULK_FACTOR,
+            bulk[0].score,
+            bulk[0].value if bulk[0].value is not None else bulk[0].score,
+            places=6,
         )
 
-    def test_a_price_above_the_cheap_threshold_is_not_an_economy_model(self):
+    def test_a_catalog_price_does_not_change_the_score(self):
         catalog = make_catalog(
             {
                 "kimi": {
@@ -713,18 +756,46 @@ class EconomyBulkTests(unittest.TestCase):
             now=NOW,
         )
         bulk = {item.model: item for item in tier_members(ranked, "bulk")}
-        quality = bulk["kimi-k2"].quality
-        self.assertEqual(quality, bulk["kimi-k3"].quality)
-        # Without a quota window the capacity is unknown, so it earns no
-        # bonus: an unknown allowance is never treated as headroom.
         self.assertAlmostEqual(
-            bulk["kimi-k2"].score, quality * ranking.PREMIUM_BULK_FACTOR
-        )
-        self.assertAlmostEqual(
-            bulk["kimi-k3"].score, quality * ranking.ECONOMY_BULK_FACTOR
+            bulk["kimi-k2"].score, bulk["kimi-k3"].score, places=6
         )
 
+    def test_a_capacity_or_pace_term_is_not_in_the_score(self):
+        without = {
+            (item.provider, item.model): item
+            for item in tier_members(self.rank(), "bulk")
+        }
+        ranked = ranking.rank_models(
+            models=self.models,
+            catalog=self.catalog,
+            quota_windows={
+                "deepseek": [
+                    ranking.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=0.1,
+                        reset_epoch=NOW + 5 * DAY,
+                        observed_at=NOW,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+        with_window = {
+            item.model: item for item in tier_members(ranked, "bulk")
+        }
+        for model, item in with_window.items():
+            self.assertAlmostEqual(
+                item.score,
+                without[(item.provider, item.model)].score,
+                places=6,
+            )
+
     def test_a_promotional_free_model_leads_the_bulk_tier(self):
+        # The free route leads because its measured cost per task is zero,
+        # which the value formula turns into the full efficiency. Nothing in
+        # the score knows that the model is called "-free".
         catalog = make_catalog(
             {
                 "opencode-go": {
@@ -741,19 +812,26 @@ class EconomyBulkTests(unittest.TestCase):
                 }
             }
         )
+        models = [
+            ranking.ModelRecord("opencode-go", "minimax-m3.1-flash-free"),
+            ranking.ModelRecord("opencode-go", "deepseek-v4-pro"),
+        ]
+        cache = aa_cache_for(models)
+        for record in cache["records"]:
+            if record["model"] == "minimax-m3.1-flash-free":
+                record["cost_per_task"] = 0.0
         ranked = ranking.rank_models(
-            models=[
-                ranking.ModelRecord("opencode-go", "minimax-m3.1-flash-free"),
-                ranking.ModelRecord("opencode-go", "deepseek-v4-pro"),
-            ],
+            models=models,
             catalog=catalog,
             quota_windows={},
             free_models={("opencode-go", "minimax-m3.1-flash-free")},
             usage_tokens={},
+            aa_cache=cache,
             now=NOW,
         )
         bulk = tier_members(ranked, "bulk")
         self.assertEqual(bulk[0].model, "minimax-m3.1-flash-free")
+        self.assertGreater(bulk[0].score, bulk[1].score)
 
 
 class RecencyBonusTests(unittest.TestCase):
@@ -1067,6 +1145,273 @@ class ExcludedProviderTests(unittest.TestCase):
         self.assertTrue(found)
         self.assertTrue(found[0].available)
         self.assertEqual(found[0].tier, "")
+
+
+def label_value_of(text: str, key: str) -> str:
+    """The value of one label in the rendered text, parsed strictly.
+
+    The text exposition format escapes a backslash, a double quote and a
+    newline in a label value. Nothing else is an escape, and the value ends
+    at the closing double quote.
+    """
+    marker = f'{key}="'
+    index = text.index(marker) + len(marker)
+    value: list[str] = []
+    while index < len(text):
+        character = text[index]
+        if character == "\\":
+            index += 1
+            if index >= len(text):
+                raise AssertionError("the label value ends with an escape")
+            escape = text[index]
+            if escape not in ('"', "\\", "n"):
+                raise AssertionError(f"unknown escape in the label value: {escape}")
+            value.append("\n" if escape == "n" else escape)
+        elif character == '"':
+            return "".join(value)
+        else:
+            value.append(character)
+        index += 1
+    raise AssertionError("the label value is not closed")
+
+
+class ModelNameTests(unittest.TestCase):
+    """Every candidate carries a human name, and the name is never empty.
+
+    The name is the first one that exists: the label T3 Code's model catalog
+    gives the model, else the Artificial Analysis record's name without its
+    reasoning condition, else the raw model id.
+    """
+
+    FIXTURES = Path(__file__).resolve().parents[1] / "tests/fixtures/ai-usage"
+    CATALOG = FIXTURES / "model-catalog.json"
+    AA_CACHE = FIXTURES / "model-names-aa.json"
+
+    def _catalog(self):
+        document = json.loads(self.CATALOG.read_text(encoding="utf-8"))
+        return catalog_module.Catalog(document)
+
+    def _aa_cache(self):
+        return json.loads(self.AA_CACHE.read_text(encoding="utf-8"))
+
+    def _ranked(self, provider, model, tier="bulk"):
+        return [
+            ranking.RankedModel(
+                tier=tier,
+                provider=provider,
+                model=model,
+                rank=1,
+                score=1.0,
+                quality=None,
+                remaining=None,
+                expires_in_seconds=None,
+                available=True,
+            )
+        ]
+
+    def _names(self, samples):
+        return {
+            (labels["provider"], labels["model"]): labels["name"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_info"
+        }
+
+    def _info(self, ranked, **kwargs):
+        samples = ranking.rank_samples(ranked, now=NOW, **kwargs)
+        return self._names(samples)
+
+    def test_the_t3_code_label_is_the_name_of_the_row(self):
+        # The instance names the model it offers, and that label is the name.
+        native = {
+            ("opencode-go", "minimax-m3.1-flash-free"): {
+                "providerInstance": "opencode",
+                "modelId": "opencode-go/minimax-m3.1-flash-free",
+                "name": "MiniMax M3.1 Flash Free",
+            }
+        }
+        name = ranking.model_display_name(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            native_models=native,
+            catalog=self._catalog(),
+        )
+        self.assertEqual(name, "MiniMax M3.1 Flash Free")
+        names = self._info(
+            self._ranked("opencode-go", "minimax-m3.1-flash-free"),
+            native_models=native,
+            catalog=self._catalog(),
+        )
+        # The name is published exactly: it is a name.
+        self.assertEqual(
+            names[("opencode-go", "minimax-m3.1-flash-free")],
+            "MiniMax M3.1 Flash Free",
+        )
+
+    def test_the_model_catalog_label_is_the_name_when_the_instance_names_none(self):
+        # The catalog T3 Code reads carries the provider's own display name.
+        name = ranking.model_display_name(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            native_models={},
+            catalog=self._catalog(),
+        )
+        self.assertEqual(name, "MiniMax M3.1 Flash Free")
+
+    def test_the_aa_record_name_is_used_without_its_reasoning_condition(self):
+        # The feed measured the model at one condition; the condition is not
+        # part of the name of the model.
+        name = ranking.model_display_name(
+            "opencode-go",
+            "glm-5.3-flash",
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(name, "GLM-5.3 Flash")
+        names = self._info(
+            self._ranked("opencode-go", "glm-5.3-flash"),
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(names[("opencode-go", "glm-5.3-flash")], "GLM-5.3 Flash")
+
+    def test_the_raw_id_is_the_name_when_nothing_names_the_model(self):
+        name = ranking.model_display_name(
+            "openrouter",
+            "qwen/qwen3.8-27b",
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(name, "qwen/qwen3.8-27b")
+        names = self._info(
+            self._ranked("openrouter", "qwen/qwen3.8-27b"),
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        # The model label keeps the sanitised form of every label of this
+        # collector; only the name is published exactly.
+        self.assertEqual(
+            names[("openrouter", "qwen_qwen3.8-27b")],
+            "qwen/qwen3.8-27b",
+        )
+
+    def test_every_candidate_has_one_info_series_with_a_name(self):
+        ranked = self._ranked("opencode-go", "minimax-m3.1-flash-free")
+        # The same model in a second tier is still one candidate.
+        second = ranking.RankedModel(
+            tier="free",
+            provider=ranked[0].provider,
+            model=ranked[0].model,
+            rank=1,
+            score=1.0,
+            quality=None,
+            remaining=None,
+            expires_in_seconds=None,
+            available=True,
+        )
+        ranked.append(second)
+        samples = ranking.rank_samples(
+            ranked,
+            now=NOW,
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=self._catalog(),
+        )
+        info = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_info"
+        ]
+        self.assertEqual(len(info), 1)
+        labels, value = info[0]
+        self.assertEqual(labels["provider"], "opencode-go")
+        self.assertEqual(labels["model"], "minimax-m3.1-flash-free")
+        self.assertEqual(labels["name"], "MiniMax M3.1 Flash Free")
+        self.assertEqual(value, 1.0)
+
+
+class ModelNameLabelTests(unittest.TestCase):
+    """The name of a model is published exactly; every other label is not.
+
+    The name is a name: the reader sees the spaces and the punctuation the
+    provider wrote. The text exposition format escapes a backslash, a double
+    quote and a newline, and that is all it does.
+    """
+
+    def _render(self, provider, model, name):
+        native = {
+            (provider, model): {
+                "providerInstance": "opencode",
+                "modelId": model,
+                "name": name,
+            }
+        }
+        ranked = [
+            ranking.RankedModel(
+                tier="bulk",
+                provider=provider,
+                model=model,
+                rank=1,
+                score=1.0,
+                quality=None,
+                remaining=None,
+                expires_in_seconds=None,
+                available=True,
+            )
+        ]
+        samples = ranking.rank_samples(ranked, now=NOW, native_models=native)
+        writer = metrics.MetricWriter()
+        writer.declare("ghostship_ai_model_info", "gauge", "One for a candidate model.")
+        for metric, labels, value in samples:
+            writer.add(metric, labels, value)
+        return writer.render()
+
+    def test_the_name_is_published_exactly(self):
+        text = self._render(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            "MiniMax M3.1 Flash Free",
+        )
+        self.assertIn('name="MiniMax M3.1 Flash Free"', text)
+
+    def test_a_name_with_a_quote_a_backslash_and_a_newline_round_trips(self):
+        name = 'MiniMax "M3.1"\\Flash\nFree'
+        text = self._render("opencode-go", "minimax-m3.1-flash-free", name)
+        # The exposition format escapes the backslash, the double quote and
+        # the newline, and nothing else.
+        self.assertIn('name="MiniMax \\"M3.1\\"\\\\Flash\\nFree"', text)
+        # The escaped form parses back into the name it came from.
+        self.assertEqual(label_value_of(text, "name"), name)
+        # A real parser reads the file when the shell has one.
+        promtool = shutil.which("promtool")
+        if not promtool:
+            return
+        with tempfile.NamedTemporaryFile("w", suffix=".prom", delete=False) as handle:
+            handle.write(text)
+            path = handle.name
+        try:
+            result = subprocess.run(
+                [promtool, "check", "metrics", path],
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            os.unlink(path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_model_label_is_still_sanitised(self):
+        # The name is published exactly; the model id keeps the sanitised
+        # form every other label of this collector has.
+        text = self._render(
+            "cloudflare-workers-ai",
+            "@cf/openai/gpt-oss-120b",
+            "GPT OSS 120B",
+        )
+        self.assertIn('model="_cf_openai_gpt-oss-120b"', text)
+        self.assertIn('name="GPT OSS 120B"', text)
 
 
 if __name__ == "__main__":

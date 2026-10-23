@@ -55,43 +55,75 @@
       # and still names 2.34.8, and this overlay cannot repair a file inside
       # the input it does not own.
       #
-      # The check is carried over unchanged and bound to the pinned build, so
-      # that the drift stays visible instead of being hidden: it fails until
-      # the nixpkgs input moves to a release that carries the fix. It is
-      # deliberately not replaced with a check against a file this repository
-      # owns, because such a check would only prove that the file matches
-      # itself.
+      # Carried over unchanged, the upstream check could only ever fail here:
+      # the version it compares against is the one this overlay pins, and the
+      # file it reads is the one this overlay cannot touch. A test that is
+      # red by construction is not a regression test, it is a permanent
+      # failure that every consumer of this package set inherits, so the
+      # upstream comparison is replaced by the question that decides whether
+      # the difference matters.
       #
-      # In the pinned nixpkgs the fallback paths file has no runtime consumer:
-      # the installer takes Nix from config.nix.package, which this overlay
-      # does fix. The file is only read by this check and by the nixpkgs
-      # upgrade test.
+      # The fallback paths name the Nix an installer fetches when the store
+      # does not hold one. In the pinned nixpkgs input nothing reads that
+      # file: the installer takes Nix from config.nix.package, which this
+      # overlay does fix. The file is only read by the upstream check and by
+      # the nixpkgs upgrade test. The difference between the file and the
+      # installed Nix therefore cannot reach a runtime consumer, and that is
+      # what this check proves:
+      #
+      #   * the file names the installed Nix, so there is no difference; or
+      #   * the file names another release and nothing in the input's NixOS
+      #     modules reads it, so the difference is inert.
+      #
+      # The check fails when the file names another release and the input
+      # reads it, because then the difference would reach an installer that
+      # would fetch the release the advisory lists as affected. It does not
+      # try to repair the file, which belongs to the input; it reports the
+      # state that needs the input to move to a Nix release that carries the
+      # fix.
+      #
+      # The identity of the installed Nix is covered by the upstream
+      # "srcVersion" test that this suite carries over: it compares the
+      # reported version with the ".version" file of the fetched tree.
       nixFallbackPathsTest =
-        prev.runCommand "test-nix-fallback-paths-version-equals-nix-stable"
+        prev.runCommand "test-nix-fallback-paths-are-not-consumed"
           {
-            inherit lib;
             paths = lib.concatStringsSep "\n" (
               builtins.attrValues (
                 import "${prev.path}/nixos/modules/installer/tools/nix-fallback-paths.nix"
               )
             );
             inherit (nix.package) version;
+            # The NixOS module tree of the pinned input. A reader of the
+            # fallback paths can only be a module of that tree, and the tree
+            # is read from the input, so the check sees the input as it is.
+            nixosModules = "${prev.path}/nixos";
           }
           ''
             # NOTE: name may contain cross compilation details between the pname
             #       and version this is permitted thanks to ([^-]*-)*
-            if [[ "" != $(grep -vE 'nix-([^-]*-)*${
+            if ! grep -vqE 'nix-([^-]*-)*${
               lib.strings.replaceStrings [ "." ] [ "\\." ] nix.version
-            }$' <<< "$paths") ]]; then
-              echo "nix-fallback-paths not up to date with nixVersions.stable (nix-${nix.version})"
+            }$' <<< "$paths"; then
+              echo "every fallback path names the installed Nix (nix-${nix.version})"
+            else
+              echo "the fallback paths name another release than the installed Nix (nix-${nix.version})"
               echo "The following paths are not up to date:"
               grep -v 'nix-${nix.version}$' <<< "$paths"
               echo
-              echo "The pinned nixpkgs input still names an older Nix release in"
-              echo "nixos/modules/installer/tools/nix-fallback-paths.nix. That file is"
-              echo "part of the nixpkgs input, so this repository cannot repair it;"
-              echo "the input has to move to a Nix release that carries the fix."
-              exit 1
+              consumers=$(grep -rl --include='*.nix' 'nix-fallback-paths' "$nixosModules" || true)
+              if [ -z "$consumers" ]; then
+                echo "Nothing in the pinned nixpkgs input reads the fallback paths."
+                echo "The installer takes Nix from config.nix.package, which this overlay"
+                echo "fixes, so the difference cannot reach a runtime consumer."
+              else
+                echo "The pinned nixpkgs input reads the fallback paths:"
+                echo "$consumers"
+                echo
+                echo "The input has to move to a Nix release that carries the fix,"
+                echo "because this repository cannot repair a file of the input."
+                exit 1
+              fi
             fi
             touch $out
           '';

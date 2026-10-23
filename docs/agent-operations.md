@@ -144,7 +144,7 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `wslpath -w /home/nixos/...` returns a `\\wsl.localhost\NixOS\...` UNC path
   for WSL-native files rather than a `C:\...` path.
 - Docker Desktop stores its WSL disk at
-  `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
+  `C:\Users\owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
 - WSL FHS shim changes can require a full WSL distro restart after a
@@ -169,12 +169,23 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   local `git push origin main`;
   remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
   remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `./result/bin/switch-to-configuration switch`.
+  remote `scripts/activate-host --toplevel ./result`.
+  `scripts/activate-host` sets the system profile before the switch and
+  verifies that `/run/current-system` and the system profile name the same
+  generation. A bare `switch-to-configuration switch` does not record the
+  system generation, and a reboot then reverts to the profile's generation.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
   `services.openssh.macs` including plain `hmac-sha2-256` and
   `hmac-sha2-512` in addition to the `*-etm` variants.
+- The agent SSH key runs `ghostship-ssh-command-guard` as its forced command
+  (`modules/self-hosted/ssh-command-guard.nix`). It refuses a recursive content
+  read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` with exit status
+  126 and a journal line under the `ghostship-ssh-command-guard` tag, and runs
+  every other command unchanged. Read named files only; a search of the host is
+  not a named file. The owner's own keys are authorized without a forced
+  command.
 
 ## Nix, Builds, and Host Boot
 
@@ -572,3 +583,15 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   it is missing.
 - `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
   host integration. Remove it after Codex finishes integrating the host.
+
+### Private runtime identity settings
+
+`/etc/ghostship/owner-identity.env` supplies `GHOSTSHIP_GITHUB_USER_ID`
+(a positive integer), `GHOSTSHIP_T3_ENVIRONMENT_ID`,
+`GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID`, and `GHOSTSHIP_T3_PROJECT_` settings for
+`CONFIG`, `AGENT`, `3DPRINTING`, `ROMS`, `XPLUS4`, `NEWSLETTER`, and `ORCA`.
+Keep the file root-owned with mode 0600; populate these settings before
+activating the coordinator or inference bridge. The canonical owner-config
+renderer refuses a missing setting and preserves the numeric GitHub ID type.
+The inference bridge renders its provider template before handing the
+mode-0600 file to the container account. Values never belong in this tree.

@@ -90,7 +90,7 @@ class RetentionSelection(unittest.TestCase):
 
 class WorktreeCleanup(unittest.TestCase):
     def test_removes_worktree_only_when_no_active_thread_keeps_it(self):
-        root = Path("/home/t3code/.t3/worktrees")
+        root = Path("/home/t3code/.t3/worktrees")  # fixture-path-ok: a name the selection compares, never read
         unique = root / "repo/unique"
         shared = root / "repo/shared"
         rows = [

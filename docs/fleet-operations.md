@@ -98,7 +98,7 @@ useful later addition.
 
 ntfy denies anonymous access and signup. `publisher` can write only to the
 `security`, `operations` and `informational` topics; `android` can read only
-those topics; `the owner` administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
+those topics; the owner administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
 `KUMA_PASSWORD` is the initial Kuma and ntfy administrator password;
 `NTFY_READER_PASSWORD` is the Android subscriber password. In the Android ntfy
 app, the configured server is `https://ntfy.ghostship.io`, user `android`, and topic
@@ -106,6 +106,25 @@ app, the configured server is `https://ntfy.ghostship.io`, user `android`, and t
 Android delivery may be unavailable until an Access-compatible method is approved;
 do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
 `ghostship-notify --topic informational --source test --title 'Ghostship notification test'` checks delivery after rollout; run as root.
+
+The account names and addresses the services log in as are not in this
+repository. The deployment supplies them in a root-owned file outside it,
+`/etc/ghostship/owner-identity.env` (mode 0600), and the units read it through
+their environment:
+
+- `GHOSTSHIP_GITHUB_ACCOUNT` — the GitHub account that owns the retired
+  container images and the repositories before they moved to the organisation.
+- `GHOSTSHIP_KEEP_AGENT_EMAIL` — the agent's Google account the Keep broker
+  verifies for the agent identity.
+- `GHOSTSHIP_KEEP_PERSONAL_EMAIL` — the personal Google account the Keep
+  broker verifies before it reads anything.
+- `GHOSTSHIP_KUMA_USERNAME` — the uptime-kuma administrator account name.
+- `GHOSTSHIP_NTFY_ADMIN_USER` — the ntfy administrator account name.
+
+The file is required: a unit that reads it stops with a clear error when it is
+missing or incomplete, and no value falls back to a default. Keep it out of the
+repository and out of the shell history; write it once on the host and keep it
+with the other root-owned configuration.
 
 `ghostship-newsletter-health.timer` checks the canonical newsletter checkout every
 ten minutes as user 3000 inside `t3code`, through its pinned Nix environment.
@@ -290,6 +309,9 @@ path-scoped Access application for exactly `/github` and `/cloudflare` whose onl
 policy is bypass-everyone, recorded in the registry as `cloudflareBypassPaths`
 with `cloudflareBypassApproval`. The receiver authenticates those requests itself
 (GitHub HMAC, Cloudflare webhook secret); any other bypass still fails validation.
+`grafana.ghostship.io` has its own Access application allowing the owner identity
+and the agent identity (owner approval 2026-10-22) so agents can verify
+dashboards; read-only through vmauth.
 All existing and proposed tunnel hostnames, including unmanaged rules and
 path-specific overrides, require complete policy evidence and restrictive identity
 or explicitly scoped service-token selectors. Unauthenticated OPTIONS bypasses
@@ -346,14 +368,19 @@ password inside the database container. Restore validation continues to use
 an isolated temporary database; it does not change the live engine or data.
 
 Private-source GitHub Actions jobs on pull requests use the `private-source-ci`
-environment. Its required reviewer is `owner`; approval releases the
-environment-scoped, read-only agent deploy key. Jobs on `main` (pushes, the
-weekly input refresh) use `private-source-main`: no reviewer, but only the
-`main` branch may deploy to it, so a pull request that edits a workflow still
-cannot reach its key. Each environment holds its own read-only agent deploy key.
+environment, which holds the environment-scoped, read-only agent deploy key.
+Neither it nor `private-source-main` asks for a reviewer: the owner removed
+that gate on 2026-10-22, because it should only hold back other people, so
+the key is released without an approval. Only the `main` branch may deploy to
+`private-source-main`, which the jobs on `main` (pushes, the weekly input
+refresh) use, so a pull request that edits a workflow still cannot reach that
+key. Each environment holds its own read-only agent deploy key.
 Repository-level private-source keys must remain absent so another
-pull-request workflow cannot bypass the environment gate. Review changes to the
-import script and workflow before approving a run.
+pull-request workflow cannot bypass the environment gate. A pull request from
+a fork gets no environment secrets at all, because GitHub withholds them
+from a fork, so the private-source job of a fork fails before it can read the
+agent source. Review changes to the import script and workflow before a run
+reaches the key.
 
 SQLite databases and WAL files are captured together. Failure handling resumes
 containers it paused and restores their health-check settings and removes the temporary Btrfs snapshot.
@@ -425,8 +452,54 @@ Fleet checks after review when needed.
 
 CI evaluates all host derivations without building the fleet, builds the config
 writer, runs regression tests, checks shell/workflow syntax, and scans the source
-for secrets. It does not claim native ARM builds, live container startup, secret
+for secrets. The tests read only committed fixtures: a lint fails the check when
+a test reads a scratch path such as `/tmp`, `/home` or `/workspace`, unless the
+test builds it in a temporary directory or the line states why the reference is
+harmless with a `# fixture-path-ok: <reason>` comment. It does not claim native ARM builds, live container startup, secret
 decryption on every host, GPU/controller acceptance, or successful restore drills.
+
+An activation must record the system generation. Use `scripts/activate-host`
+instead of calling `switch-to-configuration` directly: it sets the system
+profile first, switches, and then verifies that the running system and the
+system profile name the same store path.
+
+```bash
+# From the built checkout in the server's root shell.
+nixos-rebuild build --impure --flake .#chill-penguin
+scripts/activate-host --toplevel ./result
+```
+
+`scripts/activate-host` runs `nix-env -p /nix/var/nix/profiles/system --set
+<toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then
+compares `readlink -f /run/current-system` with `readlink -f
+/nix/var/nix/profiles/system`. It exits non-zero when the two differ, so an
+activation that did not record the generation is visible instead of silent.
+`--verify-only` performs the comparison alone. The
+`ghostship-boot-generation-drift` timer compares `/run/current-system` with
+`/nix/var/nix/profiles/system` every five minutes; a mismatch that lasts more
+than ten minutes reaches operations through `ghostship-notify` with the
+`boot-generation-drift` dedupe key, because a reboot would revert to the
+profile's generation.
+
+T3 Code is never restarted unless it is idle, except when the owner has asked
+for work to be activated or deployed; an owner instruction to deploy or
+activate approves the restart. `t3code-safe-restart` queues a restart, and
+`t3code-deploy-when-idle` performs it once the activity probe confirms idle; a
+busy T3 Code defers the restart to the next check. A forced restart bypasses
+the idle gate and interrupts the work in flight, so it needs the owner's own
+instruction:
+
+```bash
+t3code-safe-restart --force --owner-request "owner: deploy the reviewed change"
+```
+
+Without `--owner-request` the tool refuses the forced restart and says so.
+Every forced restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl`
+with the time, the actor, the owner's reference, and the container identity
+before and after the restart, and in the journal under the `t3code-restart`
+tag. A NixOS switch never restarts the container: `podman-t3code` has
+`restartIfChanged = false`, and the evaluation check asserts that the switch
+has no unit to restart.
 
 For the first backup only, from the built checkout in the server's root shell
 (the source bundle exports the same `RESTIC_PASSWORD` as its projection):
