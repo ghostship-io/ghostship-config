@@ -99,16 +99,6 @@ in
   options.ghostship.githubEngineering.enable =
     lib.mkEnableOption "hooks.ghostship.io webhook receiver and T3 engineering coordinator";
 
-  # The coordinator can be held off while the receiver keeps spooling events.
-  # A runtime drop-in under /run does not survive an activation, so the hold
-  # lives here. Clear the spool and incidents before turning it back on, or
-  # it replays the backlog.
-  options.ghostship.githubEngineering.coordinatorAutoStart = lib.mkOption {
-    type = lib.types.bool;
-    default = true;
-    description = "Start the GitHub coordinator at boot and on activation.";
-  };
-
   config = lib.mkIf cfg.enable {
     ghostship.notify.incidentSpool = "${root}/incidents";
     ghostship.apps.hooks = {
@@ -274,7 +264,6 @@ in
 
     virtualisation.oci-containers.containers.ghostship-github-coordinator = {
       image = "ghostship-github-coordinator:${coordinatorImage.imageTag}";
-      autoStart = cfg.coordinatorAutoStart;
       imageFile = coordinatorImage;
       pull = "never";
       user = "62031:62032";
