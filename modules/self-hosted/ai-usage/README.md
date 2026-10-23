@@ -269,7 +269,7 @@ Every window carries the basis of its numbers, and the bases are never mixed:
 
 | Basis | What it means | Which windows |
 | --- | --- | --- |
-| `provider_reported` | The provider reported every number of the window | The Grok, Antigravity, OpenCode Go, OpenRouter daily and Ollama windows |
+| `provider_reported` | The provider reported every number of the window | The Grok, Groq, Antigravity, OpenCode Go, OpenRouter daily and Ollama windows |
 | `provider_reported+derived_length` | The provider reported the share and the reset, and the length of the window is derived | The Ollama session window, whose length is learned from the step between two successive resets |
 | `promotion` | The provider's documentation publishes the allowance for a limited time, and no end date | The OpenCode Go free routes, which the documentation lists as unlimited "for a limited time" |
 | `published+counted` | A published limit, counted against the requests we made ourselves | The OpenRouter per-minute limit of the free models |
@@ -876,6 +876,11 @@ provider-reported dollar charge.
   history, not a complete queue census.
 * `ghostship_ai_pool_quota_amount{provider,model,kind,unit}` - a quota amount
   seen in a provider response header; `kind` is `limit` or `remaining`.
+* `ghostship_ai_pool_observed_limit{provider,model,limit,scope}` - a limit a
+  provider response header carried. `scope` is `model` when the provider
+  reported the limit for that model alone, as Groq does, and `account`
+  otherwise. The limit is a reading of the provider, and it never stands in
+  for the pool's own admission cap.
 * `ghostship_ai_pool_quota_reset_seconds{provider,model,unit}` - when that
   observed quota resets.
 * `ghostship_ai_pool_quota_observed_timestamp_seconds{provider,model}` - when
@@ -884,6 +889,40 @@ provider-reported dollar charge.
   the pool reserved over a window.
 * `ghostship_ai_pool_catalog_updated_timestamp_seconds` - when the pool
   catalog was refreshed.
+
+### The reported-header capacity of a Groq model
+
+The pool records the rate-limit headers of a provider's answer as
+observations. For Groq, an observation whose `data.scope` is
+`model_in_organization` is the capacity of that one model, and the collector
+publishes it as a measured window of the model rather than only as a
+diagnostic:
+
+* `rpd` is requests per day: kind `daily` and a window of 86400 seconds.
+* `tpm` is tokens per minute: kind `minute` and a window of 60 seconds.
+* the used share is `1 - remaining / limit`. A limit that is not a finite
+  number above zero, a remaining count that is boolean, not finite, or
+  outside `0..limit`, an unknown unit, a scope other than
+  `model_in_organization`, a missing reset and a missing observation all
+  give no measured capacity. Nothing is filled in for them.
+* the reset is `observed_at` plus the reset duration the provider reported,
+  parsed only when the whole text is a duration: `1m26.4s` is 86.4 seconds
+  and `2.227s` is 2.227 seconds, while `2s garbage` is not a reset. The
+  collection time is never used as the reset, because the reset is the
+  moment Groq said the window refills, not the moment the collector read it.
+* a reading whose reset is at or before the collection instant, or whose
+  observation is older than the quota freshness bound (1800 seconds), is
+  not current headroom and not a lockout. It is left out of the measured
+  windows, and its diagnostic series still publish what was seen.
+
+The window is filed by the model (`quotaId` `rpd` or `tpm`, basis
+`provider_reported`, `applies_to` the model id) and it survives the routing
+snapshot's account section with that model scope. No Groq window is filed
+for the whole account, so a model at zero remaining is spent while its
+siblings keep their own headroom, and the provider's account capacity stays
+unknown rather than being bound to one model. The pool's own `account_limits`
+and `model_limits` remain `ghostship_ai_pool_limit` series: they are local
+admission policy and never become provider capacity.
 
 ### The observed failures of a route
 
