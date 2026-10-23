@@ -227,18 +227,39 @@ def _match(
     The route is the one the collector knows, and the window it builds is
     keyed by that route. A route that is not in the inventory is not
     guessed: the event is counted and published as unmatched.
+
+    A model id that carries a vendor prefix ("vendor/model", the way
+    OpenCode records a request of Requesty) names a route the inventory
+    knows as the model alone. The prefix is stripped only when the whole
+    id is unknown, exactly and folded, and the model alone is then
+    matched the same way, within the same provider: a prefix is never
+    taken from another provider and never added.
     """
     key = (str(provider), str(model))
-    found = exact.get(key)
+
+    def one(name: str) -> tuple[str, str] | None:
+        """The route of the provider the model name names, or None."""
+        if not name:
+            return None
+        found = exact.get((key[0], name))
+        if found is not None:
+            return found
+        candidates = folded.get((key[0], name.lower())) or set()
+        if len(candidates) == 1:
+            # One route of that provider differs only in its case: it is
+            # the same route.
+            return (key[0], next(iter(candidates)))
+        # No route, or two routes that differ only in their case: a
+        # reading never guesses which one it meant.
+        return None
+
+    found = one(key[1])
     if found is not None:
         return found
-    candidates = folded.get((key[0], key[1].lower())) or set()
-    if len(candidates) == 1:
-        # One route of that provider differs only in its case: it is the
-        # same route.
-        return (key[0], next(iter(candidates)))
-    # No route, or two routes that differ only in their case: a reading
-    # never guesses which one it meant.
+    if "/" in key[1]:
+        # The model id carries a vendor prefix, and the route is the
+        # model alone. Only the first segment of the prefix is stripped.
+        return one(key[1].split("/", 1)[1])
     return None
 
 
@@ -249,6 +270,8 @@ def map_events(
     """Put the events on the routes of the inventory.
 
     The events come back with the model id the collector knows the route by.
+    A model id that carries a vendor prefix is put on the route of the model
+    alone, when the inventory of the same provider knows it.
     The second number is the count of the events whose route is not in the
     inventory.
     """
