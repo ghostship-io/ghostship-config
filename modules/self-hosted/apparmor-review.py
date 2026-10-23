@@ -6,6 +6,7 @@ Review with --review EVENT_ID --classification expected-denial|legitimate-needs-
 --note TEXT. IDs are returned by the status report. Reviews never change policy.
 """
 import argparse
+from collections import Counter
 import contextlib
 import fcntl
 import fnmatch
@@ -239,24 +240,32 @@ def advance(previous, observation, events, now, audit_ok):
     return state
 
 
-def status(state, now):
+def status(state, now, *, include_event_ids=True):
     baseline = state.get("coverage_start")
     reviews = state.get("reviews", {})
-    blocking = [eid for eid in state.get("events", {})
-                if reviews.get(eid, {}).get("classification") not in CLEARED]
+    blocking = (eid for eid in state.get("events", {})
+                if reviews.get(eid, {}).get("classification") not in CLEARED)
+    if include_event_ids:
+        blocking = list(blocking)
+        blocking_count = len(blocking)
+    else:
+        blocking_count = sum(1 for _ in blocking)
     samples = state.get("samples", [])
     # UTC-day buckets tolerate timer jitter. Elapsed time is checked separately:
     # eight calendar dates alone never substitute for seven full days.
     verified = {int(stamp // DAY) for stamp in samples}
     fresh = 0 <= now - state.get("last_sample", 0) <= MAX_GAP
     elapsed = max(0, state.get("last_sample", 0) - baseline) if baseline is not None else 0
-    return {"ready": bool(fresh and baseline is not None and elapsed >= 7 * DAY
-                          and len(verified) >= 8 and not blocking and not state.get("reasons")),
+    report = {"ready": bool(fresh and baseline is not None and elapsed >= 7 * DAY
+                          and len(verified) >= 8 and not blocking_count and not state.get("reasons")),
             "coverage_days": elapsed / DAY, "verified_daily_samples": len(verified),
             "last_sample": state.get("last_sample"), "coverage_start": baseline,
             "last_policy_change": state.get("last_policy_change"),
-            "fresh": fresh, "blocking_event_ids": blocking,
+            "fresh": fresh, "blocking_event_count": blocking_count,
             "event_count": len(state.get("events", {})), "reasons": state.get("reasons", [])}
+    if include_event_ids:
+        report["blocking_event_ids"] = blocking
+    return report
 
 
 def collect(config, previous, now):
@@ -380,6 +389,8 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--report-only", action="store_true")
+    parser.add_argument("--brief", action="store_true",
+                        help="aggregate status counts without container names or event IDs; collection is unchanged")
     parser.add_argument("--review", metavar="EVENT_ID")
     parser.add_argument("--classification",
                         choices=["expected-denial", "legitimate-needs-policy", "resolved-by-policy"])
@@ -388,6 +399,8 @@ def main(argv=None):
     parser.add_argument("--match", action="append", default=[], metavar="FIELD=GLOB")
     parser.add_argument("--summary", action="store_true", help="group unreviewed events; read-only")
     args = parser.parse_args(argv)
+    if args.brief and args.summary:
+        parser.error("--brief and --summary are different output formats")
     selected = bool(args.review) + bool(args.container)
     if selected > 1 or (args.match and not args.container):
         parser.error("use either --review EVENT_ID or --container NAME with --match")
@@ -458,7 +471,7 @@ def main(argv=None):
             reports = {}
             for name, spec in config["containers"].items():
                 entry = state["containers"].get(name, {})
-                report = status(entry, time.time())
+                report = status(entry, time.time(), include_event_ids=not args.brief)
                 try:
                     configured_hash = policy_hash(spec["source"])
                 except OSError:
@@ -472,7 +485,18 @@ def main(argv=None):
                 print(json.dumps({"schema_version": 1, "groups": {
                     name: summarize(state["containers"].get(name, {})) for name in config["containers"]}}))
                 return 0
-            print(json.dumps({"schema_version": 1, "containers": reports}, sort_keys=True))
+            if args.brief:
+                values = list(reports.values())
+                output = {"schema_version": 1, "profiles": len(values),
+                          "ready": sum(r["ready"] for r in values),
+                          "fresh": sum(r["fresh"] for r in values),
+                          "coverage_days_min": min(r["coverage_days"] for r in values),
+                          "coverage_days_max": max(r["coverage_days"] for r in values),
+                          "blocking_event_count": sum(r["blocking_event_count"] for r in values),
+                          "reason_counts": dict(Counter(reason for r in values for reason in set(r["reasons"])))}
+            else:
+                output = {"schema_version": 1, "containers": reports}
+            print(json.dumps(output, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Never echo exception strings: commands/config/audit paths can contain secrets.

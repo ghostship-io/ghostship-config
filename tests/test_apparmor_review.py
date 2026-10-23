@@ -388,6 +388,50 @@ class FilesAndCLI(unittest.TestCase):
             policy.write_text("profile ghostship-plex { capability, }")
             self.assertIn("configuration-mismatch", report())
 
+    def test_brief_report_is_bounded_read_only_and_preserves_blockers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            policy = directory / "policy"
+            policy.write_text("profile ghostship-plex {}")
+            observation = {**GOOD, "policy_hash": review.policy_hash(policy)}
+            events = [{"id": f"private-event-{i}", "time": 8 * DAY} for i in range(2000)]
+            previous = week()
+            previous["policy_hash"] = observation["policy_hash"]
+            state = review.advance(previous, observation, events, 9 * DAY, True)
+            review.write_state(directory, {"schema_version": 1, "containers": {"plex": state}})
+            (directory / "c.json").write_text(json.dumps({"containers": {
+                "plex": {**CONFIG["containers"]["plex"], "source": str(policy)}}}))
+            before = (directory / "evidence.json").read_bytes()
+            with patch.object(review.time, "time", return_value=9 * DAY), \
+                    patch.object(review, "collect") as collect:
+                code, output = self.run_cli(directory, "--report-only", "--brief")
+            self.assertEqual(code, 0)
+            report = json.loads(output)
+            self.assertEqual(report["profiles"], 1)
+            self.assertEqual(report["ready"], 0)
+            self.assertEqual(report["fresh"], 1)
+            self.assertEqual(report["blocking_event_count"], 2000)
+            self.assertEqual(report["coverage_days_max"], 8)
+            self.assertEqual(report["reason_counts"], {})
+            self.assertLess(len(output), 1000)
+            self.assertNotIn("private-event", output)
+            self.assertNotIn("plex", output)
+            self.assertEqual((directory / "evidence.json").read_bytes(), before)
+            collect.assert_not_called()
+
+    def test_brief_collection_still_collects_and_reports_configuration_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            state = {"schema_version": 1, "containers": {"plex": week()}}
+            with patch.object(review, "collect", return_value=state) as collect, \
+                    patch.object(review.time, "time", return_value=8 * DAY):
+                code, output = self.run_cli(directory, "--brief")
+            collect.assert_called_once()
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(output)["ready"], 0)
+            self.assertEqual(json.loads(output)["reason_counts"], {"configuration-mismatch": 1})
+            self.assertTrue((directory / "evidence.json").exists())
+
     def test_group_review_clears_only_matching_events(self):
         curl = ('apparmor="ALLOWED" operation="open" profile="ghostship-plex//null-/usr/bin/curl" '
                 'name="/etc/nsswitch.conf" requested_mask="r" comm="curl"')
