@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.177] - 2026-10-23
+
+- Keep precise model Quality ordering and free-route thresholds.
+- Publish per-provider pool selections and nested-pool evidence.
+
+PR #344.
+
 ## [3.17.176] - 2026-10-23
 
 - Keep the isolated engine alive through manager re-execution and restore relay recovery after manager exit.
