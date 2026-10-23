@@ -32,9 +32,9 @@ class IdentityReconciliation(unittest.TestCase):
     def setUp(self):
         self.name = "t3code-podman"
         self.home = "/var/lib/t3code-podman/home"
-        self.users = [user("t3code-docker"), user(self.name), user("unrelated", 62041)]
+        self.users = [user("t3code-previous"), user(self.name), user("unrelated", 62041)]
         self.groups = [
-            group("t3code-docker"),
+            group("t3code-previous"),
             group(self.name),
             group("unrelated", 62041),
         ]
@@ -45,7 +45,7 @@ class IdentityReconciliation(unittest.TestCase):
         )
 
     def test_retained_old_name_is_removed_even_when_first_for_the_uid(self):
-        self.assertEqual(self.reconcile(), (["t3code-docker"], ["t3code-docker"]))
+        self.assertEqual(self.reconcile(), (["t3code-previous"], ["t3code-previous"]))
         self.users.pop(0)
         self.groups.pop(0)
         self.assertEqual(self.reconcile(), ([], []))
@@ -62,7 +62,7 @@ class IdentityReconciliation(unittest.TestCase):
         self.users[0].pw_dir = "/home/retained-user"
         with self.assertRaisesRegex(ValueError, "unexpected account"):
             self.reconcile()
-        self.users[0] = user("t3code-docker")
+        self.users[0] = user("t3code-previous")
         self.groups[0].gr_mem = ["another-user"]
         with self.assertRaisesRegex(ValueError, "unexpected group"):
             self.reconcile()

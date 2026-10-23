@@ -865,6 +865,10 @@ let
 
     # A canary run must not touch another provider or replace any user launcher.
     case "''${1:-}" in
+      --refresh-opencode-shim)
+        install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
+        exit 0
+        ;;
       --stage-opencode)
         export OPENCODE_STAGE_ONLY=1
         install_opencode_cli
@@ -877,7 +881,7 @@ let
         exit 0
         ;;
       "") ;;
-      *) log_warn "usage: t3code-tool-maintenance [--stage-opencode|--activate-opencode]"; exit 2 ;;
+      *) log_warn "usage: t3code-tool-maintenance [--refresh-opencode-shim|--stage-opencode|--activate-opencode]"; exit 2 ;;
     esac
 
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
@@ -2718,6 +2722,7 @@ in
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
   system.build.t3codeServerMonitor = t3codeDaemonMonitor;
   system.build.t3codeToolMaintenance = t3codeToolMaintenance;
+  system.build.t3codeToolAutoUpdate = t3codeToolAutoUpdate;
   system.build.t3codeRuntimeClosure = pkgs.linkFarm "t3code-runtime-closure" (
     lib.imap0 (i: path: {
       name = toString i;
