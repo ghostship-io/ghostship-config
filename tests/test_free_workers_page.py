@@ -1,5 +1,9 @@
 """Free models and workers dashboard mirrors the Providers and model decisions page."""
 import json
+import copy
+import importlib.util
+import tempfile
+from unittest.mock import patch
 import subprocess
 import sys
 import unittest
@@ -108,7 +112,7 @@ class FreeWorkersPageTests(unittest.TestCase):
         models = helper(self.panels[233], 'selectionModels', rows)
         self.assertEqual([m['model'] for m in models], ['z', 'a'])
         self.assertEqual(models[0]['quality'], 'Unknown')
-        self.assertEqual(models[0]['percent'], 'No long-window reading')
+        self.assertEqual(models[0]['percent'], 'No published limit')
         self.assertEqual(models[0]['rounds'], 'rounds unknown')
         self.assertNotIn('NaN', json.dumps(models))
 
@@ -144,11 +148,79 @@ class FreeProviderCapacityTests(unittest.TestCase):
                     self.assertNotIn('behind', window['sub'])
             self.assertEqual(self.card(kind=kind, left=0)['fillClass'], 'spent')
 
-    def test_long_window_text_and_fill_take_the_same_owner_colour(self):
-        for state, fill, symbol in (('ahead', 'ahead', '▲'), ('on_pace', '', '●'), ('behind', 'behind', '▼'),
-                                  ('far_behind', 'spent', '▼')):
+    def test_long_window_pace_is_text_only_like_providers(self):
+        for state, symbol in (('ahead', '▲'), ('on_pace', '●'), ('behind', '▼'),
+                              ('far_behind', '▼')):
             with self.subTest(state=state):
                 window = self.card(kind='weekly', state=state)
-                self.assertEqual(window['fillClass'], fill)
+                self.assertEqual(window['fillClass'], '')
                 self.assertEqual(window['paceClass'], state)
                 self.assertIn(symbol, window['sub'])
+
+
+class FreeDashboardGeneratorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location('free_dashboard', ROOT / 'scripts/generate-free-workers-dashboard.py')
+        cls.generator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.generator)
+        cls.source = json.loads(cls.generator.SRC.read_text())
+
+    def generate(self, source):
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / 'source.json'
+            source_path.write_text(json.dumps(source))
+            with patch.object(self.generator, 'SRC', source_path):
+                return json.loads(self.generator.generate())
+
+    def test_changed_source_selectors_fail_instead_of_publishing_paid_models(self):
+        # Each transformation must find its expected source contract.
+        for old in ('picker_eligible="true",provider!="openrouter"',
+                    'picker_eligible="true",provider=~"$provider",provider!="openrouter"',
+                    'scope="t3",account!="openrouter"'):
+            with self.subTest(selector=old):
+                raw = json.dumps(self.source)
+                changed = raw.replace(json.dumps(old)[1:-1], 'unexpected_selector')
+                self.assertNotEqual(changed, raw)
+                with self.assertRaisesRegex(ValueError, 'selector'):
+                    self.generate(json.loads(changed))
+
+    def test_unconverted_paid_selector_is_rejected(self):
+        for selector in ('picker_eligible="true"', 'scope="t3"', 'orchestrator_model'):
+            with self.subTest(selector=selector):
+                source = copy.deepcopy(self.source)
+                source['panels'][0]['unexpected_query'] = selector
+                with self.assertRaisesRegex(ValueError, 'Paid selector remains'):
+                    self.generate(source)
+
+    def test_side_by_side_cards_keep_their_row_and_dimensions(self):
+        source = copy.deepcopy(self.source)
+        # Replace the layout with two kept cards sharing a row, a removed row,
+        # and another pair. Different card heights must not stack the cards.
+        source['panels'] = [
+            {'id': 901, 'gridPos': {'x': 0, 'y': 0, 'w': 12, 'h': 4}},
+            {'id': 902, 'gridPos': {'x': 12, 'y': 0, 'w': 12, 'h': 6}},
+            {'id': 230, 'gridPos': {'x': 0, 'y': 6, 'w': 24, 'h': 2}},
+            {'id': 903, 'gridPos': {'x': 0, 'y': 8, 'w': 12, 'h': 5}},
+            {'id': 904, 'gridPos': {'x': 12, 'y': 8, 'w': 12, 'h': 7}},
+            *[p for p in source['panels'] if p['id'] not in {230, 231}],
+        ]
+        # Selector-bearing original panels stay in a later section.
+        for panel in source['panels'][5:]:
+            panel['gridPos']['y'] += 30
+        page = self.generate(source)
+        positions = {p['id']: p['gridPos'] for p in page['panels'] if p['id'] in {901, 902, 903, 904}}
+        self.assertEqual(positions, {
+            901: {'x': 0, 'y': 0, 'w': 12, 'h': 4},
+            902: {'x': 12, 'y': 0, 'w': 12, 'h': 6},
+            903: {'x': 0, 'y': 6, 'w': 12, 'h': 5},
+            904: {'x': 12, 'y': 6, 'w': 12, 'h': 7},
+        })
+
+    def test_removing_one_card_does_not_remove_an_occupied_row(self):
+        source = copy.deepcopy(self.source)
+        source['panels'].append({'id': 905, 'gridPos': {'x': 12, 'y': 15, 'w': 12, 'h': 14}})
+        page = self.generate(source)
+        card = next(p for p in page['panels'] if p['id'] == 905)
+        # Only the two-unit heading above it was removed.
+        self.assertEqual(card['gridPos']['y'], 13)
