@@ -393,7 +393,7 @@ class LeadCauseTests(unittest.TestCase):
         self.assertEqual((entry["n"], entry["s"]), (8, 7))
 
     def test_a_backfill_summary_is_never_read_as_a_cause(self):
-        # The backfill has no cause field; a summary that names the brief is
+        # Without a structured cause, a summary that names the brief is
         # still the model's outcome.
         outcomes = outcomes_module()
         row = {
@@ -407,3 +407,53 @@ class LeadCauseTests(unittest.TestCase):
         }
         counts = outcomes.outcome_counts([], [row], identities())
         self.assertEqual(counts[("deepseek-v4.1-flash-1017", "implementation")]["n"], 1)
+
+    def test_explicit_non_model_causes_never_count_in_either_source(self):
+        outcomes = outcomes_module()
+        for cause in ("environment", "brief", "chief"):
+            for verdict in ("accepted", "reworked", "rejected"):
+                row = {**self.rounds()[0], "cause": cause, "verdict": verdict}
+                for source in ("ledger", "backfill"):
+                    with self.subTest(cause=cause, verdict=verdict, source=source):
+                        counts = outcomes.outcome_counts(
+                            [row] if source == "ledger" else [],
+                            [row] if source == "backfill" else [], identities(),
+                        )
+                        entry = counts[("deepseek-v4.1-flash-1017", "implementation")]
+                        self.assertEqual((entry["n"], entry["s"]), (0, 0))
+
+    def test_file_loaded_backfill_keeps_cause_and_fabrication_evidence(self):
+        outcomes = outcomes_module()
+        row = {**self.rounds()[0], "cause": "brief", "fabrication": True,
+               "ref": "example-review", "summary": "model"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "backfill.json"
+            path.write_text(json.dumps({"schema": outcomes.BACKFILL_SCHEMA,
+                                        "rounds": [row]}), encoding="utf-8")
+            rows = outcomes.load_backfill(path)
+        self.assertEqual(rows[0].get("cause"), "brief")
+        entry = outcomes.outcome_counts([], rows, identities())[
+            ("deepseek-v4.1-flash-1017", "implementation")]
+        self.assertEqual((entry["n"], entry["s"]), (0, 0))
+        self.assertEqual(entry["fabrications"][0]["ref"], "example-review")
+
+    def test_inferred_correction_keeps_cause_and_manual_verdict_stands(self):
+        outcomes = outcomes_module()
+        original = {**self.rounds()[0], "verdict_source": "inferred"}
+        correction = {**original, "verdict": "reworked", "cause": "chief"}
+        for source, expected in (("inferred", (0, 0)), ("manual", (1, 1))):
+            with self.subTest(source=source):
+                counts = outcomes.outcome_counts(
+                    [{**original, "verdict_source": source}], [correction], identities())
+                entry = counts[("deepseek-v4.1-flash-1017", "implementation")]
+                self.assertEqual((entry["n"], entry["s"]), expected)
+
+    def test_model_caused_rounds_still_count_with_non_model_words_in_summary(self):
+        outcomes = outcomes_module()
+        rows = [{**self.rounds()[0], "round_id": f"model-{index}",
+                 "cause": "model", "verdict": verdict,
+                 "summary": "environment brief chief"}
+                for index, verdict in enumerate(("accepted", "reworked", "rejected"))]
+        entry = outcomes.outcome_counts([], rows, identities())[
+            ("deepseek-v4.1-flash-1017", "implementation")]
+        self.assertEqual((entry["n"], entry["s"]), (3, 1))
