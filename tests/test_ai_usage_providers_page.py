@@ -1199,13 +1199,23 @@ class ModelSelectionTests(unittest.TestCase):
             self.assertNotIn(rule + "{", styles, rule)
 
     def test_the_left_cell_carries_the_share_and_the_pace(self):
-        """The cell reads the share left, a dot, and the pace beside it."""
+        """The cell reads the share left, a dot, and the pace beside it.
+
+        The share keeps the colour of the row; the pace alone is grey on
+        pace, green ahead, amber behind and red when spent, as on the cards.
+        """
         content = self.panel["options"]["content"]
-        self.assertIn('<td class="left {{leftClass}}">{{left}}</td>', content)
+        self.assertIn(
+            '<span class="pct">{{leftPct}}</span>', content
+        )
+        self.assertIn(
+            '<span class="pace {{leftClass}}">{{leftPace}}</span>', content
+        )
         styles = self.panel["options"].get("styles") or ""
-        self.assertIn(".left.spent { color: #d9534f; }", styles)
-        self.assertIn(".left.ahead { color: #8fc98f; }", styles)
-        self.assertIn(".left.behind { color: #e0a03a; }", styles)
+        self.assertIn(".left .pace { color: #8b8f99;", styles)
+        self.assertIn(".left .pace.spent { color: #d9534f; }", styles)
+        self.assertIn(".left .pace.ahead { color: #8fc98f; }", styles)
+        self.assertIn(".left .pace.behind { color: #e0a03a; }", styles)
 
     def test_the_chip_reads_the_routing_gauge(self):
         """The chip is the collector's routing state, and the table is static."""
@@ -1349,10 +1359,10 @@ class ModelSelectionTests(unittest.TestCase):
         """The panel holds every row of the live table at either width.
 
         Measured in Playwright with the panel's own styles and the five live
-        rows of the fixture: the content is 160 px tall at 390 px and 182 px
+        rows of the fixture: the content is 198 px tall at 390 px and 208 px
         at 1600 px, and a grid row of the dashboard is 37 px.
         """
-        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 182)
+        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 208)
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
