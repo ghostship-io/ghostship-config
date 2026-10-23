@@ -3680,6 +3680,7 @@ def build_snapshot(
     if isinstance(aa_cache, Mapping) and aa_cache.get("status") == "ok":
         feed_version = str(aa_cache.get("index_version") or "") or None
     candidates: list[dict[str, Any]] = []
+    selection_exclusions = []
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
     accounts: dict[str, list[dict[str, Any]]] = {}
@@ -3694,12 +3695,12 @@ def build_snapshot(
         # covers one model family is never published as a window of the
         # whole account. A reading of one model that names no family is
         # not a window of the account at all.
-        if pools.pool_of_window(account, measured) in excluded_pools:
-            continue
         scope = quota_module.measured_scope(measured)
         if scope is None:
             continue
         record = _window_record(measured, now)
+        if pools.pool_of_window(account, record) in excluded_pools:
+            record["not_used"] = True
         if scope:
             record["applies_to"] = [str(token) for token in scope]
         known = accounts.setdefault(account, [])
@@ -3718,7 +3719,7 @@ def build_snapshot(
             inferred.get("window"), now, inferred.get("applies_to") or ()
         )
         if pools.pool_of_window(account, record) in excluded_pools:
-            continue
+            record["not_used"] = True
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -3738,6 +3739,11 @@ def build_snapshot(
             (t3_probes or {}).get((provider, model)),
         )
         if pools.pool_of_route(provider, model, (row.get('access') or {}).get('billing') or '') in excluded_pools:
+            native = row.get('native') or {}
+            if native.get('mapped'):
+                target = {'instanceId':native['provider_instance_id'], 'model':native['model_id']}
+                selection_exclusions.extend({'provider':provider, 'native':target, 'category':category,
+                                             'reason':'pool_excluded'} for category in ('orchestrator','worker'))
             continue
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
@@ -3784,7 +3790,7 @@ def build_snapshot(
         # The provider's overall capacity is the account-level windows. A
         # model-scoped subordinate window constrains that model only.
         applicable = [
-            window for window in windows if not window.get("applies_to")
+            window for window in windows if not window.get("applies_to") and not window.get("not_used")
         ]
         reported = [
             window
@@ -4128,6 +4134,7 @@ def build_snapshot(
         },
         "recommendations": _recommendations(candidates, WORKLOAD_CLASSES),
         "candidates": candidates,
+        "selection_exclusions": selection_exclusions,
         "facts": {
             "count": len(facts_index),
             "version": facts_module.BENCHMARK_VERSION,
@@ -4536,6 +4543,8 @@ def account_window_samples(
                 "label": ExactLabel(label + _scope_suffix(scope, label)),
                 "evidence": str(window.get("evidence") or "unknown"),
             }
+            if window.get("not_used"):
+                labels["usage"] = "not_used"
             remaining = _finite(window.get("remaining_ratio"))
             if remaining is not None:
                 samples.append(
@@ -4544,7 +4553,7 @@ def account_window_samples(
             seconds = _finite(window.get("seconds_to_reset"))
             duration = _finite(window.get("duration_seconds"))
             line = None
-            paced = quota_module.is_paced_window(window)
+            paced = not window.get("not_used") and quota_module.is_paced_window(window)
             if paced and seconds is not None and duration is not None and duration > 0:
                 line = max(0.0, min(1.0, float(seconds) / float(duration)))
                 samples.append(
@@ -4564,7 +4573,7 @@ def account_window_samples(
             samples.append(
                 (
                     "ghostship_ai_account_window_pace_state",
-                    {**labels, "state": (value_policy.pace_state(remaining, line) if paced or remaining is None
+                    {**labels, "state": ("not_used" if window.get("not_used") else value_policy.pace_state(remaining, line) if paced or remaining is None
                                          else "spent" if remaining <= 0 else "on_pace")},
                     1.0,
                 )

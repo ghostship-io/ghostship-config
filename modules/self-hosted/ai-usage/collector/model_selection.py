@@ -185,7 +185,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
     trust_cache = {}
-    role_exclusions = []
+    role_exclusions = list(snapshot.get("selection_exclusions") or [])
     excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
     provider_roles = (((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("provider_roles") or {}
     worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
