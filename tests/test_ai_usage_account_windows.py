@@ -582,5 +582,99 @@ class AccountWindowTests(unittest.TestCase):
         )
 
 
+class InferredWindowLabelTests(unittest.TestCase):
+    """The label of a row of an inferred window.
+
+    An inferred window names the window the inference learned. A suffix
+    that is a length of time is that window and the label says so: '5h'
+    reads 'Inferred · 5h'. A suffix that names a state of the inference
+    is not a period, so the row is named by its kind alone: 'exhausted'
+    reads 'Inferred'.
+    """
+
+    def labels_of(self, records):
+        """The label of the row of every window given."""
+        data = build_snapshot(accounts={"learner": [dict(item) for item in records]})
+        rows = [
+            labels
+            for name, labels, value in snapshot.account_window_samples(data)
+            if name == "ghostship_ai_account_window_remaining_ratio"
+        ]
+        return {labels["quota_id"]: labels["label"] for labels in rows}
+
+    def label_of(self, quota_id, kind="inferred", remaining=0.5, duration=None):
+        """The label of the one row of one window."""
+        labels = self.labels_of(
+            [
+                record(
+                    quota_id,
+                    kind,
+                    remaining=remaining,
+                    duration=duration,
+                    check_at=iso(NOW - 120),
+                    evidence="inferred" if kind == "inferred" else "provider_reported",
+                )
+            ]
+        )
+        self.assertEqual(len(labels), 1, f"expected one row for {quota_id}")
+        return labels[quota_id]
+
+    def test_an_inferred_window_names_the_window_it_was_learned_over(self):
+        self.assertEqual(self.label_of("inferred:5h", duration=18000), "Inferred · 5h")
+
+    def test_an_inferred_window_of_a_minute_names_the_minute(self):
+        self.assertEqual(self.label_of("inferred:1m", duration=60), "Inferred · 1m")
+
+    def test_an_inferred_window_of_twelve_days_names_the_days(self):
+        self.assertEqual(self.label_of("inferred:12d", duration=1036800), "Inferred · 12d")
+
+    def test_an_inferred_window_that_names_a_state_is_named_by_its_kind(self):
+        # 'exhausted' is a state of the inference, not a period, so the
+        # row is named by its kind alone.
+        self.assertEqual(self.label_of("inferred:exhausted", remaining=0.0), "Inferred")
+
+    def test_a_window_that_names_a_model_family_still_names_it(self):
+        labels = self.labels_of(
+            [
+                record("seven_day", "weekly", remaining=0.77, check_at=iso(NOW - 60)),
+                record("seven_day_fable", "weekly", remaining=1.0, check_at=iso(NOW - 60)),
+            ]
+        )
+        self.assertEqual(labels["seven_day"], "Weekly")
+        self.assertEqual(labels["seven_day_fable"], "Weekly · Fable")
+
+    def test_the_mark_of_an_account_with_no_limit_is_not_a_row(self):
+        data = build_snapshot(
+            accounts={
+                "learner": [
+                    record(
+                        "inferred:no-limit-seen",
+                        "inferred",
+                        remaining=1.0,
+                        check_at=iso(NOW - 120),
+                        evidence="inferred",
+                    )
+                ]
+            }
+        )
+        samples = snapshot.account_window_samples(data)
+        self.assertEqual(
+            [
+                labels
+                for name, labels, value in samples
+                if name == "ghostship_ai_account_window_remaining_ratio"
+            ],
+            [],
+        )
+        self.assertEqual(
+            [
+                (name, labels, value)
+                for name, labels, value in samples
+                if name == "ghostship_ai_account_window_learning"
+            ],
+            [("ghostship_ai_account_window_learning", {"account": "learner"}, 1.0)],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
