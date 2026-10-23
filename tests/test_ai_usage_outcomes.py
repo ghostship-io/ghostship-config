@@ -154,6 +154,36 @@ class IdentityTests(unittest.TestCase):
             "gemini-3.8-flash",
         )
 
+    def test_the_real_identity_file_is_read(self):
+        outcomes = outcomes_module()
+        self.assertEqual(
+            outcomes.identity_of("ollama", "deepseek-v4.1-flash:1017", identities()),
+            "deepseek-v4.1-flash-1017",
+        )
+
+    def test_no_input_answers_the_map_of_the_identities(self):
+        outcomes = outcomes_module()
+        records = outcomes.load_identities(FIXTURES / "model-identities.json")
+        self.assertTrue(records)
+        for record in records:
+            self.assertNotEqual(record["id"], "models")
+        models = (
+            "deepseek-v4.1-flash:1017",
+            "deepseek-v4.1-flash",
+            "minimax-m3.1-flash-free",
+            "minimax/minimax-m3.1-flash:free",
+            "beam-free",
+            "beam",
+            "gemini-3.8-flash",
+            "claude-haiku-5-5",
+            "gpt-6-luna",
+        )
+        for model in models:
+            with self.subTest(model=model):
+                self.assertNotEqual(
+                    outcomes.identity_of("ollama", model, identities()), "models"
+                )
+
 
 class LedgerTests(unittest.TestCase):
     """The ledger: read only, and every column it has."""
