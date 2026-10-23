@@ -534,7 +534,7 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
             # observation. It is published with the observed basis, beside
             # the pool's own ceiling and the provider's published number.
             observed_limit = _diagnostic_number(values.get("limit"))
-            if observed_limit is not None:
+            if observed_limit is not None and not isinstance(values.get("limit"), bool):
                 samples.append(
                     _pool_sample(
                         "ghostship_ai_pool_observed_limit",
