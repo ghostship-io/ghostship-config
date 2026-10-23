@@ -1,11 +1,16 @@
 # Daily security maintenance
 
-The existing campaign task runs at 09:00 UTC and points here. Reuse it and
-campaign issue #102; reconcile open work before changing source. Follow the
-installed `ghostship-engineering` skill and current `routing-policy.md` for
-review, landing and deployment. Security evidence and private configuration
-stay off free-tier workers. Report only completed work or blockers to the
-current orchestrator.
+Each daily check starts in a fresh session and finishes after one bounded run.
+Discover the current orchestrator and its unfinished-work checklist before acting.
+Read this procedure, the installed `ghostship-engineering` skill and current
+`routing-policy.md`; each run must discover its own source and live state without
+relying on an earlier session. Reconcile existing findings and feature ownership
+before starting a fix. Send findings and concrete blockers to the orchestrator,
+which assigns follow-up work. The daily session has no permanent ownership.
+
+The orchestrator manages the single daily security task. Inspect its existing
+schedule; this procedure never creates another schedule, recurring campaign or
+permanent security thread. Keep private security evidence off free-tier workers.
 
 ## Updates and exploit mitigation
 
@@ -13,7 +18,7 @@ current orchestrator.
    active container IDs/start times, package derivations and image digests.
    Inspect host and container update timers, their effective commands, last
    results and owners. Include Nix clients **and running daemons**, Podman,
-   OCI runtimes, containerd/Docker, kernel modules, public-facing applications,
+   OCI runtimes, kernel modules, public-facing applications,
    Agent Desktop/browser, provider tools and model refresh. Reuse the configured
    host auto-upgrade, Podman auto-update, desktop canary updater, T3 tool/provider
    maintenance and model refresh owners. Record failed or unknown coverage;
@@ -27,7 +32,8 @@ current orchestrator.
    Prioritize escape, root/API sockets, mount trust, privileged capabilities and
    seccomp, exposed RCE, lateral movement/exfiltration and resource exhaustion.
    Preserve uncertain findings as work; an advisory is not evidence of intrusion.
-3. Advance relevant fixes in the existing feature branch. Prefer a stable
+3. Advance an assigned bounded fix in its existing feature branch; report other findings
+   to the orchestrator for assignment. Prefer a stable
    patch release or verified backport over a broad dependency upgrade. Prepare
    reproducible candidates and compare source/patch identity. Run fast unit
    regressions before merge; integration checks run in GitHub after merge.
@@ -45,16 +51,12 @@ current orchestrator.
    successful `--no-link` builds may have been collected since testing.
    Account for daemon/build continuity, indirect container
    restarts, image retags, rollback artifact availability and scheduled writers.
-   The current program rollout has owner authorization after exact-revision,
-   review, privacy and continuity gates. Future automatic work prepares and tests
-   fixes but retains its human deployment gates. Apply through committed Git and
-   the existing activation helper only within the applicable authorization. Follow the
+   Apply assigned fixes through committed Git with `agent deploy run`, preserving
+   its busy-session guard. Follow the
    [session guard](container-workflow.md#preserve-the-active-t3-code-session).
-   Material compatibility decisions, exposure, reboot,
-   destructive migration and unresolved broad enforcement retain their owner
-   gates. Preserve the absolute active-T3 session guard even if an updater
-   ordinarily permits an idle restart. Advance independent preparation while
-   an activation gate is pending.
+   Material compatibility decisions, exposure, reboot, destructive migration and
+   unresolved broad enforcement retain their owner gates. Advance independent
+   preparation while an activation gate is pending.
 5. After application, read the running executable/daemon/image and effective
    policy again. Verify source fixes or containment, service compatibility,
    health and the preserved T3 identity. Prepared source, a successful build,
@@ -93,13 +95,14 @@ possible intrusions under the SIEM campaign rules before changing detections.
 
 ## Completion
 
-Post one public-safe #102 checkpoint when material state changes: checked
+Include a public-safe checkpoint in the orchestrator report: checked
 coverage and unknowns, official sources, applicability, PR/commit/check results,
 prepared versus applied versus runtime-verified state, rollback, profile learning
 credit, containment results, remaining exposure and next action. Report categories
 and paths instead of private identities, coordinates, payloads or raw records.
 Check names and labels can also contain coordinates: export reviewed categories
 and counts, rather than assuming that removing a detail field sanitizes a report.
-Send shared-state decisions to the current coordinator. Update the issue plan
-when phase state changes. A run is complete only after it advances an actionable
-fix or records the concrete gate and independent work completed.
+Send one self-contained findings report to the orchestrator with severity, observed
+evidence, existing owner or proposed bounded fix, concrete blockers and verification
+state. Link the existing tracking issues and reconcile their open items. End the session after
+reporting; follow-up ownership and the next daily run belong to the orchestrator.

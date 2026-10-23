@@ -6,10 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-SOURCE = (
-    Path(__file__).resolve().parents[1] / "packages/t3code/docker-sandbox/rootfs.py"
-)
-SPEC = importlib.util.spec_from_file_location("docker_rootfs", SOURCE)
+SOURCE = Path(__file__).resolve().parents[1] / "packages/t3code/dev-engine/rootfs.py"
+SPEC = importlib.util.spec_from_file_location("podman_rootfs", SOURCE)
 rootfs = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(rootfs)
 
@@ -44,7 +42,7 @@ class RootfsSafety(unittest.TestCase):
             spec = {
                 "closure": str(closure),
                 "mounts": [
-                    {"source": "/absent-docker-test-source", "target": "/workspace"}
+                    {"source": "/absent-podman-test-source", "target": "/workspace"}
                 ],
                 "files": {},
                 "directories": [],

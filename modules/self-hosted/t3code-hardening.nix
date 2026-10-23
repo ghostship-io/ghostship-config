@@ -1,12 +1,9 @@
 { config, lib, ... }:
 let
   cfg = config.ghostship.t3code.hardening;
-  engineUid = toString config.ghostship.t3codeDocker.uid;
-  # Moby's rootless daemon resolves its delegated cgroup controllers through
-  # /sys/fs/cgroup/user.slice/user-<UID>.slice (dockerd createSpec.withRootless),
-  # so the engine manager must stay inside that slice. The slice is therefore
-  # the only parent that can hold the engine and the outer T3 container under
-  # one aggregate limit without relocating the manager.
+  engineUid = toString config.ghostship.t3codePodman.uid;
+  # Keep the dedicated user manager in its standard slice. The outer
+  # container joins this parent only when aggregate hardening is enabled.
   engineSlice = "user-${engineUid}.slice";
   engineSliceKey = "user-${engineUid}";
   engineManager = "user@${engineUid}";
@@ -118,14 +115,14 @@ in
   };
 
   config = {
-    ghostship.t3codeDocker.enable = lib.mkDefault cfg.enable;
+
     assertions = [
       {
         assertion = !cfg.enable || canonicalContainerOptions;
         message = "Hardened T3 extraOptions must use canonical --flag=value tokens so option values cannot hide resource or security flags.";
       }
       {
-        assertion = !cfg.enable || config.ghostship.t3codeDocker.enable;
+        assertion = !cfg.enable || config.ghostship.t3codePodman.enable;
         message = "Unprivileged T3 requires the separate rootless development engine.";
       }
       {
@@ -217,16 +214,16 @@ in
       # The engine keeps its own bounds; the aggregate only adds a shared cap.
       {
         assertion =
-          !cfg.enable || (engineServiceConfig.MemoryMax or null) == config.ghostship.t3codeDocker.memoryMax;
+          !cfg.enable || (engineServiceConfig.MemoryMax or null) == config.ghostship.t3codePodman.memoryMax;
         message = "The engine keeps its own memory ceiling; the aggregate limit must not replace it.";
       }
       {
-        assertion = !cfg.enable || engineTasksMax == config.ghostship.t3codeDocker.tasksMax;
+        assertion = !cfg.enable || engineTasksMax == config.ghostship.t3codePodman.tasksMax;
         message = "The engine keeps its own task ceiling; the aggregate limit must not replace it.";
       }
       {
         assertion =
-          !cfg.enable || (engineServiceConfig.CPUQuota or null) == config.ghostship.t3codeDocker.cpuQuota;
+          !cfg.enable || (engineServiceConfig.CPUQuota or null) == config.ghostship.t3codePodman.cpuQuota;
         message = "The engine keeps its own CPU quota; the aggregate limit must not replace it.";
       }
       # The outer T3 container keeps a bounded task count of its own, and
@@ -253,7 +250,6 @@ in
       cap_add_allow.t3code = map (cap: "CAP_${cap}") (
         builtins.fromJSON (builtins.readFile ../../packages/t3code/runtime-caps.json)
       );
-      socket_mount_allow = [ "/run/t3code-docker/docker.sock" ];
     };
     # One slice bounds the outer T3 container and the rootless engine together.
     # The engine manager keeps its own delegated subtree inside the same slice,

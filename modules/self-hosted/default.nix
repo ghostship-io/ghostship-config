@@ -60,7 +60,8 @@
     ./inference-bridge.nix
     ./t3code.nix
     ./t3code-hardening.nix
-    ./t3code-docker.nix
+    ./t3code-podman.nix
+    ./podman-only.nix
     ../agent-host
 
     # Games

@@ -4,7 +4,7 @@ The relay is the only path from the apps group to the rootless engine API.
 The engine's socket path is writable by the untrusted container, so the relay
 must authorize the peer of every upstream connection instead of trusting the
 path. These tests use real Unix sockets in a temporary directory; no host
-Podman, Nix or Docker socket is ever contacted.
+Podman, Nix or Podman socket is ever contacted.
 """
 
 import asyncio
@@ -20,10 +20,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-SOURCE = (
-    Path(__file__).resolve().parents[1] / "packages/t3code/docker-sandbox/api-relay.py"
-)
-SPEC = importlib.util.spec_from_file_location("docker_api_relay", SOURCE)
+SOURCE = Path(__file__).resolve().parents[1] / "packages/t3code/dev-engine/api-relay.py"
+SPEC = importlib.util.spec_from_file_location("podman_api_relay", SOURCE)
 relay = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(relay)
 
@@ -199,7 +197,7 @@ class RelayAuthorization(unittest.TestCase):
         # what refuses the connection.
         attacker = self.root / "attacker"
         attacker.mkdir()
-        link = attacker / "docker.sock"
+        link = attacker / "podman.sock"
         link.symlink_to(self.upstream.path)
         process = start_relay(self.listener, link, os.getuid() + 1)
         try:
