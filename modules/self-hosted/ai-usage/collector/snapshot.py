@@ -3660,6 +3660,7 @@ def build_snapshot(
     does not carry. It is optional: without it every model is trusted and
     no round was observed.
     """
+    excluded_pools = set((((outcomes or {}).get('policy') or {}).get('model_selection') or {}).get('excluded_pools') or [])
     ranked = [entry for entry in ranked if pools.usable_route(entry.provider, entry.model)]
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
@@ -3683,6 +3684,17 @@ def build_snapshot(
     if isinstance(aa_cache, Mapping) and aa_cache.get("status") == "ok":
         feed_version = str(aa_cache.get("index_version") or "") or None
     candidates: list[dict[str, Any]] = []
+    selection_exclusions = []
+    # Ranking may already have removed unused routes. Keep their native
+    # identities so reconciliation can remove previously managed favorites
+    # even during a partial collection.
+    for (provider, model), native in native_models.items():
+        if not pools.usable_route(provider, model):
+            identity = _native_record(provider, model, native)
+            if identity['mapped']:
+                target = {'instanceId':identity['provider_instance_id'], 'model':identity['model_id']}
+                selection_exclusions.extend({'provider':provider, 'native':target, 'category':category,
+                                             'reason':'pool_excluded'} for category in ('orchestrator','worker'))
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
     accounts: dict[str, list[dict[str, Any]]] = {}
@@ -3701,8 +3713,8 @@ def build_snapshot(
         if scope is None:
             continue
         record = _window_record(measured, now)
-        if pools.not_used_window(account, measured):
-            record['not_used'] = True
+        if pools.pool_of_window(account, record) in excluded_pools or pools.not_used_window(account, measured):
+            record["not_used"] = True
         if scope:
             record["applies_to"] = [str(token) for token in scope]
         known = accounts.setdefault(account, [])
@@ -3720,8 +3732,8 @@ def build_snapshot(
         record = _inferred_window_record(
             inferred.get("window"), now, inferred.get("applies_to") or ()
         )
-        if pools.not_used_window(account, inferred):
-            record['not_used'] = True
+        if pools.pool_of_window(account, record) in excluded_pools or pools.not_used_window(account, inferred):
+            record["not_used"] = True
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -3740,6 +3752,13 @@ def build_snapshot(
             (pool_evidence or {}).get((provider, model)),
             (t3_probes or {}).get((provider, model)),
         )
+        if pools.pool_of_route(provider, model, (row.get('access') or {}).get('billing') or '') in excluded_pools:
+            native = row.get('native') or {}
+            if native.get('mapped'):
+                target = {'instanceId':native['provider_instance_id'], 'model':native['model_id']}
+                selection_exclusions.extend({'provider':provider, 'native':target, 'category':category,
+                                             'reason':'pool_excluded'} for category in ('orchestrator','worker'))
+            continue
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
         fact = facts_module.lookup_by_model(
@@ -4130,6 +4149,7 @@ def build_snapshot(
         },
         "recommendations": _recommendations(candidates, WORKLOAD_CLASSES),
         "candidates": candidates,
+        "selection_exclusions": selection_exclusions,
         "facts": {
             "count": len(facts_index),
             "version": facts_module.BENCHMARK_VERSION,

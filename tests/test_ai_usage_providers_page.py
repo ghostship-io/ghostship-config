@@ -127,6 +127,17 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertIn('data-field="remaining"',panel['options']['content'])
         self.assertIn('custom reset',panel['options']['content'])
 
+    def test_pi_is_absent_from_dashboard_queries(self):
+        for variable in self.page['templating']['list']:
+            query=variable.get('definition','')
+            if 'provider!=' in query:self.assertIn('provider!="pi"',query)
+            if 'account!=' in query:self.assertIn('account!="pi"',query)
+        for panel in self.page['panels']:
+            for target in panel.get('targets',[]):
+                query=target.get('expr','')
+                if 'provider!=' in query:self.assertIn('provider!="pi"',query)
+                if 'account!=' in query:self.assertIn('account!="pi"',query)
+
     def test_model_pace_reads_the_published_band_without_rounding_it_again(self):
         for state, delta, text in (('ahead',5.1,'▲ 5.1 ahead'),('on_pace',5,'● on pace'),
                                    ('behind',-5.1,'▼ 5.1 behind'),('behind',-20,'▼ 20 behind'),
@@ -179,6 +190,20 @@ class ProviderCapacityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.panel=next(p for p in json.loads(PAGE.read_text())['panels'] if p['id']==210)
+
+    def test_unused_windows_are_grey_even_when_spent_and_have_no_pace_tick(self):
+        labels={'account':'antigravity','kind':'weekly','quota_id':'3p-weekly','label':'Weekly · Claude & GPT',
+                'evidence':'provider_reported','not_used':'true'}
+        rows=[{**labels,'field':'left','value':0},
+              {**labels,'field':'expected','value':.5},
+              {**labels,'field':'pace_state','state':'spent','value':1}]
+        window=helper(self.panel,'capacityCards',rows)[0]['windows'][0]
+        self.assertEqual(window['fillClass'],'not_used')
+        self.assertEqual(window['paceClass'],'not_used')
+        self.assertIn('Not used',window['sub'])
+        self.assertFalse(window['hasTick'])
+        self.assertTrue(window['notUsed'])
+        self.assertIn('.fill.not_used',self.panel['options']['styles'])
 
     def card(self,kind='weekly',left=.55,state='behind',extra=()):
         common={'account':'claude','kind':kind,'quota_id':'synthetic','label':kind,'evidence':'provider_reported'}

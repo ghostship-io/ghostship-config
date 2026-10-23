@@ -9,7 +9,7 @@ import pools
 
 class PoolTests(unittest.TestCase):
     def test_antigravity_families_share_only_their_own_allowance(self):
-        for model in ('claude-sonnet-5-5-high', 'claude-opus-5-5-low', 'gpt-oss-120b-medium'):
+        for model in ('claude-sonnet-5-5-high', 'claude-opus-5-5-low', 'gpt-oss-120b-medium', 'gpt-6.1-sol'):
             self.assertEqual(pools.pool_of_route('antigravity', model), 'antigravity:3p')
         self.assertEqual(pools.pool_of_route('antigravity', 'gemini-3.8-flash'), 'antigravity:gemini')
         self.assertEqual(pools.pool_of_route('antigravity', 'unknown-model'), 'antigravity:unknown')

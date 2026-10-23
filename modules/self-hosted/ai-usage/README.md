@@ -1533,3 +1533,13 @@ Source health is visible above the model panes. It labels missing/stale
 collections and T3 usage/provider failures independently of model quota data.
 Historical T3 usage scans use the bounded sixty-second transport budget;
 failures preserve their fixed reason (including timeout), never server text.
+
+Provider role restrictions are declared only in runtime policy's
+`model_selection.provider_roles`. The collector omits disallowed categories
+and publishes explicit native role exclusions, so the reconciler can remove
+previously managed worker favorites even when another source is unavailable.
+Orchestrator review authority remains independent of worker eligibility.
+Unused pools are declared in the same policy's `excluded_pools`; their
+model candidates are omitted. Their account windows remain visible as grey
+"not used" rows with reported remaining/reset values, without pace or binding
+capacity. Other pools retain their readings and eligibility.
