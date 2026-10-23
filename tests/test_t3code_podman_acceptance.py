@@ -70,20 +70,38 @@ class NativeNetworkInspection(unittest.TestCase):
     def test_project_networks_read_native_subnets(self):
         # Docker-shaped inspection silently discarded Podman's subnet evidence.
         def command(*args, **kwargs):
-            output = "project_default\n" if args[1] == "ls" else json.dumps([
-                {"driver": "bridge", "subnets": [{"subnet": "192.0.2.0/24"}]}
-            ])
+            output = (
+                "project_default\n"
+                if args[1] == "ls"
+                else json.dumps(
+                    [{"driver": "bridge", "subnets": [{"subnet": "192.0.2.0/24"}]}]
+                )
+            )
             return subprocess.CompletedProcess(args, 0, output, "")
 
-        self.assertEqual(acceptance.project_networks(command, "project"), {
-            "project_default": {"driver": "bridge", "subnets": ["192.0.2.0/24"]}
-        })
+        self.assertEqual(
+            acceptance.project_networks(command, "project"),
+            {"project_default": {"driver": "bridge", "subnets": ["192.0.2.0/24"]}},
+        )
 
 
 class ImageStartup(unittest.TestCase):
     def test_readiness_unit_executes_the_packaged_command(self):
         # A stale executable name prevents the bootstrap and server from starting.
         source = (SOURCE.parents[3] / "modules/self-hosted/t3code.nix").read_text()
-        name = re.search(r't3codeEngineReady = pkgs.writeShellScriptBin "([^"]+)"', source)[1]
-        executable = re.search(r'ExecStart=\$\{t3codeEngineReady\}/bin/([^\s]+)', source)[1]
+        name = re.search(
+            r't3codeEngineReady = pkgs.writeShellScriptBin "([^"]+)"', source
+        )[1]
+        executable = re.search(
+            r"ExecStart=\$\{t3codeEngineReady\}/bin/([^\s]+)", source
+        )[1]
         self.assertEqual(executable, name)
+
+
+class PublishedPort(unittest.TestCase):
+    def test_absent_or_bare_provider_ports_do_not_abort_the_report(self):
+        # podman-compose can print None after a failed project start.
+        for output in ("", "None\n", "0.0.0.0:22", "70000"):
+            self.assertIsNone(acceptance.published_tcp_port(output))
+        self.assertEqual(acceptance.published_tcp_port("127.0.0.1:32123\n"), 32123)
+        self.assertEqual(acceptance.published_tcp_port("32123\n"), 32123)
