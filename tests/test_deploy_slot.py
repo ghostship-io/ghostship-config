@@ -84,8 +84,8 @@ class DeploySlotTestCase(unittest.TestCase):
     def acquire(self, holder="alpha", purpose="release chill-penguin", now=None, *flags):
         return self.command("acquire", "--holder", holder, "--purpose", purpose, *flags, now=now)
 
-    def status(self, now=None):
-        return self.command("status", now=now)[1]
+    def status(self, now=None, stale_minutes=None):
+        return self.command("status", now=now, stale_minutes=stale_minutes)[1]
 
     def released(self, holder="alpha"):
         return self.command("release", "--holder", holder)
