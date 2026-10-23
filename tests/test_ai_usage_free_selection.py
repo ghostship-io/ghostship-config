@@ -17,7 +17,6 @@ hold invented values only.
 """
 
 import importlib.util
-import re
 import sys
 import unittest
 from datetime import datetime, timezone
