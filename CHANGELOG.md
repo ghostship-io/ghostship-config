@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.207] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7f180d26; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #373.
+
 ## [3.17.206] - 2026-10-23
 
 - Track public Codex reset announcements separately from owner overrides and provider measurements, with bounded Desktop checks and announced-reset pacing labels.
