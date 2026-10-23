@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.104] - 2026-10-23
+
+- AI usage: an inferred window on the Providers page names only the window it was learned over. The suffix of an inferred quota id is a window when it is a length of time, so the row of a five hour window reads 'Inferred · 5h'. A suffix that names a state of the inference is not a period, so the row of an exhausted account reads 'Inferred', and no longer 'Inferred · Exhausted'. The label of every other window is unchanged.
+
 ## [3.17.103] - 2026-10-23
 
 - The Providers page opens with the capacity cards: one card per provider, with a small icon and every capacity window the account has, and a chip for every provider that publishes no window of its own yet. The numbers of a card are the collector's account window gauges, read in one query, so the page never recomputes a window: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The pace of a row reads the difference between the share that is left and the share the window expects to be left, a window that is spent says so, and a window the provider did not report carries the tag that it was inferred. The card order, the names, the icons and the notes are the presentation the owner approved.
