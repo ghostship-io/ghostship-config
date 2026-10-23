@@ -40,6 +40,9 @@ python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
 
+printf 'Checking the deploy slot\n'
+python3 -m unittest discover -s tests -p test_deploy_slot.py
+
 printf 'Checking the agent pin against a regression\n'
 python3 scripts/check-agent-pin.py
 python3 -m unittest discover -s tests -p test_agent_pin_guard.py
