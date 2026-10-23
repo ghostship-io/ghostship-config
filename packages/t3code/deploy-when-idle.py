@@ -2,12 +2,14 @@
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import time
+import tarfile
 from datetime import datetime, timezone
 
 # The host stamps each container with the image deployment it was created from.
@@ -18,6 +20,31 @@ TOOL_LOCK = Path(".local/state/t3code-tool-update/tool-update.lock")
 MAX_DEPLOY_ATTEMPTS = 3
 # The ledger of the restarts that interrupted T3 Code without waiting for idle.
 RESTART_LEDGER = "/var/lib/t3code-restarts/ledger.jsonl"
+
+
+def require_candidate(state_dir, image_archive, podman_bin):
+    """An owner request bypasses idle, never candidate acceptance."""
+    if not image_archive:
+        raise RuntimeError("image archive missing; refusing an unverified image change")
+    with tarfile.open(image_archive) as archive:
+        manifest = json.load(archive.extractfile("manifest.json"))
+        config = archive.extractfile(manifest[0]["Config"]).read()
+    image_id = hashlib.sha256(config).hexdigest()
+    current = container_identity(podman_bin).get("image", "").removeprefix("sha256:")
+    if current == image_id:
+        return
+    state_dir = Path(state_dir)
+    desired = (state_dir / "desired").read_text().strip()
+    receipt = json.loads((state_dir / "receipts" / f"{desired}.json").read_text())
+    checks = ("authenticated_app", "provider_turn", "agent_cli", "skills", "desktop_transport")
+    if not (
+        receipt.get("deployment_id") == desired
+        and receipt.get("image_id", "").removeprefix("sha256:") == image_id
+        and receipt.get("candidate_name", "").startswith("t3code-candidate-")
+        and receipt.get("live_before") and receipt.get("live_before") == receipt.get("live_after")
+        and all(receipt.get("checks", {}).get(name) is True for name in checks)
+    ):
+        raise RuntimeError("candidate receipt does not approve this exact T3 image")
 
 
 def utcnow_iso():
@@ -223,6 +250,7 @@ def run_deployment(
     tool_lock_acquirer=None,
     health_reader=None,
     max_attempts=MAX_DEPLOY_ATTEMPTS,
+    image_archive=None,
 ):
     state_dir = Path(state_dir)
     home_dir = Path(home_dir)
@@ -326,6 +354,7 @@ def run_deployment(
             return 0
 
         try:
+            require_candidate(state_dir, image_archive, podman_bin)
             if desired:
                 tmp_applying = state_dir / "applying.tmp"
                 tmp_applying.write_text(desired)
@@ -427,8 +456,10 @@ def journal_message(journal_bin, message):
         pass
 
 
-def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin, audit_log):
+def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin, audit_log,
+                  state_dir, image_archive):
     """Restart T3 Code now, on the owner's explicit instruction."""
+    require_candidate(state_dir, image_archive, podman_bin)
     pre = container_identity(podman_bin)
     print(f"Forcing immediate restart of podman-t3code.service (owner request: {reference})...",
           flush=True)
@@ -450,6 +481,7 @@ def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin
 def main():
     parser = argparse.ArgumentParser(description="T3 Code deploy when idle")
     parser.add_argument("--state-dir", default="/var/lib/ghostship/t3code-deployment")
+    parser.add_argument("--image-archive", help="the exact Nix-built image archive")
     parser.add_argument("--home-dir", default="/srv/apps/t3code/home")
     parser.add_argument("--probe-bin", default="t3code-activity-probe")
     parser.add_argument("--podman-bin", default="podman")
@@ -482,10 +514,11 @@ def main():
         print("instruction, recorded with --owner-request \"<short quote or reference>\".", flush=True)
         return 2
 
-    if args.safe_restart:
+    if args.safe_restart or args.force:
         if args.force:
             return force_restart(args.systemctl_bin, args.podman_bin, args.owner_request.strip(),
-                                 args.restart_ledger, args.journal_bin, audit_path)
+                                 args.restart_ledger, args.journal_bin, audit_path,
+                                 args.state_dir, args.image_archive)
 
         state_dir.mkdir(parents=True, exist_ok=True)
         tmp = state_dir / "restart.pending.tmp"
@@ -518,6 +551,7 @@ def main():
             audit_log=audit_path,
             confirm_idle_seconds=args.confirm_idle_seconds,
             health_timeout_seconds=args.health_timeout_seconds,
+            image_archive=args.image_archive,
         )
     )
 
