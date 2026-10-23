@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.106] - 2026-10-23
+
+- ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
 ## [3.17.105] - 2026-10-23
 
 - AI usage: the value policy carries the outcome maths the ranking is about to be valued by, and nothing calls it yet. The quality is an outcome-weighted *p*: a prior *p0* places the measured intelligence index inside its own tier (0.5 when the index is missing, 0.9 when the tier holds one model, clamped to [0.5, 0.9]), and *p* shrinks that prior toward the outcomes actually measured, at a prior strength of ten outcomes. The value is `0.70 * p + 0.30 * E` through the existing weights, so *p* takes the intelligence slot and a missing component leaves the value unknown. The trust levels order the tiers (trusted, backup, untrusted, excluded, with an absent or unknown level ranking as trusted) and an untrusted route keeps half of its value. A free route leads while it is within 0.10 of the best paid quality. The published policy states the formulas, the prior strength, the margin, the untrusted factor and the trust order, and the measured `value_score` and the existing policy sections are unchanged.
