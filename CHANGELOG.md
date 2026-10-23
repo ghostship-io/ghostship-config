@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.125] - 2026-10-23
+## [3.17.126] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
+
+## [3.17.125] - 2026-10-23
+
+- AI usage: the collector publishes the availability of every account, so a provider that publishes no limit of its own reaches the Providers page as "Available", or as unavailable with its reason, instead of a bare "learning window" chip. The new series `ghostship_ai_account_availability{account,state,basis,reason}` holds one series per account: whether the account can serve right now, the reason it cannot when it cannot, and the basis of its limit (`learning` for an account that never saw a limit failure, `unpublished` for an account that publishes no number, `published` for every other account). `ghostship_ai_account_availability_check_timestamp_seconds{account}` holds when the routes that were counted were observed. The routes of an account that count are its free or promotional routes when it holds any, and all of its routes otherwise, so a paid route never stands in for a free one: the OpenCode Go account is counted by its five free routes and not by the paid routes of the same subscription, and its check time is the newest observation of those free routes alone. The reason is the one the routes carry most often, and a route that says nothing does not count against a route that says something; when no route says anything, a route that is in cooldown names the moment it cools down, and an account that holds no route at all says "no route available". The reason is published exactly as it reads, and an available account carries no reason. Every value is read from the routing snapshot, and nothing is recomputed.
 
 ## [3.17.124] - 2026-10-23
 
