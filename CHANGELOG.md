@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.219] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 97935734; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #386.
+
 ## [3.17.218] - 2026-10-23
 
 - Retain the MCP runtime's transitive Python helpers and sandbox-profile data in content-scoped sources.
