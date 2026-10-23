@@ -19,7 +19,7 @@ TODAY = datetime.date(2026, 10, 19)
 
 LIVE_CONFIG = {
     "$schema": "https://opencode.ai/config.json",
-    "enabled_providers": ["ollama-cloud", "opencode-go", "openrouter"],
+    "enabled_providers": ["ollama-cloud", "opencode-go", "openrouter", "opencode"],
     "provider": {"openrouter": {"models": {}}},
     "model": "ollama-cloud/deepseek-v4.1-flash",
     "small_model": "openrouter/cohere/north-mini-code:free",
@@ -55,6 +55,10 @@ class Trim(unittest.TestCase):
                 "a/new-paid": model("a/new-paid", "2026-09-01"),
                 "a/old:free": model("a/old:free", "2025-01-01", cost=0),
             }},
+            "opencode": {"id": "opencode", "models": {
+                "fixture-free": model("fixture-free", "2026-09-01", cost=0),
+                "fixture-paid": model("fixture-paid", "2026-09-01"),
+            }},
             "anthropic": {"id": "anthropic", "models": {"legacy": model("legacy", "2023-01-01")}},
         }
 
@@ -73,6 +77,9 @@ class Trim(unittest.TestCase):
     def test_a_pinned_openrouter_model_stays_out(self):
         result = catalog.trim(self.source(), TODAY, {"openrouter/a/new:free"})
         self.assertNotIn("openrouter", result)
+
+    def test_zen_is_absent_even_when_a_free_model_was_pinned(self):
+        self.assertNotIn('opencode', catalog.trim(self.source(), TODAY, {'opencode/fixture-free'}))
 
     def test_new_releases_are_accepted_without_a_list(self):
         source = self.source()
@@ -104,6 +111,8 @@ class Config(unittest.TestCase):
         config = self.read_config()
         self.assertEqual(config["enabled_providers"], ["ollama-cloud", "opencode-go"])
         self.assertNotIn("openrouter", config["provider"])
+        self.assertEqual(config['providers']['opencode']['models'], {
+            'fixture-free': {'disabled': True}, 'fixture-paid': {'disabled': True}})
         self.assertEqual(config["small_model"], "ollama-cloud/minimax-m3.1-flash")
         self.assertEqual(config["model"], "ollama-cloud/deepseek-v4.1-flash")
         for key in ("$schema", "mcp", "permission"):
@@ -156,8 +165,10 @@ class Config(unittest.TestCase):
         lines = [line for line in errors.getvalue().splitlines() if str(self.config) in line]
         self.assertEqual(len(lines), 1)
 
-    def test_a_config_without_openrouter_is_not_rewritten(self):
-        plain = {"enabled_providers": ["ollama-cloud"], "model": "ollama-cloud/deepseek-v4.1-flash"}
+    def test_a_config_already_isolating_free_providers_is_not_rewritten(self):
+        plain = {"enabled_providers": ["ollama-cloud"], "model": "ollama-cloud/deepseek-v4.1-flash",
+                 "providers": {"opencode": {"models": {
+                     'fixture-free': {'disabled': True}, 'fixture-paid': {'disabled': True}}}}}
         self.config.write_text(json.dumps(plain, indent=2))
         before_bytes = self.config.read_bytes()
         before = os.stat(self.config).st_mtime_ns
