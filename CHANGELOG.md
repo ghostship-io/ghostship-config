@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.109] - 2026-10-23
+
+- The Providers page shows the owner's static model selection under the capacity cards: one row per route of the runtime policy in the collector's row order, with the role, the model and its blue bulk tag, the provider with the icon of its capacity card, the work the route is used for, and the share that is left with the Paced Availability beside it. A spent route reads zero, spent, and how long until it resets; a route the routing snapshot does not carry says no reading and never zero; a route with no pace series keeps its share alone. The chip reads the routing gauge and says that the static table is shown for reference while the routing is on. The old Providers table goes, since the cards above it replace it.
+
 ## [3.17.108] - 2026-10-23
 
 - ai-usage: a capacity window keeps the scope the ranking gives it. The account records of the routing snapshot dropped the scope of a window, so the session and the weekly window of the Antigravity third-party group read as the capacity of the whole account, the per-model quota readings of that account merged into one row of many models, and a spent Fable week of Claude blocked every Claude route. A measured window is filed under the scope the ranking gives it, a reading the provider reports for one model is filed under the family of that model, and a model id that names no family is not a window of the account at all. The label of the row names the scope: 'Session · Claude & GPT', 'Weekly · Claude & GPT', 'Quota · Gemini', 'Quota · Claude', 'Quota · GPT'. The provider capacity of an account counts the windows that cover the whole account only, and the ranking, the candidate rows and the windows they carry are unchanged.
