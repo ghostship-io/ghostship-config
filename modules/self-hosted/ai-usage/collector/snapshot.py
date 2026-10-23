@@ -231,11 +231,6 @@ def _inferred_window_record(
         "state": inference.get("state") or None,
         "rolling": bool(inference.get("rolling")),
     }
-    if "rolling" in inference:
-        # The mark of a window that rolls. It is carried as the inference
-        # published it, and a record of an inference that carries no mark
-        # has none: the page then says nothing about the window rolling.
-        record["inference"]["rolling"] = bool(inference.get("rolling"))
     scope = [str(token) for token in applies_to or ()]
     if scope:
         record["applies_to"] = scope
