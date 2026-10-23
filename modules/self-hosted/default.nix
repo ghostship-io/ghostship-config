@@ -57,6 +57,7 @@
     ./agent-desktop-update.nix
     ./private-integrations.nix
     ./github-engineering.nix
+    ./github-ci.nix
     ./inference-bridge.nix
     ./free-worker.nix
     ./t3code.nix
