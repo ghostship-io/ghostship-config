@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.179] - 2026-10-23
+
+- Audit the free runtime auth store without resolving its deliberately hidden Go provider.
+
+PR #345.
+
 ## [3.17.178] - 2026-10-23
 
 - Publish deployed agent release candidates while preserving monotonic managed refresh selection.
