@@ -7,7 +7,7 @@
 
 let
   tautulli-secrets = config.ghostship.selfHostedSecrets.projections.tautulli.path;
-  render-tautulli-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project tautulli";
+  render-tautulli-secrets = "${config.ghostship.selfHostedSecrets.renderFor "tautulli"}/bin/ghostship-secret-project tautulli";
 in
 {
   ghostship.apps.tautulli = {
