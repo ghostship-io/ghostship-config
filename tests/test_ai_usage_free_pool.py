@@ -599,6 +599,22 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
     MODEL = "qwen/qwen3-32b"
     MOMENT = 1001.0
 
+    def test_boolean_limit_keeps_only_the_existing_raw_diagnostic(self):
+        result = self.collect({"quota_observations": [observation(
+            self.MODEL, observed=1000.0,
+            rpd={"limit": True, "remaining": 0, "reset": "1m"},
+        )]})
+        self.assertEqual(result.windows, [])
+        self.assertEqual([
+            value for name, labels, value in result.metrics
+            if name == "ghostship_ai_pool_quota_amount"
+            and labels["kind"] == "limit"
+        ], [1.0])
+        self.assertEqual([
+            value for name, _labels, value in result.metrics
+            if name == "ghostship_ai_pool_observed_limit"
+        ], [])
+
     def collect(self, status, *, now=None, catalog=None):
         """Run the real pool collector against a synthetic bridge."""
         with tempfile.TemporaryDirectory(prefix="reported-headers-") as directory:
