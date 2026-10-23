@@ -2784,7 +2784,8 @@ in
       ++ [
         "--systemd=always"
         "--stop-timeout=180"
-        "--hostname=t3code.ghostship.io"
+        # Public HTTPS must resolve through Cloudflare, not this HTTP-only origin.
+        "--hostname=t3code"
         "--network=ghostship_net"
         "--network=agent_desktop_net"
         "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
