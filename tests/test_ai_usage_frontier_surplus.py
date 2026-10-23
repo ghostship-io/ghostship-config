@@ -63,17 +63,6 @@ class SurplusTests(unittest.TestCase):
         )
         self.assertFalse(surplus["available"])
 
-    def test_a_session_ahead_of_the_line_spares_nothing(self):
-        # The session window is used faster than the line allows: the review
-        # capacity is under pressure.
-        windows = [
-            window(0.2, 12 * HOUR, "weekly"),
-            window(0.9, 2 * HOUR, "session"),
-        ]
-        surplus = ranking._frontier_surplus(windows, NOW)
-        self.assertFalse(surplus["available"])
-        self.assertIn("ahead of the line", surplus["reason"])
-
     def test_a_weekly_surplus_with_a_calm_session_is_available(self):
         windows = [
             window(0.2, 12 * HOUR, "weekly"),

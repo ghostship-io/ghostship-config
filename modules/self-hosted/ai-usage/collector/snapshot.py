@@ -352,7 +352,7 @@ def _pace_record(
 
     duration = _get("duration_seconds", "durationSeconds")
     reset = _get("reset_epoch", "resetEpoch")
-    if not duration or float(duration) <= 0 or not isinstance(reset, (int, float)):
+    if not quota_module.is_paced_window(window) or not duration or float(duration) <= 0 or not isinstance(reset, (int, float)):
         return None, None
     start = float(reset) - float(duration)
     expected = min(1.0, max(0.0, (now - start) / float(duration)))
@@ -1044,16 +1044,21 @@ def _candidate(
                   if getattr(window, "inference", None) else _window_record(window, now))
         if record not in windows:
             windows.append(record)
-    if pace is None and raw_windows:
-        binding = min(
-            (w for w in raw_windows if _window_record(w, now)["evidence"] == "provider_reported"),
-            key=lambda w: _window_record(w, now)["remaining_ratio"] or 0.0,
-            default=None,
-        )
-        if binding is not None:
-            expected, actual = _pace_record(
-                binding, now, _window_record(binding, now)["remaining_ratio"]
-            )
+    pace_remaining = remaining
+    if raw_windows:
+        # Capacity and pace have independent bindings. The long window's
+        # line must be compared with its own usage, even if a short window
+        # has less headroom or is exhausted.
+        paces = []
+        for window in raw_windows:
+            own_remaining = _window_record(window, now)["remaining_ratio"]
+            own_expected, own_actual = _pace_record(window, now, own_remaining)
+            if own_expected is not None and own_actual is not None:
+                paces.append((own_expected - own_actual, own_expected, own_actual, own_remaining))
+        if paces:
+            pace, expected, actual, pace_remaining = min(paces, key=lambda item: item[0])
+        else:
+            pace = expected = actual = None
 
     # The pace state of the row: where the share left sits on the line of the
     # most constraining window, in points. The line of that window is the
@@ -1061,11 +1066,11 @@ def _candidate(
     # published number draws; a row with no line, or with nothing left, says
     # so instead of guessing.
     expected_left = None
-    if remaining is not None and pace is not None:
-        expected_left = remaining - pace
+    if pace_remaining is not None and pace is not None:
+        expected_left = pace_remaining - pace
     elif expected is not None:
         expected_left = 1.0 - expected
-    pace_state = value_policy.pace_state(remaining, expected_left)
+    pace_state = value_policy.pace_state(pace_remaining, expected_left)
 
     native_record = _native_record(provider, model, native)
     # The owner's lists, read once from the runtime policy. Every consumer
@@ -4532,7 +4537,8 @@ def account_window_samples(
             seconds = _finite(window.get("seconds_to_reset"))
             duration = _finite(window.get("duration_seconds"))
             line = None
-            if seconds is not None and duration is not None and duration > 0:
+            paced = quota_module.is_paced_window(window)
+            if paced and seconds is not None and duration is not None and duration > 0:
                 line = max(0.0, min(1.0, float(seconds) / float(duration)))
                 samples.append(
                     (
@@ -4548,7 +4554,8 @@ def account_window_samples(
             samples.append(
                 (
                     "ghostship_ai_account_window_pace_state",
-                    {**labels, "state": value_policy.pace_state(remaining, line)},
+                    {**labels, "state": (value_policy.pace_state(remaining, line) if paced or remaining is None
+                                         else "spent" if remaining <= 0 else "on_pace")},
                     1.0,
                 )
             )
