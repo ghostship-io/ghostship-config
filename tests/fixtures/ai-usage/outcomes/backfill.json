@@ -1,0 +1,43 @@
+{
+  "schema": "ghostship.delegation.backfill/v1",
+  "rounds": [
+    {
+      "round_id": "m-2",
+      "model": "ollama/beam",
+      "task_type": "research",
+      "started_at": "2026-10-20T10:00:00Z",
+      "verdict": "accepted",
+      "fabrication": 1,
+      "ref": "chat-77",
+      "summary": "the review accepted the second answer and recorded a fabrication"
+    },
+    {
+      "round_id": "m-1",
+      "model": "ollama/beam",
+      "task_type": "research",
+      "started_at": "2026-10-20T09:00:00Z",
+      "verdict": "rejected",
+      "fabrication": 1,
+      "ref": "chat-70",
+      "summary": "the backfill would replace the manual verdict of the round"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "research",
+      "started_at": "2026-10-17T09:00:00Z",
+      "verdict": "accepted",
+      "fabrication": 0,
+      "ref": "chat-60",
+      "summary": "a round older than the first round of the ledger"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "research",
+      "started_at": "2026-10-22T09:00:00Z",
+      "verdict": "accepted",
+      "fabrication": 0,
+      "ref": "chat-80",
+      "summary": "a round the ledger already covers"
+    }
+  ]
+}
