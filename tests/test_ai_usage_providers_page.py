@@ -305,15 +305,15 @@ STATIC_ROUTES = (
 # The live free selection under the static rows, at the moment of the
 # fixture: the provider, the name the cards read it by, the model the
 # provider selected for the free tier, the name of that model, and the Left
-# cell. The rows follow the capacity cards: the approved accounts first, then
-# the accounts the list does not name, by name.
+# cell. One row per free provider that holds an eligible free model, in the
+# order of the capacity cards: the approved accounts first, then the accounts
+# the list does not name, by name.
 FREE_ROWS = (
     ("opencode-go", "OpenCode Go", "beam-free", "Beam Free", "100%"),
     ("openrouter", "OpenRouter", "gpt-oss-120b", "GPT OSS 120B",
      "99% \u00b7 \u25cf on pace"),
     ("cloudflare-workers-ai", "Cloudflare", "llama-3.3-70b-instruct",
      "Llama 3.3 70B Instruct", "learning window"),
-    ("cohere", "Cohere", "", "", "no eligible free model"),
     ("google", "Google", "gemma-3-27b", "Gemma 3 27B",
      "97% \u00b7 \u25b2 33 ahead"),
     ("groq", "Groq", "qwen3.8-27b", "Qwen3.8 27B", "learning window"),
@@ -322,14 +322,26 @@ FREE_ROWS = (
      "learning window"),
     ("kilo-keyed", "Kilo (keyed)", "qwen3.8-27b", "Qwen3.8 27B",
      "learning window"),
-    ("mistral", "Mistral", "", "", "no eligible free model"),
     ("nvidia", "NVIDIA", "glm-5.3-flash", "GLM-5.3 Flash", "learning window"),
     ("ovh", "OVH", "mistral-small-3.2", "Mistral Small 3.2",
      "learning window"),
-    ("opencode", "OpenCode Zen", "", "", "no eligible free model"),
-    ("orcarouter", "Orcarouter", "", "", "no eligible free model"),
-    ("poolside", "Poolside", "", "", "no eligible free model"),
-    ("requesty", "Requesty", "", "", "no eligible free model"),
+    ("upstage", "Upstage", "solar-mini4", "Solar Mini4", "learning window"),
+)
+
+# The free providers the collector publishes with no free winner, in the
+# order of the capacity cards. A provider with no eligible free model is not
+# a row of the Free group; it comes back by itself once the routing gives it
+# a free-tier winner. The collector keeps publishing these rows, so the cards
+# and the other readers of the free selection still read them.
+FREE_HIDDEN = (
+    ("cohere", "Cohere"),
+    ("mistral", "Mistral"),
+    ("opencode", "OpenCode Zen"),
+    ("orcarouter", "Orcarouter"),
+    ("poolside", "Poolside"),
+    ("requesty", "Requesty"),
+    ("vercel", "Vercel"),
+    ("zai", "Zai"),
 )
 
 # The free models of every provider that holds a free route, by state, as the
@@ -1875,9 +1887,9 @@ class ModelSelectionTests(unittest.TestCase):
     def test_a_phone_row_names_its_provider_in_the_model_cell(self):
         """Under 520 px the hidden Provider column's name moves under the model.
 
-        A free row with no model held only the letter icon on a phone, and the
-        owner could not tell which provider it was. The name is hidden at the
-        wide width, where the Provider column carries it.
+        A free row on a phone would otherwise hold only the letter icon, and
+        the owner could not tell which provider it was. The name is hidden at
+        the wide width, where the Provider column carries it.
         """
         content = self.panel["options"]["content"]
         self.assertEqual(
@@ -1892,11 +1904,11 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertIn(
             "display: block", dict(css_rules(media_body(styles)))[".routes .mp"]
         )
-        row = self.free_row(provider="cohere")
-        self.assertEqual(row["providerName"], "Cohere")
-        self.assertEqual(row["model"], "")
-        self.assertEqual(row["displayName"], "")
-        self.assertEqual(row["left"], "no eligible free model")
+        row = self.free_row(provider="upstage")
+        self.assertEqual(row["providerName"], "Upstage")
+        self.assertEqual(row["model"], "solar-mini4")
+        self.assertEqual(row["displayName"], "Solar Mini4")
+        self.assertEqual(row["left"], "learning window")
 
     def test_a_model_name_is_one_line_and_carries_its_id(self):
         """A model name ends in an ellipsis on one line, the full id in its title.
@@ -2023,6 +2035,46 @@ class ModelSelectionTests(unittest.TestCase):
             [(row[1], row[3]) for row in FREE_ROWS],
         )
 
+    def test_the_live_free_set_lists_only_its_eligible_providers(self):
+        """Nineteen free providers are published, and eleven hold a model.
+
+        The eight the collector publishes with basis "none" are not rows of
+        the group, and every eligible provider, learning window and pace
+        alike, still is.
+        """
+        info = {
+            row["provider"]: row
+            for row in fixture_free_rows()
+            if row["field"] == "free_info"
+        }
+        eligible = [row[0] for row in FREE_ROWS]
+        hidden = [row[0] for row in FREE_HIDDEN]
+        self.assertEqual(len(eligible), 11)
+        self.assertEqual(len(hidden), 8)
+        self.assertEqual(sorted(info), sorted(eligible + hidden))
+        self.assertEqual(
+            sorted(
+                provider for provider, row in info.items() if row["basis"] == "none"
+            ),
+            sorted(hidden),
+        )
+        self.assertEqual(
+            sorted(
+                provider for provider, row in info.items() if row["basis"] != "none"
+            ),
+            sorted(eligible),
+        )
+        built = self.free()
+        self.assertEqual(len(built[1:]), 11)
+        self.assertEqual([row["provider"] for row in built[1:]], eligible)
+        for provider, _name, _model, display, left in FREE_ROWS:
+            row = next(row for row in built[1:] if row["provider"] == provider)
+            self.assertEqual(row["left"], left, provider)
+            self.assertEqual(row["displayName"], display, provider)
+        self.assertIn(
+            "learning window", [row["leftPace"] for row in built[1:]]
+        )
+
     def test_an_opencode_go_free_route_reads_its_published_share(self):
         """Beam Free is a route the provider publishes: 100%, with no pace."""
         row = self.free_row(provider="opencode-go")
@@ -2052,14 +2104,56 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertEqual(row["leftClass"], "")
         self.assertEqual(row["left"], "learning window")
 
-    def test_a_selection_with_no_eligible_model_says_so(self):
-        """A free provider with no winner reads one sentence, not a zero."""
-        row = self.free_row(provider="requesty")
-        self.assertEqual(row["basis"], "none")
-        self.assertEqual(row["model"], "")
-        self.assertEqual(row["leftPct"], "")
-        self.assertEqual(row["leftPace"], "no eligible free model")
-        self.assertEqual(row["left"], "no eligible free model")
+    def test_a_provider_with_no_eligible_free_model_is_not_listed(self):
+        """Only a provider that holds a free winner is a row of the group.
+
+        Google has an inferred selection with a model, Requesty has none, so
+        the Free group holds Google alone and the skip is silent: no row and
+        no sentence says that Requesty was left out.
+        """
+        rows = [
+            {
+                "provider": "google",
+                "field": "free_info",
+                "model": "gemma-3-27b",
+                "display_name": "Gemma 3 27B",
+                "basis": "inferred",
+                "value": 1,
+            },
+            {"provider": "google", "field": "free_left", "value": 0.9712},
+            {"provider": "google", "field": "free_pace", "value": 0.33},
+            {
+                "provider": "requesty",
+                "field": "free_info",
+                "model": "",
+                "display_name": "",
+                "basis": "none",
+                "value": 1,
+            },
+        ]
+        built = self.free(rows)
+        self.assertEqual(built[0], {"group": "Free"})
+        self.assertEqual([row["provider"] for row in built[1:]], ["google"])
+        self.assertEqual(built[1]["left"], "97% \u00b7 \u25b2 33 ahead")
+
+    def test_the_panel_never_says_a_provider_has_no_eligible_model(self):
+        """The panel carries no sentence about a provider it leaves out.
+
+        The collector keeps publishing the row with basis "none"; the page
+        drops it without a word, so the phrase a row used to read is gone
+        from the content, the helpers and the description alike.
+        """
+        options = self.panel["options"]
+        for part in (
+            self.panel.get("description") or "",
+            options["content"],
+            options.get("defaultContent") or "",
+            options["helpers"],
+            options.get("styles") or "",
+        ):
+            self.assertNotIn("no eligible free model", part)
+        # The static rows are not filtered with the free ones.
+        self.assertEqual(len(self.selection()), len(STATIC_ROUTES))
 
     def test_a_spent_selection_reads_spent_and_its_reset(self):
         """A selection at zero reads spent, and its reset when it has one."""
@@ -2113,8 +2207,8 @@ class ModelSelectionTests(unittest.TestCase):
             self.assertEqual(row["providerName"], card["name"], provider)
             for key in ("icon", "background", "foreground"):
                 self.assertEqual(row[key], card[key], f"{provider} {key}")
-        # The account of the OpenCode API is read as its card reads it.
-        self.assertEqual(selected["opencode"]["providerName"], "OpenCode Zen")
+        # OpenCode Zen holds no free winner, so its row is not on the page.
+        self.assertNotIn("opencode", selected)
 
     def test_the_free_group_draws_no_bar(self):
         """A free row is a row of the table: it has no bar and no track."""
@@ -2132,8 +2226,10 @@ class ModelSelectionTests(unittest.TestCase):
         info = {
             row["provider"]: row for row in rows if row["field"] == "free_info"
         }
-        self.assertEqual(len(info), len(FREE_ROWS))
-        self.assertEqual(sorted(info), sorted(row[0] for row in FREE_ROWS))
+        self.assertEqual(len(info), len(FREE_ROWS) + len(FREE_HIDDEN))
+        self.assertEqual(
+            sorted(info), sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN)
+        )
         expected = {
             "opencode-go": ("beam-free", "published"),
             "openrouter": ("gpt-oss-120b", "reported"),
@@ -2151,12 +2247,15 @@ class ModelSelectionTests(unittest.TestCase):
             "orcarouter": ("", "none"),
             "poolside": ("", "none"),
             "requesty": ("", "none"),
+            "upstage": ("solar-mini4", "learning"),
+            "vercel": ("", "none"),
+            "zai": ("", "none"),
         }
         self.assertEqual(
             {provider: (row["model"], row["basis"]) for provider, row in info.items()},
             expected,
         )
-        self.assertEqual(len(info), 16)  # the live set of the free providers
+        self.assertEqual(len(info), 19)  # the live set of the free providers
 
         left = {
             row["provider"]: row["value"]
@@ -2268,7 +2367,11 @@ class ModelSelectionStoreTests(unittest.TestCase):
         providers = sorted(
             row["provider"] for row in free if row["field"] == "free_info"
         )
-        self.assertEqual(providers, sorted(row[0] for row in FREE_ROWS))
+        # The collector still publishes every free provider, including the
+        # eight without a winner that the page leaves out of the group.
+        self.assertEqual(
+            providers, sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN)
+        )
         selection = {row["provider"]: row for row in free if row["field"] == "free_info"}
         self.assertEqual(selection["opencode-go"]["model"], "beam-free")
         self.assertEqual(selection["opencode-go"]["basis"], "published")
