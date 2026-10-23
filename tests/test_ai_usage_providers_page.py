@@ -1997,7 +1997,9 @@ class ModelSelectionTests(unittest.TestCase):
             spent((18 * 60 + 59.7) * 60)["leftPace"],
             "\u2715 spent \u00b7 resets in 19h 0m",
         )
-        # No output of the panel carries a sixty-minute field.
+        # No output of the panel carries a sixty-minute field. The rows go to
+        # node in batches: one argument of the platform is capped (128 KiB on
+        # Linux), and the whole sweep in one script is longer than that.
         seconds = list(range(1, 48 * 3600, 197)) + [
             59.6 * 60,
             (18 * 60 + 59.7) * 60,
@@ -2005,25 +2007,26 @@ class ModelSelectionTests(unittest.TestCase):
             48 * 3600,
             3.04 * 86400,
         ]
-        rows = []
-        for index, value in enumerate(seconds):
-            key = str(100 + index)
-            rows += [
-                {
-                    "row": key,
-                    "field": "info",
-                    "role": "Bulk 3",
-                    "provider": "ollama",
-                    "model": "worked",
-                    "display_name": "Worked",
-                    "used_for": "Research",
-                    "value": 1.0,
-                },
-                {"row": key, "field": "left", "value": 0.0},
-                {"row": key, "field": "reset", "value": now + value},
-            ]
-        for row in self.selection(rows):
-            self.assertNotIn("60m", row["left"], row["left"])
+        for start in range(0, len(seconds), 150):
+            rows = []
+            for index, value in enumerate(seconds[start : start + 150]):
+                key = str(100 + index)
+                rows += [
+                    {
+                        "row": key,
+                        "field": "info",
+                        "role": "Bulk 3",
+                        "provider": "ollama",
+                        "model": "worked",
+                        "display_name": "Worked",
+                        "used_for": "Research",
+                        "value": 1.0,
+                    },
+                    {"row": key, "field": "left", "value": 0.0},
+                    {"row": key, "field": "reset", "value": now + value},
+                ]
+            for row in self.selection(rows):
+                self.assertNotIn("60m", row["left"], row["left"])
         for part in (
             self.panel.get("description") or "",
             self.panel["options"]["content"],
