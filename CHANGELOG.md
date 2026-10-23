@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.154] - 2026-10-23
+
+- Keep CI runners available for fast PR gates by running slow main coverage nightly and cancelling obsolete main checks.
+
+PR #317.
+
 ## [3.17.153] - 2026-10-23
 
 - Remove superseded engineering handoff and deployment instructions.
