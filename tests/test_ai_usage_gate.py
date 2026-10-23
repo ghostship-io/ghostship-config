@@ -83,7 +83,7 @@ class FactsPublicationTests(unittest.TestCase):
             indices={"intelligence_index": 42.0},
             now=NOW,
         )
-        fact["aliases"] = ["<owner-email>"]
+        fact["aliases"] = ["person@private.invalid"]
         fact["native_bindings"] = {"token": "sk-live-AAAABBBB"}
         fact["note"] = "/srv/apps/secret path"
         data = snapshot.build_snapshot(
@@ -93,7 +93,7 @@ class FactsPublicationTests(unittest.TestCase):
             facts={facts.identity_key("minimax", "MiniMax M3.1 Flash"): fact},
         )
         text = json.dumps(data)
-        for sentinel in ("<owner-email>", "sk-live", "/srv/apps/secret"):
+        for sentinel in ("private.invalid", "sk-live", "/srv/apps/secret"):
             self.assertNotIn(sentinel, text)
 
     def test_the_published_fact_has_only_allowlisted_fields(self):
@@ -127,9 +127,15 @@ class QuotaPanelTests(unittest.TestCase):
             / "modules/self-hosted/siem/dashboards/ai-usage.json"
         )
         dashboard = json.loads(path.read_text())
+        def walk(panels):
+            # A collapsed row keeps its panels nested inside it.
+            for panel in panels:
+                yield panel
+                yield from walk(panel.get("panels") or [])
+
         quota_panels = [
             panel
-            for panel in dashboard["panels"]
+            for panel in walk(dashboard["panels"])
             if any(
                 "ghostship_ai_quota_" in (target.get("expr") or "")
                 for target in panel.get("targets") or []
@@ -165,12 +171,12 @@ class SelectionTests(unittest.TestCase):
     def test_the_value_is_the_published_intelligence_and_cost_policy(self):
         weights = snapshot.CALCULATION["value"]["weights"]
         self.assertAlmostEqual(sum(weights.values()), 1.0, places=6)
-        self.assertEqual(weights, {"intelligence": 0.8, "cost_per_task": 0.2})
+        self.assertEqual(weights, {"intelligence": 0.7, "cost_per_task": 0.3})
         value, used = snapshot._component_value(
             {"intelligence": 0.9, "cost_per_task": 0.5}
         )
         self.assertEqual(set(used), {"intelligence", "cost_per_task"})
-        self.assertAlmostEqual(value, 0.8 * 0.9 + 0.2 * 0.5, places=6)
+        self.assertAlmostEqual(value, 0.7 * 0.9 + 0.3 * 0.5, places=6)
         # A missing input means no combined value: no renormalization.
         self.assertEqual(
             snapshot._component_value({"intelligence": 0.9, "cost_per_task": None}),
@@ -274,7 +280,7 @@ class FactsAttestationTests(unittest.TestCase):
     """Every text field a published fact carries, probed with sentinels."""
 
     SENTINELS = (
-        "<owner-email>",
+        "person@private.invalid",
         "/srv/apps/t3code/home/.grok/auth.json",
         "sk-live-AAAABBBBCCCC",
         "acct-1234567890",
@@ -296,11 +302,11 @@ class FactsAttestationTests(unittest.TestCase):
             self.assertNotIn(sentinel, text)
 
     def test_the_provider_and_the_model_must_be_proven(self):
-        fact = self._fact(provider="<owner-email>", model="/srv/x")
+        fact = self._fact(provider="person@private.invalid", model="/srv/x")
         self.assertIsNone(facts.public_record(fact, {"minimax:MiniMax M3.1 Flash"}))
 
     def test_the_basis_is_not_published(self):
-        fact = self._fact(basis="account <owner-email> owes /srv/apps/x")
+        fact = self._fact(basis="account person@private.invalid owes /srv/apps/x")
         record = facts.public_record(fact)
         self.assertNotIn("basis", record)
         self.assertEqual(record["attestation"], "artificialanalysis_free")
@@ -310,7 +316,7 @@ class FactsAttestationTests(unittest.TestCase):
         allowed = facts.public_record(self._fact())
         self.assertEqual(allowed["brief_url"], "https://artificialanalysis.ai/models/minimax")
         for url in (
-            "https://example.com/<owner-email>",
+            "https://example.com/person@private.invalid",
             "https://artificialanalysis.ai.evil.example/x",
             "file:///srv/apps/secret",
             "https://artificialanalysis.ai/models?token=sk-live-AAAABBBBCCCC",
@@ -318,7 +324,7 @@ class FactsAttestationTests(unittest.TestCase):
             self.assertIsNone(facts.public_record(self._fact(brief_url=url))["brief_url"])
 
     def test_the_pending_reason_is_a_code(self):
-        fact = self._fact(status="pending", pending_reason="the brief for <owner-email>")
+        fact = self._fact(status="pending", pending_reason="the brief for person@private.invalid")
         record = facts.public_record(fact)
         self.assertEqual(record["pending_reason"], "unknown")
         self._assert_clean(json.dumps(record))
@@ -326,7 +332,7 @@ class FactsAttestationTests(unittest.TestCase):
     def test_the_canonical_identity_and_the_benchmark_id_are_not_published(self):
         fact = self._fact(
             canonical_identity="acct-1234567890 /srv/apps/x",
-            benchmark_id="<owner-email>",
+            benchmark_id="person@private.invalid",
         )
         record = facts.public_record(fact)
         self.assertNotIn("canonical_identity", record)
@@ -336,7 +342,7 @@ class FactsAttestationTests(unittest.TestCase):
     def test_an_admission_workload_must_be_a_known_class(self):
         fact = self._fact(
             admission_evidence=[
-                {"workload": "<owner-email>", "admitted": True, "score": 1.0, "at": NOW},
+                {"workload": "person@private.invalid", "admitted": True, "score": 1.0, "at": NOW},
                 {"workload": "research", "admitted": True, "score": 1.0, "at": NOW},
             ]
         )

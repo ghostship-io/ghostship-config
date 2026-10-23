@@ -130,6 +130,14 @@ def _pool_sample(name: str, labels: dict[str, str], value: float) -> Sample:
 
 
 def _limit_samples(provider: str, model: str, limits: Any, scope: str) -> list[Sample]:
+    """The pool's own ceilings.
+
+    These are the limits the pool enforces, which is a local policy and not
+    the provider's own allowance. The basis they were read with is
+    published with the `ghostship_ai_provider_limit` family, so a reader
+    can tell the pool's ceiling from the provider's published number and
+    from what the provider's headers said.
+    """
     samples: list[Sample] = []
     if not isinstance(limits, dict):
         return samples
@@ -238,6 +246,41 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                 1.0,
             )
         )
+        # The pool's own probe of the route. It says whether the route
+        # answered its last check, the class of the answer, the model it
+        # checked and the moment of the check. A probe the pool did not run
+        # carries no moment and is not a reading of the route.
+        probe = state.get("probe")
+        if isinstance(probe, dict):
+            probe_state = probe.get("state")
+            probe_model = probe.get("model")
+            if (
+                isinstance(probe_state, str)
+                and probe_state
+                and isinstance(probe_model, str)
+                and probe_model
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_probe",
+                        {
+                            "provider": str(provider),
+                            "model": probe_model,
+                            "state": probe_state,
+                            "category": str(probe.get("category") or ""),
+                        },
+                        1.0,
+                    )
+                )
+                checked = probe.get("at")
+                if isinstance(checked, (int, float)) and not isinstance(checked, bool):
+                    samples.append(
+                        _pool_sample(
+                            "ghostship_ai_pool_probe_timestamp_seconds",
+                            {"provider": str(provider), "model": probe_model},
+                            float(checked),
+                        )
+                    )
     for row in status.get("health") or []:
         if not isinstance(row, dict):
             continue
@@ -293,6 +336,25 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                         float(value),
                     )
                 )
+            # A limit the provider's own response headers carried is an
+            # observation. It is published with the observed basis, beside
+            # the pool's own ceiling and the provider's published number.
+            observed_limit = values.get("limit")
+            if isinstance(observed_limit, (int, float)) and not isinstance(
+                observed_limit, bool
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_observed_limit",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "limit": str(unit),
+                            "scope": "account",
+                        },
+                        float(observed_limit),
+                    )
+                )
             reset = values.get("reset")
             if isinstance(reset, str) and reset:
                 seconds = _duration_seconds(reset)
@@ -332,22 +394,38 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                         )
                     )
                     break
+    # The recent jobs are counted by their label set. A metric series is a
+    # name with a label set, and two jobs that share a provider, a worker, a
+    # client and a status are the same series: publishing one sample per
+    # job published that series twice, the writer dropped the repeat, and
+    # the published number was one where it was two. The series is the
+    # count of those jobs, published once.
+    recent_jobs: dict[tuple[str, str, str, str], int] = {}
     for job in status.get("jobs") or []:
         if not isinstance(job, dict):
             continue
         provider = str(job.get("provider") or "")
         if not provider:
             continue
+        key = (
+            provider,
+            str(job.get("worker") or "unknown"),
+            str(job.get("client") or "default"),
+            str(job.get("status") or "unknown"),
+        )
+        recent_jobs[key] = recent_jobs.get(key, 0) + 1
+    for key in sorted(recent_jobs):
+        provider, worker, client, job_status = key
         samples.append(
             _pool_sample(
                 "ghostship_ai_pool_recent_jobs",
                 {
                     "provider": provider,
-                    "worker": str(job.get("worker") or "unknown"),
-                    "client": str(job.get("client") or "default"),
-                    "status": str(job.get("status") or "unknown"),
+                    "worker": worker,
+                    "client": client,
+                    "status": job_status,
                 },
-                1.0,
+                float(recent_jobs[key]),
             )
         )
     updated = status.get("catalog_updated_at")
@@ -358,6 +436,11 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
 
 
 def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
+    # The account limits of a provider belong to the provider, not to one of
+    # its models, so they are published once per provider. A provider with
+    # several models used to publish the same limit once per model, and the
+    # repeated series made the scrape fail.
+    emitted_account_limits: set[tuple[str, str]] = set()
     for provider, entry in (catalog.get("providers") or {}).items():
         if not isinstance(entry, dict):
             continue
@@ -400,6 +483,19 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                     1.0 if available else 0.0,
                 )
             )
+            # The pool's own reason a candidate is unavailable. The pool
+            # names the policy that parks the account or the route, and the
+            # snapshot repeats that reason instead of guessing one. A
+            # candidate that is offered carries none.
+            unavailable_reason = candidate.get("unavailable_reason")
+            if isinstance(unavailable_reason, str) and unavailable_reason:
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_model_unavailable_reason",
+                        {**labels, "reason": unavailable_reason},
+                        1.0,
+                    )
+                )
             samples.append(
                 _pool_sample(
                     "ghostship_ai_pool_model_selected",
@@ -412,6 +508,18 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                 samples.append(
                     _pool_sample("ghostship_ai_pool_model_cooldown_until_seconds", labels, float(cooldown))
                 )
+            # When the pool last sent a job to this route. The least recently
+            # used route breaks the tie inside the quality band of the free
+            # tier, so the reading is published with the route.
+            last_used = candidate.get("last_used")
+            if isinstance(last_used, (int, float)) and not isinstance(last_used, bool):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_route_last_used_timestamp_seconds",
+                        labels,
+                        float(last_used),
+                    )
+                )
             admissions = candidate.get("admissions")
             if isinstance(admissions, dict):
                 for workload, entry_value in admissions.items():
@@ -423,9 +531,34 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                             1.0 if admitted else 0.0,
                         )
                     )
-            samples.extend(
-                _limit_samples(str(provider), "*", candidate.get("account_limits"), "account")
-            )
+                    # The score the pool's own bench gave the route. It is
+                    # the pool's measurement, not ours, and it is published
+                    # beside the admission so a reader can see how strong it
+                    # is.
+                    score = (
+                        entry_value.get("score") if isinstance(entry_value, dict) else None
+                    )
+                    if isinstance(score, (int, float)) and not isinstance(score, bool):
+                        samples.append(
+                            _pool_sample(
+                                "ghostship_ai_pool_admission",
+                                {**labels, "workload": str(workload)},
+                                float(score),
+                            )
+                        )
+            account_limits = candidate.get("account_limits")
+            if isinstance(account_limits, dict):
+                new_limits = {
+                    name: value
+                    for name, value in account_limits.items()
+                    if (str(provider), str(name)) not in emitted_account_limits
+                }
+                if new_limits:
+                    samples.extend(
+                        _limit_samples(str(provider), "*", new_limits, "account")
+                    )
+                    for name in new_limits:
+                        emitted_account_limits.add((str(provider), str(name)))
             samples.extend(
                 _limit_samples(str(provider), model, candidate.get("model_limits"), "model")
             )

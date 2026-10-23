@@ -3,20 +3,25 @@
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import tempfile
-import urllib.request
-import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import private_source
 
 
 # Private flake inputs mapped to their source repository, scoped read key, and
 # optional subdirectory. The deployment consumes the agent repository for the
 # ghostship-tools platform builder; the MCP image's shopping policy and icon are
-# deployment-owned under modules/self-hosted/private-integrations/.
+# deployment-owned under modules/self-hosted/private-integrations/. The AI usage
+# collector reads the same repository's runtime policy as a plain source tree,
+# under its own pin.
 SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
-
+    'ghostship-agent-policy': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
 }
 
 
@@ -39,46 +44,46 @@ def main():
     root = Path(tempfile.mkdtemp(prefix='ghostship-ci-sources-', dir=os.environ['RUNNER_TEMP']))
     try:
         # Authenticate the SSH host using GitHub's HTTPS-published public keys.
-        headers = {'User-Agent': 'ghostship-ci-private-inputs'}
-        if meta_token:
-            headers['Authorization'] = 'Bearer ' + meta_token
-        request = urllib.request.Request('https://api.github.com/meta', headers=headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
-            host_keys = json.load(response)['ssh_keys']
-        del request, headers, meta_token
-        known = root/'known_hosts'
-        known.write_text(''.join('github.com ' + key + '\n' for key in host_keys))
+        host_keys = private_source.github_host_keys(meta_token)
+        del meta_token
+        known = private_source.known_hosts(root/'known_hosts', host_keys)
         for name, spec in SOURCES.items():
             suffix = spec['key']
-            credential = credentials.pop(suffix)
+            credential = credentials.get(suffix)
             if not credential:
                 raise SystemExit('Missing scoped private-source key: ' + suffix)
-            key = root/(suffix + '.key')
+            key = root/(name + '.key')
             key.write_text(credential + '\n'); key.chmod(0o600)
             del credential
             locked = nodes[name]['locked']
-            if locked['type'] != 'github' or locked['owner'] != 'owner' or locked['repo'] != spec['repo']:
-                raise SystemExit('Unsupported private source declaration: ' + name)
+            if not private_source.supported_source(locked, spec['repo']):
+                raise SystemExit(
+                    'Unsupported private source declaration: ' + name
+                    + ' (a lock written before the transfer needs '
+                    + private_source.TRANSITION_OWNERS_VARIABLE + ')'
+                )
             if spec['dir'] and locked.get('dir') != spec['dir']:
                 raise SystemExit('Unsupported private source directory: ' + name)
-            checkout = root/('checkout-' + suffix); checkout.mkdir()
-            env = {name: os.environ[name] for name in ('PATH', 'HOME') if name in os.environ}
-            env['GIT_SSH_COMMAND'] = ('ssh -i ' + str(key) + ' -o IdentitiesOnly=yes -o BatchMode=yes'
-                + ' -o StrictHostKeyChecking=yes -o UserKnownHostsFile=' + str(known))
-            subprocess.run(['git', 'init', '-q', str(checkout)], env=env, check=True)
-            subprocess.run(['git', '-C', str(checkout), 'fetch', '-q', '--depth=1',
-                'git@github.com:owner/' + spec['repo'] + '.git', locked['rev']], env=env, check=True)
-            subprocess.run(['git', '-C', str(checkout), 'checkout', '-q', '--detach', 'FETCH_HEAD'], env=env, check=True)
+            # Two inputs may share one read key, so every working path is named
+            # after the input and never after the key.
+            checkout = root/('checkout-' + name)
+            env = private_source.ssh_environment(key, known)
+            # The owner and the repository come from the lock that was checked
+            # above, so neither is written out here.
+            url = private_source.git_ssh_url(lock, name)
+            if not url:
+                raise SystemExit('Unsupported private source declaration: ' + name)
+            private_source.fetch_source(checkout, url, locked['rev'], env)
             key.unlink()
-            archive = root/(suffix + '.tar')
+            archive = root/(name + '.tar')
             with archive.open('wb') as output:
                 subprocess.run(['git', '-C', str(checkout), 'archive', 'FETCH_HEAD'], stdout=output, env=env, check=True)
-            source = root/('source-' + suffix); source.mkdir()
+            source = root/('source-' + name); source.mkdir()
             with tarfile.open(archive) as packed:
                 packed.extractall(source, filter='data')
             actual = subprocess.check_output(['nix', 'hash', 'path', str(source)], text=True).strip()
             if actual != locked['narHash']:
-                raise SystemExit('Pinned private source hash mismatch: ' + suffix)
+                raise SystemExit('Pinned private source hash mismatch: ' + name)
             # CI-only local Git locks avoid private GitHub archive/API credentials.
             substituted = {
                 'type': 'git', 'url': checkout.as_uri(), 'rev': locked['rev'],
@@ -89,6 +94,7 @@ def main():
             print('Verified pinned private source: ' + name, flush=True)
         lock_path.write_text(json.dumps(lock, indent=2) + '\n')
     finally:
+        credentials.clear()
         for key in root.glob('*.key'):
             key.unlink(missing_ok=True)
 

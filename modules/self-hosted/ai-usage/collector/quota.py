@@ -39,6 +39,43 @@ STALE_AFTER_SECONDS = 1800.0
 # A reading from the future is not a reading.
 FUTURE_TOLERANCE_SECONDS = 60.0
 
+# The scope of a quota window: the model families it applies to. A window
+# that names a family only applies to the models of that family; every
+# other window applies to the whole account.
+WINDOW_SCOPES = (
+    ("3p-", ("claude", "gpt")),
+    ("gemini-", ("gemini",)),
+    ("fable", ("fable",)),
+    ("sonnet", ("sonnet",)),
+    ("opus", ("opus",)),
+    ("haiku", ("haiku",)),
+    ("sol", ("sol",)),
+    ("astra", ("astra",)),
+)
+
+# The model families a reading the provider reports for one model belongs
+# to. A provider that reports a window per model names the family in the
+# model id, and the family is the scope of the reading.
+MODEL_FAMILY_SCOPES = (
+    ("gemini-", ("gemini",)),
+    ("claude-", ("claude",)),
+    ("gpt-", ("gpt",)),
+)
+
+# The names the scope of a window is written with. A scope names a family
+# of models, and the family is written the way its models are named.
+SCOPE_NAMES = {
+    "claude": "Claude",
+    "gpt": "GPT",
+    "gemini": "Gemini",
+    "fable": "Fable",
+    "sonnet": "Sonnet",
+    "opus": "Opus",
+    "haiku": "Haiku",
+    "sol": "Sol",
+    "astra": "Astra",
+}
+
 
 def _finite(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -57,6 +94,58 @@ def _get(item: Any, *names: str) -> Any:
         if value is not None:
             return value
     return None
+
+
+def window_scope(quota_id: str) -> tuple[str, ...]:
+    """The model families a quota window applies to.
+
+    The scope of a window is the name of the window: a window whose id
+    names a model family applies to the models of that family, and every
+    other window applies to the whole account.
+    """
+    text = str(quota_id or "").lower()
+    for marker, families in WINDOW_SCOPES:
+        if marker in text:
+            return families
+    return ()
+
+
+# The name the lookup had where the table lived before it moved here, so
+# the collector keeps one name for the scope of a window.
+_window_scope = window_scope
+
+
+def model_scope(model_id: str) -> tuple[str, ...]:
+    """The model families a reading of one model belongs to.
+
+    A provider that reports a window per model names the family in the
+    model id. A model id that names no family is not a route of the
+    account but an internal name of the provider.
+    """
+    text = str(model_id or "").strip().lower()
+    for marker, families in MODEL_FAMILY_SCOPES:
+        if text == marker[:-1] or text.startswith(marker):
+            return families
+    return ()
+
+
+def measured_scope(measured: Any) -> tuple[str, ...] | None:
+    """The scope of a measured reading, or None when it is not a window.
+
+    A reading of the whole account is scoped by the name of its window,
+    which is the scope the ranking gives it. A reading of one model is
+    scoped by the family of that model, and a model id that names no
+    family is not a route of the account: such a reading is not a window
+    of the account, because it would read as a window of the whole
+    account.
+    """
+    scope = _get(measured, "applies_to", "appliesTo")
+    if scope:
+        return tuple(str(token) for token in scope)
+    model = str(_get(measured, "model") or "*")
+    if model == "*":
+        return window_scope(str(_get(measured, "quota_id", "quotaId") or ""))
+    return model_scope(model) or None
 
 
 def window_pace(window: Any, now: float) -> dict[str, Any] | None:
@@ -156,6 +245,33 @@ QUOTA_ALIASES = {
     "go_weekly": "weekly",
 }
 
+# Why a headroom is unknown. The codes are fixed, so the dashboard can group
+# them, and the texts say it in words. An unknown headroom without a reason
+# is a gap a reader cannot explain, so a reason is always there.
+UNKNOWN_REASON_NO_WINDOW = "no_window"
+UNKNOWN_REASON_WINDOW_UNKNOWN = "window_unknown"
+
+UNKNOWN_REASON_TEXT = {
+    UNKNOWN_REASON_NO_WINDOW: (
+        "the provider publishes no quota window for this account"
+    ),
+    UNKNOWN_REASON_WINDOW_UNKNOWN: (
+        "the provider's window was not read, is stale, or has already reset"
+    ),
+}
+
+
+def unknown_reason_code(windows: Iterable[Any], remaining: Any) -> str:
+    """The code of the reason a headroom is unknown, or an empty string.
+
+    A headroom that is known has no reason to give: it is measured. A
+    headroom that is unknown always has one, so a consumer never has to
+    guess why a window is missing.
+    """
+    if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+        return ""
+    return UNKNOWN_REASON_WINDOW_UNKNOWN if list(windows or ()) else UNKNOWN_REASON_NO_WINDOW
+
 
 def _entitlement_parts(window: Any) -> dict[str, str]:
     def get(name: str, default: str = "") -> str:
@@ -180,6 +296,10 @@ def _entitlement_parts(window: Any) -> dict[str, str]:
         "observed_at": _get(window, "observed_at", "observedAtEpoch", "observed_at_epoch"),
         "used_ratio": _get(window, "used_ratio", "usedRatio"),
         "reset_at": _get(window, "reset_at", "resetAt", "resetEpoch", "reset_epoch"),
+        # The basis of the numbers of the window, and the end of its
+        # entitlement when the provider publishes one.
+        "basis": str(get("basis") or ""),
+        "ends_at": _get(window, "ends_at", "endsAt", "ends_at_epoch"),
     }
 
 
@@ -217,6 +337,8 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "used_ratio": parts["used_ratio"],
                 "reset_at": parts["reset_at"],
                 "observed_at": parts["observed_at"],
+                "basis": parts["basis"],
+                "ends_at": parts["ends_at"],
                 "usable": pace is not None,
                 "expected_used_ratio": None if pace is None else pace["expected_used_ratio"],
                 "pace_delta_ratio": None if pace is None else pace["pace_delta_ratio"],
@@ -257,12 +379,30 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "pace_delta_ratio": chosen["pace_delta_ratio"],
                 "reset_at": chosen["reset_at"],
                 "observed_at": chosen["observed_at"],
+                "basis": chosen["basis"],
+                "ends_at": chosen["ends_at"],
                 "state": "measured",
-                "basis": "the current usable reading with the least remaining",
+                "selection": "the current usable reading with the least remaining",
             }
         else:
+            chosen = None
             entry["display"] = None
             entry["display_state"] = "unknown"
+        # The basis of the entitlement and the end of it. An entitlement
+        # without a usable numeric reading still has an identity, so the
+        # basis comes from its freshest reading: a route the provider
+        # publishes as a promotion is a promotion, measured or not.
+        freshest = max(
+            entry["readings"],
+            key=lambda reading: (
+                _epoch(reading["observed_at"]) or 0.0,
+                str(reading["source"] or ""),
+            ),
+        )
+        entry["basis"] = str(
+            (chosen or freshest)["basis"] or ""
+        )
+        entry["ends_at"] = (chosen or freshest)["ends_at"]
         result.append(entry)
     return sorted(result, key=lambda entry: entry["entitlement"])
 
@@ -288,6 +428,12 @@ def entitlement_display_samples(
             "quota": entry["canonical_quota"],
             "source": str((display or {}).get("source") or ""),
             "entitlement": entry["entitlement"],
+            # The basis of the numbers of the entitlement, and the end of it
+            # when the provider publishes one. An end that is not published
+            # is unknown, and an unknown end is an empty label and never a
+            # zero.
+            "basis": str(entry.get("basis") or ""),
+            "ends_at": _iso_label(entry.get("ends_at")),
         }
         samples.append(("ghostship_ai_entitlement_info", dict(labels), 1.0))
         if not isinstance(display, Mapping):
@@ -331,6 +477,20 @@ def entitlement_display_samples(
                 )
             )
     return samples
+
+
+def _iso_label(value: Any) -> str:
+    """The end of an entitlement as a label, or an empty string.
+
+    An end that the provider does not publish is unknown, and an unknown end
+    is an empty label: it is never a zero and never a guess.
+    """
+    moment = _epoch(value)
+    if moment is None:
+        return ""
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(moment, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _epoch(value: Any) -> float | None:

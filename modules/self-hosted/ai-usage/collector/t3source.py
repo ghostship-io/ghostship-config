@@ -46,6 +46,12 @@ INSTANCE_PROVIDERS = {
 # The OpenCode instance reports the Go subscription windows.
 WINDOW_PROVIDERS = {"go_rolling": "opencode-go", "go_weekly": "opencode-go", "go_monthly": "opencode-go"}
 
+# The Ollama Cloud account has its own session window and its own weekly
+# window. The OpenCode instance serves it beside the Go subscription, so a
+# window that names Ollama belongs to the Ollama account and not to the Go
+# one. A window that names no account at all stays with its instance.
+OLLAMA_WINDOW_MARKERS = ("ollama",)
+
 # Model ids carried by the OpenCode instance name their upstream provider.
 MODEL_PREFIX_PROVIDERS = {
     "opencode-go": "opencode-go",
@@ -270,6 +276,18 @@ def _model_options(model: dict[str, Any]) -> list[dict[str, Any]]:
     return options
 
 
+def _model_label(model: dict[str, Any]) -> str:
+    """The label the instance gives one model, or an empty string.
+
+    The label is a name, never an id: the model id is published beside it.
+    """
+    for field in ("name", "label", "displayName", "display_name", "title"):
+        value = model.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> SourceResult:
     started = time.monotonic()
     providers: list[dict[str, Any]] = []
@@ -314,6 +332,9 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             native[pair] = {
                 "providerInstance": instance,
                 "modelId": slug,
+                # The label the instance gives the model, when it gives one.
+                # It is the name T3 Code's model catalog carries for it.
+                "name": _model_label(model),
                 "options": _model_options(model),
             }
         state = str(provider.get("status") or "")
@@ -339,6 +360,14 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
         for window in limits.get("windows") or []:
             window_id = str(window.get("id") or "")
             provider_name = WINDOW_PROVIDERS.get(window_id, name)
+            if window_id not in WINDOW_PROVIDERS:
+                # A window that names its own account belongs to that
+                # account, not to the instance that reported it. The Ollama
+                # Cloud session and weekly windows are reported by the
+                # OpenCode instance, and they are the Ollama account's.
+                lowered = window_id.lower()
+                if any(marker in lowered for marker in OLLAMA_WINDOW_MARKERS):
+                    provider_name = "ollama"
             used = window.get("usedPercent")
             if used is None:
                 continue

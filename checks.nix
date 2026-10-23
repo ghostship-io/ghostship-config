@@ -21,6 +21,12 @@ let
   # deletes it and the unit silently fails (e.g. the retention timer).
   t3codeImagePreStart =
     self.nixosConfigurations.chill-penguin.config.systemd.services.podman-t3code.preStart;
+  # The switch restarts every unit with restartIfChanged. The T3 Code
+  # container must never be one of them: an activation that interrupts an
+  # active session breaks the work in flight.
+  t3codeRestartedBySwitch = builtins.filter
+    (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}.restartIfChanged)
+    (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codeImageSeedsRetention = pkgs.lib.hasInfix "t3code-retention" t3codeImagePreStart;
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
@@ -55,7 +61,7 @@ in
         node --test tests/t3code-access-proxy.test.cjs
         node --test packages/t3code/activity-probe/probe-v1-sqlite.test.cjs
         node --test packages/t3code/activity-probe/probe-v2-sqlite.test.cjs
-        python -m compileall -q modules/self-hosted/private-relay-render.py modules/self-hosted/secret-project.py modules/self-hosted/monitoring-provision.py modules/self-hosted/monitoring-heartbeats.py modules/self-hosted/ghostship-notify.py modules/self-hosted/seerr-provision.py modules/self-hosted/dashboard-sync.py modules/self-hosted/cloudflare-sync.py containers/agent-desktop/root/opt/ghostship-agent-desktop/agent_desktop_api.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/cdp_client.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_cdp_matrix.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_retailer.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/check_cdp_regression.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_extension.py modules/self-hosted/agent-desktop-mcp.py
+        python -m compileall -q modules/self-hosted/private-relay-render.py modules/self-hosted/secret-project.py modules/self-hosted/monitoring-provision.py modules/self-hosted/render-owner-config.py modules/self-hosted/monitoring-heartbeats.py modules/self-hosted/ghostship-notify.py modules/self-hosted/seerr-provision.py modules/self-hosted/dashboard-sync.py modules/self-hosted/cloudflare-sync.py containers/agent-desktop/root/opt/ghostship-agent-desktop/agent_desktop_api.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/cdp_client.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_cdp_matrix.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_retailer.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/check_cdp_regression.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_extension.py modules/self-hosted/agent-desktop-mcp.py
         touch "$out"
       '';
   host-evaluation =
@@ -69,6 +75,7 @@ in
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
     assert t3codeImageSeedsRetention;
+    assert !(builtins.elem "podman-t3code" t3codeRestartedBySwitch);
     # Temporary CAD checkouts once filled a 32 GiB tmpfs and stalled the
     # shared T3 cgroup. Check the evaluated mount and its writable sticky mode.
     assert builtins.elem "/srv/apps/t3code/tmp:/tmp:rw"
