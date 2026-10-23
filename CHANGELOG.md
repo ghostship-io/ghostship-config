@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.105] - 2026-10-23
+## [3.17.106] - 2026-10-23
 
 - ai-usage: the collector can read the observed outcomes of the delegation rounds. A new module reads the rounds the ledger holds, per model and task type: the count of the rounds of work (n), the count of the accepted ones (s), the fabrications that were seen, and the trust of the model with the reason it holds. The identity of a route is one model on every provider: a route of an identity names the provider and the model, the normalized model is the id of an identity or the model of one of its routes, and the normalized model is the identity itself; a checkpoint tag such as `:1017` is kept, so a tagged model never pools with the untagged model of the same name. The ledger is opened read only, a backfill row replaces the verdict of the round it names unless the verdict of the ledger is a manual one, and the trust of a model is the worse of the level the owner's runtime policy gives it and the level the ledger gives it: a model is not trusted again until three accepted rounds follow its last fabrication. Nothing calls the module yet.
+
+## [3.17.105] - 2026-10-23
+
+- AI usage: the value policy carries the outcome maths the ranking is about to be valued by, and nothing calls it yet. The quality is an outcome-weighted *p*: a prior *p0* places the measured intelligence index inside its own tier (0.5 when the index is missing, 0.9 when the tier holds one model, clamped to [0.5, 0.9]), and *p* shrinks that prior toward the outcomes actually measured, at a prior strength of ten outcomes. The value is `0.70 * p + 0.30 * E` through the existing weights, so *p* takes the intelligence slot and a missing component leaves the value unknown. The trust levels order the tiers (trusted, backup, untrusted, excluded, with an absent or unknown level ranking as trusted) and an untrusted route keeps half of its value. A free route leads while it is within 0.10 of the best paid quality. The published policy states the formulas, the prior strength, the margin, the untrusted factor and the trust order, and the measured `value_score` and the existing policy sections are unchanged.
 
 ## [3.17.104] - 2026-10-23
 
