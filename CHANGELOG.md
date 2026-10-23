@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.170] - 2026-10-23
+
+- Repair stale Seerr integration profiles after initial setup and keep managed credentials current.
+- Enable authenticated request lifecycle notifications and include Seerr regression tests in CI.
+
+PR #336.
+
 ## [3.17.169] - 2026-10-23
 
 - Pace weekly and monthly quota windows only; preserve short-window capacity and resets.
