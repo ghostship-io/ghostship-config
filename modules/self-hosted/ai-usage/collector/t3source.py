@@ -14,11 +14,12 @@ provider limit is invented when T3 does not report one.
 from __future__ import annotations
 
 import time
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
 import codes
-from metrics import SourceResult, Sample
+from metrics import ExactLabel, SourceResult, Sample
 from t3client import T3Client, T3Error
 from util import iso_to_epoch
 
@@ -167,6 +168,64 @@ def _bucket_samples(buckets: Iterable[dict[str, Any]], window: str) -> list[Samp
     return samples
 
 
+def usage_bucket_samples(buckets: Iterable[dict[str, Any]], timezone_name: str) -> list[Sample]:
+    """Publish T3's daily history, with no local repricing or private source paths.
+
+    T3's usage page sums input, cache reads, cache writes and output. Reasoning
+    is already part of output and is retained separately, never added twice.
+    The summary is already bounded to thirty days by read_usage.
+    """
+    zone = _zone(timezone_name)
+    totals, costs, unpriced = {}, {}, {}
+
+    def finite(value):
+        return (not isinstance(value, bool) and isinstance(value, (int, float))
+                and math.isfinite(value) and value >= 0)
+
+    fields = {'input': 'uncachedInputTokens', 'cache_read': 'cachedInputTokens',
+              'cache_write': 'cacheCreationTokens', 'output': 'outputTokens', 'reasoning': 'reasoningTokens'}
+    for bucket in buckets:
+        day = bucket.get('day')
+        try:
+            stamp = datetime.strptime(str(day), '%Y-%m-%d').replace(tzinfo=zone).timestamp()
+        except (TypeError, ValueError):
+            continue
+        if len(str(day)) != 10:
+            continue
+        provider, model = split_model(str(bucket.get('provider') or ''), str(bucket.get('model') or ''))
+        if not provider or not model:
+            continue
+        key = (provider, model, day)
+        entry = totals.setdefault(key, {'timestamp': stamp, **{kind: 0 for kind in fields}})
+        raw = bucket.get('totals') or {}
+        for kind, field in fields.items():
+            value = raw.get(field)
+            if finite(value):
+                entry[kind] += value
+        cost, source = bucket.get('costUsd'), bucket.get('costSource')
+        if finite(cost) and source and source != 'unpriced':
+            basis = 'provider_reported' if source == 'providerReported' else 'api_equivalent'
+            cost_key = (*key, basis)
+            costs[cost_key] = costs.get(cost_key, 0) + cost
+        missing = bucket.get('unpricedRecords')
+        if finite(missing):
+            unpriced[key] = unpriced.get(key, 0) + missing
+    samples = []
+    for (provider, model, day), entry in sorted(totals.items()):
+        labels = {'provider': provider, 'model': ExactLabel(model), 'day': day, 'source': 't3_history'}
+        samples.append(('ghostship_ai_t3_usage_bucket_timestamp_seconds', labels, entry['timestamp']))
+        entry['total'] = sum(entry[kind] for kind in ('input', 'cache_read', 'cache_write', 'output'))
+        for kind in (*fields, 'total'):
+            samples.append(('ghostship_ai_t3_usage_bucket_tokens', {**labels, 'kind': kind}, entry[kind]))
+        if (provider, model, day) in unpriced:
+            samples.append(('ghostship_ai_t3_usage_bucket_unpriced_records', labels, unpriced[(provider, model, day)]))
+    for (provider, model, day, basis), cost in sorted(costs.items()):
+        samples.append(('ghostship_ai_t3_usage_bucket_cost_usd',
+                        {'provider': provider, 'model': ExactLabel(model), 'day': day,
+                         'basis': basis, 'source': 't3_history'}, cost))
+    return samples
+
+
 def read_usage(client: T3Client, now: float, timezone_name: str = DEFAULT_TIMEZONE) -> dict[str, Any]:
     """Read the daily and hourly usage summaries from T3 Code."""
     zone = _zone(timezone_name)
@@ -311,6 +370,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 duration_s=time.monotonic() - started,
             )
     samples: list[Sample] = []
+
     windows: list[dict[str, Any]] = []
     reason_code = codes.OK
     observed: float | None = None
@@ -455,6 +515,7 @@ def _collect_usage(
     daily_buckets = list((summary["daily"] or {}).get("buckets") or [])
     hourly_buckets = list((summary["hourly"] or {}).get("buckets") or [])
     samples: list[Sample] = []
+    samples.extend(usage_bucket_samples(daily_buckets, timezone_name))
 
     for window, since_day in (("7d", _day_bounds(now - 6 * 86400, zone)), ("30d", _day_bounds(now - 29 * 86400, zone))):
         selected = _window_buckets(daily_buckets, since_day, today)

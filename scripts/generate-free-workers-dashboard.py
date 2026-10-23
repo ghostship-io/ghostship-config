@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
-"""Generate the Free models and providers dashboard from ai-usage.json.
+"""Generate Free models from Paid models; refuse drift or paid selectors.
 
-The free dashboard mirrors the Providers and model decisions page (ai-usage.json)
-for the free pool:
-- Swaps selector filters:
-  picker_eligible="true",provider!="openrouter" -> billing=~"free|promotion"
-  scope="t3",account!="openrouter" -> scope="free"
-- Drops paid-only panels (orchestrators text & dynamictext)
-- Drops paid-only variables (orchestrator_model)
-- Updates metadata (uid="ghostship-free-workers", title="Free models and providers")
-- Re-layouts vertical positions without gaps
-
-Usage:
-  python3 scripts/generate-free-workers-dashboard.py          # Regenerates free-workers.json
-  python3 scripts/generate-free-workers-dashboard.py --check  # Fails if committed file differs
+Usage: python3 scripts/generate-free-workers-dashboard.py [--check]
 """
 
 import argparse
@@ -24,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "modules/self-hosted/siem/dashboards/ai-usage.json"
+SRC = ROOT / "modules/self-hosted/siem/dashboards/paid-models.json"
 DST = ROOT / "modules/self-hosted/siem/dashboards/free-workers.json"
 
 
@@ -32,10 +20,8 @@ SUBSTITUTIONS = (
     ('picker_eligible="true",provider!="openrouter"', 'billing=~"free|promotion"'),
     ('picker_eligible="true",provider=~"$provider",provider!="openrouter"',
      'billing=~"free|promotion",provider=~"$provider"'),
-    ('scope="t3",account!="openrouter"', 'scope="free"'),
+    ('billing!~"free|promotion"', 'billing=~"free|promotion"'),
     (',provider!="pi"', ''),
-    (',account!="pi"', ''),
-    (',account!="openrouter"', ''),
     (',provider!="openrouter"', ''),
 )
 
@@ -58,7 +44,7 @@ def free_selectors(dashboard):
     result = visit(dashboard)
     for old, count in counts.items():
         if count == 0:
-            raise ValueError(f"Providers dashboard selector changed or disappeared: {old}")
+            raise ValueError(f"Paid models selector changed or disappeared: {old}")
     raw = json.dumps(result)
     for forbidden in ('picker_eligible=\\"true\\"', 'scope=\\"t3\\"', 'orchestrator_model'):
         if forbidden in raw:
@@ -93,15 +79,13 @@ def generate():
 
     # 1. Metadata
     dashboard["uid"] = "ghostship-free-workers"
-    dashboard["title"] = "Free models and providers"
-    dashboard["description"] = "Free pool mirror of the Providers and models dashboard"
-    dashboard["links"] = [
-        {
-            "title": "Providers",
-            "type": "link",
-            "url": "/d/ghostship-ai-usage",
-            "targetBlank": False,
-        }
+    dashboard["title"] = "Free models"
+    dashboard["description"] = "Free pool generated from Paid models · public tasks only"
+    dashboard['links'] = [
+        {'title': title, 'type': 'link', 'url': '/d/' + uid, 'targetBlank': False}
+        for title, uid in [('Providers', 'ghostship-ai-usage'),
+                           ('Paid models', 'ghostship-paid-models'),
+                           ('Free models', 'ghostship-free-workers')]
     ]
 
     dashboard["templating"]["list"] = [
@@ -117,15 +101,15 @@ def generate():
         if panel.get("id") == 200:
             panel["options"]["content"] = (
                 '<div style="font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere">'
-                '<strong>Free models and providers</strong>'
-                '<span style="font-size:11px;color:#8b8f99"> · Free worker pool and free provider accounts · Public tasks only</span>'
+                '<strong>Free models</strong>'
+                '<span style="font-size:11px;color:#8b8f99"> · Free worker pool · one selection per provider · Public tasks only</span>'
                 '</div>'
             )
         elif panel.get("id") == 232:
             panel["options"]["content"] = (
                 '<div style="font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere">'
                 '<strong>Free worker models</strong>'
-                '<span style="font-size:11px;color:#8b8f99"> · Public-only policy · Exhausted routes greyed out · Dynamic ordering by capacity</span>'
+                '<span style="font-size:11px;color:#8b8f99"> · Public-only policy · Exhausted routes greyed out · Paced Availability · selected per provider</span>'
                 '</div>'
             )
         elif panel.get("id") == 234:

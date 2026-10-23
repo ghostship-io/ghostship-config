@@ -199,7 +199,26 @@ class SelectionTests(unittest.TestCase):
         free['access'] = {'billing': 'free'}
         value = self.build([candidate('codex', 'reviewer', quality=90), free])
         self.assertEqual(value['worker'][0]['model'], 'free')
-        self.assertEqual(value['default_worker']['model'], 'free')
+        self.assertEqual(value['default_worker']['model'], 'reviewer')
+        self.assertIsNone(next(r for r in value['worker'] if r['model'] == 'free')['native'])
+
+    def test_every_eligible_free_provider_publishes_one_choice_without_t3_favorites(self):
+        rows = []
+        for provider in ('opencode', 'nvidia', 'groq'):
+            for model, quality in (('best', 90), ('alternate', 70), ('spent', 99)):
+                row = candidate(provider, model, quality, remaining=0 if model == 'spent' else .6)
+                row['native'] = {}  # The free runtime is outside T3.
+                row['access'] = {'billing': 'free'}
+                rows.append(row)
+        result = self.build(rows)
+        self.assertEqual(result['free_selected'], {p: p + ':best' for p in ('opencode', 'nvidia', 'groq')})
+        self.assertIsNone(result['default_worker'])
+        self.assertTrue(all(group['selected']['worker'] is None for group in result['providers'].values()))
+        published = [(labels['provider'], labels['model']) for name, labels, number in selection.samples(result)
+                     if name == 'ghostship_ai_picker_model_selected' and number == 1]
+        self.assertCountEqual(published, [(p, 'best') for p in ('opencode', 'nvidia', 'groq')])
+        rows[0]['available'] = False
+        self.assertEqual(self.build(rows)['free_selected']['opencode'], 'opencode:alternate')
 
     def test_lane_order_and_default_follow_live_capacity_without_fixed_provider_order(self):
         one=candidate('one','strong',99,remaining=.2)
