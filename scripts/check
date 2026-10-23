@@ -17,6 +17,7 @@ shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/r
 actionlint
 git diff --check
 git diff --cached --check
+python3 scripts/generate-free-workers-dashboard.py --check
 python3 scripts/check-test-fixtures.py tests
 timeout 110s python3 scripts/check-unit.py
 gitleaks dir --redact --no-banner .
