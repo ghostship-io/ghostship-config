@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.241] - 2026-10-23
+
+- Defer OAuth cutover cleanly while the free authentication probe is unavailable.
+
+PR #407.
+
 ## [3.17.240] - 2026-10-23
 
 - Separate engineering credentials from runner registration and keep the registration PAT inside the privileged registrar.
