@@ -1,8 +1,28 @@
 # Changelog
 
-## [3.17.106] - 2026-10-23
+## [3.17.111] - 2026-10-23
 
 - AI usage: an inferred route that was refused reads "spent" only for the learned window that holds its last refusal, and it becomes available again once that window rolls over, with all of its allowance and a reset one window later. A refusal in the new window spends it again; a route with no learned window keeps its spent state with no reset. The quota id of an inferred window now names the learned window (`inferred:1h`, `inferred:5h`) rather than the state, so a spent route with a known window no longer reads `inferred:exhausted`; a refusal with no learned window keeps that id.
+
+## [3.17.110] - 2026-10-23
+
+- ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
+## [3.17.109] - 2026-10-23
+
+- The Providers page shows the owner's static model selection under the capacity cards: one row per route of the runtime policy in the collector's row order, with the role, the model and its blue bulk tag, the provider with the icon of its capacity card, the work the route is used for, and the share that is left with the Paced Availability beside it. A spent route reads zero, spent, and how long until it resets; a route the routing snapshot does not carry says no reading and never zero; a route with no pace series keeps its share alone. The chip reads the routing gauge and says that the static table is shown for reference while the routing is on. The old Providers table goes, since the cards above it replace it.
+
+## [3.17.108] - 2026-10-23
+
+- ai-usage: a capacity window keeps the scope the ranking gives it. The account records of the routing snapshot dropped the scope of a window, so the session and the weekly window of the Antigravity third-party group read as the capacity of the whole account, the per-model quota readings of that account merged into one row of many models, and a spent Fable week of Claude blocked every Claude route. A measured window is filed under the scope the ranking gives it, a reading the provider reports for one model is filed under the family of that model, and a model id that names no family is not a window of the account at all. The label of the row names the scope: 'Session · Claude & GPT', 'Weekly · Claude & GPT', 'Quota · Gemini', 'Quota · Claude', 'Quota · GPT'. The provider capacity of an account counts the windows that cover the whole account only, and the ranking, the candidate rows and the windows they carry are unchanged.
+
+## [3.17.107] - 2026-10-23
+
+- AI usage: a Go free route keeps its free capacity when the live instance does not offer it. The unlimited window of the free routes was built from the instance inventory alone, so a free route the catalog lists but the instance did not offer that moment was left to the paid monthly allowance of the subscription and reported exhausted in `routing.json`. The window is now built from the inventory and the catalog's free list together; the catalog still keeps a "-free"-named route it prices on the paid allowance, and the OpenRouter free routes keep their daily free-models allowance. The status the Go usage endpoint reports for each window ("ok" or "rate-limited") also reaches the `quota.accounts` records of the snapshot, and a window without a status carries no status key.
+
+## [3.17.106] - 2026-10-23
+
+- AI usage: the Providers page lists every free provider, the model it selected for the free tier, and the free routes it holds apart from its paid allowance. The monthly allowance of OpenCode Go is spent, and its free route still works, so the two are published apart. Everything is a projection of the routing snapshot, and nothing is recomputed: the selection is the provider's first entry in `tier_winners.free`, and the free routes are the candidates whose billing class is `free` or `promotion`, split by their own availability. The class alone decides, so a subscription route of a paid provider is never a free model. A provider whose account only learned its window is a free provider even when it holds no route, a provider with no free winner keeps its row with an empty model and no basis, and a paid provider has no row at all. The basis of a selection is the capacity of the winning route: reported, inferred or published, `learning` for a route that never saw a limit failure, and none when nothing was measured. The new series are `ghostship_ai_free_provider_selection_info`, `ghostship_ai_free_provider_selection_remaining_ratio`, `ghostship_ai_free_provider_selection_paced_availability`, `ghostship_ai_free_provider_selection_reset_timestamp_seconds` and `ghostship_ai_provider_free_models`.
 
 ## [3.17.105] - 2026-10-23
 
