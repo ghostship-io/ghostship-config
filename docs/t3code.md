@@ -11,6 +11,10 @@ For the staged unprivileged runtime and separate development Podman engine, use
 the [hardening acceptance workflow](t3code-hardening.md). Root SSH administration
 remains an explicit requirement; the active runtime stays intact during testing.
 
+Host switches preserve the running container and its dedicated Podman relay,
+user manager, runtime directory, network and rootfs helpers. Changes to those
+helpers take effect at a separately authorized runtime restart.
+
 ## Projects and state
 
 The container user is `t3code`, with home `/home/t3code`. Host state lives in

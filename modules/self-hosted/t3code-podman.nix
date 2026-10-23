@@ -504,6 +504,9 @@ in
           "d /run/t3code-podman 0750 root apps -"
         ];
         systemd.services.t3code-podman-network = {
+          # Switching host generations must preserve the live T3 dependency chain.
+          restartIfChanged = false;
+          stopIfChanged = false;
           description = "Host-controlled T3 Podman network boundary";
           before = [ "user@${uid}.service" ];
           serviceConfig = {
@@ -514,6 +517,9 @@ in
           };
         };
         systemd.services.t3code-podman-rootfs = {
+          # Switching host generations must preserve the live T3 dependency chain.
+          restartIfChanged = false;
+          stopIfChanged = false;
           description = "Minimal filesystem for the dedicated rootless Podman manager";
           requires = [ "user-runtime-dir@${uid}.service" ];
           after = [ "user-runtime-dir@${uid}.service" ];
@@ -525,8 +531,16 @@ in
             ExecStop = "${rootfs} stop";
           };
         };
+        systemd.services."user-runtime-dir@${uid}" = {
+          overrideStrategy = "asDropin";
+          restartIfChanged = false;
+          stopIfChanged = false;
+        };
         # A genuine user manager (not unsupported system-wide rootful engine User=).
         systemd.services."user@${uid}" = {
+          # Switching host generations must preserve the live T3 dependency chain.
+          restartIfChanged = false;
+          stopIfChanged = false;
           overrideStrategy = "asDropin";
           requires = [
             "t3code-podman-network.service"
@@ -571,6 +585,9 @@ in
           };
         };
         systemd.services.t3code-podman = {
+          # Switching host generations must preserve the live T3 dependency chain.
+          restartIfChanged = false;
+          stopIfChanged = false;
           requires = [ "user@${uid}.service" ];
           bindsTo = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
@@ -612,6 +629,9 @@ in
           };
         };
         systemd.services.t3code-podman-ports = {
+          # Switching host generations must preserve the live T3 dependency chain.
+          restartIfChanged = false;
+          stopIfChanged = false;
           requires = [ "user@${uid}.service" ];
           bindsTo = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
