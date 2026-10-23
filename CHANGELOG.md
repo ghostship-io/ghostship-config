@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.194] - 2026-10-23
+
+- Restore coding-client MCP connections and human handoff through managed runtimes.
+
+PR #360.
+
 ## [3.17.193] - 2026-10-23
 
 - Restore the stable T3 image with the startup environment required by managed helpers.
