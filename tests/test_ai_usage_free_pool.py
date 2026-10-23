@@ -12,11 +12,15 @@ builder and the real renderer. A helper-only test would pass while the
 published file is broken.
 """
 import importlib.util
+import json
 import re
+import sqlite3
 import sys
+import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "collector"
 if str(ROOT) not in sys.path:
@@ -562,6 +566,328 @@ class FreeTierOrderTests(unittest.TestCase):
                 ("mistral", "mistral/mixtral-8x7b"),
             ],
         )
+
+
+def observation(model, *, observed, rpd=None, tpm=None, rph=None, scope="model_in_organization"):
+    """One synthetic reading of a provider's own rate-limit headers."""
+    windows = {}
+    if rpd is not None:
+        windows["rpd"] = rpd
+    if tpm is not None:
+        windows["tpm"] = tpm
+    if rph is not None:
+        windows["rph"] = rph
+    return {
+        "provider": "groq",
+        "model": model,
+        "observed_at": observed,
+        "data": {"scope": scope, "windows": windows},
+    }
+
+
+class ReportedHeaderCapacityTests(unittest.TestCase):
+    """A provider's own reported headers are that model's capacity.
+
+    The free pool records the rate-limit headers of a provider's answer as
+    observations. Those observations are the provider's capacity for the
+    model it answered, filed per model, with the moment the provider said
+    the window refills. The pool's own admission caps are a local policy
+    and never stand in for it.
+    """
+
+    MODEL = "qwen/qwen3-32b"
+    MOMENT = 1001.0
+
+    def collect(self, status, *, now=None, catalog=None):
+        """Run the real pool collector against a synthetic bridge."""
+        with tempfile.TemporaryDirectory(prefix="reported-headers-") as directory:
+            root = Path(directory)
+            server = root / "server.json"
+            server.write_text(json.dumps({"socket": str(root / "inference.sock")}), encoding="utf-8")
+            token = root / "token"
+            token.write_text("synthetic-token", encoding="utf-8")
+            ledger = root / "ledger.sqlite"
+            connection = sqlite3.connect(ledger)
+            try:
+                connection.execute(
+                    "CREATE TABLE inference_reservations ("
+                    "id TEXT, job TEXT, provider TEXT, model TEXT, at REAL, "
+                    "input INTEGER, output INTEGER, usd REAL, neurons INTEGER)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            def bridge(_socket, _token, _surface, arguments):
+                if arguments.get("op") == "models":
+                    return catalog or {"providers": {}}
+                return status
+
+            with mock.patch.object(pool, "bridge_call", side_effect=bridge):
+                results = pool.collect(
+                    server, token, ledger, self.MOMENT if now is None else now
+                )
+        self.assertEqual(len(results), 1)
+        return results[0]
+
+    def test_the_reported_headers_publish_the_daily_and_minute_window(self):
+        status = {
+            "quota_observations": [
+                observation(
+                    self.MODEL,
+                    observed=1000.0,
+                    rpd={"limit": 1000, "remaining": 999, "reset": "1m26.4s"},
+                    tpm={"limit": 8000, "remaining": 7703, "reset": "2.227s"},
+                )
+            ]
+        }
+        result = self.collect(status)
+        windows = {(window["kind"], window["quotaId"]): window for window in result.windows}
+
+        self.assertEqual(set(windows), {("daily", "rpd"), ("minute", "tpm")})
+        daily = windows[("daily", "rpd")]
+        self.assertEqual(daily["provider"], "groq")
+        self.assertEqual(daily["model"], self.MODEL)
+        self.assertEqual(daily["durationSeconds"], 86400.0)
+        self.assertAlmostEqual(daily["usedRatio"], 0.001)
+        # The reset is the one the provider reported, counted from the
+        # moment it observed the reading, and never from the collection.
+        self.assertAlmostEqual(daily["resetEpoch"], 1086.4)
+        self.assertEqual(daily["observedAtEpoch"], 1000.0)
+        self.assertEqual(daily["basis"], "provider_reported")
+        self.assertEqual(tuple(daily["applies_to"]), (self.MODEL,))
+
+        minute = windows[("minute", "tpm")]
+        self.assertEqual(minute["durationSeconds"], 60.0)
+        self.assertAlmostEqual(minute["usedRatio"], 0.037125)
+        self.assertAlmostEqual(minute["resetEpoch"], 1002.227)
+
+        # The observation is still a diagnostic: the amounts, the reset and
+        # the observation keep their series and their values.
+        amounts = {
+            (labels["kind"], labels["unit"]): value
+            for name, labels, value in result.metrics
+            if name == "ghostship_ai_pool_quota_amount"
+        }
+        self.assertEqual(amounts[("limit", "rpd")], 1000.0)
+        self.assertEqual(amounts[("remaining", "rpd")], 999.0)
+        self.assertEqual(amounts[("limit", "tpm")], 8000.0)
+        self.assertEqual(amounts[("remaining", "tpm")], 7703.0)
+        resets = {
+            labels["unit"]: value
+            for name, labels, value in result.metrics
+            if name == "ghostship_ai_pool_quota_reset_seconds"
+        }
+        self.assertAlmostEqual(resets["rpd"], 1086.4)
+        self.assertAlmostEqual(resets["tpm"], 1002.227)
+        observed_limit = [
+            labels
+            for name, labels, _value in result.metrics
+            if name == "ghostship_ai_pool_observed_limit"
+        ]
+        # The provider reported the limit for one model, and the diagnostic
+        # keeps that scope instead of filing it as the account's limit.
+        self.assertEqual({labels["scope"] for labels in observed_limit}, {"model"})
+
+    def test_a_spent_model_does_not_lock_out_its_sibling(self):
+        spent = "llama-3.3-70b-versatile"
+        room = self.MODEL
+        status = {
+            "quota_observations": [
+                observation(
+                    spent,
+                    observed=1000.0,
+                    rpd={"limit": 100, "remaining": 0, "reset": "1m"},
+                ),
+                observation(
+                    room,
+                    observed=1000.0,
+                    rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+                ),
+            ]
+        }
+        result = self.collect(status)
+        catalog = catalog_module.Catalog(
+            catalog_document(
+                [
+                    ("groq", spent, 42.0, None, 0.0, None),
+                    ("groq", room, 41.0, None, 0.0, None),
+                ]
+            )
+        )
+        inputs = main.ranking_inputs(
+            [result], catalog, {}, result.windows, now=self.MOMENT
+        )
+        # The windows are filed by the model, never by the account: one
+        # spent model has no window at the provider key.
+        self.assertEqual(
+            sorted(inputs["windows"]), [f"groq/{spent}", f"groq/{room}"]
+        )
+        self.assertNotIn("groq", inputs["windows"])
+        self.assertAlmostEqual(
+            inputs["windows"][f"groq/{spent}"][0].used_ratio, 1.0
+        )
+        self.assertAlmostEqual(
+            inputs["windows"][f"groq/{room}"][0].used_ratio, 0.5
+        )
+
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": self.MOMENT,
+            "records": [
+                aa_record(spent.rsplit("/", 1)[-1], 42.0),
+                aa_record(room.rsplit("/", 1)[-1], 41.0),
+            ],
+        }
+        ranked = ranking.rank_models(
+            models=[
+                ranking.ModelRecord("groq", spent),
+                ranking.ModelRecord("groq", room),
+            ],
+            catalog=catalog,
+            quota_windows=inputs["windows"],
+            free_models={("groq", spent), ("groq", room)},
+            promo_models=set(),
+            usage_tokens={},
+            aa_cache=cache,
+            now=self.MOMENT,
+        )
+        remaining = {(entry.provider, entry.model): entry.remaining for entry in ranked}
+        self.assertEqual(remaining[("groq", spent)], 0.0)
+        self.assertEqual(remaining[("groq", room)], 0.5)
+
+        snapshot_data = snapshot.build_snapshot(
+            now=self.MOMENT,
+            sources=[],
+            ranked=ranked,
+            catalog=catalog,
+            measured_windows=result.windows,
+        )
+        accounts = snapshot_data["quota"]["accounts"]["groq"]
+        self.assertEqual(
+            sorted(tuple(record["applies_to"]) for record in accounts),
+            sorted([(spent,), (room,)]),
+        )
+        # No window applies to the whole account, so the provider keeps no
+        # account-wide capacity and neither model locks the other out.
+        self.assertEqual(
+            snapshot_data["quota"]["provider_capacity"]["groq"]["windows"], 0
+        )
+
+        text = main.render([result], [], self.MOMENT, 0.1, snapshot_data)
+        remaining_published = {}
+        for line in text.splitlines():
+            if not line.startswith("ghostship_ai_account_window_remaining_ratio{"):
+                continue
+            for model in (spent, room):
+                if f'quota_id="rpd@{model}"' in line:
+                    remaining_published[model] = float(line.rsplit(" ", 1)[-1])
+        self.assertEqual(remaining_published, {spent: 0.0, room: 0.5})
+        self.assertFalse(
+            any(
+                line.startswith("ghostship_ai_provider_capacity_remaining_ratio{")
+                and 'provider="groq"' in line
+                for line in text.splitlines()
+            ),
+            "a per-model window is never published as the provider's capacity",
+        )
+
+    def test_an_expired_or_stale_reading_is_not_current_capacity(self):
+        expired = "llama-3.3-70b-versatile"
+        stale = self.MODEL
+        status = {
+            "quota_observations": [
+                observation(
+                    expired,
+                    observed=1000.0,
+                    rpd={"limit": 100, "remaining": 50, "reset": "2s"},
+                ),
+                observation(
+                    stale,
+                    observed=1000.0,
+                    rpd={"limit": 100, "remaining": 50, "reset": "1h"},
+                ),
+            ]
+        }
+        # The first window refilled at 1002, and the second reading is 1801
+        # seconds old: neither is current headroom or a lockout.
+        result = self.collect(status, now=2801.0)
+        self.assertEqual(result.windows, [])
+        self.assertTrue(
+            [
+                name
+                for name, _labels, _value in result.metrics
+                if name == "ghostship_ai_pool_quota_amount"
+            ],
+            "the observation stays a diagnostic",
+        )
+
+    def test_pool_admission_caps_are_not_provider_capacity(self):
+        catalog = {
+            "providers": {
+                "groq": {
+                    "selected_model": self.MODEL,
+                    "candidates": [
+                        {
+                            "model": self.MODEL,
+                            "available": True,
+                            "admissions": {"light": {"admitted": True, "score": 0.8}},
+                            "account_limits": {"rpd": 1000, "tpm": 8000},
+                            "model_limits": {},
+                        }
+                    ],
+                }
+            }
+        }
+        result = self.collect({}, catalog=catalog)
+        self.assertEqual(result.windows, [])
+        self.assertTrue(
+            [
+                labels
+                for name, labels, _value in result.metrics
+                if name == "ghostship_ai_pool_limit"
+                and labels.get("scope") == "account"
+            ],
+            "the pool's own caps stay local admission metrics",
+        )
+
+    def test_no_unusable_reading_becomes_capacity(self):
+        invalid = [
+            ("remaining above the limit", {"limit": 100, "remaining": 101, "reset": "1m"}),
+            ("a boolean limit", {"limit": True, "remaining": 1, "reset": "1m"}),
+            ("a NaN limit", {"limit": float("nan"), "remaining": 1, "reset": "1m"}),
+            ("an infinite remaining", {"limit": 100, "remaining": float("inf"), "reset": "1m"}),
+            ("a zero limit", {"limit": 0, "remaining": 0, "reset": "1m"}),
+            ("a malformed reset", {"limit": 100, "remaining": 50, "reset": "2s garbage"}),
+            ("a boolean remaining", {"limit": 100, "remaining": False, "reset": "1m"}),
+            ("no reset", {"limit": 100, "remaining": 50}),
+            ("a negative remaining", {"limit": 100, "remaining": -1, "reset": "1m"}),
+        ]
+        observations = [
+            observation(f"invalid-{index}", observed=1000.0, rpd=values)
+            for index, (_reason, values) in enumerate(invalid)
+        ]
+        observations.append(
+            observation("unknown-unit", observed=1000.0, rph={"limit": 100, "remaining": 50, "reset": "1m"})
+        )
+        observations.append(
+            observation(
+                "unknown-scope",
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+                scope="account",
+            )
+        )
+        missing = observation(
+            "missing-observation",
+            observed=1000.0,
+            rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+        )
+        missing["observed_at"] = None
+        observations.append(missing)
+        result = self.collect({"quota_observations": observations})
+        self.assertEqual(result.windows, [])
 
 
 if __name__ == "__main__":
