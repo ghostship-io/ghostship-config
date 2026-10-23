@@ -60,9 +60,18 @@ CAPACITY_METRICS = {
 # production font (Inter), with the panel's own styles and a phone of 390 px
 # and a desktop of 1600 px. A grid row of the dashboard is 37 px, so the
 # panel is tall enough for the taller of the two readings.
-CAPACITY_PHONE_HEIGHT = 1713
-CAPACITY_DESKTOP_HEIGHT = 577
+#
+# The free line of a card is part of the measurement: four cards of the live
+# set hold free models, and the line adds 84 px at 390 px.
+CAPACITY_PHONE_HEIGHT = 1798
+CAPACITY_DESKTOP_HEIGHT = 538
 CAPACITY_ROW_HEIGHT = 37
+
+# The content of the model selection panel, measured in Playwright the same
+# way with the headroom the panel is sized for: the five static rows, the
+# Free divider, and twenty free providers. The live set holds sixteen.
+SELECTION_PHONE_HEIGHT = 883
+SELECTION_DESKTOP_HEIGHT = 861
 
 # The moment the fixture was read. The resets of the fixture are counted
 # from it, so the worked cases are the rows of that moment.
@@ -301,6 +310,7 @@ FREE_ROWS = (
      "99% \u00b7 \u25cf on pace"),
     ("cloudflare-workers-ai", "Cloudflare", "llama-3.3-70b-instruct",
      "Llama 3.3 70B Instruct", "learning window"),
+    ("cohere", "Cohere", "", "", "no eligible free model"),
     ("google", "Google", "gemma-3-27b", "Gemma 3 27B",
      "97% \u00b7 \u25b2 33 ahead"),
     ("groq", "Groq", "qwen3.8-27b", "Qwen3.8 27B", "learning window"),
@@ -309,9 +319,13 @@ FREE_ROWS = (
      "learning window"),
     ("kilo-keyed", "Kilo (keyed)", "qwen3.8-27b", "Qwen3.8 27B",
      "learning window"),
+    ("mistral", "Mistral", "", "", "no eligible free model"),
     ("nvidia", "NVIDIA", "glm-5.3-flash", "GLM-5.3 Flash", "learning window"),
     ("ovh", "OVH", "mistral-small-3.2", "Mistral Small 3.2",
      "learning window"),
+    ("opencode", "OpenCode Zen", "", "", "no eligible free model"),
+    ("orcarouter", "Orcarouter", "", "", "no eligible free model"),
+    ("poolside", "Poolside", "", "", "no eligible free model"),
     ("requesty", "Requesty", "", "", "no eligible free model"),
 )
 
@@ -1462,11 +1476,12 @@ class ProviderCapacityTests(unittest.TestCase):
 
         Measured in Playwright with the panel's own helpers, styles and the
         production font (Inter), at the widths the owner uses: the content is
-        1713 px tall at 390 px and 577 px at 1600 px. The taller reading is
-        rounded up to whole 37 px grid rows.
+        1798 px tall at 390 px and 538 px at 1600 px with the free line of
+        every card that holds free models. The taller reading is rounded up
+        to whole 37 px grid rows.
         """
         rows = math.ceil(CAPACITY_PHONE_HEIGHT / CAPACITY_ROW_HEIGHT)
-        self.assertEqual(rows, 47)
+        self.assertEqual(rows, 49)
         self.assertEqual(self.panel["gridPos"]["h"], rows)
         self.assertGreaterEqual(
             self.panel["gridPos"]["h"] * CAPACITY_ROW_HEIGHT,
@@ -1840,11 +1855,19 @@ class ModelSelectionTests(unittest.TestCase):
     def test_the_panel_is_tall_enough_for_its_rows(self):
         """The panel holds every row of the live table at either width.
 
-        Measured in Playwright with the panel's own styles and the five live
-        rows of the fixture: the content is 198 px tall at 390 px and 208 px
-        at 1600 px, and a grid row of the dashboard is 37 px.
+        Measured in Playwright with the panel's own styles, the production
+        font (Inter) and the headroom of twenty free providers: the content is
+        883 px tall at 390 px and 861 px at 1600 px, and a grid row of the
+        dashboard is 37 px. The live set holds sixteen free providers, so the
+        height keeps room for four more.
         """
-        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 208)
+        self.assertEqual(self.panel["gridPos"]["h"] * 37, 888)
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * 37, SELECTION_PHONE_HEIGHT
+        )
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * 37, SELECTION_DESKTOP_HEIGHT
+        )
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
@@ -1889,8 +1912,13 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertGreater(free, static, "the free rows are not under the static rows")
         divider = re.search(r"<tr class=\"group\">.*?</tr>", content, re.S)
         self.assertIsNotNone(divider, "the free group has no divider row")
-        self.assertIn('colspan="5"', divider.group(0))
-        self.assertIn("Free", divider.group(0))
+        row = divider.group(0)
+        # The divider spans the table without a colspan: a spanned cell would
+        # take the room the hidden columns leave on a narrow screen.
+        self.assertNotIn("colspan", row)
+        self.assertEqual(len(re.findall(r"<td[\s>]", row)), 5)
+        self.assertIn("Free", row)
+        self.assertIn('class="role"', row)
         built = self.free()
         self.assertEqual(built[0], {"group": "Free"})
         self.assertEqual(
@@ -2025,20 +2053,25 @@ class ModelSelectionTests(unittest.TestCase):
             "opencode-go": ("beam-free", "published"),
             "openrouter": ("gpt-oss-120b", "reported"),
             "cloudflare-workers-ai": ("llama-3.3-70b-instruct", "learning"),
+            "cohere": ("", "none"),
             "google": ("gemma-3-27b", "inferred"),
             "groq": ("qwen3.8-27b", "learning"),
             "inception": ("mercury-2", "learning"),
             "kilo": ("nemotron-3.5-super-vl", "learning"),
             "kilo-keyed": ("qwen3.8-27b", "learning"),
+            "mistral": ("", "none"),
             "nvidia": ("glm-5.3-flash", "learning"),
             "ovh": ("mistral-small-3.2", "learning"),
+            "opencode": ("", "none"),
+            "orcarouter": ("", "none"),
+            "poolside": ("", "none"),
             "requesty": ("", "none"),
         }
         self.assertEqual(
             {provider: (row["model"], row["basis"]) for provider, row in info.items()},
             expected,
         )
-        self.assertEqual(len(info), 11)  # the live set of the free providers
+        self.assertEqual(len(info), 16)  # the live set of the free providers
 
         left = {
             row["provider"]: row["value"]
@@ -2493,13 +2526,18 @@ class WorkedCasesTests(unittest.TestCase):
 
         The query reads every account window gauge in one go, so the rows
         are the windows of the twelve accounts that have one and the
-        seventeen accounts that are learning.
+        seventeen accounts that are learning, and the free models of the
+        providers that hold a free route.
         """
         panel = section(self.page, "Provider capacity")
         target = find_target(panel, "ghostship_ai_account_window_remaining_ratio")
         rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        windows = [
+            row for row in rows if row["metric"].get("field") != "free_models"
+        ]
+        free = [row for row in rows if row["metric"].get("field") == "free_models"]
         self.assertEqual(
-            {row["metric"].get("field") for row in rows},
+            {row["metric"].get("field") for row in windows},
             {
                 "left",
                 "expected",
@@ -2510,9 +2548,19 @@ class WorkedCasesTests(unittest.TestCase):
                 "learning",
             },
         )
-        accounts = {row["metric"].get("account") for row in rows}
+        accounts = {row["metric"].get("account") for row in windows}
         self.assertEqual(len(accounts), 29)
-        self.assertEqual(len(rows), 122)
+        self.assertEqual(len(windows), 122)
+        # The count of the free routes, by state, for the six providers that
+        # hold one.
+        self.assertEqual(
+            {(row["metric"]["provider"], row["metric"]["state"]) for row in free},
+            {
+                (provider, state)
+                for provider in FREE_MODEL_COUNTS
+                for state in ("available", "unavailable")
+            },
+        )
 
     def test_the_worked_rows_are_the_rows_the_store_returns(self):
         """The cards of the page are the windows the store holds."""
