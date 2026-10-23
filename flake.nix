@@ -5,7 +5,7 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/1f7edec302db05d8c273cf8a90f3d005c000d687";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/dfa2e5f62d3fa03bcf853561acaf2d7d67eac65c";
 
     # The owner's runtime policy, read by the AI usage collector for the
     # model-selection identities and trust evidence. It is a plain
@@ -195,6 +195,7 @@
             packages = [ pkgs.playwright-driver.browsers pkgs.playwright-driver pkgs.librsvg ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
             PLAYWRIGHT_MODULE = "${pkgs.playwright-driver}";
+            GHOSTSHIP_TEST_AGENT_SOURCE = inputs.ghostship-private-agent.outPath;
           };
         }
       );
