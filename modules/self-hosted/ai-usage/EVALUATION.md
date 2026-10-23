@@ -56,9 +56,8 @@ already keeps.
   upgrade of any kind.
 - A quality score is never invented. A model without a measurement keeps its
   lineage prior, and the prior stays labelled as a prior.
-- The frontier review is unchanged: an implementation by a bulk model needs
-  a review by the frontier authority, and a required frontier that is
-  unavailable is waited for.
+- The orchestrator reviews each diff: worker implementations require
+  orchestrator review before merge.
 - The role cap is independent of the quality: a free route stays in the low
   complexity classes, whatever the measured quality says.
 - The collector keeps its own five minute reading of the quota and the

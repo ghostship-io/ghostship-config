@@ -61,6 +61,7 @@ let
   });
 in
 {
+  imports = [ ./announced-resets.nix ];
   options.ghostship.aiUsage.routing.enabled = lib.mkOption {
     type = lib.types.bool;
     default = false;

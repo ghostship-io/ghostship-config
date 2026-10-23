@@ -156,7 +156,8 @@ class PublicationTestCase(unittest.TestCase):
             )
         ]
         return main.ranking_samples(
-            results, self.catalog, context, now, t3_home=self.directory
+            results, self.catalog, context, now, t3_home=self.directory,
+            t3_state=os.path.join(self.directory, 'absent-state.sqlite')
         )
 
     def snapshot(self, inferred, routes=(), ranked=(), measured=(), now=NOW):

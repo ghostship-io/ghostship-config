@@ -1,5 +1,98 @@
 # Changelog
 
+## [3.17.215] - 2026-10-23
+
+- Discover reset relays from community announcement search, show unverified items and source links, notify for confirmation, and apply confirmed resets to capacity pacing.
+
+PR #383.
+
+## [3.17.214] - 2026-10-23
+
+- Check reset announcements through the personal Desktop profile and retain a public relay with independent blocked status and source confidence.
+
+
+Rebased onto the corrected #379 isolation guard at 3f0cb133e28fb8fb59d3e7cdbd2ca2c3597ab824. The transport feature matches the approved c0283879 behavior; the new base retains main's non-fatal optional-cache handling. Land #379 first, then retarget this PR to main. The relay-list/dashboard/confirmation follow-up is separate in #383.
+
+PR #374.
+
+## [3.17.213] - 2026-10-23
+
+- Keep fast tests off live host state and external services, with temporary collector state, stubbed notifications and a guard that rejects accidental access.
+
+CI follow-up: only absolute runtime defaults are remapped; relative values and source-tree defaults are preserved. `/var/run` is recognized before symlink resolution. Regression probes reproduce the runner layout and preserve ordinary defaults. CI run 40020113356 passed at fa7d9e765132bc98eb25d0aea1ac5269f922fdc2.
+
+PR #379.
+
+## [3.17.212] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 0ce0aa80; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #382.
+
+## [3.17.211] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 0fd3cddc; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #380.
+
+## [3.17.210] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to a5045257; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #378.
+
+## [3.17.209] - 2026-10-23
+
+- Align process documentation and agent instructions with the 0.44 orchestrator-worker delegation model.
+
+PR #370.
+
+## [3.17.208] - 2026-10-23
+
+Render unused Fable and Antigravity third-party limits grey while preserving usage truth and excluding their model routes from selection. Keep optional announcement-cache failures from aborting usage collection.
+
+PR #375.
+
+## [3.17.207] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7f180d26; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #373.
+
+## [3.17.206] - 2026-10-23
+
+- Track public Codex reset announcements separately from owner overrides and provider measurements, with bounded Desktop checks and announced-reset pacing labels.
+
+PR #371.
+
+## [3.17.205] - 2026-10-23
+
+Remove the two internal heading scrollbars at phone widths.
+
+PR #369.
+
+## [3.17.204] - 2026-10-23
+
+Restore the Providers model panes and capacity cards. Exact model IDs now survive Grafana regex interpolation, and capacity freshness no longer introduces a five-minute implicit subquery that empties the repeat variable.
+
+Show collector freshness and T3 usage/provider failures above the model panes. Keep only the latest source-status label variant in the evidence table. Give historical T3 usage scans the bounded 60-second transport budget and preserve fixed failure reasons such as timeout.
+
+Validation: 16 focused page tests, four usage tests and eight transport tests pass; staged privacy/security and whitespace checks pass. In the signed-in live browser, the original capacity variable returned zero rows and the repaired query returned seven at the same evaluation time. A local unsaved query preview renders real model quality/rounds/limits and all seven provider cards. The current authenticated T3 API returned both daily and hourly summaries; no bearer/URL change was needed. Desktop/phone final screenshots remain required after approved deployment.
+
+PR #367.
+
+## [3.17.203] - 2026-10-23
+
+- Give CI job-start hooks the shell suffix required by the runner.
+
+PR #368.
+
+## [3.17.202] - 2026-10-23
+
+- Refuse foreign PR source at host-owned CI runner admission before checkout.
+
+PR #366.
+
 ## [3.17.201] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 7bf7ec3e; the lock's narHash is the `nix flake prefetch` hash of that revision.

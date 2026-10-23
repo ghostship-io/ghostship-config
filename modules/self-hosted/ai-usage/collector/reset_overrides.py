@@ -44,7 +44,7 @@ def apply(results, overrides: list[dict[str, Any]], now: float) -> None:
                 reset = datetime.fromisoformat(override['reset_at'].replace('Z', '+00:00')).timestamp()
                 if reset <= now:
                     continue
-                window['providerResetEpoch'] = window.get('resetEpoch')
+                window.setdefault('providerResetEpoch', window.get('resetEpoch'))
                 window['resetEpoch'] = reset
-                window['resetSource'] = 'custom'
-                window['resetLabel'] = 'custom reset'
+                window['resetSource'] = 'announced' if override.get('reset_source') == 'announced' else 'custom'
+                window['resetLabel'] = 'announced reset' if window['resetSource'] == 'announced' else 'custom reset'
