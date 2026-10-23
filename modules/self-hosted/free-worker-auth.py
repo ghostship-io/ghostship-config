@@ -146,6 +146,8 @@ def quota_or_answer(output):
 
 def migrate(source, free, manifest_path, plan):
     source_rows = source.records()
+    if free.records('opencode-go'):
+        raise MigrationError('free_runtime_contains_paid_credentials')
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
         if manifest.get('version') != 1 or set(manifest.get('roles', {})) != {'go', 'zen'}:

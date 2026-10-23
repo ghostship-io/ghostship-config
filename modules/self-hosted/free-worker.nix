@@ -43,7 +43,9 @@ let
   authPlan = pkgs.writeText "free-worker-auth-plan.json" (builtins.toJSON {
     free_model = "opencode/${builtins.head freeModels}";
     go_model = "opencode-go/minimax-m3.1-flash";
-    probe_key = "free-worker-auth-${builtins.substring 0 12 (inputs.ghostship-private-agent.rev or "development")}";
+    probe_key = "free-worker-auth-${builtins.substring 0 16 (builtins.hashString "sha256"
+      ((inputs.ghostship-private-agent.rev or "development")
+        + builtins.readFile ./free-worker.nix + builtins.readFile ./free-worker-auth.py))}";
   });
   nativeCatalog = pkgs.writeText "free-worker-native-catalog.json"
     (builtins.readFile ./free-worker-native-catalog.json);
@@ -135,6 +137,14 @@ let
 in
 {
   config = lib.mkIf enabled {
+    ghostship.apps.ghostship-worker = {
+      name = "Free workers";
+      group = "Services";
+      description = "Sandboxed public background tasks";
+      icon = "mdi-cube-outline";
+      order = 103;
+      apparmorProfile = "ghostship-free-worker";
+    };
     assertions = [{
       assertion = config.virtualisation.oci-containers.backend == "podman";
       message = "The free-worker runtime requires Podman.";
@@ -152,10 +162,10 @@ in
       "d ${data}/home/.local/share/t3code-tools/opencode/releases/2.1.2/lib/node_modules/@opencode/cli-linux-${arch}/bin 0755 63000 63000 -"
     ];
     security.apparmor.policies.ghostship-free-worker = {
-      enable = true;
+      state = "complain";
       profile = ''
         #include <tunables/global>
-        profile ghostship-free-worker flags=(attach_disconnected,mediate_deleted,complain) {
+        profile ghostship-free-worker flags=(attach_disconnected,mediate_deleted) {
           #include <abstractions/base>
           network inet stream,
           network inet6 stream,
@@ -206,7 +216,6 @@ in
         "--cap-drop=ALL"
         "--security-opt=no-new-privileges"
         "--security-opt=seccomp=unconfined"
-        "--security-opt=apparmor=ghostship-free-worker"
         "--pids-limit=256"
         "--memory=8g"
         "--cpus=2"
