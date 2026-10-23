@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.110] - 2026-10-23
+
+- ai-usage: a published window series carries a quota id of its own. The card of a provider keys its rows by the account, the kind and the quota id, so a provider that publishes one quota id for several model families drew one row of the card for all of them: the Antigravity account publishes 'quotaInfo' for the Gemini, the Claude and the GPT models, and the card showed one of the three. The scope of the window is named after the id when the id does not name it already, so the quota of the Gemini models is 'quotaInfo@gemini' and a window of two families is 'quotaInfo@claude+gpt'. A window whose id names its scope keeps it: '3p-5h' names the Claude and the GPT models of the third-party group, and 'seven_day_fable' names the Fable models of the Claude account. A window of the whole account keeps its id, an inferred window keeps the name of the window it was learned over, and the account records of the routing snapshot keep the quota id of the provider.
+
 ## [3.17.109] - 2026-10-23
 
 - The Providers page shows the owner's static model selection under the capacity cards: one row per route of the runtime policy in the collector's row order, with the role, the model and its blue bulk tag, the provider with the icon of its capacity card, the work the route is used for, and the share that is left with the Paced Availability beside it. A spent route reads zero, spent, and how long until it resets; a route the routing snapshot does not carry says no reading and never zero; a route with no pace series keeps its share alone. The chip reads the routing gauge and says that the static table is shown for reference while the routing is on. The old Providers table goes, since the cards above it replace it.
