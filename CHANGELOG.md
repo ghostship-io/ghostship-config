@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.17.236] - 2026-10-23
+
+- Seed and project the dedicated canonical orchestrator pointer into the coordinator read-only.
+
+PR #402.
+
+## [3.17.235] - 2026-10-23
+
+- Restore model picks by compacting published routing JSON within the reader budget.
+
+PR #401.
+
+## [3.17.234] - 2026-10-23
+
+- Track scoped primary usage-limit reset announcements with quotes, post/reset times and honest confidence.
+- Apply confirmed resets to matching quota windows and expose announced headroom to pacing, selection and Providers metrics.
+- Remove legacy keyword-only matches without repeating notifications.
+
+PR #400.
+
+## [3.17.233] - 2026-10-23
+
+- Give coordinator review checks read-only access to issued approval metadata.
+
+PR #399.
+
 ## [3.17.232] - 2026-10-23
 
 - Protect Claude review headroom when selecting Sonnet workers.

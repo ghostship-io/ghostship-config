@@ -17,6 +17,13 @@ let
   coordinatorImage = base "ghostship-github-coordinator" "62031";
   # Under /var/lib: tmpfiles refuses root-owned children of the apps-owned /srv/apps.
   root = "/var/lib/ghostship-github";
+  t3Home = lib.removeSuffix ":/home/t3code:rw" (lib.findFirst
+    (volume: lib.hasSuffix ":/home/t3code:rw" volume)
+    (throw "GitHub review receipts require the T3 home volume")
+    config.virtualisation.oci-containers.containers.t3code.volumes);
+  reviewStore = "${t3Home}/.local/state/ghostship/reviews";
+  orchestratorDirectory = "${t3Home}/.local/state/ghostship/orchestrator";
+  pointerPython = pkgs.python3.withPackages (ps: [ ps.websockets ]);
   network = "ghostship_github_net";
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
@@ -267,7 +274,14 @@ in
       user = "62031:62032";
       cmd = [ "--config" "/etc/ghostship-github/config.json" "--spool" "/spool" "--state" "/state"
               "--incidents" "/incidents" "--secrets" "/run/secrets/github.env" ];
+      environment = {
+        GHOSTSHIP_REVIEW_STORE = "/reviews";
+        GHOSTSHIP_ORCHESTRATOR_FILE = "/run/ghostship-orchestrator/pointer.env";
+      };
       volumes = [
+        "${reviewStore}:/reviews:ro,noexec,nosuid,nodev"
+        # Directory binding follows the canonical writer’s atomic replacements.
+        "${orchestratorDirectory}:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev"
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${root}/state:/state:rw,noexec,nosuid,nodev"
         "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
@@ -288,6 +302,28 @@ in
       wants = [ "ghostship-github-t3-token.service" ];
       serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       preStart = lib.mkBefore ''
+        # Seed using the pinned writer as the home owner before the explicit
+        # coordinator reader starts. No T3 restart or managed-CLI race.
+        ${pkgs.util-linux}/bin/setpriv \
+          --reuid="$(${pkgs.coreutils}/bin/stat -c %u ${lib.escapeShellArg t3Home})" \
+          --regid="$(${pkgs.coreutils}/bin/stat -c %g ${lib.escapeShellArg t3Home})" --clear-groups \
+          ${pkgs.coreutils}/bin/env -u GHOSTSHIP_ORCHESTRATOR_FILE \
+          XDG_CONFIG_HOME=${lib.escapeShellArg (t3Home + "/.config")} \
+          XDG_STATE_HOME=${lib.escapeShellArg (t3Home + "/.local/state")} \
+          PYTHONPATH=${inputs.ghostship-private-agent}/tools/python \
+          ${pointerPython}/bin/python3 -c 'from ghostship_sessions.orchestrator import seed_pointer; seed_pointer()'
+        # No ACL or per-file bind: new pointer inodes retain mode 0644.
+        ${pkgs.coreutils}/bin/test -r ${lib.escapeShellArg (orchestratorDirectory + "/pointer.env")}
+        ${pkgs.coreutils}/bin/test "$(${pkgs.findutils}/bin/find ${lib.escapeShellArg orchestratorDirectory} -mindepth 1 -maxdepth 1 ! -name pointer.env -print -quit)" = ""
+        # A named-user ACL survives T3’s recursive owner/group reconciliation.
+        # Default ACLs cover future atomic receipt replacements.
+        # Export only approval metadata. Keep T3 state and credentials private.
+        ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg reviewStore}
+        ${pkgs.coreutils}/bin/chown --reference=${lib.escapeShellArg t3Home} ${lib.escapeShellArg reviewStore}
+        ${pkgs.coreutils}/bin/chmod 0750 ${lib.escapeShellArg reviewStore}
+        ${pkgs.acl}/bin/setfacl -R -m u:62031:rX ${lib.escapeShellArg reviewStore}
+        ${pkgs.findutils}/bin/find ${lib.escapeShellArg reviewStore} -type d -exec \
+          ${pkgs.acl}/bin/setfacl -m d:u:62031:rX {} +
         source=/srv/apps/t3code/home/.t3/handoffs/coordination-list.md
         if [ ! -r "$source" ]; then
           echo "coordinator: runtime coordination list is missing or unreadable" >&2

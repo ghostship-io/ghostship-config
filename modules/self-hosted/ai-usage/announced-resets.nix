@@ -11,7 +11,7 @@ let
       echo 'Usage: ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE' >&2
       exit 2
     fi
-    exec ${python}/bin/python3 ${./collector/announced_resets.py} --confirm "$1" --reset-at "$2"
+    exec ${python}/bin/python3 ${./collector}/announced_resets.py --confirm "$1" --reset-at "$2"
   '';
 in
 {
@@ -21,7 +21,7 @@ in
     after = [ "network-online.target" "podman-ghostship-private-integrations.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${python}/bin/python3 ${./collector/announced_resets.py} --notify-command ${config.ghostship.notify.package}/bin/ghostship-notify ${desktop}";
+      ExecStart = "${python}/bin/python3 ${./collector}/announced_resets.py --notify-command ${config.ghostship.notify.package}/bin/ghostship-notify ${desktop}";
       TimeoutStartSec = "10min";
       UMask = "0077";
       NoNewPrivileges = true;

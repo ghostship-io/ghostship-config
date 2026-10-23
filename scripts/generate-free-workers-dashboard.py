@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # Height of the free selection lane in Grafana grid units; tune with the screenshots.
-FREE_LANE_HEIGHT = 15
+FREE_LANE_HEIGHT = 14
 FREE_QUALITY_HEIGHT = 16
 SRC = ROOT / "modules/self-hosted/siem/dashboards/paid-models.json"
 DST = ROOT / "modules/self-hosted/siem/dashboards/free-workers.json"
@@ -60,26 +60,45 @@ BLOCKED_QUERY = (
     '\n or label_replace(label_replace((ghostship_ai_provider_free_models{state="unavailable",provider=~"$provider"} > 0)'
     ' unless on(provider) (ghostship_ai_provider_free_models{state="available"} > 0),'
     ' "field", "free_blocked", "", ""), "category", "worker", "", "")'
+    '\n or label_replace(label_replace(count by (provider, reason) (ghostship_ai_picker_model_info{billing=~"free|promotion",'
+    'category="worker",state!="available",provider=~"$provider"}), "field", "free_reason", "", ""), "category", "worker", "", "")'
 )
 BLOCKED_HELPER = """
 context.handlebars.registerHelper('freeBlocked', function(rows) {
   const names = {opencode:'OpenCode Zen','cloudflare-workers-ai':'Cloudflare','kilo-keyed':'Kilo (keyed)',nvidia:'NVIDIA',ovh:'OVH',zai:'Zai'};
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const pad = (n) => String(n).padStart(2, '0');
+  const clock = (at) => { const d = new Date(at); return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + 'Z'; };
+  const why = new Map();
+  for (const row of rows || []) {
+    if (!row || row.field !== 'free_reason' || !row.provider || !(Number(row.value) > 0)) { continue; }
+    const text = String(row.reason || '');
+    const until = text.match(/until (\\d{4}-\\d\\d-\\d\\dT[\\d:]+Z)/);
+    const label = until ? 'cooling · back ' + clock(Date.parse(until[1])) : /not offered/i.test(text) ? 'not offered'
+      : /exclud/i.test(text) ? 'excluded' : (text.replace(/_/g, ' ').slice(0, 24) || 'unavailable');
+    const groups = why.get(row.provider) || new Map();
+    groups.set(label, (groups.get(label) || 0) + Number(row.value));
+    why.set(row.provider, groups);
+  }
   return (rows || []).filter(row => row && row.field === 'free_blocked' && row.provider && Number(row.value) > 0)
     .map(row => ({provider: row.provider, count: Number(row.value),
       name: names[row.provider] || String(row.provider).charAt(0).toUpperCase() + String(row.provider).slice(1),
-      icon: String(row.provider).charAt(0).toUpperCase()}))
+      icon: String(row.provider).charAt(0).toUpperCase(),
+      why: Array.from((why.get(row.provider) || new Map()).entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
+        .map(([label, count]) => count + ' ' + label).join(' · ')}))
     .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 });
 """
 BLOCKED_CARD = (
     '{{#each (freeBlocked data)}}<article class="selection-card restricted blocked" data-provider="{{this.provider}}">'
     '<div class="sc-h"><span class="ico">{{this.icon}}</span><span class="model-provider">{{this.name}}</span></div>'
-    '<h3>No model available</h3><div class="reason">{{this.count}} models blocked</div></article>{{/each}}</div></section>'
+    '<h3>No model available</h3><div class="reason">{{#if this.why}}{{this.why}}{{else}}{{this.count}} models blocked{{/if}}</div></article>{{/each}}</div></section>'
 )
 FREE_STYLES = (
-    ".selection-card.blocked .reason{display:block}"
+    ".selection-card.blocked .reason{display:block;color:#b5b8c0}.selection-card.blocked{opacity:.75}"
     ".selection-card .capacity-graph.open .graph-label{margin-top:5px}"
-    "@media (max-width:768px){.selection-card .capacity-graph,.selection-card .model-pace{display:none}.selection-card.restricted .capacity-graph{display:block}}"
+    ".selection-card .evid{display:none}@media (max-width:768px){.selection-card{padding:8px 8px}.lane-g{gap:6px}}"
+    "@media (max-width:768px){.selection-card .capacity-graph,.selection-card .model-pace,.selection-card .nolimit{display:none}.selection-card.restricted .capacity-graph{display:block}}"
 )
 
 
@@ -125,8 +144,8 @@ def generate():
                                     "providers with no available model stay as a grey card.")
         if panel.get("id") == 250:
             panel["gridPos"].update(y=FREE_LANE_HEIGHT + 1, h=FREE_QUALITY_HEIGHT)
-            panel["options"]["afterRender"] = panel["options"]["afterRender"].replace("?3:15", "?3:7")
-            if "?3:7" not in panel["options"]["afterRender"]:
+            panel["options"]["afterRender"] = panel["options"]["afterRender"].replace("?3:15", "?5:7")
+            if "?5:7" not in panel["options"]["afterRender"]:
                 raise ValueError("Paid models quality pager changed: cannot size the free page")
         panels.append(panel)
 

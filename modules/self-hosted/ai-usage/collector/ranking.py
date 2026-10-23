@@ -130,6 +130,10 @@ class QuotaWindow:
     reset_source: str = "provider"
     provider_reset_epoch: float | None = None
     source: str = ""
+    provider_used_ratio: float | None = None
+    provider_observed_at: float | None = None
+    announced_reset_epoch: float | None = None
+    announcement_url: str = ""
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -1516,8 +1520,10 @@ def _observed_failures(
 def _quota_recovered(failure: Mapping[str, Any], windows: Iterable[Any], now: float) -> bool:
     """A newer reported allowance can supersede an old account quota failure.
 
-    A reset timestamp, inferred budget or static published limit cannot prove
-    recovery. Every applicable gating window needs fresh positive headroom.
+    A timestamp alone, inferred budget or static published limit cannot prove
+    recovery. An explicit completed announcement can supersede an older reading;
+    its observation time is the reset itself and normal freshness still applies.
+    Every applicable gating window needs fresh positive headroom.
     Other failures keep their own authority until an observed success.
     """
     if failure.get('scope') != 'account' or failure.get('reason') != 'account_usage_limit':
@@ -1534,7 +1540,7 @@ def _quota_recovered(failure: Mapping[str, Any], windows: Iterable[Any], now: fl
         basis = str(field(window, 'basis') or '')
         observed = _as_float(field(window, 'observed_at'))
         state, remaining = _window_state(window, now)
-        if (basis not in ('', BASIS_REPORTED) or _is_inferred_window(window)
+        if (basis not in ('', BASIS_REPORTED, 'announced_reset') or _is_inferred_window(window)
                 or _is_unlimited_window(window) or observed is None or observed <= failed_at
                 or state != 'known' or remaining is None or remaining <= 0):
             return False

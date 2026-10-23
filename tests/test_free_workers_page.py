@@ -91,9 +91,15 @@ class FreeWorkersPageTests(unittest.TestCase):
         self.assertIn('ghostship_ai_provider_free_models{state="unavailable"', panel['targets'][0]['expr'])
         self.assertIn('unless on(provider)', panel['targets'][0]['expr'])
         rows = [{'provider': 'opencode', 'field': 'free_blocked', 'value': 46, 'category': 'worker'},
+                {'provider': 'opencode', 'field': 'free_reason', 'value': 44, 'category': 'worker',
+                 'reason': 'not offered by the T3 instance (deprecated in the catalog)'},
+                {'provider': 'opencode', 'field': 'free_reason', 'value': 1, 'category': 'worker',
+                 'reason': 'cooling down in the free pool until 2026-10-24T00:00:01Z'},
                 {'provider': 'cohere', 'field': 'free_blocked', 'value': 0, 'category': 'worker'}]
         blocked = helper(panel, 'freeBlocked', rows)
-        self.assertEqual(blocked, [{'provider': 'opencode', 'count': 46, 'name': 'OpenCode Zen', 'icon': 'O'}])
+        self.assertEqual(blocked, [{'provider': 'opencode', 'count': 46, 'name': 'OpenCode Zen', 'icon': 'O',
+                                    'why': '44 not offered · 1 cooling · back 24 Oct 00:00Z'}])
+        self.assertIn('ghostship_ai_picker_model_info{billing=~"free|promotion"', panel['targets'][0]['expr'])
         self.assertIn('{{#each (freeBlocked data)}}', panel['options']['content'])
         self.assertIn('No model available', panel['options']['content'])
         self.assertIn('restricted blocked', panel['options']['content'])
