@@ -32,6 +32,7 @@ The rules:
 from __future__ import annotations
 
 import math
+import pools
 from typing import Any, Iterable, Mapping
 
 # A reading older than this has no pace: the collector reads every five
@@ -152,6 +153,8 @@ def measured_scope(measured: Any) -> tuple[str, ...] | None:
 
 def is_paced_window(window: Any) -> bool:
     """Only weekly/monthly periods have an even-spend line."""
+    if pools.not_used_window(str(_get(window, 'provider') or ''), window):
+        return False
     kind = str(_get(window, "kind") or "").lower()
     if any(token in kind for token in ("session", "hour", "daily", "minute")):
         return False
@@ -299,7 +302,7 @@ def _entitlement_parts(window: Any) -> dict[str, str]:
     account = get("account") or "default"
     model = get("model") or "*"
     kind = get("kind") or get("window")
-    quota = get("quota_id") or get("quota")
+    quota = get("quota_id") or get("quotaId") or get("quota")
     canonical = QUOTA_ALIASES.get(quota, quota)
     return {
         "provider": provider,
