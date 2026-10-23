@@ -24,7 +24,6 @@ let
     "init-ghostship-github-net"
     "init-ghostship-net"
     "init-ghostship-siem-net"
-    "nixos-upgrade"
     "prometheus-node-exporter"
     "pyload-restart-failed"
     "qbittorrent-auto-resume"
