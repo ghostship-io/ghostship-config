@@ -85,7 +85,8 @@ let
     umask 077
     install -d -m0710 -o0 -g62020 ${data}
     install -d -m0700 -o63000 -g63000 ${data}/home ${data}/home/.config \
-      ${data}/home/.config/ghostship ${data}/home/.config/opencode
+      ${data}/home/.config/ghostship ${data}/home/.config/opencode \
+      ${data}/home/.cache ${data}/home/.local ${data}/home/.local/share ${data}/home/.local/state
     install -d -m0750 -o63000 -g62020 ${data}/socket ${data}/control ${data}/secrets
     install -m0400 -o63000 -g62020 ${token} ${data}/control/token.new
     mv -fT ${data}/control/token.new ${data}/control/token
@@ -216,6 +217,10 @@ in
         "--cap-drop=ALL"
         "--security-opt=no-new-privileges"
         "--security-opt=seccomp=unconfined"
+        # Locked outer proc submounts prevent an unprivileged nested proc mount.
+        # The outer PID namespace remains private; each round creates its own
+        # proc and Landlock grants it read-only access, with no added capability.
+        "--security-opt=unmask=/proc/*"
         "--pids-limit=256"
         "--memory=8g"
         "--cpus=2"
