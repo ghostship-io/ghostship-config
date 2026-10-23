@@ -63,8 +63,13 @@ agent-browser --version
 
 ## Browser access and provider sign-in
 
-Open `https://t3code.ghostship.io` and complete Cloudflare sign-in. No separate
-T3 account is required for this web interface. The internal gateway supplies a
+Open `https://t3code.ghostship.io` and complete Cloudflare sign-in.
+The container hostname is the internal name `t3code`: assigning its public
+hostname would also register that name in Podman DNS and `/etc/hosts`, shadowing
+the Cloudflare HTTPS edge with the HTTP-only origin. Container hostname changes
+apply at the next idle swap; never restart an active session to change one.
+
+No separate T3 account is required for this web interface. The internal gateway supplies a
 native T3 bearer session for HTTP and WebSocket requests. The credential stays
 in `~/.t3code-container/access/session.json` with mode `0600`, and the gateway
 renews it before expiry. It rejects cross-origin browser requests. Cloudflare
