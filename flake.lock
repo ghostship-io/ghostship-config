@@ -155,17 +155,17 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1792790739,
-        "narHash": "sha256-WSV23R8LRzCmUsXbqnOXYwqbPpPcrCDY9s0b4/g0a9I=",
+        "lastModified": 1792792851,
+        "narHash": "sha256-zCZB/CgwuyPiDYRe2GCA/8GCUrdJ6wrLs/vkzTAqj20=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "3d9046bd05363541499262e5a4252568c948a896",
+        "rev": "0d0cf93ce970377a61b992870945c56bf036e88a",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "3d9046bd05363541499262e5a4252568c948a896",
+        "rev": "0d0cf93ce970377a61b992870945c56bf036e88a",
         "type": "github"
       }
     },
