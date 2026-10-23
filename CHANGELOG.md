@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.157] - 2026-10-23
+
+Reserve shared static addresses and apply a safe dynamic allocation range to existing Podman networks.
+
+PR #319.
+
 ## [3.17.156] - 2026-10-23
 
 Use native rootless Podman for development and remove obsolete runtime consumers. Refresh the daily security procedure.
