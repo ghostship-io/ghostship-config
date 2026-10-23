@@ -443,7 +443,7 @@ class SharedParentPrecedenceTests(unittest.TestCase):
             now=NOW,
         )
 
-    def test_a_spent_shared_week_blocks_the_fable_subordinate(self):
+    def test_a_spent_shared_week_blocks_active_opus_and_excludes_fable(self):
         ranked = self._rank(
             [
                 ranking.QuotaWindow(
@@ -465,11 +465,12 @@ class SharedParentPrecedenceTests(unittest.TestCase):
                 ),
             ]
         )
-        fable = [entry for entry in ranked if entry.model == "claude-fable-5-1"][0]
-        self.assertFalse(fable.available)
-        self.assertEqual(fable.remaining, 0.0)
+        opus = [entry for entry in ranked if entry.model == "claude-opus-5-5"][0]
+        self.assertFalse(opus.available)
+        self.assertEqual(opus.remaining, 0.0)
+        self.assertNotIn("claude-fable-5-1", [entry.model for entry in ranked])
 
-    def test_a_spent_fable_window_blocks_only_fable(self):
+    def test_a_spent_unused_fable_window_does_not_block_active_opus(self):
         ranked = self._rank(
             [
                 ranking.QuotaWindow(
@@ -492,12 +493,11 @@ class SharedParentPrecedenceTests(unittest.TestCase):
             ]
         )
         opus = [entry for entry in ranked if entry.model == "claude-opus-5-5"][0]
-        fable = [entry for entry in ranked if entry.model == "claude-fable-5-1"][0]
         self.assertTrue(opus.available)
         self.assertEqual(opus.remaining, 0.8)
-        self.assertFalse(fable.available)
+        self.assertNotIn("claude-fable-5-1", [entry.model for entry in ranked])
 
-    def test_the_row_publishes_the_shared_and_the_subordinate_windows(self):
+    def test_active_row_uses_only_shared_window_and_excludes_fable(self):
         ranked = self._rank(
             [
                 ranking.QuotaWindow(
@@ -542,7 +542,8 @@ class SharedParentPrecedenceTests(unittest.TestCase):
             },
             catalog=_Catalog(),
         )
-        fable = [row for row in data["candidates"] if row["model"] == "claude-fable-5-1"][0]
-        scopes = {window["quota"]: window["scope"] for window in fable["quota_windows_applied"]}
-        self.assertEqual(scopes, {"seven_day": "shared", "seven_day_fable": "model"})
-        self.assertTrue(fable["quota_scope_basis"])
+        self.assertNotIn("claude-fable-5-1", [row["model"] for row in data["candidates"]])
+        opus = next(row for row in data["candidates"] if row["model"] == "claude-opus-5-5")
+        scopes = {window["quota"]: window["scope"] for window in opus["quota_windows_applied"]}
+        self.assertEqual(scopes, {"seven_day": "shared"})
+        self.assertTrue(opus["quota_scope_basis"])
