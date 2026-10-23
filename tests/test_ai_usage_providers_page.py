@@ -1345,6 +1345,15 @@ class ModelSelectionTests(unittest.TestCase):
                     f"{provider} {key}",
                 )
 
+    def test_the_panel_is_tall_enough_for_its_rows(self):
+        """The panel holds every row of the live table at either width.
+
+        Measured in Playwright with the panel's own styles and the five live
+        rows of the fixture: the content is 160 px tall at 390 px and 182 px
+        at 1600 px, and a grid row of the dashboard is 37 px.
+        """
+        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 182)
+
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
         rows = {
