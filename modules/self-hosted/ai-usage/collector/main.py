@@ -27,6 +27,7 @@ import aa  # noqa: E402
 import aa_3d  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
+import free_selection as free_selection_module  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
 import published as published_module  # noqa: E402
@@ -403,6 +404,25 @@ METRIC_HELP = {
     "ghostship_ai_static_route_policy_ok": (
         "One when the runtime policy that carries the static worker routes "
         "was read, zero when it is missing or unreadable."
+    ),
+    "ghostship_ai_free_provider_selection_info": (
+        "One for every free provider, with the model it selected for the "
+        "free tier and the basis of that selection."
+    ),
+    "ghostship_ai_free_provider_selection_remaining_ratio": (
+        "The share left of the capacity of the free selection of a provider."
+    ),
+    "ghostship_ai_free_provider_selection_paced_availability": (
+        "The Paced Availability of the free selection of a provider: the "
+        "pace delta of the capacity of the route it selected."
+    ),
+    "ghostship_ai_free_provider_selection_reset_timestamp_seconds": (
+        "When the capacity window that binds the free selection of a "
+        "provider resets."
+    ),
+    "ghostship_ai_provider_free_models": (
+        "The free models of a provider, split into the ones that are "
+        "available and the ones that are not."
     ),
 }
 
@@ -1011,8 +1031,13 @@ def ranking_inputs(
     # window of its own, so it has a stated state instead of no state, and
     # the paid allowance of the account does not gate it. The documentation
     # lists those routes as unlimited "for a limited time", so the basis of
-    # the window is a promotion and the end of it is unknown.
-    for provider, model in _published_unlimited_routes(catalog, inventory):
+    # the window is a promotion and the end of it is unknown. A free route
+    # reaches the collector on two paths, the instance inventory and the
+    # catalog's free list, and it is the same route on both: the published
+    # listing does not depend on whether the instance offers it today.
+    for provider, model in _published_unlimited_routes(
+        catalog, set(inventory) | free
+    ):
         windows.setdefault(f"{provider}/{model}", []).append(
             ranking_module.QuotaWindow(
                 kind="unlimited",
@@ -1910,6 +1935,12 @@ def render(
             display_names[(provider, model)] = text
     for name, labels, value in static_routes_module.samples(
         runtime_policy, snapshot or {}, display_names
+    ):
+        writer.add(name, labels, value)
+    # The free selection of every free provider, and the free models it
+    # holds, read from the same snapshot.
+    for name, labels, value in free_selection_module.samples(
+        snapshot or {}, display_names
     ):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []

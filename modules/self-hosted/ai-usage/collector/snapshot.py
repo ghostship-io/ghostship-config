@@ -140,6 +140,9 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     observed = _get("observed_at", "observedAtEpoch")
     basis = str(_get("basis", default="") or "")
     ends = _finite(_get("ends_at", "endsAt"))
+    # The provider's own status of the window, when it publishes one. A
+    # window it does not state a status for carries no status key.
+    status = _get("status")
 
     used_value = _finite(used)
     known = used_value is not None and 0.0 <= used_value <= 1.0
@@ -181,6 +184,8 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     }
     if applies:
         record["applies_to"] = [str(token) for token in applies]
+    if isinstance(status, str) and status:
+        record["status"] = status
     return record
 
 
