@@ -24,7 +24,7 @@ let
     fi
     exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
-      --tools-package ${tools.default} --managed-only "$@"
+      --tools-package ${tools.default} --refresh --managed-only "$@"
   '';
   sourceSync = import ../../packages/t3code/source-sync.nix {
     inherit lib pkgs;
