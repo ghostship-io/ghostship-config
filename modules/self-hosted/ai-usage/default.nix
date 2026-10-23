@@ -25,9 +25,6 @@ let
   aaCache = "${stateDir}/artificial-analysis.json";
   # The AA-3D board, written by the same pull.
   aa3dCache = "${stateDir}/aa-3d.json";
-  # The live model catalog. Only the models it offers have their model page
-  # read by the pull.
-  modelCatalog = "${t3Home}/.cache/opencode/models.json";
   # The routing snapshot is the canonical answer for a consumer. The producer
   # writes it; a consumer only reads it.
   routing = "${stateDir}/routing.json";
@@ -93,7 +90,8 @@ in
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.
-        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ]
+        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock"
+          "GHOSTSHIP_MODEL_EVIDENCE_PATH=${t3Home}/.local/state/ghostship/model-evidence.jsonl" ]
           ++ lib.optional (policy != null) "PYTHONPATH=${policy}/tools/python";
         # The T3 usage summary pages over 30 days and the free pool catalog is
         # paged; a few minutes is the honest bound.
@@ -176,7 +174,10 @@ in
       wants = [ "network-online.target" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/aa_pull.py --output ${aaCache} --aa3d-output ${aa3dCache} --catalog ${modelCatalog} --model-pages";
+        # Intelligence comes from the public boards. Optional model-page cost
+        # enrichment took minutes and delayed the daily quality cache; worker
+        # price checks use the provider catalog, independently of that work.
+        ExecStart = "${python}/bin/python3 ${collector}/collector/aa_pull.py --output ${aaCache} --aa3d-output ${aa3dCache}";
         TimeoutStartSec = "10min";
         UMask = "0077";
         NoNewPrivileges = true;

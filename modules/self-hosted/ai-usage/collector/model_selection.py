@@ -11,9 +11,11 @@ from pathlib import Path
 from datetime import datetime
 
 import value_policy
+import model_quality
 import outcomes as outcomes_module
 import quota
 import pools
+import ranking
 from metrics import ExactLabel
 from typing import Any, Mapping
 
@@ -75,7 +77,11 @@ def _trust(row: Mapping[str, Any]) -> str:
 
 
 def quality_value(row: Mapping[str, Any]) -> float | None:
-    """Order by the posterior; the integer Quality score is display only."""
+    """Use canonical AA/observed quality; tolerate older snapshots in readers."""
+    if 'quality_evidence' in row:
+        measured = model_quality.choose(row, effort_options((row.get('native') or {}).get('options') or []))
+        score = number((measured or {}).get('overall'))
+        return None if score is None else score / 100
     prior = number(row.get('quality_p0'))
     if prior is not None:
         try:
@@ -87,7 +93,7 @@ def quality_value(row: Mapping[str, Any]) -> float | None:
 
 
 def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) -> dict[str, Any] | None:
-    """Display a long or quota limit; short windows only gate availability."""
+    """Display the actual binding window, including short unpaced windows."""
     try:
         datetime.fromisoformat(str(generated_at).replace("Z", "+00:00")).timestamp()
     except ValueError:
@@ -96,12 +102,7 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
     for window in windows:
         kind = str(window.get("kind") or "").lower()
         duration = number(window.get("duration_seconds"))
-        short = (any(token in kind for token in ("session", "hour", "daily", "minute"))
-                 or (duration is not None and duration < 7 * 86400
-                     and not any(token in kind for token in ("week", "month"))))
-        long = (any(token in kind for token in ("week", "month", "quota", "credit"))
-                or (duration is not None and duration >= 7 * 86400))
-        if short or not long:
+        if window.get('not_used'):
             continue
         remaining = number(window.get("remaining_ratio"))
         if remaining is None:
@@ -115,7 +116,8 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
                          "remaining_ratio": remaining, "reset_at": window.get("reset_at"),
                          "seconds_to_reset": seconds, "expected_remaining_ratio": expected,
                          "pace_delta": delta,
-                         "pace_state": value_policy.pace_state(remaining, expected),
+                         "pace_state": (value_policy.pace_state(remaining, expected) if quota.is_paced_window(window)
+                                        else 'spent' if remaining <= 0 else 'on_pace'),
                          "source": window.get("source"), "evidence": window.get("evidence")})
         eligible[-1].update({name: window.get(name) for name in
                             ('reset_source', 'reset_label', 'provider_reset_at')})
@@ -167,10 +169,43 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         free = (row['billing'] in ('free', 'promotion') and quality is not None
                 and quality >= best.get(row['trust_level'], 1) - value_policy.FREE_ROUTE_MARGIN)
         return (not row.get('selection_eligible', True), not row['available'], TRUST.get(row['trust_level'], 3),
-                row['pace_state'] == 'far_behind', not free,
+                row.get('ranking_pace_state', row['pace_state']) == 'far_behind', not free,
                 -(quality if quality is not None else -1),
                 -(row['pace_delta'] if row['pace_delta'] is not None else -2), row['key'])
     return sorted(rows, key=rank)
+
+
+def worker_cost_allowed(source: Mapping[str, Any], candidates: list[Mapping[str, Any]]) -> bool:
+    if (source.get('access') or {}).get('billing') in ('free','promotion'):
+        return True
+    reference = next((row for row in candidates if row.get('provider') == 'codex'
+                      and row.get('model') == 'gpt-6.1-sol'), {})
+    price, cap = source.get('price') or {}, reference.get('price') or {}
+    fields = ['input','output'] + [field for field in ('cache_read','cache_write') if price.get(field) is not None]
+    return all(number(price.get(field)) is not None and number(cap.get(field)) is not None
+               and 0 <= price[field] <= cap[field] for field in fields)
+
+
+def applicable_windows(snapshot: Mapping[str, Any], source: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Untiered native models still inherit their reported account/family caps."""
+    windows = [window for window in source.get('windows') or [] if not window.get('not_used')]
+    try:
+        now = datetime.fromisoformat(str(snapshot.get('generated_at')).replace('Z','+00:00')).timestamp()
+    except ValueError:
+        return windows
+    for window in ((snapshot.get('quota') or {}).get('accounts') or {}).get(source['provider']) or []:
+        if window.get('not_used') or not ranking._window_applies(window,source['model']):
+            continue
+        try:
+            checked = datetime.fromisoformat(str(window.get('check_at')).replace('Z','+00:00')).timestamp()
+            reset = (datetime.fromisoformat(str(window['reset_at']).replace('Z','+00:00')).timestamp()
+                     if window.get('reset_at') else None)
+        except ValueError:
+            continue
+        if (now - quota.STALE_AFTER_SECONDS <= checked <= now + quota.FUTURE_TOLERANCE_SECONDS
+                and (reset is None or reset > now) and window not in windows):
+            windows.append(window)
+    return windows
 
 
 def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
@@ -207,6 +242,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             level = trust_cache[identity]['level']
         capacity = source.get("capacity") or {}
         remaining = number(capacity.get("remaining_ratio"))
+        windows = applicable_windows(snapshot,source)
+        reported = [value for window in windows if (value := number(window.get('remaining_ratio'))) is not None]
+        if reported:
+            remaining = min(reported + ([remaining] if remaining is not None else []))
         exhausted = source.get("quota_state") == "exhausted" or remaining == 0
         available = (bool(source.get("available")) and not exhausted and level != "excluded"
                      and (not mapped or native.get("available") is not False))
@@ -214,9 +253,20 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             (source.get("availability") or {}).get("reason") or "")
         quality = number(source.get("quality_score"))
         posterior = quality_value(source)
-        limit = limiting_window(source.get("windows") or [], snapshot.get("generated_at"))
+        measured = model_quality.choose(source, effort)
+        if measured is not None:
+            quality = measured['overall']
+            posterior = None if quality is None else quality / 100
+            if measured['effort_option']:
+                effort_value = measured['effort']
+                if measured['effort_option'] == 'thinking':
+                    effort_value = effort_value == 'true'
+                effort = [{'id':measured['effort_option'], 'value':effort_value}]
+                options = [item for item in options if item['id'] != measured['effort_option']] + effort
+        limit = limiting_window(windows, snapshot.get("generated_at"))
         required_build = worker_builds.get(str(source.get('provider') or ''))
         build_allowed = required_build is None or (mapped and model == required_build)
+        cost_allowed = ('model_quality' not in snapshot or worker_cost_allowed(source, snapshot.get('candidates') or []))
         row = {
             "key": str(source.get("provider")) + ":" + str(source.get("model")),
             "provider": str(source.get("provider")), "model": str(source.get("model")),
@@ -225,11 +275,14 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                         **({"options": options} if options else {})} if mapped else None),
             "effort": effort[0] if effort else None,
             "picker_eligible": mapped,
-            "selection_eligible": build_allowed,
-            "selection_reason": '' if build_allowed else 'configured worker build: ' + required_build,
+            "selection_eligible": build_allowed and cost_allowed,
+            "selection_reason": ('configured worker build: ' + required_build if not build_allowed else
+                                 '' if cost_allowed else 'worker price exceeds reference or is unknown'),
             "billing": (source.get("access") or {}).get("billing") or "unknown",
-            "quality_basis": source.get("quality_basis"),
-            "quality_n": source.get("quality_n"), "quality_s": source.get("quality_s"),
+            "quality_basis": measured['basis'] if measured is not None else source.get("quality_basis"),
+            "quality_n": measured['n'] if measured is not None else source.get("quality_n"),
+            "quality_s": measured['passed'] if measured is not None else source.get("quality_s"),
+            "quality_evidence": measured,
             "available": available, "state": "excluded" if level == "excluded" else "exhausted" if exhausted else (
                 "available" if available else "unavailable"),
             "reason": "model_excluded" if level == "excluded" else reason, "trust_level": level, "quality_score": quality,
@@ -237,6 +290,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "remaining_ratio": remaining, "limiting_window": limit,
             "pace_delta": limit.get("pace_delta") if limit else None,
             "pace_state": limit.get("pace_state") if limit else "unknown",
+            "ranking_pace_state": capacity.get('pace_state') or (limit.get('pace_state') if limit else 'unknown'),
             "pool": source.get("pool") or pools.record(str(source.get("provider") or ""),
                 str(source.get("model") or ""), (source.get("access") or {}).get("billing") or ""),
         }
@@ -256,10 +310,23 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         if mapped and "orchestrator" in allowed and (instance, model) in orchestrator_ids:
             review_effort = effort_options(descriptors, preferred='medium')
             review_options = native_options(descriptors, preferred='medium')
+            review_measured = model_quality.choose(source, review_effort)
+            quality_fields = {}
+            if review_measured is not None:
+                if review_measured['effort_option']:
+                    review_value = review_measured['effort']
+                    if review_measured['effort_option'] == 'thinking':
+                        review_value = review_value == 'true'
+                    review_effort = [{'id':review_measured['effort_option'], 'value':review_value}]
+                    review_options = [item for item in review_options if item['id'] != review_measured['effort_option']] + review_effort
+                score = review_measured['overall']
+                quality_fields = {'quality_score':score, 'quality_p':None if score is None else score / 100,
+                    'quality_n':review_measured['n'], 'quality_s':review_measured['passed'],
+                    'quality_basis':review_measured['basis'], 'quality_evidence':review_measured}
             review_native = {'instanceId': str(instance), 'model': str(model),
                              **({'options': review_options} if review_options else {})}
             categories["orchestrator"].append({**row, 'selection_eligible': True, 'selection_reason': '', 'native': review_native,
-                                               'effort': review_effort[0] if review_effort else None})
+                                               'effort': review_effort[0] if review_effort else None, **quality_fields})
     for category, rows in categories.items():
         rows[:] = ordered(rows)
         native_providers, native_pools = {}, {}
@@ -285,6 +352,23 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 group['selected'][category] = row['native']
             if row["available"] and row["selection_eligible"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
+    # Quality chooses the provider's model. Capacity orders those provider
+    # choices across the lane; no provider name has a fixed position.
+    for category, rows in categories.items():
+        displayed_choices = {provider: group['selected'][category] or next(
+            (item['native'] for item in rows if item['provider'] == provider
+             and item['picker_eligible'] and item['selection_eligible']), None)
+            for provider, group in providers.items()}
+        def lane_key(row):
+            displayed = displayed_choices[row['provider']]
+            picked = row['native'] is not None and row['native'] == displayed
+            capacity = row['remaining_ratio']
+            return (not picked, not row['available'], TRUST.get(row['trust_level'],3),
+                    row.get('ranking_pace_state', row['pace_state']) == 'far_behind', -(capacity if capacity is not None else -1),
+                    row['position'])
+        rows.sort(key=lane_key)
+        for index, row in enumerate(rows,1):
+            row['position'] = index
     return {"schema": SCHEMA, "generated_at": snapshot.get("generated_at"),
             "partial": bool(snapshot.get("partial", False)),
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
@@ -316,6 +400,10 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'effort': str(effort.get('value') or ''),
                       'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown'))}
             numbers = {'info': 1.0, 'position': row['position'],
+                       'selected': float(row.get('native') is not None and row.get('native') == (
+                           (((selection.get('providers') or {}).get(row['provider']) or {}).get('selected') or {}).get(category)
+                           or next((item['native'] for item in selection.get(category) or []
+                               if item['provider'] == row['provider'] and item['picker_eligible'] and item['selection_eligible']), None))),
                        'provider_position': row.get('picker_provider_position', row.get('provider_position')),
                        'pool_position': row.get('picker_pool_position', row.get('pool_position')),
                        'quality': row.get('quality_score'),
