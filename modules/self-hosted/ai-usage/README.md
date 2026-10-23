@@ -552,6 +552,51 @@ collector publishes it as `ghostship_ai_account_window_rolling`, so the
 page can say 'rolling'. The mark is carried as the inference published it:
 a window of an inference that carries no mark publishes no rolling series.
 
+### The availability of an account
+
+An account whose limit was never seen used to reach the Providers page as a
+bare "learning window" chip: the page could not say whether the account
+could serve a request at all. The collector now publishes, per account,
+whether the account can serve right now, why it cannot when it cannot,
+whether its limit is unpublished or still being learned, and when that was
+observed. Everything is read from the routing snapshot, and nothing is
+recomputed.
+
+| Series | Value |
+| --- | --- |
+| `ghostship_ai_account_availability{account,state,basis,reason}` | 1 for every account: whether it can serve right now, with the reason it cannot when it cannot, and the basis of its limit |
+| `ghostship_ai_account_availability_check_timestamp_seconds{account}` | when the availability of the account was observed: the newest observation of the routes that were counted |
+
+The account is every key of `quota.accounts` and every provider of the
+candidates, so an account the snapshot knows only by its routes is published
+too, and every account holds exactly one series.
+
+The routes of an account that count are its free or promotional routes when
+it holds any, and all of its routes otherwise. A paid route never stands in
+for a free one, and a free route never stands in for a paid one: the
+OpenCode Go account is counted by its five free routes and not by the paid
+routes of the same subscription, and the check time of the account is the
+newest observation of those free routes alone.
+
+The state is `available` when one of the routes that count is available, and
+`unavailable` otherwise. The reason belongs to an account that cannot
+serve, and it is the reason its routes carry most often; a route that says
+nothing does not count against a route that says something. When no route
+says anything, a route that is in cooldown names the moment it cools down
+(`cooling down until 04:48 UTC`), and an account that holds no route at all
+says `no route available`. The reason is published exactly as it reads, and
+it is empty for an account that can serve: an available account has no
+reason to give.
+
+The basis says where the limit of the account comes from, and the three are
+never mixed:
+
+| Basis | What it means |
+| --- | --- |
+| `learning` | a route of the account never saw a limit failure, so the account is still learning its window |
+| `unpublished` | the account publishes no window with a number, so its limit is unknown and is never read as a zero |
+| `published` | the account publishes a window of its own |
+
 ### The static worker table
 
 While the routing switch is off, the selection in force is the owner's static
@@ -935,6 +980,8 @@ intelligence placed inside the range of the tier it competes in
 (`p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min)`), shrunk toward the rounds
 that were actually observed (`p = (k * p0 + s) / (k + n)`, with `k = 10`), and
 combined with the measured efficiency (`value = 0.70 * p + 0.30 * E`). The
+rounds n and s are the model's own outcomes: a round of the environment, or
+one whose cause is the `brief` or the `chief` reviewer, counts in neither. The
 trust scales it: an untrusted route keeps half of it. The Artificial
 Analysis value is published beside the published value, so the two cannot
 disagree about what the order was made of.
