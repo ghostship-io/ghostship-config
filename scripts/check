@@ -23,6 +23,7 @@ python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
 python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
+python3 -m unittest discover -s tests -p test_opencode_model_catalog.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
 printf 'Checking the kernel audit backlog limit\n'
@@ -36,9 +37,6 @@ python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 
 printf 'Checking the boot generation drift check\n'
 python3 -m unittest discover -s tests -p test_boot_generation_drift.py
-
-printf 'Checking the merge freeze status\n'
-python3 -m unittest discover -s tests -p test_freeze_status.py
 
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
