@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.140] - 2026-10-23
+## [3.17.141] - 2026-10-23
 
 - ai-usage: a provider whose published rate limits apply per model gets one learned limit per model, never one account-wide limit. Live, a Google account (the Gemini API key) read one account-wide 5h window fitted across three models, while Google documents per-model, per-project limits: the engine read two models refused seconds apart as one shared pool, and for these providers that is the same request refused by each model's own cap. The engine names `google` and `groq` as the per-model providers, with the sources of both (Google per project and per model, Groq per model and per organization), and measures every refused route of them on its own events with scope `model`, exactly like a route whose scope evidence said `model` today. A route of such a provider that was never refused keeps `no_failure` and `unknown`, and no route reads another model's events for its window, budget or state. Every other provider is unchanged, and the model-scoped capacity is still filed by `usage_inference.key_for` under `provider/model` with `applies_to [model]`.
+
+## [3.17.140] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `3f108af0` (agent 0.43.55). It adds the read-only `containers resources` host operation for CPU, memory against the declared limit, PIDs and host headroom, with 1 h/24 h peaks and a `stale` outcome when the container snapshot stops writing or a container restarted after it; the broker needs no new pipeline and no `metrics` section because it reads the counters the SIEM already collects. The bump also carries #152 (deploy slot), #157 (routing and worker policy), #139 (session handoff) and #155 (brief lesson), and #158, which retires the deployment freezes so that an owner deploy request is what deploys - the reason this pin goes out now.
 
 ## [3.17.139] - 2026-10-23
 
