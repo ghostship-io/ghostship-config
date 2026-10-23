@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.201] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7bf7ec3e; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #365.
+
 ## [3.17.200] - 2026-10-23
 
 Use the managed worker executable when validating Console OAuth migration.
