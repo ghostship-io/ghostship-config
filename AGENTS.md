@@ -1,12 +1,15 @@
 # Project instructions
 
 - Follow [shared preferences](home/config/AGENTS.md).
-- Validate with `nix develop .#ci -c scripts/check`; stage new Nix files first.
+- Run focused fast unit tests with `nix develop .#ci -c`; stage new Nix files first.
   Use `nix develop .#browser` when local Playwright browsers are required.
-- Work on a named branch in an isolated worktree. Commit verified changes,
-  push, and open a draft PR. Resolve CI failures, merge conflicts, and review
-  comments; mark ready when checks pass. Leave merging to the user.
-- Bump `VERSION` and update `CHANGELOG.md` for completed changes.
+- Work on a named branch in an isolated worktree. A frontier model reviews its
+  own change; other models need one frontier review. Record the review with
+  `agent review approve`, then land with `agent pr land` and deploy your own
+  work. Follow the agent repository's `config/agents/routing-policy.md`.
+- Keep `VERSION` and `CHANGELOG.md` out of PRs. `agent pr land` publishes one
+  release commit on main; use a PR body `## Changelog` section for release
+  notes and `Release: minor` or `Release: major` for an explicit larger bump.
 - Cloudflare Access bypasses, direct Internet listeners and public IPv6 rules
   require explicit user approval recorded in the service configuration. Every
   Internet-facing service requires an enabled, attached AppArmor profile; use
