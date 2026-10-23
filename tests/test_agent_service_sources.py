@@ -1,5 +1,6 @@
 """Content-scoped MCP sources retain the transitive Python package closure."""
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -81,3 +82,55 @@ class SourceClosureTests(unittest.TestCase):
                                   capture_output=True,text=True,check=True,timeout=10)
             self.assertEqual(json.loads(result.stdout),
                              {'sessions':True,'policy':True,'inventory':True,'ingress':False})
+
+    def test_coordinator_mounts_only_read_only_review_metadata(self):
+        expression = r'''
+          let
+            suffix = a: b: let n = builtins.stringLength b - builtins.stringLength a;
+              in n >= 0 && builtins.substring n (builtins.stringLength a) b == a;
+            lib = {
+              mkIf = condition: value: value;
+              hasSuffix = suffix;
+              removeSuffix = a: b: if suffix a b then builtins.substring 0
+                (builtins.stringLength b - builtins.stringLength a) b else b;
+              findFirst = pred: fallback: values: let found = builtins.filter pred values;
+                in if found == [] then fallback else builtins.head found;
+            };
+            config = {
+              ghostship.githubEngineering.enable = true;
+              ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path = "/secrets/coordinator";
+              virtualisation.oci-containers.containers.t3code.volumes = ["/worker-home:/home/t3code:rw"];
+            };
+            result = import __SOURCE__ { inherit config lib; pkgs = {}; inputs = {}; };
+            coordinator = result.config.virtualisation.oci-containers.containers.ghostship-github-coordinator;
+          in { inherit (coordinator) volumes environment; }
+        '''.replace('__SOURCE__',str(ROOT/'modules/self-hosted/github-engineering.nix'))
+        result = subprocess.run(['nix','eval','--impure','--json','--expr',expression],
+                                capture_output=True,text=True,check=True,timeout=10)
+        data=json.loads(result.stdout)
+        self.assertIn('/worker-home/.local/state/ghostship/reviews:/reviews:ro,noexec,nosuid,nodev',data['volumes'])
+        self.assertEqual(data['environment']['GHOSTSHIP_REVIEW_STORE'],'/reviews')
+        self.assertFalse(any('/.t3/userdata' in value or '/.config/gh' in value for value in data['volumes']))
+
+    @unittest.skipUnless(shutil.which('setfacl') and shutil.which('getfacl'), 'requires POSIX ACL tools')
+    def test_review_acl_survives_ownership_reconciliation_and_atomic_replacement(self):
+        # T3 recursively chowns its home; a shared-group grant was lost this way.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(['setfacl', '-m', 'u:62031:rX,d:u:62031:rX', str(root)], check=True)
+            receipt = root / 'receipt.json'
+            receipt.write_text('{}')
+            receipt.chmod(0o640)
+            os.chown(root, os.getuid(), os.getgid())
+            os.chown(receipt, os.getuid(), os.getgid())
+            with tempfile.NamedTemporaryFile(dir=root, delete=False) as stream:
+                replacement = Path(stream.name)
+                stream.write(b'{}')
+            replacement.chmod(0o640)
+            replacement.replace(receipt)
+            os.chown(receipt, os.getuid(), os.getgid())
+            acl = subprocess.check_output(['getfacl', '-cpn', str(receipt)], text=True)
+            self.assertIn('user:62031:r-', acl)
+            self.assertIn('mask::r--', acl)
+            self.assertIn('default:user:62031:r-x', subprocess.check_output(
+                ['getfacl', '-cpn', str(root)], text=True))
