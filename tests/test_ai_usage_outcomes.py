@@ -355,3 +355,55 @@ class TrustTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LeadCauseTests(unittest.TestCase):
+    """A round the lead caused is not the model's outcome."""
+
+    def rounds(self):
+        rows = []
+        verdicts = (
+            [("accepted", None)] * 7
+            + [("accepted", "brief")]
+            + [("reworked", "brief")] * 3
+            + [("reworked", "model")]
+            + [("rejected", "chief")]
+        )
+        for index, (verdict, cause) in enumerate(verdicts):
+            rows.append(
+                {
+                    "round_id": f"r-{index}",
+                    "model": "ollama-cloud/deepseek-v4.1-flash:1017",
+                    "task_type": "implementation",
+                    "verdict": verdict,
+                    "verdict_source": "manual",
+                    "cause": cause,
+                    "fabrication": 0,
+                    "started_at": f"2026-10-22T{10 + index:02d}:00:00Z",
+                }
+            )
+        return rows
+
+    def test_a_brief_or_chief_round_counts_in_neither_n_nor_s(self):
+        # Catches the lead's own mistakes being charged to the model: only
+        # the seven clean accepts and the one model-caused rework count.
+        outcomes = outcomes_module()
+        counts = outcomes.outcome_counts(self.rounds(), [], identities())
+        entry = counts[("deepseek-v4.1-flash-1017", "implementation")]
+        self.assertEqual((entry["n"], entry["s"]), (8, 7))
+
+    def test_a_backfill_summary_is_never_read_as_a_cause(self):
+        # The backfill has no cause field; a summary that names the brief is
+        # still the model's outcome.
+        outcomes = outcomes_module()
+        row = {
+            "model": "ollama-cloud/deepseek-v4.1-flash:1017",
+            "task_type": "implementation",
+            "started_at": "2026-09-30T10:00:00Z",
+            "verdict": "reworked",
+            "fabrication": False,
+            "ref": "opencode:s-1",
+            "summary": "brief",
+        }
+        counts = outcomes.outcome_counts([], [row], identities())
+        self.assertEqual(counts[("deepseek-v4.1-flash-1017", "implementation")]["n"], 1)
