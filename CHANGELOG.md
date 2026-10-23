@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.139] - 2026-10-23
+
+- ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, and the observation's limit now keeps its reported `scope="model"`. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
+
 ## [3.17.138] - 2026-10-23
 
 - ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
