@@ -7,7 +7,7 @@
 
 let
   homepage-secrets = config.ghostship.selfHostedSecrets.projections.homepage.path;
-  render-homepage-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project homepage";
+  render-homepage-secrets = "${config.ghostship.selfHostedSecrets.renderFor "homepage"}/bin/ghostship-secret-project homepage";
   brokerConfig = pkgs.writeText "homepage-podman-broker.conf" (
     builtins.readFile ./homepage-podman-broker.conf
   );

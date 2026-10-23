@@ -223,7 +223,7 @@ in
       after = [ "init-ghostship-github-net.service" ];
       requires = [ "init-ghostship-github-net.service" ];
       preStart = lib.mkBefore ''
-        ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-hooks
+        ${config.ghostship.selfHostedSecrets.renderFor "ghostship-hooks"}/bin/ghostship-secret-project ghostship-hooks
       '';
     };
 
@@ -302,7 +302,7 @@ in
         # Search permission only; the coordinator can read the public-mode list,
         # without listing the private handoff directory.
         ${pkgs.acl}/bin/setfacl -m u:62031:--x /srv/apps/t3code/home/.t3/handoffs
-        ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-github-coordinator
+        ${config.ghostship.selfHostedSecrets.renderFor "ghostship-github-coordinator"}/bin/ghostship-secret-project ghostship-github-coordinator
         ${renderOwnerConfig}/bin/ghostship-render-owner-config ${coordinatorConfigTemplate} ${root}/config.json 644
       '';
     };
