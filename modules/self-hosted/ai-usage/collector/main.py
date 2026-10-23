@@ -35,6 +35,7 @@ import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
+import static_routes as static_routes_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
 import usage_inference  # noqa: E402
@@ -380,6 +381,25 @@ METRIC_HELP = {
         "One when the owner's routing switch is on. The collector publishes "
         "the switch and never acts on it itself."
     ),
+    "ghostship_ai_static_route_info": (
+        "One for every model of the owner's static worker table, with the "
+        "role the table gives it and every entry that names it."
+    ),
+    "ghostship_ai_static_route_remaining_ratio": (
+        "The share left of a static route's capacity, read from the routing "
+        "snapshot's candidate of that route."
+    ),
+    "ghostship_ai_static_route_paced_availability": (
+        "The Paced Availability of a static route: the pace delta of the "
+        "capacity of its candidate."
+    ),
+    "ghostship_ai_static_route_reset_timestamp_seconds": (
+        "When the capacity window that binds a static route resets."
+    ),
+    "ghostship_ai_static_route_policy_ok": (
+        "One when the runtime policy that carries the static worker routes "
+        "was read, zero when it is missing or unreadable."
+    ),
 }
 
 GAUGE_METRICS = tuple(METRIC_HELP)
@@ -692,6 +712,85 @@ def _published_unlimited_routes(
     return routes
 
 
+def _measured_window_keys(
+    measured_windows: Iterable[Mapping[str, Any]],
+) -> set[str]:
+    """The keys the provider-reported windows occupy.
+
+    A window the provider reports for the whole account is keyed by the
+    provider, and the one it reports for a single model by the route. An
+    inferred window is filed beside them, never over them.
+    """
+    keys: set[str] = set()
+    for measured in measured_windows or ():
+        provider = str(measured.get("provider") or "")
+        if not provider:
+            continue
+        model = str(measured.get("model") or "*")
+        keys.add(provider if model == "*" else f"{provider}/{model}")
+    return keys
+
+
+def inferred_windows(
+    context: Mapping[str, Any],
+    occupied: Iterable[str],
+    moment: float,
+) -> list[dict[str, Any]]:
+    """The windows the limit failures of the routes imply, in filing order.
+
+    The capacity of a route is its own learned window, not its provider's
+    silence. A route that was never refused files a "no limit seen" window
+    under the provider key; while a refused route of the same provider
+    exists, that quiet window is not the provider's capacity and it never
+    takes the provider key: the learned window of the refused route is.
+
+    A reported or a published window is never replaced. The keys those
+    windows already occupy are given, and an inferred window is skipped when
+    the account, the route, or the key itself holds one. The account's
+    capacity is the same for every one of its routes, so it is filed once.
+
+    Each entry carries the key it is filed under, the route it came from,
+    the model families it applies to, and the window itself. The ranking
+    reads the key and the window; the snapshot publishes the account record,
+    which keeps the route's model as the scope of a model-scoped limit.
+    """
+    capacities = context.get("inferred_capacity") or {}
+    taken = set(occupied)
+    refused = {
+        str(capacity.get("provider") or "")
+        for capacity in capacities.values()
+        if str(capacity.get("state") or "") != usage_inference.STATE_NO_FAILURE
+    }
+    filed: list[dict[str, Any]] = []
+    keys: set[str] = set()
+    for route, capacity in sorted(capacities.items()):
+        provider, model = str(route[0]), str(route[1])
+        state = str(capacity.get("state") or "")
+        if state == usage_inference.STATE_NO_FAILURE and provider in refused:
+            # A route that was never refused stands behind no budget at
+            # all, and it never stands in for a refused route of its
+            # provider.
+            continue
+        key = usage_inference.key_for(capacity)
+        if key in taken or provider in taken or f"{provider}/{model}" in taken:
+            continue
+        if key in keys:
+            continue
+        keys.add(key)
+        filed.append(
+            {
+                "key": key,
+                "provider": provider,
+                "model": model,
+                "applies_to": (
+                    (model,) if str(capacity.get("scope") or "") == "model" else ()
+                ),
+                "window": usage_inference.window_for(capacity, moment),
+            }
+        )
+    return filed
+
+
 def provider_limit_samples(
     inputs: Mapping[str, Any],
 ) -> list[Sample]:
@@ -951,22 +1050,10 @@ def ranking_inputs(
     # overrides a reported reading, and a route whose account already has a
     # window keeps that one as well. The window is keyed by the route when
     # the limit is the model's own, and by the provider when the limit
-    # belongs to the account.
-    inferred_keys: set[str] = set()
-    for route, capacity in sorted((context.get("inferred_capacity") or {}).items()):
-        provider, model = str(route[0]), str(route[1])
-        key = usage_inference.key_for(capacity)
-        if key in windows or provider in windows or f"{provider}/{model}" in windows:
-            # A reported window of the route, of the account, or of the
-            # route itself is the reading: the inference does not replace
-            # it.
-            continue
-        if key in inferred_keys:
-            # The account's capacity is the same for every route of the
-            # account, so it is filed once.
-            continue
-        inferred_keys.add(key)
-        windows.setdefault(key, []).append(usage_inference.window_for(capacity, moment))
+    # belongs to the account. A route that was never refused never stands in
+    # for a refused route of its provider.
+    for inferred in inferred_windows(context, windows, moment):
+        windows.setdefault(inferred["key"], []).append(inferred["window"])
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
@@ -1435,6 +1522,13 @@ def build_snapshot(
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
+        # The learned windows of the routes whose limit failures measured
+        # them. The account section publishes them beside the reported
+        # readings, never over one, and a refused route keeps its record
+        # even while it has no ranked row.
+        inferred_windows=inferred_windows(
+            context, _measured_window_keys(measured_windows or []), now
+        ),
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
@@ -1763,6 +1857,7 @@ def render(
     now: float,
     duration: float,
     snapshot: dict[str, Any] | None = None,
+    runtime_policy: str | None = None,
 ) -> str:
     writer = MetricWriter()
     for name, help_text in METRIC_HELP.items():
@@ -1821,6 +1916,21 @@ def render(
     for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    # The name the collector already publishes for a model, so a static row
+    # says what the model is. The row falls back to the model id.
+    display_names: dict[tuple[str, str], str] = {}
+    for name, labels, _value in list(_iter_samples(results)) + list(extra):
+        if name != "ghostship_ai_model_info":
+            continue
+        provider = str(labels.get("provider") or "")
+        model = str(labels.get("model") or "")
+        text = str(labels.get("name") or "")
+        if provider and model and text:
+            display_names[(provider, model)] = text
+    for name, labels, value in static_routes_module.samples(
+        runtime_policy, snapshot or {}, display_names
+    ):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -1945,6 +2055,15 @@ def main(argv: list[str] | None = None) -> int:
             "consumers and never acts on it itself."
         ),
     )
+    parser.add_argument(
+        "--runtime-policy",
+        default="",
+        help=(
+            "The runtime policy that carries the owner's static worker "
+            "routes. A missing or unreadable file publishes no static rows "
+            "and says so; the rest of the collection is unaffected."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -1980,7 +2099,14 @@ def main(argv: list[str] | None = None) -> int:
         aa_3d_cache=aa_3d_cache,
         routing_enabled=routing_enabled,
     )
-    text = render(results, extra, now, duration, snapshot)
+    text = render(
+        results,
+        extra,
+        now,
+        duration,
+        snapshot,
+        runtime_policy=args.runtime_policy,
+    )
     if args.stdout:
         sys.stdout.write(text)
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")

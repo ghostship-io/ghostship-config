@@ -1,8 +1,22 @@
 # Changelog
 
-## [3.17.99] - 2026-10-22
+## [3.17.102] - 2026-10-23
 
 - ai-usage: a Requesty request counts toward its learned limit. OpenCode records the request as "vendor/model", while the collector's route is the model alone, so every such event was unmatched and dropped, and the limit failures of the route never reached the inference. The matching now falls back to the model alone when the whole id is unknown, exactly and folded, within the same provider: the prefix is never taken from another provider, never added, and only one segment of it is ever stripped.
+
+## [3.17.101] - 2026-10-22
+
+- AI usage collector: the owner's static model selection is published for the Providers page. While routing is off, the selection in force is `worker_routes.entries` of the runtime policy, and the collector now reads it through `--runtime-policy` and publishes one row per model: the role the table gives it (Bulk 1, Bulk 2, Large, Deploys, Research), every entry that names it with the route's place in that entry, and the share left, the Paced Availability and the reset the routing snapshot already measured for that route. A model listed twice is one row and a model outside the table has none; a route the snapshot does not carry keeps its row with no capacity; a missing or unreadable policy publishes no rows and `ghostship_ai_static_route_policy_ok 0` while everything else is still written. The policy has its own flake input, `ghostship-agent-policy`, so the T3 Code input and its lock entry are unchanged.
+
+## [3.17.100] - 2026-10-22
+
+- AI usage: a provider whose routes hit limit failures now shows its learned window and budget, instead of "no limit seen", in the ranking and in `routing.json` `quota.accounts`. A route of the provider that was never refused filed its own no-failure window under the provider key and hid the refused route's learned window; the quiet route no longer stands in for a refused one of its provider.
+- AI usage: the inferred windows reach `quota.accounts` at all. The account section was filled from the provider-reported windows only, so a learned window never arrived, and a refused route lost its record as soon as it had no ranked row. Each inferred record carries `kind: inferred`, `evidence: inferred`, its basis, and the window, budget, unit, scope, episode count and state it was measured from; a model-scoped limit keeps its model in `applies_to`, and an inferred window with a known share now counts as the provider's remaining capacity instead of an unknown window.
+
+## [3.17.99] - 2026-10-22
+
+- ghostship-agent is pinned to 5fb39a15, the rewritten main with the Google account settings read at runtime (#101, #125, #130). The previous pin, 7f8d9fda, is the rewritten 2318134e, whose Google tooling held the addresses that the privacy rewrite replaced.
+- The MCP container reads its account settings (the owner's and the agent's Google accounts, and the health document folders) from `/etc/ghostship/mcp-identity.env`, outside the repository.
 
 ## [3.17.98] - 2026-10-22
 
