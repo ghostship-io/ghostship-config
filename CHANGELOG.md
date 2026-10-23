@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.188] - 2026-10-23
+
+- Keep T3 container identity independent of agent and tooling releases.
+- Deliver and automatically update T3 tooling through the managed agent in the persistent home.
+- Apply standalone T3 app updates after idle without replacing the container.
+- Enforce switch protection across the T3 service dependency graph.
+
+PR #354.
+
 ## [3.17.187] - 2026-10-23
 
 - Deliver GhostShip service code and worker tooling separately from base container images.
