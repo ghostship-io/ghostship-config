@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.173] - 2026-10-23
+
+- Read coordinator routing from the live runtime coordination list and reject a missing list at startup.
+- Align newsletter incident consumer tests with active-worker routing and digest overflow.
+
+PR #339.
+
 ## [3.17.172] - 2026-10-23
 
 - Prepare writable worker state and allow the nested sandbox to mount its private proc.
