@@ -10,7 +10,9 @@
 #
 # An activation needs the deploy slot, the one deploy at a time the other
 # deploy tooling takes: the helper checks that the caller holds it before it
-# touches the system profile, and releases it once the switch is verified.
+# touches the system profile. The slot stays held after the switch, so the
+# deploy's own checks run inside it; `--verify-only --holder NAME` verifies the
+# generation once more and releases the slot with it.
 set -euo pipefail
 
 system_profile="${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
@@ -31,7 +33,8 @@ Usage: scripts/activate-host [--toplevel PATH] [--verify-only] [--holder NAME]
                    (default GHOSTSHIP_DEPLOY_HOLDER)
 
 An activation needs the deploy slot: the helper checks it before it sets the
-system profile, and releases it once the switch is verified. Without a holder
+system profile, and keeps it held after the switch. `--verify-only --holder
+NAME` verifies the generation and releases the slot, recording the generation. Without a holder
 it exits 3 and names `agent deploy slot acquire`. A verify-only run never
 touches the slot unless a holder is given.
 
@@ -185,9 +188,7 @@ echo "activate-host: recording the system generation in $system_profile"
 nix-env -p "$system_profile" --set "$toplevel"
 echo "activate-host: switching to $toplevel"
 "$toplevel/bin/switch-to-configuration" switch
-if ! verify; then
-  exit 1
-fi
-status=0
-slot_release || status=$?
-exit "$status"
+verify
+# The slot stays held: the deploy's own checks run after the switch, and the
+# separate `--verify-only --holder NAME` run releases it at the end.
+echo "activate-host: $holder still holds the deploy slot; release it with --verify-only --holder"
