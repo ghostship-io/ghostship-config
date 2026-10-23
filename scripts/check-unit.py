@@ -87,8 +87,16 @@ def unit_cases(suite):
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT / "tests"))
+    from check_podman_runtime import RuntimePolicy, findings
+
+    violations = findings(ROOT)
+    if violations:
+        print("\n".join(violations))
+        sys.exit(1)
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromTestCase(RuntimePolicy))
     for pattern in TESTS:
         suite.addTests(unit_cases(loader.discover(str(ROOT / "tests"), pattern=pattern)))
     sys.exit(not unittest.TextTestRunner().run(suite).wasSuccessful())
