@@ -104,6 +104,13 @@ class PaidModelsPageTests(unittest.TestCase):
         row['provider']='opencode'
         self.assertEqual(helper(self.panels[233],'selectionModels',[row])[0]['providerName'],'OpenCode Zen')
 
+    def test_lane_styles_are_scoped_so_they_cannot_restyle_grafana(self):
+        for panel_id in (231, 233):
+            css = re.sub(r'@media[^{]*\{', '', self.panels[panel_id]['options']['styles'])
+            for head in re.findall(r'(?:^|[}\n])\s*([^{}@]+)\{', css):
+                for selector in head.split(','):
+                    self.assertRegex(selector.strip(), r'^\.(lane|selection-card)', selector)
+
     def test_every_dashboard_panel_has_room_for_its_content(self):
         for panel in self.page['panels']:
             if panel['type']=='row':
