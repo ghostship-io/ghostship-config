@@ -1,5 +1,5 @@
-# The hooks.ghostship.io webhook receiver: one stdlib Python script from the Nix store image
-# (no shell), plus the collector's heartbeat /bin/cat in its own domain.
+# Webhook code is delivered through the private managed Nix store; the image
+# contains only base utilities. The heartbeat /bin/cat has its own domain.
 # No abstractions or explicit denies: unmatched operations must remain allowed
 # and visible while this profile is in complain mode.
 profile ghostship-hooks flags=(complain,attach_disconnected,mediate_deleted) {
@@ -9,6 +9,9 @@ profile ghostship-hooks flags=(complain,attach_disconnected,mediate_deleted) {
   signal (receive) peer=unconfined,
   signal (send, receive) peer=ghostship-hooks,
 
+  /nix/store/*-ghostship-hooks-entrypoint/bin/start rix,
+  /nix/store/*-bash-*/bin/bash rix,
+  /nix/store/*-bash-*/lib/** mr,
   /nix/store/*-python3-minimal-*/bin/python3* rix,
   /nix/store/*-coreutils-*/bin/cat cx -> tools,
   /bin/cat cx -> tools,

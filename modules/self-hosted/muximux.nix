@@ -389,7 +389,7 @@ in
         "d /srv/apps/muximux/www/muximux 0755 apps apps -"
       ];
 
-      systemd.services.podman-muximux.preStart = ''
+      systemd.services.ghostship-muximux-config.script = ''
         install -d -m0755 -o apps -g apps /srv/apps/muximux/nginx/site-confs
         install -d -m0755 -o apps -g apps /srv/apps/muximux/www/muximux
         install -m0644 -o apps -g apps ${muximuxDefaultSite} /srv/apps/muximux/nginx/site-confs/default
@@ -405,7 +405,7 @@ in
 
     }
     {
-      systemd.services.podman-muximux.preStart = lib.mkAfter ''
+      systemd.services.ghostship-muximux-config.script = lib.mkAfter ''
         CONFIG_FILE="/srv/apps/muximux/www/muximux/settings.ini.php"
 
         if [ ! -f "$CONFIG_FILE" ]; then

@@ -200,6 +200,20 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(provider['pools']['example:separate']['selected']['worker']['model'], 'separate')
         self.assertEqual([r['pool_position'] for r in provider['pools']['example:all']['worker']], [1, 2])
 
+    def test_picker_positions_do_not_count_routes_the_picker_cannot_offer(self):
+        external = candidate('example', 'inference-only', 95)
+        external['native'] = {'mapped': False}
+        native = candidate('example', 'native', 90)
+        result = self.build([external, native])
+        self.assertEqual(result['default_worker']['model'], 'native')
+        row = next(row for row in result['worker'] if row['model'] == 'native')
+        self.assertEqual(row['provider_position'], 2)
+        self.assertEqual((row['picker_provider_position'], row['picker_pool_position']), (1, 1))
+        published = {name: number for name, labels, number in selection.samples(result)
+                     if labels['model'] == 'native'}
+        self.assertEqual(published['ghostship_ai_picker_model_provider_position'], 1)
+        self.assertEqual(published['ghostship_ai_picker_model_pool_position'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

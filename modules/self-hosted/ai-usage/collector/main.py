@@ -433,6 +433,7 @@ METRIC_HELP = {
         "The place a window takes in the card of its account: 1 is the "
         "session window, and a monthly window comes after a weekly one."
     ),
+    "ghostship_ai_account_window_pace_delta_points": "Weekly or monthly window pace in percentage points, from its own reading.",
     "ghostship_ai_account_window_missing": "Reported provider limits could not be read; this is not a learned window.",
     "ghostship_ai_account_window_learning": (
         "One for an account that publishes no window of its own yet."
@@ -514,6 +515,22 @@ METRIC_HELP = {
         "available and the ones that are not."
     ),
 }
+
+# The picker, discovery and dashboards share this exact selection projection.
+for field, description in {
+    'info': 'Canonical model selection and availability, with native effort and quota pool.',
+    'position': 'Preferred model position across providers in its category.',
+    'default': 'One for the canonical native default worker, zero for other selections.',
+    'provider_position': 'Preferred model position within its provider and category.',
+    'pool_position': 'Preferred model position within its quota pool and category.',
+    'quality': 'Integer Quality score; ordering uses the unrounded posterior.',
+    'quality_rounds': 'Observed model rounds used by Quality.',
+    'quality_accepted': 'Accepted model rounds used by Quality.',
+    'remaining_ratio': 'Remaining share of the displayed long or quota limiting window.',
+    'pace_delta': 'Weekly or monthly limiting window pace in percentage points.',
+    'reset_timestamp_seconds': 'Effective limiting-window reset; reset_source identifies custom resets.',
+}.items():
+    METRIC_HELP['ghostship_ai_picker_model_' + field] = description
 
 GAUGE_METRICS = tuple(METRIC_HELP)
 

@@ -108,12 +108,7 @@ let
     # no_new_privs containers: AppArmor never enters child profiles, so flat.
     github-coordinator = {
       container = "ghostship-github-coordinator";
-      # No cat or shell in the image; its Python reads the boot ID.
-      heartbeat = [
-        "@entrypoint"
-        "-c"
-        "open('/proc/sys/kernel/random/boot_id').read()"
-      ];
+      heartbeat = [ "/bin/cat" "/proc/sys/kernel/random/boot_id" ];
     };
     ghostship.container = "ghostship-private-integrations";
     chaptarr = {
