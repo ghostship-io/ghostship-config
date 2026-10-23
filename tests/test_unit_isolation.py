@@ -45,3 +45,43 @@ class IsolationTests(unittest.TestCase):
         result, log = self.probe("import argparse,os; p=argparse.ArgumentParser(); p.add_argument('--state',default='/var/lib/example/state.json'); assert p.parse_args([]).state.startswith(os.environ['GHOSTSHIP_UNIT_ROOT']); assert p.parse_args(['--state','/run/example']).state == '/run/example'")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(log, '')
+
+    def test_current_repository_source_remains_readable_on_runtime_directory_runners(self):
+        # CI's checkout is beneath /run; this exact import/read failed there.
+        result, log = self.probe("from pathlib import Path; import unit_guard; assert Path(unit_guard.__file__).read_text(); assert Path(unit_guard.__file__).is_file()")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log, '')
+
+    def test_source_exception_is_read_only_and_does_not_allow_neighbor_state(self):
+        result, log = self.probe("import unit_guard as g; g._source='/run/fixture-source'; assert not g.protected('/run/fixture-source/tests/example.py',source_reads=True); assert g.protected('/run/fixture-source/tests/example.py'); assert g.protected('/run/runtime.json',source_reads=True)")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log, '')
+
+    def test_runner_layout_allows_source_resolution_and_temp_cleanup_only(self):
+        result, log = self.probe("""import os,tempfile
+from pathlib import Path
+import unit_guard as g
+root=Path(os.environ['GHOSTSHIP_UNIT_ROOT'])
+source=root/'runtime'/'checkout'
+source.mkdir(parents=True)
+fixture=source/'fixture.py'
+fixture.write_text('fixture')
+scratch=Path(tempfile.mkdtemp(dir='/tmp'))
+(scratch/'file').write_text('temporary')
+os.chdir(source)
+g._source=str(source)
+g._forbidden=(str(source.parent),)
+assert fixture.resolve().read_text() == 'fixture'
+fd=os.open(scratch,os.O_RDONLY)
+os.remove('file',dir_fd=fd)
+os.close(fd)
+scratch.rmdir()
+try:
+ fixture.write_text('must fail')
+except PermissionError:
+ pass
+else:
+ raise AssertionError('source mutation allowed')
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('host state access', log)
