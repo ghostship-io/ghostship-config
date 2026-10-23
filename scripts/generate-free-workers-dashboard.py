@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
-"""Generate the Free models and providers dashboard from ai-usage.json.
+"""Generate Free models from Paid models; refuse drift or paid selectors.
 
-The free dashboard mirrors the Providers and model decisions page (ai-usage.json)
-for the free pool:
-- Swaps selector filters:
-  picker_eligible="true",provider!="openrouter" -> billing=~"free|promotion"
-  scope="t3",account!="openrouter" -> scope="free"
-- Drops paid-only panels (orchestrators text & dynamictext)
-- Drops paid-only variables (orchestrator_model)
-- Updates metadata (uid="ghostship-free-workers", title="Free models and providers")
-- Re-layouts vertical positions without gaps
-
-Usage:
-  python3 scripts/generate-free-workers-dashboard.py          # Regenerates free-workers.json
-  python3 scripts/generate-free-workers-dashboard.py --check  # Fails if committed file differs
+Usage: python3 scripts/generate-free-workers-dashboard.py [--check]
 """
 
 import argparse
-import copy
 import difflib
 import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "modules/self-hosted/siem/dashboards/ai-usage.json"
+# Height of the free selection lane in Grafana grid units; tune with the screenshots.
+FREE_LANE_HEIGHT = 14
+FREE_QUALITY_HEIGHT = 16
+SRC = ROOT / "modules/self-hosted/siem/dashboards/paid-models.json"
 DST = ROOT / "modules/self-hosted/siem/dashboards/free-workers.json"
 
 
@@ -32,10 +22,8 @@ SUBSTITUTIONS = (
     ('picker_eligible="true",provider!="openrouter"', 'billing=~"free|promotion"'),
     ('picker_eligible="true",provider=~"$provider",provider!="openrouter"',
      'billing=~"free|promotion",provider=~"$provider"'),
-    ('scope="t3",account!="openrouter"', 'scope="free"'),
+    ('billing!~"free|promotion"', 'billing=~"free|promotion"'),
     (',provider!="pi"', ''),
-    (',account!="pi"', ''),
-    (',account!="openrouter"', ''),
     (',provider!="openrouter"', ''),
 )
 
@@ -58,7 +46,7 @@ def free_selectors(dashboard):
     result = visit(dashboard)
     for old, count in counts.items():
         if count == 0:
-            raise ValueError(f"Providers dashboard selector changed or disappeared: {old}")
+            raise ValueError(f"Paid models selector changed or disappeared: {old}")
     raw = json.dumps(result)
     for forbidden in ('picker_eligible=\\"true\\"', 'scope=\\"t3\\"', 'orchestrator_model'):
         if forbidden in raw:
@@ -66,26 +54,52 @@ def free_selectors(dashboard):
     return result
 
 
-def compact_rows(original, kept):
-    # Rows can contain multiple cards. Remove a row's vertical band only when
-    # the whole row was removed, and never consume the next occupied row.
-    rows = {}
-    for panel in original:
-        if 'gridPos' in panel:
-            pos = panel['gridPos']
-            rows[pos['y']] = max(rows.get(pos['y'], 0), pos['h'])
-    occupied = {p['gridPos']['y'] for p in kept if 'gridPos' in p}
-    starts = sorted(rows)
-    removed = []
-    for i, y in enumerate(starts):
-        if y not in occupied:
-            end = min(y + rows[y], starts[i + 1]) if i + 1 < len(starts) else y + rows[y]
-            removed.append((y, end))
-    for panel in kept:
-        if 'gridPos' in panel:
-            pos = panel['gridPos']
-            y = pos['y']
-            pos['y'] -= sum(end - start for start, end in removed if end <= y)
+# Free providers whose whole pool is blocked have no selectable model. They stay
+# visible as a grey card instead of silently disappearing from the page.
+BLOCKED_QUERY = (
+    '\n or label_replace(label_replace((ghostship_ai_provider_free_models{state="unavailable",provider=~"$provider"} > 0)'
+    ' unless on(provider) (ghostship_ai_provider_free_models{state="available"} > 0),'
+    ' "field", "free_blocked", "", ""), "category", "worker", "", "")'
+    '\n or label_replace(label_replace(count by (provider, reason) (ghostship_ai_picker_model_info{billing=~"free|promotion",'
+    'category="worker",state!="available",provider=~"$provider"}), "field", "free_reason", "", ""), "category", "worker", "", "")'
+)
+BLOCKED_HELPER = """
+context.handlebars.registerHelper('freeBlocked', function(rows) {
+  const names = {opencode:'OpenCode Zen','cloudflare-workers-ai':'Cloudflare','kilo-keyed':'Kilo (keyed)',nvidia:'NVIDIA',ovh:'OVH',zai:'Zai'};
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const pad = (n) => String(n).padStart(2, '0');
+  const clock = (at) => { const d = new Date(at); return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + 'Z'; };
+  const why = new Map();
+  for (const row of rows || []) {
+    if (!row || row.field !== 'free_reason' || !row.provider || !(Number(row.value) > 0)) { continue; }
+    const text = String(row.reason || '');
+    const until = text.match(/until (\\d{4}-\\d\\d-\\d\\dT[\\d:]+Z)/);
+    const label = until ? 'cooling · back ' + clock(Date.parse(until[1])) : /not offered/i.test(text) ? 'not offered'
+      : /exclud/i.test(text) ? 'excluded' : (text.replace(/_/g, ' ').slice(0, 24) || 'unavailable');
+    const groups = why.get(row.provider) || new Map();
+    groups.set(label, (groups.get(label) || 0) + Number(row.value));
+    why.set(row.provider, groups);
+  }
+  return (rows || []).filter(row => row && row.field === 'free_blocked' && row.provider && Number(row.value) > 0)
+    .map(row => ({provider: row.provider, count: Number(row.value),
+      name: names[row.provider] || String(row.provider).charAt(0).toUpperCase() + String(row.provider).slice(1),
+      icon: String(row.provider).charAt(0).toUpperCase(),
+      why: Array.from((why.get(row.provider) || new Map()).entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
+        .map(([label, count]) => count + ' ' + label).join(' · ')}))
+    .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+});
+"""
+BLOCKED_CARD = (
+    '{{#each (freeBlocked data)}}<article class="selection-card restricted blocked" data-provider="{{this.provider}}">'
+    '<div class="sc-h"><span class="ico">{{this.icon}}</span><span class="model-provider">{{this.name}}</span></div>'
+    '<h3>No model available</h3><div class="reason">{{#if this.why}}{{this.why}}{{else}}{{this.count}} models blocked{{/if}}</div></article>{{/each}}</div></section>'
+)
+FREE_STYLES = (
+    ".selection-card.blocked .reason{display:block;color:#b5b8c0}.selection-card.blocked{opacity:.75}"
+    ".selection-card .capacity-graph.open .graph-label{margin-top:5px}"
+    ".selection-card .evid{display:none}@media (max-width:768px){.selection-card{padding:8px 8px}.lane-g{gap:6px}}"
+    "@media (max-width:768px){.selection-card .capacity-graph,.selection-card .model-pace,.selection-card .nolimit{display:none}.selection-card.restricted .capacity-graph{display:block}}"
+)
 
 
 def generate():
@@ -93,53 +107,54 @@ def generate():
 
     # 1. Metadata
     dashboard["uid"] = "ghostship-free-workers"
-    dashboard["title"] = "Free models and providers"
-    dashboard["description"] = "Free pool mirror of the Providers and models dashboard"
-    dashboard["links"] = [
-        {
-            "title": "Providers",
-            "type": "link",
-            "url": "/d/ghostship-ai-usage",
-            "targetBlank": False,
-        }
+    dashboard["title"] = "Free models"
+    dashboard["description"] = "Free pool generated from Paid models. One selected model per free provider; public tasks only."
+    dashboard['links'] = [
+        {'title': title, 'type': 'link', 'url': '/d/' + uid, 'targetBlank': False}
+        for title, uid in [('Providers', 'ghostship-ai-usage'),
+                           ('Paid models', 'ghostship-paid-models'),
+                           ('Free models', 'ghostship-free-workers')]
     ]
 
     dashboard["templating"]["list"] = [
         v for v in dashboard.get("templating", {}).get("list", [])
         if v.get("name") != "orchestrator_model"
     ]
-    original = copy.deepcopy(dashboard.get("panels", []))
     panels = []
     for panel in dashboard.get("panels", []):
         if panel.get("id") in {230, 231} or panel.get("repeat") == "orchestrator_model":
             continue
-
-        if panel.get("id") == 200:
-            panel["options"]["content"] = (
-                '<div style="font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere">'
-                '<strong>Free models and providers</strong>'
-                '<span style="font-size:11px;color:#8b8f99"> · Free worker pool and free provider accounts · Public tasks only</span>'
-                '</div>'
-            )
-        elif panel.get("id") == 232:
-            panel["options"]["content"] = (
-                '<div style="font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere">'
-                '<strong>Free worker models</strong>'
-                '<span style="font-size:11px;color:#8b8f99"> · Public-only policy · Exhausted routes greyed out · Dynamic ordering by capacity</span>'
-                '</div>'
-            )
-        elif panel.get("id") == 234:
-            panel["options"]["content"] = (
-                '<div style="font-family:Inter,system-ui,sans-serif;max-width:100%;overflow-wrap:anywhere">'
-                '<strong>Free provider capacity</strong>'
-                '<span style="font-size:11px;color:#8b8f99"> · Short windows are blue above zero. Only weekly/monthly windows are paced.</span>'
-                '</div>'
-            )
-
+        if panel.get("id") == 233:
+            panel["gridPos"].update(x=0, w=24, h=FREE_LANE_HEIGHT)
+            options = panel["options"]
+            options["content"] = (options["content"]
+                .replace('data-lane="worker"', 'data-lane="free"')
+                .replace('<b>Workers</b><span>one per provider · ranked by Paced Availability</span>',
+                         '<b>Free workers</b><span>one selected model per free provider · public tasks only</span>')
+                .replace('</div></section>', BLOCKED_CARD))
+            if BLOCKED_CARD not in options["content"]:
+                raise ValueError("Paid models worker lane changed: cannot append blocked free providers")
+            options["helpers"] += BLOCKED_HELPER
+            options["styles"] += FREE_STYLES
+            options["defaultContent"] = (
+                '<div class="lane"><div class="lane-h"><b>Free workers</b>'
+                '<span>No free model selected in the latest snapshot</span></div></div>')
+            panel["targets"][0]["expr"] += BLOCKED_QUERY
+            panel["description"] = ("Latest snapshot. One selected free model per free provider in collector order; "
+                                    "providers with no available model stay as a grey card.")
+        if panel.get("id") == 250:
+            panel["gridPos"].update(y=FREE_LANE_HEIGHT + 1, h=FREE_QUALITY_HEIGHT)
+            panel["options"]["afterRender"] = panel["options"]["afterRender"].replace("?3:15", "?5:7")
+            if "?5:7" not in panel["options"]["afterRender"]:
+                raise ValueError("Paid models quality pager changed: cannot size the free page")
         panels.append(panel)
 
-    compact_rows(original, panels)
     dashboard["panels"] = panels
+    for panel in panels:
+        if panel.get("type") == "row":
+            panel["gridPos"]["y"] = FREE_LANE_HEIGHT + 1 + FREE_QUALITY_HEIGHT
+            for index, nested in enumerate(panel.get("panels", [])):
+                nested["gridPos"]["y"] = panel["gridPos"]["y"] + 1 + 8 * index
     dashboard = free_selectors(dashboard)
     return json.dumps(dashboard, indent=2) + "\n"
 

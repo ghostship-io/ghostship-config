@@ -19,6 +19,17 @@ NOW = 1_800_000_000.0
 HOUR = 3600.0
 
 
+class OpenCodeBillingTests(unittest.TestCase):
+    def test_go_is_paid_even_when_a_catalog_or_pool_calls_the_route_free(self):
+        pair = ('opencode-go', 'example-free')
+        for free, promo in (({pair}, set()), (set(), {pair}), (set(), set())):
+            record = snapshot._access_record(*pair, free, promo, {'input': 0, 'output': 0})
+            self.assertEqual(record['billing'], 'subscription')
+            self.assertEqual(record['kind'], 'provider_paid')
+        zen = snapshot._access_record('opencode', 'example-free', {('opencode', 'example-free')}, set(), {})
+        self.assertEqual(zen['billing'], 'free')
+
+
 class Ranked:
     """A ranked model, shaped like the ranking engine's own entry."""
 
