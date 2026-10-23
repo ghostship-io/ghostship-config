@@ -32,6 +32,10 @@ python3 -m unittest discover -s tests -p 'test_t3code_docker_*.py'
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/apparmor/t3code.profile
 
+printf 'Checking the container containment policy model and module\n'
+nix eval --impure --json --file tests/container-isolation.nix >/dev/null
+python3 tests/check_container_isolation.py selftest >/dev/null
+
 printf 'Checking the configuration drift check\n'
 python3 -m unittest discover -s tests -p test_configuration_drift.py
 nix eval --impure --json --file tests/configuration-drift.nix >/dev/null

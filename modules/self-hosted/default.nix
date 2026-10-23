@@ -10,6 +10,7 @@
     ./ca-distrust.nix
     ./siem
     ./container-hardening.nix
+    ./container-isolation.nix
     ./security-monitoring.nix
     ./cloudflare-sync.nix
     ./reliability.nix
