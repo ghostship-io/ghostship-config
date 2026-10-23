@@ -13,8 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-SOURCE = Path(__file__).resolve().parents[1] / "packages/t3code/docker-sandbox/ports.py"
-SPEC = importlib.util.spec_from_file_location("docker_ports", SOURCE)
+SOURCE = Path(__file__).resolve().parents[1] / "packages/t3code/dev-engine/ports.py"
+SPEC = importlib.util.spec_from_file_location("podman_ports", SOURCE)
 ports = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ports)
 
@@ -126,7 +126,7 @@ class PortBridge(unittest.IsolatedAsyncioTestCase):
 
     async def test_random_published_port_flows_through_unix_gateway(self):
         # Defect: Compose-assigned ports are not discovered or the Unix hop
-        # loses bytes/half-close. These are real sockets, with no Docker mocks.
+        # loses bytes/half-close. These are real sockets, with no Podman mocks.
         with tempfile.TemporaryDirectory() as directory:
             gateway_path = str(Path(directory) / "gateway.sock")
             api_path = str(Path(directory) / "api.sock")

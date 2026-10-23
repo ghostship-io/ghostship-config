@@ -8,7 +8,7 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location(
     "candidate",
     Path(__file__).resolve().parents[1]
-    / "packages/t3code/docker-sandbox/host-candidate.py",
+    / "packages/t3code/dev-engine/host-candidate.py",
 )
 candidate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(candidate)

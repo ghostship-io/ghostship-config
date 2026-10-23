@@ -1,4 +1,4 @@
-"""Assemble ONLY the dedicated Docker manager's disposable filesystem.
+"""Assemble ONLY the dedicated Podman manager's disposable filesystem.
 
 Runs as root during opt-in activation, never against the active T3 container.
 All mounts are below a private /run directory. No ownership/ACL changes to source
@@ -84,7 +84,7 @@ def assemble(root, spec):
                 raise ValueError("invalid engine closure entry")
             if not destination(root, path).exists():
                 raise ValueError(
-                    f"seed t3codeDocker.runtimePackage into the private T3 Nix store first: {path}"
+                    f"seed t3codePodman.runtimePackage into the private T3 Nix store first: {path}"
                 )
         # Read-only bind mounts still allow connecting to Unix sockets. Hide
         # the inner Nix daemon socket, rather than trusting read-only flags.
@@ -116,8 +116,8 @@ def main():
     parser.add_argument("root", type=Path)
     parser.add_argument("spec", type=Path)
     args = parser.parse_args()
-    if args.root != Path("/run/t3code-docker-rootfs"):
-        parser.error("only /run/t3code-docker-rootfs may be managed")
+    if args.root != Path("/run/t3code-podman-rootfs"):
+        parser.error("only /run/t3code-podman-rootfs may be managed")
     if args.operation == "start":
         if not Path("/sys/fs/cgroup/cgroup.controllers").exists():
             parser.error("cgroup v2 is required")

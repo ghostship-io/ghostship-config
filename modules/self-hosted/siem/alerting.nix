@@ -151,7 +151,7 @@ in
         RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
         CapabilityBoundingSet = "";
         # Root needs no capability to drive the rootful Podman API; hide it.
-        InaccessiblePaths = [ "-/run/podman" "-/run/docker.sock" ];
+        InaccessiblePaths = [ "-/run/podman" ];
       };
     };
   };
