@@ -2855,7 +2855,16 @@ def build_snapshot(
         account = str(measured.get("provider") or "")
         if not account:
             continue
+        # The window keeps the scope the ranking gives it, so a window that
+        # covers one model family is never published as a window of the
+        # whole account. A reading of one model that names no family is
+        # not a window of the account at all.
+        scope = quota_module.measured_scope(measured)
+        if scope is None:
+            continue
         record = _window_record(measured, now)
+        if scope:
+            record["applies_to"] = [str(token) for token in scope]
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -3541,6 +3550,26 @@ def _window_label(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
     return f"{base} · {suffix}" if suffix else base
 
 
+def _scope_suffix(scope: Iterable[str], label: str) -> str:
+    """The scope of a window, as the label of the row names it.
+
+    A window that covers one model family says which one, and the label of
+    the row names it: 'Session · Claude & GPT'. A label that names the
+    scope already is not named twice: 'Weekly · Fable' stays that.
+    """
+    names = [
+        quota_module.SCOPE_NAMES.get(str(token).lower(), _title_case(token))
+        for token in scope or ()
+    ]
+    names = [name for name in names if name]
+    if not names:
+        return ""
+    text = " & ".join(names)
+    if str(label or "").lower().endswith(text.lower()):
+        return ""
+    return f" · {text}"
+
+
 def account_window_samples(
     snapshot: Mapping[str, Any],
 ) -> list[tuple[str, dict[str, str], float]]:
@@ -3592,13 +3621,20 @@ def account_window_samples(
         ):
             kind = str(window.get("kind") or "")
             quota_id = str(window.get("quota_id") or "")
+            # The scope of the window is named by the label of the row. An
+            # inferred window names the window it was learned over, and
+            # that name is the whole of it.
+            scope = window.get("applies_to") or ()
+            if str(window.get("evidence") or "") == "inferred":
+                scope = ()
+            label = _window_label(kind, quota_id, siblings.get(kind, []))
             labels = {
                 "account": account,
                 "kind": kind,
                 "quota_id": quota_id,
                 # The label is a name for a reader, and it is published the
                 # way it reads.
-                "label": ExactLabel(_window_label(kind, quota_id, siblings.get(kind, []))),
+                "label": ExactLabel(label + _scope_suffix(scope, label)),
                 "evidence": str(window.get("evidence") or "unknown"),
             }
             remaining = _finite(window.get("remaining_ratio"))
