@@ -65,8 +65,11 @@ class ReportedLimitsTests(unittest.TestCase):
         panel = next(p for p in page['panels'] if p['id'] == 210)
         code = "const helpers={};const context={handlebars:{registerHelper:(k,v)=>helpers[k]=v}};"
         code += "new Function('context'," + json.dumps(panel['options']['helpers']) + ")(context);"
-        code += "console.log(JSON.stringify({cards:helpers.capacityCards([{account:'openrouter',kind:'daily',quota_id:'daily',field:'left',value:.8}],0),learning:helpers.learningLine([{account:'claude',field:'missing',value:1}]),missing:helpers.missingLimitsLine([{account:'claude',field:'missing',value:1}])}));"
+        code += "console.log(JSON.stringify({cards:helpers.capacityCards([{account:'openrouter',kind:'daily',quota_id:'daily',field:'left',value:.8}],0),missing:helpers.capacityCards([{account:'claude',field:'reported_missing',value:1}],0)}));"
         value=json.loads(subprocess.check_output(['node','-e',code],text=True))
-        self.assertEqual(value, {'cards': [], 'learning': [], 'missing': [{'text': 'Claude'}]})
-        self.assertIn('Reported limits unavailable:', panel['options']['content'])
+        self.assertEqual(value['cards'], [])
+        missing=value['missing'][0]['windows'][0]
+        self.assertEqual(missing['label'], 'Reported limits unavailable')
+        self.assertEqual(missing['fillClass'], 'unavailable')
+        self.assertIn('source read failed', missing['sub'])
         self.assertIn('account!="openrouter"', panel['targets'][0]['expr'])

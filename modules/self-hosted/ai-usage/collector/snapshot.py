@@ -4546,6 +4546,9 @@ def account_window_samples(
                         round(line, ACCOUNT_WINDOW_LINE_DECIMALS),
                     )
                 )
+            if remaining is not None and line is not None:
+                samples.append(('ghostship_ai_account_window_pace_delta_points', dict(labels),
+                                round(100.0 * (remaining - line), 6)))
             # The band of the window's own line: ahead, on_pace, behind,
             # far_behind, spent or unknown. A window with no line to compare
             # with says unknown, so a card always has a state to colour and
