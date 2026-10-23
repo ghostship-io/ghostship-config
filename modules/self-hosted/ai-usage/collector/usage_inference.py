@@ -78,6 +78,13 @@ SOURCE_POOL = "pool_events"
 # at twenty seconds; they run at the same time, so the pair costs one cap.
 READ_BUDGET_S = 20.0
 
+# The collector's own run interval. The unit runs every five minutes
+# (`OnUnitActiveSec` in the module's `default.nix`), so a window that ends
+# inside that interval is already over by the time the reading is
+# published: the instant the inference measured has passed. Such a window
+# is published as a rolling window, with no fixed reset.
+ROLLING_BELOW_S = 300
+
 # The three states an inferred capacity can be in. The names are the ones
 # the owner rule uses.
 STATE_IN_WINDOW = "in_window"
@@ -416,6 +423,12 @@ def basis_for(capacity: Mapping[str, Any]) -> str:
 def detail_for(capacity: Mapping[str, Any]) -> dict[str, Any]:
     """The inference behind a capacity, as plain data."""
     weights = capacity.get("weights")
+    duration = capacity.get("window_seconds")
+    seconds = (
+        float(duration)
+        if isinstance(duration, (int, float)) and not isinstance(duration, bool)
+        else None
+    )
     return {
         "window": capacity.get("window"),
         "budget": capacity.get("budget"),
@@ -425,6 +438,9 @@ def detail_for(capacity: Mapping[str, Any]) -> dict[str, Any]:
         "weights_basis": str(capacity.get("weights_basis") or ""),
         "episodes": int(capacity.get("episodes") or 0),
         "state": str(capacity.get("state") or ""),
+        # A window that ends inside the collector's own run interval
+        # rolls: it is over before the next reading is taken.
+        "rolling": seconds is not None and seconds < ROLLING_BELOW_S,
     }
 
 
@@ -434,6 +450,12 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
     The window reads like the window of a route the provider publishes as
     unlimited: it carries a state instead of no state, and a route that was
     never refused has all of its allowance and no pace.
+
+    A window that ends inside the collector's own run interval is
+    published as a rolling window: it keeps its length, and it carries no
+    fixed reset, because the instant the inference measured is already
+    past by the time the reading is published. Every other window keeps
+    the reset it was measured with.
     """
     state = str(capacity.get("state") or STATE_NO_FAILURE)
     left = capacity.get("left")
@@ -441,6 +463,12 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
     used_ratio = max(0.0, min(1.0, 1.0 - share))
     reset = capacity.get("reset_at")
     duration = capacity.get("window_seconds")
+    detail = detail_for(capacity)
+    if detail["rolling"]:
+        # The window is shorter than the interval the collector runs at:
+        # it ends between two readings, and the reset the inference
+        # measured is already past. The window rolls, and it says so.
+        reset = None
     if state == STATE_EXHAUSTED:
         used_ratio = 1.0
     elif state == STATE_NO_FAILURE:
@@ -462,7 +490,7 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
         basis=basis_for(capacity),
         ends_at=None,
         gating=True,
-        inference=detail_for(capacity),
+        inference=detail,
     )
 
 
