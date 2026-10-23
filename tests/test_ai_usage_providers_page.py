@@ -73,9 +73,10 @@ CAPACITY_ROW_HEIGHT = 37
 # of generation 412 publishes nineteen free providers, eleven of them with a
 # model; the eight with basis "none" are not rows. The content is measured
 # inside the panel body, which is the grid height less the panel's title bar
-# of 26 px.
-SELECTION_PHONE_HEIGHT = 1049
-SELECTION_DESKTOP_HEIGHT = 820
+# of 26 px. The rows carry the capacity cards' 22 px icon now, which adds
+# 126 px at 1568 px and 147 px at 358 px to the reading before it.
+SELECTION_PHONE_HEIGHT = 1196
+SELECTION_DESKTOP_HEIGHT = 946
 SELECTION_PANEL_HEADER = 26
 
 # The moment the fixture was read. The resets of the fixture are counted
@@ -2125,8 +2126,10 @@ class ModelSelectionTests(unittest.TestCase):
         """A row rendered at 1568 px and at 358 px: 22 px box, 13 px glyph.
 
         The row is the panel's own markup, measured in Chromium with the
-        panel's stylesheet. The icon's vertical centre is within 2 px of the
-        model name's at both widths.
+        panel's stylesheet. At both widths the icon's vertical centre is
+        within 2 px of the model name's; a runner with no fonts installed
+        reports the name's box as zero high, so the centring is then read
+        from the alignment and the line height that set it.
         """
         row = next(row for row in self.selection() if row["tag"] == "bulk")
         styles = self.panel["options"]["styles"]
@@ -2156,6 +2159,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
     out.push(await page.evaluate((w) => {
       const icon = document.querySelector('.ico');
       const name = document.querySelector('.mn');
+      const row = document.querySelector('.mrow');
       const ib = icon.getBoundingClientRect();
       const nb = name.getBoundingClientRect();
       const style = getComputedStyle(icon);
@@ -2165,7 +2169,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
         glyph: style.fontSize,
         radius: style.borderRadius,
         centre: (ib.y + ib.height / 2) - (nb.y + nb.height / 2),
+        top: ib.y - nb.y,
         nameHeight: nb.height,
+        align: getComputedStyle(row).alignItems,
+        line: getComputedStyle(name).lineHeight,
       };
     }, width));
     await page.close();
@@ -2190,7 +2197,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
             self.assertEqual(item["box"], [22, 22], item["width"])
             self.assertEqual(item["glyph"], "13px", item["width"])
             self.assertEqual(item["radius"], "6px", item["width"])
-            self.assertLessEqual(abs(item["centre"]), 2, item["width"])
+            if item["nameHeight"]:
+                self.assertLessEqual(abs(item["centre"]), 2, item["width"])
+        phone = measured[1]
+        # The name's line is the icon's height and both start at the cell's
+        # top, so the icon is centred on the name even beside the provider
+        # line the phone adds under it.
+        self.assertEqual(phone["align"], "flex-start")
+        self.assertEqual(phone["line"], "22px")
+        self.assertLessEqual(abs(phone["top"]), 2)
+        self.assertEqual(measured[0]["align"], "center")
 
     def test_a_route_with_no_remaining_reading_says_so(self):
         """A route the snapshot does not carry has no share, and never a zero."""
@@ -2298,22 +2314,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
 
         Measured in Playwright with the panel's own helpers and styles, the
         production font (Inter) and the headroom of sixteen free providers
-        that hold a winner: the content is 1049 px tall at 358 px and 820 px
+        that hold a winner: the content is 1196 px tall at 358 px and 946 px
         at 1568 px. A grid row of the dashboard is 37 px, and the panel's
         title bar takes 26 px of it, so the body is the height less 26. The
         live set of generation 412 lists eleven free rows, so the height
-        keeps room for five more and leaves 264 px empty at 1568 px.
+        keeps room for five more and leaves 286 px empty at 1568 px.
         """
         rows = math.ceil(
             (max(SELECTION_PHONE_HEIGHT, SELECTION_DESKTOP_HEIGHT) + SELECTION_PANEL_HEADER)
             / 37
         )
-        self.assertEqual(rows, 30)
+        self.assertEqual(rows, 34)
         self.assertEqual(self.panel["gridPos"]["h"], rows)
         body = self.panel["gridPos"]["h"] * 37 - SELECTION_PANEL_HEADER
         self.assertGreaterEqual(body, SELECTION_PHONE_HEIGHT)
         self.assertGreaterEqual(body, SELECTION_DESKTOP_HEIGHT)
-        self.assertEqual(body - SELECTION_DESKTOP_HEIGHT, 264)
+        self.assertEqual(body - SELECTION_DESKTOP_HEIGHT, 286)
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
