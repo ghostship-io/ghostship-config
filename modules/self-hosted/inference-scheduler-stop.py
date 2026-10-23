@@ -9,7 +9,7 @@ import sys
 import time
 
 
-def stop(podman, main_pid, timeout=890):
+def stop(podman, main_pid, timeout=890, *, container="t3code"):
     try:
         attachment = os.pidfd_open(main_pid)
     except ProcessLookupError:
@@ -17,7 +17,7 @@ def stop(podman, main_pid, timeout=890):
     descriptors = [attachment]
     try:
         output = subprocess.check_output(
-            [podman, "top", "t3code", "hpid"], text=True, timeout=10
+            [podman, "top", container, "hpid"], text=True, timeout=10
         )
         targets = []
         for value in output.splitlines()[1:]:
@@ -67,4 +67,4 @@ if __name__ == "__main__":
     # systemd unsets MAINPID if the attachment has already exited. Its recorded
     # exit status still determines the unit result; there is nothing left to stop.
     if len(sys.argv) > 2 and sys.argv[2]:
-        stop(sys.argv[1], int(sys.argv[2]))
+        stop(sys.argv[1], int(sys.argv[2]), container=sys.argv[3] if len(sys.argv) > 3 else "t3code")

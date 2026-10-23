@@ -186,32 +186,44 @@ credential bytes, the real container's read-only mount, and unchanged T3 identit
 and PIDs. New commands can source `/run/secrets/t3code.env`; existing process
 environments retain their previous values.
 
-The inference broker and scheduler are separate host units using `podman exec`
-into the existing T3 container. Their pinned closures are copied into its Nix
-store without replacing the container image or its application runtime. The
-broker owns only authenticated Unix HTTP submission and status; the scheduler
-owns execution through the same durable runtime store. Restart either unit
-independently, waiting for graceful scheduler shutdown before starting its
-replacement. The MCP mounts the socket directory so a recreated socket remains
-visible. Its dedicated bearer comes from the encrypted source and is separate
-from provider keys. Activation refreshes the managed CLI through the pinned
-installer with `--managed-only`, preserving provider and global Git settings.
-The host also projects the installer at
-`~/.local/state/t3code-shared-agents/managed-installer` and updates only the
-container sync service's `ExecStart` through a runtime drop-in. Both this command
-and future images share the same guarded repository-sync script. Preserve its
-30-minute timer and run the actual sync service twice after activation: checking
-the CLI immediately after a one-time refresh misses an old image's later writer.
-The host recreates the override on activation/container startup. Verify the real
-mounted socket and authenticated request path after deployment, then repeat after
-a broker restart.
+The free inference broker and scheduler run as host-managed `podman exec`
+processes inside the separate `ghostship-worker` container. That container has
+its own UID, home and Nix image store. It mounts no T3 home, provider auth or
+runtime socket. The scheduler drains durable public jobs; the broker handles
+submission and status. Stop targets only the worker scheduler and waits for its
+attached Podman client. Each research round runs in bubblewrap and Landlock;
+provider credentials remain in the trusted egress gate.
 
-The pool policy lives in `modules/self-hosted/inference-pool.json`, separately
-from OpenCode configuration. Deployment seeds only the public synthetic fixture
-when absent and preserves an existing fixture and Git history. The policy lists
-approved repositories for selected-file reviews with public or private
-sensitivity; broker roots derive from that same list. Trusted test commands are
-configured per repository; the existing test command belongs to the fixture.
+T3 and MCP keep their existing authenticated Unix socket paths. A host Unix
+socket proxy forwards to the worker broker without adding mounts or restarting
+T3. Activation publishes the pinned managed CLI, updates its sync-service
+installer, disables the old local T3 pool, and removes Zen models from T3's
+OpenCode catalog. Verify authenticated requests through both client paths after
+activation and after a broker restart. Preserve the managed sync timer.
+
+`ghostship-free-worker-auth.service` separates the existing Console OAuth
+workspaces using native auth commands and secret-only stdin. It imports only
+Zen into the worker, proves a bounded public Zen task, then removes Zen from T3
+and selects Go there. Failure before the Zen task succeeds preserves the T3
+source login. Its private runtime manifest makes retries idempotent; it stores
+credential references and result classes, never access or refresh values.
+The worker exposes only declared zero-price Zen models; T3 exposes Go and no
+Zen models. API-key fallbacks are disabled for both Console routes. The worker
+credential projection contains only configured free-provider variables.
+
+Each side's native OpenCode refreshes its own OAuth token. If refresh is refused,
+repeat `opencode auth login opencode` as that side's runtime user and select the
+same Console workspace: the free workspace inside `ghostship-worker`, or the
+Go subscription workspace inside T3. Never sign the Zen workspace into T3 or
+import Go into the worker. Restart the auth validation service after an owner
+sign-in. Auth values stay outside repositories, command arguments and logs.
+
+The pool policy lives in `modules/self-hosted/inference-pool.json`. All jobs
+require explicit public sensitivity and a versioned sandbox grant. Initial
+activation supports research files; repository profiles are refused until their
+mount and commit paths are implemented. Scheduled provider probes remain off
+until their native adapters are validated. Run the deployed boundary proof with
+`agent worker toolcheck --profile research` inside the worker container.
 
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.

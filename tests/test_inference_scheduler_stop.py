@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 source = Path(__file__).resolve().parents[1] / "modules/self-hosted/inference-scheduler-stop.py"
@@ -18,6 +19,15 @@ spec.loader.exec_module(scheduler_stop)
 
 
 class SchedulerStopTest(unittest.TestCase):
+    def test_stop_inventories_the_selected_worker_container(self):
+        with patch.object(scheduler_stop.os, 'pidfd_open', return_value=91), \
+             patch.object(scheduler_stop.os, 'close'), \
+             patch.object(scheduler_stop.subprocess, 'check_output', return_value='HPID\n') as inventory:
+            with self.assertRaisesRegex(RuntimeError, 'found 0'):
+                scheduler_stop.stop('/podman', 123, container='ghostship-worker')
+        inventory.assert_called_once_with(
+            ['/podman', 'top', 'ghostship-worker', 'hpid'], text=True, timeout=10)
+
     def test_already_exited_attachment_with_unset_mainpid_is_a_noop(self):
         for arguments in ([], [""]):
             result = subprocess.run(
