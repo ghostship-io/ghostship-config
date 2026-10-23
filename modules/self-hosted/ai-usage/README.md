@@ -597,6 +597,42 @@ never mixed:
 | `unpublished` | the account publishes no window with a number, so its limit is unknown and is never read as a zero |
 | `published` | the account publishes a window of its own |
 
+### The card order of the Providers page
+
+The Providers page draws one card per provider account, and the cards come
+in the order the owner approved. A Grafana variable keeps only the order of
+the query that fills it, so the page cannot sort the cards itself: the
+collector publishes the place of every account, and the page reads it.
+
+| Series | Value |
+| --- | --- |
+| `ghostship_ai_account_card_order{account}` | the place the card of the account takes: 1 is the first card |
+
+The place is counted from one and holds no gap: the first card is 1, the
+last card is the number of accounts, and every account holds exactly one
+series.
+
+The approved list is `APPROVED_CARD_ORDER` in
+[`collector/card_order.py`](./collector/card_order.py): Claude, Codex,
+Ollama, OpenCode Go, Antigravity, Grok and OpenRouter, in that order. The
+page and this document point at that one list, so a change of the order is
+one change in one place.
+
+The accounts that are not on the list follow it. The ones that publish at
+least one window with a number come first, by name, and the accounts that
+publish none come after them, by name. A window with a number publishes a
+share that is left or a share that is used, and a spent window holds the
+number zero: a zero is a number. An account that is still learning its
+window publishes no number, and it follows the accounts that do.
+
+An account of the approved list that the snapshot does not hold is skipped,
+and the cards behind it move up. The places are the places of the cards
+that exist, and they never leave a hole.
+
+The account is every key of `quota.accounts` and every provider of the
+candidates, the same set of accounts the availability of an account
+covers.
+
 ### The static worker table
 
 While the routing switch is off, the selection in force is the owner's static
