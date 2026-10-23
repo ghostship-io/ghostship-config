@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.17.145] - 2026-10-23
+
+- Remove per-PR version bumps from configuration instructions and the weekly input-refresh workflow.
+- Record review and land finished changes through `agent pr land`, using the pinned identity-safe local merge and release tool.
+
+PR #310.
+
+## [3.17.144] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `f9779033` (agent 0.44.0). It activates the owner's engineering policy: frontier models self-review and land their own work, subagents serve reviews and public-safe free-tier background tasks only, one orchestrator owns the work queue, and threads report only to it. The generated agent instructions (CLAUDE.md/AGENTS.md) carry the new rules after this switch.
+
+## [3.17.143] - 2026-10-23
+
+- ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, a non-finite parsed duration or reset epoch, an integer too large for a float, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, except that the observation's limit now keeps its reported `scope="model"` and a diagnostic value too large to render is skipped instead of crashing the run. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
+
+## [3.17.142] - 2026-10-23
+
+- change control: the deployment host no longer upgrades itself. `chill-penguin` sets `myOptions.autoUpgrade.enable = false`, so `system.autoUpgrade` is false and no `nixos-upgrade` service or timer is rendered; the two WSL hosts keep their unattended upgrade. The replacement is the daily, read-only `ghostship-configuration-drift` timer and service. It reads the running revision from the running system (`nixos-version --configuration-revision`, recorded from `system.configurationRevision = self.rev`) rather than from the checkout or the evaluated candidate, fetches the public source into a private bare cache under `/var/lib/ghostship-configuration-drift`, and reports two security alerts through `ghostship-notify`: a generation mismatch between `/run/current-system` and `/nix/var/nix/profiles/system` immediately, and a running revision that has stayed behind main for more than 86400 seconds (86400 does not alert, 86401 does). The ntfy URL comes from the root container snapshot `/run/ghostship-podman/containers.json` (300-second maximum age), never from the Podman API, so the hardened unit needs no container storage access. Main advancing keeps the first observation; convergence or a new running revision clears it. A missing or dirty revision, a failed fetch, a missing symlink or unrelated histories is an explicit nonzero error, never health, and a failed delivery returns nonzero so the next run retries. The service mounts the host read-only, keeps no capability and writes only its `StateDirectory` and the notifier's state inside it. `docs/configuration-drift.md` describes the check and the response.
+
 ## [3.17.141] - 2026-10-23
 
 - ai-usage: a provider whose published rate limits apply per model gets one learned limit per model, never one account-wide limit. Live, a Google account (the Gemini API key) read one account-wide 5h window fitted across three models, while Google documents per-model, per-project limits: the engine read two models refused seconds apart as one shared pool, and for these providers that is the same request refused by each model's own cap. The engine names `google` and `groq` as the per-model providers, with the sources of both (Google per project and per model, Groq per model and per organization), and measures every refused route of them on its own events with scope `model`, exactly like a route whose scope evidence said `model` today. A route of such a provider that was never refused keeps `no_failure` and `unknown`, and no route reads another model's events for its window, budget or state. Every other provider is unchanged, and the model-scoped capacity is still filed by `usage_inference.key_for` under `provider/model` with `applies_to [model]`.
