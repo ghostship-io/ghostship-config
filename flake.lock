@@ -136,17 +136,17 @@
     "ghostship-agent-policy": {
       "flake": false,
       "locked": {
-        "lastModified": 1792708044,
-        "narHash": "sha256-/0z7hE0Op08Zu8q02bAHGz5EKj2MdenAcah2emLquZQ=",
+        "lastModified": 1792716922,
+        "narHash": "sha256-7ZllHSXqNkafFY3ThOOQOROE7YPG0HI3xJkNFU5AT8w=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "797a4cc0f1fb1be5869857d33393a7d4cd28bb7c",
+        "rev": "5381c0156b441aa3e6ce039e7e8e3768bcac68a8",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "797a4cc0f1fb1be5869857d33393a7d4cd28bb7c",
+        "rev": "5381c0156b441aa3e6ce039e7e8e3768bcac68a8",
         "type": "github"
       }
     },

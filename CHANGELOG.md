@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.116] - 2026-10-23
+## [3.17.117] - 2026-10-23
 
 - ai-usage: the tiers are ordered by the trust of a model and by the outcome it is worth. The Providers page put a bad model on top: Beam Free led the bulk tier because a route with no window counted as a pace of zero, and no trust spoke about any model. The trust of a model is now read for the task type of the tier it holds (`implementation` for the frontier, the bulk and the free tiers, `cad-execution` for the 3D tier) from the owner's runtime policy and from the delegation ledger, and the worse of the two wins: a trusted route leads a tier, a backup route follows it, and an untrusted route comes last with the reason it holds. An excluded level holds no tier at all. The value that decides the rest is the outcome-weighted value: the measured intelligence placed inside the range of the tier (`p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min)`), shrunk toward the rounds that were observed (`p = (k * p0 + s) / (k + n)`, `k = 10`), combined with the measured efficiency, and halved for an untrusted route. A free route leads the bulk tier while its quality is within `0.10` of the best paid route of its own trust level. A route with no window has no pace and waits behind every route that has one. The Artificial Analysis value stays the value of a candidate row and is published beside the published value of every winner, which carries the trust level, the reason, and the outcome it was built from. The collector reads the trust and the outcomes from the model identities, the runtime policy, the delegation ledger and its backfill; all four are read only, and a file that is missing is an empty history. The new series are `ghostship_ai_model_trust_info` and `ghostship_ai_model_outcome`.
+
+## [3.17.116] - 2026-10-23
+
+- flake: the AI usage collector's policy input moves to ghostship-agent 5381c015. The runtime policy there declares `model_trust`, the owner's trust levels: Beam is untrusted for implementation, Gemini 3.8 Flash for implementation and CAD execution, and Claude Haiku 5.5 and GPT-6 Luna are backup. `model-identities.json` declares the routes of those models, and DeepSeek V4.1 Flash 1017 is its own model. The static worker table now routes narrow implementation to DeepSeek V4.1 Flash 1017 first. The T3 Code agent input is unchanged. The wiring test no longer names one revision: it requires an exact 40-hex pin and a lock that holds the same revision, so a pin moves without a test edit and a stale lock still fails.
 
 ## [3.17.115] - 2026-10-23
 
