@@ -38,6 +38,17 @@ def destination(root, path):
     return target
 
 
+def install_symlinks(root, links, closure_paths):
+    for path, target in links.items():
+        if path != "/run/current-system/systemd" or target not in closure_paths:
+            raise ValueError("re-exec alias must target the seeded systemd closure")
+        if not destination(root, target).is_dir():
+            raise ValueError("re-exec closure is absent from the private store")
+        link = destination(root, path)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(target)
+
+
 def run(*args):
     subprocess.run(args, check=True)
 
@@ -79,7 +90,8 @@ def assemble(root, spec):
                 run("mount", "-o", "remount,bind,ro", str(target))
         # The coordinator seeds runtimePackage into T3's PRIVATE store. Never
         # mount the host store to paper over an incomplete image closure.
-        for path in Path(spec["closure"]).read_text().splitlines():
+        closure_paths = set(Path(spec["closure"]).read_text().splitlines())
+        for path in closure_paths:
             if not path.startswith("/nix/store/") or len(Path(path).parts) != 4:
                 raise ValueError("invalid engine closure entry")
             if not destination(root, path).exists():
@@ -100,6 +112,7 @@ def assemble(root, spec):
             target = destination(root, path)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)
+        install_symlinks(root, spec.get("symlinks", {}), closure_paths)
         for path in spec["directories"]:
             destination(root, path).mkdir(parents=True, exist_ok=True)
         if not os.path.ismount(root / "tmp"):

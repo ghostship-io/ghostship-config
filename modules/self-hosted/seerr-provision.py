@@ -1,4 +1,4 @@
-"""First-run Seerr setup using its API and the existing Servarr profiles."""
+"""Reconcile Seerr wiring while preserving valid user-selected profiles."""
 
 import os
 import subprocess
@@ -21,10 +21,82 @@ def address(container, port):
     return f"http://{ip}:{port}"
 
 
+def reconcile_instance(api, name, desired, profiles, roots):
+    path = f"/settings/{name}"
+    instances = api("GET", path)
+    if not instances:
+        api("POST", path + "/test", desired)
+        api("POST", path, desired)
+        instances = api("GET", path)
+    matches = [item for item in instances if item.get("name") == desired["name"]]
+    if len(matches) != 1:
+        raise RuntimeError(f"Ambiguous managed {name} instance; preserve settings")
+    current = matches[0]
+    if current.get("hostname") != name or current.get("port") != desired["port"]:
+        raise RuntimeError(f"Managed {name} endpoint changed; preserve settings")
+    if not any(root["path"] == current.get("activeDirectory") for root in roots):
+        raise RuntimeError(f"Managed {name} root is missing; preserve settings")
+    updated = dict(current, apiKey=desired["apiKey"])
+    for prefix in ("active", "activeAnime"):
+        id_key, name_key = prefix + "ProfileId", prefix + "ProfileName"
+        profile_id = current.get(id_key)
+        if profile_id in (None, 0) and prefix == "activeAnime":
+            continue
+        if not any(profile["id"] == profile_id for profile in profiles):
+            replacements = [p for p in profiles if p["name"] == current.get(name_key)]
+            if len(replacements) != 1:
+                raise RuntimeError(
+                    f"Managed {name} profile is ambiguous; preserve settings"
+                )
+            updated[id_key] = replacements[0]["id"]
+    if updated != current:
+        # The released schema marks id readOnly; only the URL carries it.
+        body = {key: value for key, value in updated.items() if key != "id"}
+        api("POST", path + "/test", body)
+        api("PUT", f"{path}/{current['id']}", body)
+        saved = next(
+            (item for item in api("GET", path) if item["id"] == current["id"]), {}
+        )
+        if any(saved.get(key) != value for key, value in updated.items()):
+            raise RuntimeError(f"Managed {name} update did not persist")
+
+
+def reconcile_notifications(api):
+    path = "/settings/notifications/ntfy"
+    current = api("GET", path)
+    options = current.get("options", {})
+    # Adopt the unconfigured default; leave an independently configured agent alone.
+    if options.get("topic") and (
+        options.get("url") != "http://ntfy:8080" or options["topic"] != "operations"
+    ):
+        return
+    desired = {
+        **current,
+        "enabled": True,
+        # Pending, approved, available, failed, declined and automatic approval.
+        "types": 2 | 4 | 8 | 16 | 64 | 128,
+        "options": {
+            **options,
+            "url": "http://ntfy:8080",
+            "topic": "operations",
+            "priority": 3,
+            "locale": "en",
+            "authMethodUsernamePassword": True,
+            "authMethodToken": False,
+            "username": "publisher",
+            "password": os.environ["NTFY_PUBLISH_PASSWORD"],
+        },
+    }
+    if desired != current:
+        api("POST", path + "/test", desired)
+        api("POST", path, desired)
+        if api("GET", path) != desired:
+            raise RuntimeError("Seerr notification update did not persist")
+
+
 def main():
     marker = Path("/srv/apps/seerr/.ghostship-provisioned")
-    if marker.exists():
-        return
+    first_run = not marker.exists()
     session = requests.Session()
     base = address("seerr", 5055) + "/api/v1"
 
@@ -88,9 +160,23 @@ def main():
             )
         else:
             settings["minimumAvailability"] = "released"
-        definitions.append((name, settings))
+        definitions.append((name, settings, profiles, roots))
 
     api("POST", "/auth/plex", {"authToken": os.environ["PLEX_TOKEN"]})
+    if first_run:
+        initialize_plex(api)
+    for name, settings, profiles, roots in definitions:
+        reconcile_instance(api, name, settings, profiles, roots)
+    reconcile_notifications(api)
+    if first_run:
+        api("POST", "/settings/initialize")
+        marker.touch(mode=0o600)
+    print(
+        "Seerr integration profiles, roots, Plex authentication and notifications verified"
+    )
+
+
+def initialize_plex(api):
     api(
         "POST",
         "/settings/main",
@@ -150,13 +236,6 @@ def main():
                     f"/settings/plex/library/{library['id']}",
                     {"enabled": True},
                 )
-    for name, settings in definitions:
-        if not api("GET", f"/settings/{name}"):
-            api("POST", f"/settings/{name}/test", settings)
-            api("POST", f"/settings/{name}", settings)
-    api("POST", "/settings/initialize")
-    marker.touch(mode=0o600)
-    print("Seerr configured with administrator approval required for ordinary users")
 
 
 if __name__ == "__main__":
