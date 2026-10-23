@@ -756,8 +756,7 @@ class Desktop:
     def __init__(self, name: str, api_bind: str | None = None):
         self.name = name
         # The address the desktop API answers on, when this container was
-        # given one (a canary). Production binds its own address and is
-        # probed as it was before.
+        # given one (a canary). Production probes the API's configured address.
         self.api_bind = api_bind
 
     def exec(self, *args: str, user: str = "abc", timeout: float = 600, check: bool = False,
@@ -768,7 +767,18 @@ class Desktop:
     def api_ready(self) -> bool:
         """The desktop API answers on the address this container was given."""
         if not self.api_bind:
-            return True
+            # Production uses the API's configured bind address and port.
+            # Read its defaults inside the container rather than duplicate them.
+            probe = (
+                "import http.client, runpy; "
+                "config = runpy.run_path('/opt/ghostship-agent-desktop/agent_desktop_api.py'); "
+                "host = config['BIND']; "
+                "connection = http.client.HTTPConnection('127.0.0.1' if host == '0.0.0.0' else host, "
+                "config['PORT'], timeout=5); "
+                "connection.request('GET', '/healthz'); "
+                "raise SystemExit(0 if connection.getresponse().status == 200 else 1)"
+            )
+            return self.exec("python3", "-c", probe, timeout=30).returncode == 0
         url = f"http://{self.api_bind}:{CANARY_API_PORT}/healthz"
         return self.exec("curl", "-fsS", "--max-time", "5", "-o", "/dev/null", url,
                          timeout=30).returncode == 0
@@ -776,9 +786,7 @@ class Desktop:
     def wait_ready(self, timeout: float = 600) -> None:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.exec("curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1:3000/",
-                         timeout=30).returncode == 0 and \
-                    self.exec("test", "-r", "/config/agent-desktop/session-env", timeout=30).returncode == 0 and \
+            if self.exec("test", "-r", "/config/agent-desktop/session-env", timeout=30).returncode == 0 and \
                     self.api_ready():
                 return
             time.sleep(5)

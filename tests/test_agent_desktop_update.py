@@ -304,5 +304,48 @@ class CommitTests(unittest.TestCase):
                 self.assertEqual(before, after)
 
 
+class DesktopReadinessTests(unittest.TestCase):
+    def probe(self, api_ok=True, session_ok=True):
+        calls = []
+
+        def execute(*args, **kwargs):
+            calls.append(args)
+            if args[0] == "test":
+                code = 0 if session_ok else 1
+            elif any("/healthz" in arg for arg in args):
+                code = 0 if api_ok else 22
+            else:
+                code = 22  # The authenticated viewer root returns HTTP 401.
+            return subprocess.CompletedProcess(args, code, "", "")
+
+        return calls, execute
+
+    def test_authenticated_viewer_does_not_block_a_healthy_candidate(self):
+        desktop = update.Desktop("candidate", api_bind="127.0.0.1")
+        calls, execute = self.probe()
+        with patch.object(desktop, "exec", side_effect=execute), \
+                patch.object(update.time, "time", side_effect=[0, 0, 2]), \
+                patch.object(update.time, "sleep"):
+            desktop.wait_ready(timeout=1)
+        self.assertTrue(any("/healthz" in " ".join(call) for call in calls))
+        self.assertFalse(any("http://127.0.0.1:3000/" in call for call in calls))
+
+    def test_api_failure_or_missing_session_blocks_readiness(self):
+        for api_ok, session_ok in [(False, True), (True, False)]:
+            with self.subTest(api_ok=api_ok, session_ok=session_ok):
+                desktop = update.Desktop("candidate", api_bind="127.0.0.1")
+                _, execute = self.probe(api_ok, session_ok)
+                with patch.object(desktop, "exec", side_effect=execute), \
+                        patch.object(update.time, "time", side_effect=[0, 0, 2]), \
+                        patch.object(update.time, "sleep"), self.assertRaises(update.GateFailure):
+                    desktop.wait_ready(timeout=1)
+
+    def test_production_api_health_is_not_assumed(self):
+        desktop = update.Desktop("production")
+        with patch.object(desktop, "exec", return_value=subprocess.CompletedProcess([], 1)) as execute:
+            self.assertFalse(desktop.api_ready())
+        self.assertIn("/healthz", " ".join(execute.call_args.args))
+
+
 if __name__ == "__main__":
     unittest.main()
