@@ -26,6 +26,7 @@ python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 python3 -m unittest discover -s tests -p test_container_runtime_derivations.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 nix eval --impure --json --file tests/t3code-hardening.nix >/dev/null
+nix eval --impure --json --file tests/t3code-recovery.nix >/dev/null
 nix eval --impure --json --file tests/t3code-podman.nix >/dev/null
 python3 tests/check_podman_runtime.py
 python3 tests/check_podman_runtime.py --selftest
