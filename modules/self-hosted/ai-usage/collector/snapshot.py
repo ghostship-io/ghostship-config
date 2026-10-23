@@ -211,6 +211,7 @@ def _inferred_window_record(
         "weights_basis": inference.get("weights_basis") or None,
         "episodes": inference.get("episodes"),
         "state": inference.get("state") or None,
+        "rolling": bool(inference.get("rolling")),
     }
     scope = [str(token) for token in applies_to or ()]
     if scope:
@@ -881,6 +882,7 @@ def _candidate(
                 "weights_basis": capacity_inference.get("weights_basis") or None,
                 "episodes": capacity_inference.get("episodes"),
                 "state": capacity_inference.get("state") or None,
+                "rolling": bool(capacity_inference.get("rolling")),
             },
             "ends_at": _binding_ends_at(
                 getattr(entries[0], "capacity_binding", None) if entries else None
