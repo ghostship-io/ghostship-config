@@ -3,10 +3,9 @@
 - Follow [shared preferences](home/config/AGENTS.md).
 - Run focused fast unit tests with `nix develop .#ci -c`; stage new Nix files first.
   Use `nix develop .#browser` when local Playwright browsers are required.
-- Work on a named branch in an isolated worktree. A frontier model reviews its
-  own change; other models need one frontier review. Record the review with
-  `agent review approve`, then land with `agent pr land` and deploy your own
-  work. Follow the agent repository's `config/agents/routing-policy.md`.
+- Work on a named branch in an isolated worktree. Workers implement and the
+  orchestrator reviews each diff. Once approved with `agent review approve`,
+  workers ship with `agent pr land` and deploy their own work.
 - Keep `VERSION` and `CHANGELOG.md` out of PRs. `agent pr land` publishes one
   release commit on main; use a PR body `## Changelog` section for release
   notes and `Release: minor` or `Release: major` for an explicit larger bump.

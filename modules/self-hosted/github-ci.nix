@@ -41,6 +41,11 @@ in
     extraLabels = [ "ghostship-fast" ];
     extraPackages = with pkgs; [ curl jq openssh python3 unzip xz ];
     extraEnvironment.XDG_CACHE_HOME = "/var/cache/github-ci-${repo}";
+    # Read by the runner process, outside workflow-controlled environment.
+    # The immutable hook runs before checkout and before container setup.
+    extraEnvironment.ACTIONS_RUNNER_HOOK_JOB_STARTED = pkgs.writeShellScript "github-ci-source-guard.sh" ''
+      exec ${pkgs.python3}/bin/python3 -I -S ${./github-ci-guard.py} "ghostship-io/${repo}"
+    '';
     serviceOverrides = {
       CacheDirectory = "github-ci-${repo}";
       CacheDirectoryMode = "0700";

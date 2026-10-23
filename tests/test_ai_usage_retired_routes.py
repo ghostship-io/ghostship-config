@@ -302,6 +302,13 @@ class Harness:
                 state_path=str(self.state_path),
                 t3_state=str(self.database),
                 catalog_path=str(self.catalog_path),
+                opencode_db=str(self.home / 'absent-opencode.db'),
+                events_cache=str(self.home / 'events.json'),
+                pool_ledger=None,
+                window_state_path=str(self.home / 'window-state.json'),
+                secrets_env=str(self.home / 'secrets.env'),
+                pool_server=str(self.home / 'pool-server.json'),
+                pool_token=str(self.home / 'pool-token'),
                 aa_cache=aa_cache(self.models),
                 aa_3d_cache={"status": "missing"},
             )
