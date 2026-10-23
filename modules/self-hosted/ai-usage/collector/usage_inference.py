@@ -55,6 +55,7 @@ __all__ = [
     "infer",
     "key_for",
     "map_events",
+    "probes_from_events",
     "quota_id_for",
     "read_and_infer",
     "read_records",
@@ -91,6 +92,18 @@ STATE_IN_WINDOW = "in_window"
 STATE_EXHAUSTED = "exhausted"
 STATE_NO_FAILURE = "no_failure"
 
+# What the latest request of a route says about the route. A success is a
+# probe that answered, a refusal is a probe that failed for quota, and a
+# retirement is a probe that found the model gone. Every other failure is
+# an upstream error: the route exists but the request did not get through.
+PROBE_WORKS = "works"
+PROBE_FAILS = "fails"
+PROBE_CLASS_SUCCESS = "success"
+PROBE_CLASS_QUOTA = "quota"
+PROBE_CLASS_MODEL_NOT_FOUND = "model_not_found"
+PROBE_CLASS_UPSTREAM_ERROR = "upstream_error"
+PROBE_SOURCE = "t3_probe"
+
 # The quota id of the window of an inferred route. The label says the
 # window it was inferred from, and a route that was never refused says so.
 QUOTA_ID_NO_FAILURE = "inferred:no-limit-seen"
@@ -124,6 +137,9 @@ class Inference:
         # "provider/model", and the last success of every route it saw.
         self.retirements: dict[str, dict[str, Any]] = {}
         self.last_success: dict[str, float] = {}
+        # The probe of every route the OpenCode record shows, by the route
+        # the collector knows it by: the latest request, and what it said.
+        self.probes: dict[tuple[str, str], dict[str, Any]] = {}
 
     @property
     def unmatched_events(self) -> int:
@@ -354,6 +370,55 @@ def retirements_from_events(
     return retired, last_success
 
 
+def probes_from_events(
+    events: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """The probe of every route the request record shows.
+
+    The latest request of a route is its probe. A success answered, a limit
+    refused the route for its quota, and a retirement found the model gone.
+    Every other failure is an upstream error. Only the flags are read: the
+    record holds no error text.
+
+    The reading is keyed by the route the collector knows, so an event of
+    another model never answers for this one.
+    """
+    latest: dict[tuple[str, str], Mapping[str, Any]] = {}
+    latest_at: dict[tuple[str, str], float] = {}
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        at = event.get("at")
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            continue
+        provider = str(event.get("provider") or "")
+        model = str(event.get("model") or "")
+        if not provider or not model:
+            continue
+        route = (provider, model)
+        moment = float(at)
+        if route not in latest_at or moment > latest_at[route]:
+            latest[route] = event
+            latest_at[route] = moment
+    probes: dict[tuple[str, str], dict[str, Any]] = {}
+    for route, event in latest.items():
+        if event.get("retired") is True:
+            state, failure_class = PROBE_FAILS, PROBE_CLASS_MODEL_NOT_FOUND
+        elif str(event.get("outcome") or "") == "success":
+            state, failure_class = PROBE_WORKS, PROBE_CLASS_SUCCESS
+        elif str(event.get("outcome") or "") == "limit":
+            state, failure_class = PROBE_FAILS, PROBE_CLASS_QUOTA
+        else:
+            state, failure_class = PROBE_FAILS, PROBE_CLASS_UPSTREAM_ERROR
+        probes[route] = {
+            "state": state,
+            "class": failure_class,
+            "checked_at": latest_at[route],
+            "source": PROBE_SOURCE,
+        }
+    return probes
+
+
 def read_and_infer(
     now: float,
     *,
@@ -384,6 +449,7 @@ def read_and_infer(
         events.extend(mapped)
         if source == SOURCE_OPENCODE:
             reading.retirements, reading.last_success = retirements_from_events(mapped)
+            reading.probes = probes_from_events(mapped)
     reading.unmatched = unmatched
     reading.capacities = infer(events, now)
     # Every record publishes the events it could not place on a route. The

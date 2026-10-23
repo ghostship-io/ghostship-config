@@ -246,6 +246,41 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                 1.0,
             )
         )
+        # The pool's own probe of the route. It says whether the route
+        # answered its last check, the class of the answer, the model it
+        # checked and the moment of the check. A probe the pool did not run
+        # carries no moment and is not a reading of the route.
+        probe = state.get("probe")
+        if isinstance(probe, dict):
+            probe_state = probe.get("state")
+            probe_model = probe.get("model")
+            if (
+                isinstance(probe_state, str)
+                and probe_state
+                and isinstance(probe_model, str)
+                and probe_model
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_probe",
+                        {
+                            "provider": str(provider),
+                            "model": probe_model,
+                            "state": probe_state,
+                            "category": str(probe.get("category") or ""),
+                        },
+                        1.0,
+                    )
+                )
+                checked = probe.get("at")
+                if isinstance(checked, (int, float)) and not isinstance(checked, bool):
+                    samples.append(
+                        _pool_sample(
+                            "ghostship_ai_pool_probe_timestamp_seconds",
+                            {"provider": str(provider), "model": probe_model},
+                            float(checked),
+                        )
+                    )
     for row in status.get("health") or []:
         if not isinstance(row, dict):
             continue
@@ -448,6 +483,19 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                     1.0 if available else 0.0,
                 )
             )
+            # The pool's own reason a candidate is unavailable. The pool
+            # names the policy that parks the account or the route, and the
+            # snapshot repeats that reason instead of guessing one. A
+            # candidate that is offered carries none.
+            unavailable_reason = candidate.get("unavailable_reason")
+            if isinstance(unavailable_reason, str) and unavailable_reason:
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_model_unavailable_reason",
+                        {**labels, "reason": unavailable_reason},
+                        1.0,
+                    )
+                )
             samples.append(
                 _pool_sample(
                     "ghostship_ai_pool_model_selected",
