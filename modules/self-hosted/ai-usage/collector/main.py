@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import aa  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
+import card_order as card_order_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
@@ -441,6 +442,10 @@ METRIC_HELP = {
     "ghostship_ai_account_availability_check_timestamp_seconds": (
         "When the availability of an account was observed: the newest "
         "observation of the routes that were counted."
+    ),
+    "ghostship_ai_account_card_order": (
+        "The place the card of an account takes on the Providers page: 1 is "
+        "the first card, and the places hold no gap."
     ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
@@ -2199,6 +2204,10 @@ def render(
     # The availability of every account: whether it can serve right now, why
     # not when it cannot, and where its limit comes from.
     for name, labels, value in account_availability_module.samples(snapshot or {}, now):
+        writer.add(name, labels, value)
+    # The place every card takes on the Providers page. The page draws the
+    # cards in this order, and the order is the owner's.
+    for name, labels, value in card_order_module.samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
