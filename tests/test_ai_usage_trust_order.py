@@ -489,6 +489,27 @@ class FreeRouteOrderTests(unittest.TestCase):
         )
 
 
+class FreeRouteMarginTests(unittest.TestCase):
+    """The margin of a free route is read from the best route of its level."""
+
+    def test_a_free_route_far_behind_the_best_route_does_not_lead(self):
+        # Catches a margin measured from the best paid route only: beta-free
+        # is within the margin of the best paid route (gamma) but far behind
+        # the best route of its trust level (alpha-free), so gamma leads it.
+        routes = [
+            Route("opencode-go", "alpha-free", 45.0, free=True),
+            Route("openrouter", "beta:free", 35.0, free=True),
+            Route("ollama", "gamma", 37.5),
+            Route("claude", "low-anchor", 30.0),
+        ]
+        data = build(routes)
+        self.assertAlmostEqual(row_of(data, "openrouter:beta:free")["outcome"]["bulk"]["p"], 0.6333, places=4)
+        self.assertAlmostEqual(row_of(data, "ollama:gamma")["outcome"]["bulk"]["p"], 0.7, places=4)
+        order = bulk_winners(data)
+        self.assertEqual(order[0], "opencode-go:alpha-free")
+        self.assertLess(order.index("ollama:gamma"), order.index("openrouter:beta:free"))
+
+
 class NewRouteTests(unittest.TestCase):
     """A route that was never measured keeps the prior of its intelligence."""
 
@@ -654,3 +675,27 @@ class ExcludedTrustTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MainWiringTests(unittest.TestCase):
+    """The collector reads the identities that ship beside the policy."""
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures/ai-usage/outcomes"
+
+    def test_the_identities_default_to_the_file_beside_the_policy(self):
+        # Catches a default that computes the path and never uses it: with
+        # no identities the routes of one model would not pool.
+        policy = self.FIXTURES / "runtime-policy.json"
+        path = main.model_identities_path("", str(policy))
+        self.assertEqual(path, str(self.FIXTURES / "model-identities.json"))
+        outcomes = main.read_outcomes(
+            identities_path=path, runtime_policy=str(policy)
+        )
+        self.assertIn(
+            "deepseek-v4.1-flash-1017",
+            {record["id"] for record in outcomes["identities"]},
+        )
+
+    def test_a_named_identities_file_wins_and_none_reads_nothing(self):
+        self.assertEqual(main.model_identities_path("other.json", "x/p.json"), "other.json")
+        self.assertEqual(main.model_identities_path("", ""), "")
