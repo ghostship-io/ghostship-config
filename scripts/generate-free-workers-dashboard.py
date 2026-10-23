@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import copy
 import difflib
 import json
 import sys
@@ -25,6 +26,66 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "modules/self-hosted/siem/dashboards/ai-usage.json"
 DST = ROOT / "modules/self-hosted/siem/dashboards/free-workers.json"
+
+
+SUBSTITUTIONS = (
+    ('picker_eligible="true",provider!="openrouter"', 'billing=~"free|promotion"'),
+    ('picker_eligible="true",provider=~"$provider",provider!="openrouter"',
+     'billing=~"free|promotion",provider=~"$provider"'),
+    ('scope="t3",account!="openrouter"', 'scope="free"'),
+    (',provider!="pi"', ''),
+    (',account!="pi"', ''),
+    (',account!="openrouter"', ''),
+    (',provider!="openrouter"', ''),
+)
+
+
+def free_selectors(dashboard):
+    counts = {old: 0 for old, _ in SUBSTITUTIONS}
+
+    def visit(value):
+        if isinstance(value, str):
+            for old, new in SUBSTITUTIONS:
+                counts[old] += value.count(old)
+                value = value.replace(old, new)
+            return value
+        if isinstance(value, list):
+            return [visit(v) for v in value]
+        if isinstance(value, dict):
+            return {k: visit(v) for k, v in value.items()}
+        return value
+
+    result = visit(dashboard)
+    for old, count in counts.items():
+        if count == 0:
+            raise ValueError(f"Providers dashboard selector changed or disappeared: {old}")
+    raw = json.dumps(result)
+    for forbidden in ('picker_eligible=\\"true\\"', 'scope=\\"t3\\"', 'orchestrator_model'):
+        if forbidden in raw:
+            raise ValueError(f"Paid selector remains in free dashboard: {forbidden}")
+    return result
+
+
+def compact_rows(original, kept):
+    # Rows can contain multiple cards. Remove a row's vertical band only when
+    # the whole row was removed, and never consume the next occupied row.
+    rows = {}
+    for panel in original:
+        if 'gridPos' in panel:
+            pos = panel['gridPos']
+            rows[pos['y']] = max(rows.get(pos['y'], 0), pos['h'])
+    occupied = {p['gridPos']['y'] for p in kept if 'gridPos' in p}
+    starts = sorted(rows)
+    removed = []
+    for i, y in enumerate(starts):
+        if y not in occupied:
+            end = min(y + rows[y], starts[i + 1]) if i + 1 < len(starts) else y + rows[y]
+            removed.append((y, end))
+    for panel in kept:
+        if 'gridPos' in panel:
+            pos = panel['gridPos']
+            y = pos['y']
+            pos['y'] -= sum(end - start for start, end in removed if end <= y)
 
 
 def generate():
@@ -43,32 +104,15 @@ def generate():
         }
     ]
 
-    # 2. Templating variables
-    variables = []
-    for v in dashboard.get("templating", {}).get("list", []):
-        if v.get("name") == "orchestrator_model":
-            continue
-        raw = json.dumps(v)
-        raw = raw.replace('picker_eligible=\\"true\\",provider!=\\"openrouter\\"', 'billing=~\\"free|promotion\\"')
-        raw = raw.replace('picker_eligible=\\"true\\",provider=~\\"$provider\\",provider!=\\"openrouter\\"', 'billing=~\\"free|promotion\\",provider=~\\"$provider\\"')
-        raw = raw.replace('scope=\\"t3\\",account!=\\"openrouter\\"', 'scope=\\"free\\"')
-        variables.append(json.loads(raw))
-    dashboard["templating"]["list"] = variables
-
-    # 3. Panels
+    dashboard["templating"]["list"] = [
+        v for v in dashboard.get("templating", {}).get("list", [])
+        if v.get("name") != "orchestrator_model"
+    ]
+    original = copy.deepcopy(dashboard.get("panels", []))
     panels = []
-    paid_panel_ids = {230, 231}
-    current_y = 0
-
-    for p in dashboard.get("panels", []):
-        if p.get("id") in paid_panel_ids or p.get("repeat") == "orchestrator_model":
+    for panel in dashboard.get("panels", []):
+        if panel.get("id") in {230, 231} or panel.get("repeat") == "orchestrator_model":
             continue
-
-        raw = json.dumps(p)
-        raw = raw.replace('picker_eligible=\\"true\\",provider!=\\"openrouter\\"', 'billing=~\\"free|promotion\\"')
-        raw = raw.replace('picker_eligible=\\"true\\",provider=~\\"$provider\\",provider!=\\"openrouter\\"', 'billing=~\\"free|promotion\\",provider=~\\"$provider\\"')
-        raw = raw.replace('scope=\\"t3\\",account!=\\"openrouter\\"', 'scope=\\"free\\"')
-        panel = json.loads(raw)
 
         if panel.get("id") == 200:
             panel["options"]["content"] = (
@@ -92,13 +136,11 @@ def generate():
                 '</div>'
             )
 
-        if "gridPos" in panel:
-            panel["gridPos"]["y"] = current_y
-            current_y += panel["gridPos"]["h"]
-
         panels.append(panel)
 
+    compact_rows(original, panels)
     dashboard["panels"] = panels
+    dashboard = free_selectors(dashboard)
     return json.dumps(dashboard, indent=2) + "\n"
 
 
