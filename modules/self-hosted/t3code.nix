@@ -2139,20 +2139,18 @@ let
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF
-      ${lib.optionalString true ''
-          mkdir -p etc/systemd/user/default.target.wants
-          cat > etc/systemd/user/t3code-podman-bridge.service <<'BRIDGE'
-        [Unit]
-        Description=Localhost access to isolated development Podman ports
-        [Service]
-        ExecStart=${config.ghostship.t3codePodman.bridgePackage}/bin/t3code-podman-bridge bridge
-        Restart=always
-        RestartSec=2
-        [Install]
-        WantedBy=default.target
-        BRIDGE
-          ln -s ../t3code-podman-bridge.service etc/systemd/user/default.target.wants/t3code-podman-bridge.service
-      ''}
+      mkdir -p etc/systemd/user/default.target.wants
+      cat > etc/systemd/user/t3code-podman-bridge.service <<'BRIDGE'
+      [Unit]
+      Description=Localhost access to isolated development Podman ports
+      [Service]
+      ExecStart=${config.ghostship.t3codePodman.bridgePackage}/bin/t3code-podman-bridge bridge
+      Restart=always
+      RestartSec=2
+      [Install]
+      WantedBy=default.target
+      BRIDGE
+      ln -s ../t3code-podman-bridge.service etc/systemd/user/default.target.wants/t3code-podman-bridge.service
       ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/system/t3code-container-setup.service <<'EOF'
       [Unit]
@@ -2262,7 +2260,7 @@ let
       [Service]
       Type=notify
       NotifyAccess=all
-      ExecStart=${t3codeEngineReady}/bin/t3code-podmand-run
+      ExecStart=${t3codeEngineReady}/bin/t3code-engine-ready
       Restart=always
       RestartSec=5
       TimeoutStopSec=30s

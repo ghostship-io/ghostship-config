@@ -148,7 +148,7 @@ def main():
                     "t3code-podman-network.service",
                 )
                 gcroot = Path(
-                    "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime"
+                    "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-candidate"
                 )
                 if (
                     gcroot.is_symlink()
@@ -221,7 +221,7 @@ def main():
             os.close(socket_fd)
             # The engine receives only this closure in the isolated T3 store.
             gcroot = Path(
-                "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime"
+                "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-candidate"
             )
             if gcroot.is_symlink():
                 if os.readlink(gcroot) != spec["runtimePackage"]:

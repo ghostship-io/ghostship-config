@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,3 +64,26 @@ class CandidateAdmission(unittest.TestCase):
                 self.assertEqual(
                     run.call_args.args[0][-3:], ["info", "--format", "{{json .}}"]
                 )
+
+
+class NativeNetworkInspection(unittest.TestCase):
+    def test_project_networks_read_native_subnets(self):
+        # Docker-shaped inspection silently discarded Podman's subnet evidence.
+        def command(*args, **kwargs):
+            output = "project_default\n" if args[1] == "ls" else json.dumps([
+                {"driver": "bridge", "subnets": [{"subnet": "192.0.2.0/24"}]}
+            ])
+            return subprocess.CompletedProcess(args, 0, output, "")
+
+        self.assertEqual(acceptance.project_networks(command, "project"), {
+            "project_default": {"driver": "bridge", "subnets": ["192.0.2.0/24"]}
+        })
+
+
+class ImageStartup(unittest.TestCase):
+    def test_readiness_unit_executes_the_packaged_command(self):
+        # A stale executable name prevents the bootstrap and server from starting.
+        source = (SOURCE.parents[3] / "modules/self-hosted/t3code.nix").read_text()
+        name = re.search(r't3codeEngineReady = pkgs.writeShellScriptBin "([^"]+)"', source)[1]
+        executable = re.search(r'ExecStart=\$\{t3codeEngineReady\}/bin/([^\s]+)', source)[1]
+        self.assertEqual(executable, name)

@@ -6,6 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = (
+    "test_t3code_podman_*.py",
     "test_apparmor_profile_paths.py",
     "test_apparmor_review.py",
     "test_cloudflare_access.py",
@@ -17,7 +18,6 @@ TESTS = (
     "test_ssh_command_guard.py",
     "test_boot_generation_drift.py",
     "test_activate_host.py",
-    "test_deploy_slot.py",
     "test_agent_pin_guard.py",
     "test_private_source_owner.py",
     "test_owner_identity.py",
