@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.184] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 1f7edec3; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #350.
+
 ## [3.17.183] - 2026-10-23
 
 - Prevent unrelated secret projections from restarting containers or the Cloudflare tunnel.
