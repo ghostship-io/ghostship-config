@@ -13,11 +13,19 @@ window whose id already names its scope keeps it: `3p-5h` names the
 Claude and the GPT models of the third-party group, and
 `seven_day_fable` names the Fable models of the Claude account.
 
+The id of a series is published the way the collector composed it, so the
+text file the host writes holds `quotaInfo@gemini` and not the safe form
+of it, `quotaInfo_gemini`: the card keys its rows by the id, and a second
+id is a second row.
+
 The records in this file are invented. They hold no live value.
 """
 
 import importlib.util
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -129,6 +137,29 @@ def records(data, account):
     """The account records of the snapshot."""
     accounts = (data.get("quota") or {}).get("accounts") or {}
     return accounts.get(account) or []
+
+
+def written(data):
+    """The text of the metrics file, as the host writes it.
+
+    The writer of the collector itself, imported the way main.py imports
+    it, so the file this test reads is the file the host writes.
+    """
+    from metrics import MetricWriter
+
+    writer = MetricWriter()
+    for name, labels, value in snapshot.account_window_samples(data):
+        writer.add(name, labels, value)
+    return writer.render()
+
+
+def lines_of(data, metric):
+    """The written lines of one metric."""
+    return [
+        line
+        for line in written(data).splitlines()
+        if line.startswith(f"{metric}{{")
+    ]
 
 
 class ScopedQuotaIdTests(unittest.TestCase):
@@ -256,6 +287,128 @@ class UnchangedQuotaIdTests(unittest.TestCase):
             [record["applies_to"] for record in account],
             [["gemini"], ["claude"]],
         )
+
+
+class WrittenQuotaIdTests(unittest.TestCase):
+    """The quota id as the text file the host writes holds it."""
+
+    def test_the_file_names_the_scope_of_every_family(self):
+        data = build(
+            [
+                reading("antigravity", "quotaInfo", "quota", 0.2, model="gemini-3-flash"),
+                reading("antigravity", "quotaInfo", "quota", 0.3, model="claude-opus-5-5-high"),
+                reading("antigravity", "quotaInfo", "quota", 0.4, model="gpt-oss-120b-medium"),
+            ]
+        )
+        text = written(data)
+        # The three windows of the account are three series, and the file
+        # holds the id each of them was published with.
+        self.assertIn('quota_id="quotaInfo@gemini"', text)
+        self.assertIn('quota_id="quotaInfo@claude"', text)
+        self.assertIn('quota_id="quotaInfo@gpt"', text)
+        # The safe form of the id is another id than the one the card keys
+        # its rows by, and it is not written.
+        self.assertNotIn("quotaInfo_gemini", text)
+        self.assertNotIn("quotaInfo_claude", text)
+        self.assertNotIn("quotaInfo_gpt", text)
+
+    def test_the_file_names_two_families_of_one_window(self):
+        data = build(
+            [
+                reading(
+                    "antigravity",
+                    "quotaInfo",
+                    "quota",
+                    0.2,
+                    applies_to=("claude", "gpt"),
+                ),
+            ]
+        )
+        text = written(data)
+        # The window covers the Claude and the GPT models, and the file
+        # holds the id that names the two of them.
+        self.assertIn('quota_id="quotaInfo@claude+gpt"', text)
+        self.assertNotIn("quotaInfo_claude_gpt", text)
+
+    def test_the_ids_that_name_no_scope_are_written_as_they_are(self):
+        data = build(
+            [
+                reading("claude", "five_hour", "session", 0.2),
+                reading("opencode-go", "go_monthly", "monthly", 0.3),
+                reading("antigravity", "3p-5h", "session", 0.5),
+                reading("claude", "seven_day_fable", "weekly", 0.0),
+            ]
+        )
+        text = written(data)
+        for quota_id in ("five_hour", "go_monthly", "3p-5h", "seven_day_fable"):
+            self.assertIn(f'quota_id="{quota_id}"', text)
+
+    def test_the_other_labels_of_a_series_are_written_as_they_are(self):
+        data = build(
+            [reading("antigravity", "quotaInfo", "quota", 0.2, model="gemini-3-flash")]
+        )
+        # The whole series, with every label of it, and the id the card
+        # keys the row by.
+        self.assertIn(
+            'ghostship_ai_account_window_remaining_ratio{account="antigravity",'
+            'evidence="provider_reported",kind="quota",label="Quota · Gemini",'
+            'quota_id="quotaInfo@gemini"} 0.8',
+            written(data),
+        )
+
+    def test_the_series_of_the_other_accounts_are_unchanged(self):
+        data = build(
+            [
+                reading("claude", "five_hour", "session", 0.2),
+                reading("opencode-go", "go_monthly", "monthly", 0.3),
+                reading("antigravity", "3p-5h", "session", 0.5),
+                reading("claude", "seven_day_fable", "weekly", 0.0),
+            ]
+        )
+        # Every label of every series of the windows that name no scope is
+        # written as it was written before.
+        self.assertEqual(
+            lines_of(data, "ghostship_ai_account_window_remaining_ratio"),
+            [
+                'ghostship_ai_account_window_remaining_ratio{account="antigravity",'
+                'evidence="provider_reported",kind="session",label="Session · Claude & GPT",'
+                'quota_id="3p-5h"} 0.5',
+                'ghostship_ai_account_window_remaining_ratio{account="claude",'
+                'evidence="provider_reported",kind="session",label="Session",'
+                'quota_id="five_hour"} 0.8',
+                'ghostship_ai_account_window_remaining_ratio{account="claude",'
+                'evidence="provider_reported",kind="weekly",label="Weekly · Fable",'
+                'quota_id="seven_day_fable"} 1',
+                'ghostship_ai_account_window_remaining_ratio{account="opencode-go",'
+                'evidence="provider_reported",kind="monthly",label="Monthly",'
+                'quota_id="go_monthly"} 0.7',
+            ],
+        )
+
+    def test_the_file_is_a_valid_metrics_file(self):
+        data = build(
+            [
+                reading("antigravity", "quotaInfo", "quota", 0.2, model="gemini-3-flash"),
+                reading("antigravity", "quotaInfo", "quota", 0.3, model="claude-opus-5-5-high"),
+            ]
+        )
+        text = written(data)
+        # A real parser reads the file when the shell has one.
+        promtool = shutil.which("promtool")
+        if not promtool:
+            return
+        with tempfile.NamedTemporaryFile("w", suffix=".prom", delete=False) as handle:
+            handle.write(text)
+            path = handle.name
+        try:
+            result = subprocess.run(
+                [promtool, "check", "metrics", path],
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

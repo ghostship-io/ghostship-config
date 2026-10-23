@@ -63,10 +63,12 @@ import usage_inference
 import value_policy
 
 try:  # pragma: no cover - the collector always ships metrics.py
-    from metrics import ExactLabel
+    from metrics import ExactLabel, MAX_LABEL_LENGTH
 except ImportError:  # pragma: no cover - standalone use
     class ExactLabel(str):  # pragma: no cover - standalone use
         """A label value that is published exactly as it is."""
+
+    MAX_LABEL_LENGTH = 120
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -3604,6 +3606,19 @@ def _scoped_quota_id(window: Mapping[str, Any]) -> str:
     return f"{quota_id}@{'+'.join(scope)}"
 
 
+def _published_quota_id(quota_id: str) -> ExactLabel:
+    """The quota id of a published series, as the text file holds it.
+
+    The writer's safe form of a label value replaces every character it
+    does not know, and the id of a scoped window carries an '@' and a '+':
+    the safe form of 'quotaInfo@gemini' is 'quotaInfo_gemini', and that is
+    another id than the one the card keys its rows by. The id is a name
+    the collector composed, so it is published as it is, and it keeps the
+    bound every label value has.
+    """
+    return ExactLabel(str(quota_id)[:MAX_LABEL_LENGTH])
+
+
 def account_window_samples(
     snapshot: Mapping[str, Any],
 ) -> list[tuple[str, dict[str, str], float]]:
@@ -3621,7 +3636,9 @@ def account_window_samples(
 
     Every series of an account carries a quota id of its own, so a
     provider that publishes one quota id for several model families draws
-    one row of the card for each of them.
+    one row of the card for each of them. The id is published the way the
+    collector composed it, so the text file holds 'quotaInfo@gemini' and
+    not another id.
 
     An account that publishes no window of its own is learning, and the
     collector says so instead of drawing a row.
@@ -3669,7 +3686,9 @@ def account_window_samples(
             labels = {
                 "account": account,
                 "kind": kind,
-                "quota_id": quota_id,
+                # The quota id is a name the collector composed, and it is
+                # published as it is: the card keys its rows by it.
+                "quota_id": _published_quota_id(quota_id),
                 # The label is a name for a reader, and it is published the
                 # way it reads.
                 "label": ExactLabel(label + _scope_suffix(scope, label)),
