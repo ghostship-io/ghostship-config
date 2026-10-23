@@ -214,6 +214,64 @@ ghostship_ai_model_info{provider="azure",model="phi-4-mini",name="Phi 4 Mini"} 1
 ghostship_ai_model_info{provider="cohere",model="command-r-plus",name="Command R Plus"} 1
 ghostship_ai_model_info{provider="openrouter",model="gpt-oss-120b",name="GPT OSS 120B"} 1
 
+# --- Free selections --------------------------------------------------------
+# The free selection of every free provider at 01:10Z, as the collector
+# projects it from the routing snapshot: the model the provider selected for
+# the free tier, the basis of its capacity, the share of its window that is
+# left, the pace and the reset. A provider with no free winner keeps its row
+# with no model and no basis.
+#
+# The free routes a provider holds apart from its paid allowance are counted
+# by state. A provider that holds no free route publishes no count at all, so
+# its card carries no free line.
+#
+# OpenCode Go is the case the page needs both of: its monthly allowance is
+# spent, and its Beam Free route is free and available.
+ghostship_ai_free_provider_selection_info{provider="cloudflare-workers-ai",model="llama-3.3-70b-instruct",display_name="Llama 3.3 70B Instruct",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="cloudflare-workers-ai"} 1.0
+ghostship_ai_free_provider_selection_info{provider="cohere",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="google",model="gemma-3-27b",display_name="Gemma 3 27B",basis="inferred"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="google"} 0.9712
+ghostship_ai_free_provider_selection_paced_availability{provider="google"} 0.33
+ghostship_ai_free_provider_selection_reset_timestamp_seconds{provider="google"} 1792710000
+ghostship_ai_free_provider_selection_info{provider="groq",model="qwen3.8-27b",display_name="Qwen3.8 27B",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="groq"} 1.0
+ghostship_ai_free_provider_selection_info{provider="inception",model="mercury-2",display_name="Mercury 2",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="inception"} 1.0
+ghostship_ai_free_provider_selection_info{provider="kilo",model="nemotron-3.5-super-vl",display_name="Nemotron 3.5 Super VL",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="kilo"} 1.0
+ghostship_ai_free_provider_selection_info{provider="kilo-keyed",model="qwen3.8-27b",display_name="Qwen3.8 27B",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="kilo-keyed"} 1.0
+ghostship_ai_free_provider_selection_info{provider="mistral",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="nvidia",model="glm-5.3-flash",display_name="GLM-5.3 Flash",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="nvidia"} 1.0
+ghostship_ai_free_provider_selection_info{provider="opencode",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="opencode-go",model="beam-free",display_name="Beam Free",basis="published"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="opencode-go"} 1.0
+ghostship_ai_free_provider_selection_info{provider="openrouter",model="gpt-oss-120b",display_name="GPT OSS 120B",basis="reported"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="openrouter"} 0.992
+ghostship_ai_free_provider_selection_paced_availability{provider="openrouter"} 0.041
+ghostship_ai_free_provider_selection_reset_timestamp_seconds{provider="openrouter"} 1792706333
+ghostship_ai_free_provider_selection_info{provider="orcarouter",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="ovh",model="mistral-small-3.2",display_name="Mistral Small 3.2",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="ovh"} 1.0
+ghostship_ai_free_provider_selection_info{provider="poolside",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="requesty",model="",display_name="",basis="none"} 1
+
+# The free routes of a provider, apart from its paid allowance.
+ghostship_ai_provider_free_models{provider="google",state="available"} 8
+ghostship_ai_provider_free_models{provider="google",state="unavailable"} 0
+ghostship_ai_provider_free_models{provider="kilo",state="available"} 8
+ghostship_ai_provider_free_models{provider="kilo",state="unavailable"} 4
+ghostship_ai_provider_free_models{provider="nvidia",state="available"} 15
+ghostship_ai_provider_free_models{provider="nvidia",state="unavailable"} 1
+ghostship_ai_provider_free_models{provider="opencode-go",state="available"} 2
+ghostship_ai_provider_free_models{provider="opencode-go",state="unavailable"} 3
+ghostship_ai_provider_free_models{provider="openrouter",state="available"} 10
+ghostship_ai_provider_free_models{provider="openrouter",state="unavailable"} 10
+ghostship_ai_provider_free_models{provider="requesty",state="available"} 0
+ghostship_ai_provider_free_models{provider="requesty",state="unavailable"} 7
+
 # --- Frontier --------------------------------------------------------------
 # The chief and the backup of the owner.
 ghostship_ai_model_winner_position{tier="frontier",provider="claude",model="claude-opus-5-5"} 1
