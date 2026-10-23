@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.116] - 2026-10-23
+## [3.17.117] - 2026-10-23
 
 - Providers page: the Model selection panel renders again. Live it read "An unexpected error happened": its `externalStyles` option was an empty string, and Business Text 6.3.0 maps that option as a list (`e.externalStyles.map is not a function`). It is a list now, and its query reads as one table like every other section. A test holds every Business Text panel to list-valued `externalStyles`, `editors` and `contentPartials` and table-format queries.
+
+## [3.17.116] - 2026-10-23
+
+- flake: the AI usage collector's policy input moves to ghostship-agent 5381c015. The runtime policy there declares `model_trust`, the owner's trust levels: Beam is untrusted for implementation, Gemini 3.8 Flash for implementation and CAD execution, and Claude Haiku 5.5 and GPT-6 Luna are backup. `model-identities.json` declares the routes of those models, and DeepSeek V4.1 Flash 1017 is its own model. The static worker table now routes narrow implementation to DeepSeek V4.1 Flash 1017 first. The T3 Code agent input is unchanged. The wiring test no longer names one revision: it requires an exact 40-hex pin and a lock that holds the same revision, so a pin moves without a test edit and a stale lock still fails.
 
 ## [3.17.115] - 2026-10-23
 
