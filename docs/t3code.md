@@ -329,15 +329,9 @@ only the session leaving the running state settles the turn. No conversation rec
 
 ## Maintenance
 
-`system.autoUpgrade` deploys GitHub `main` nightly (04:00 UTC plus up to 45
-minutes, with `--impure` for Asahi firmware; missed runs catch up after boot).
-It waits for a running backup and alerts through `ghostship-failure@` on
-failure; the next run retries an interrupted switch. To deploy manually, run
-`nixos-rebuild switch --impure --flake .#chill-penguin -L` on the host after
-pulling the committed configuration. This updates the system profile and boot
-entry as well as the running system. Running a built system's
-`switch-to-configuration switch` directly does not advance the system profile;
-reboot can therefore return to a generation without T3 Code.
+Deploy merged changes with `agent deploy run`; `--agent-rev REV` pins an agent
+revision first. Its gates preserve busy T3 sessions, record the generation and
+verify live health. Image updates wait for idle when a restart is needed.
 
 The four-hour tool timer resolves the current registry version online before it
 updates T3, Codex, and Claude, then verifies the installed package manifest
