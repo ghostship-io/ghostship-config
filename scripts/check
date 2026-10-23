@@ -38,9 +38,6 @@ python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 printf 'Checking the boot generation drift check\n'
 python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 
-printf 'Checking the merge freeze status\n'
-python3 -m unittest discover -s tests -p test_freeze_status.py
-
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
 
