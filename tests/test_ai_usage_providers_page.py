@@ -65,6 +65,7 @@ class ProvidersPageTests(unittest.TestCase):
             query=variables[category+'_model']['query']['query']
             self.assertIn('sort(',query)
             self.assertIn('ghostship_ai_picker_model_position',query)
+            self.assertIn('ghostship_ai_picker_model_selected',query)
             self.assertIn('ghostship_ai_collection_duration_seconds',query)
             self.assertEqual(variables[category+'_model']['sort'],0)
         query=variables['capacity_account']['query']['query']
@@ -127,6 +128,59 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertIn('data-field="remaining"',panel['options']['content'])
         self.assertIn('custom reset',panel['options']['content'])
 
+    def test_selected_models_have_exactly_one_binding_graph_and_spent_models_remain_grey(self):
+        panel=self.panels[233]
+        self.assertEqual(panel['options']['content'].count('class="capacity-track"'),1)
+        self.assertIn('.selection-card.restricted{opacity:.5}',panel['options']['styles'])
+        model=helper(panel,'selectionModels',selection_rows(left=0,state='spent'))[0]
+        self.assertEqual(model['fill'],0)
+        self.assertTrue(model['restricted'])
+        variables={v['name'] for v in self.page['templating']['list']}
+        self.assertNotIn('free_model',variables)
+
+    def test_quality_table_uses_published_scores_and_preserves_missing_evidence(self):
+        panel=self.panels[250]
+        labels={'provider':'example','model':'model','display_name':'Example','effort':'low',
+                'effort_option':'effort','aa_date':'2026-10-23T00:00:00Z',
+                'source':'bench + work','evidence_state':'ok'}
+        rows=[{**labels,'field':field,'value':value} for field,value in {
+            'info':1,'rank':1,'overall':72.34,'aa':70,'observed':80,'n':5,'passed':4,
+            'observed_weight':1/11,'tokens_per_pass':150,'median_seconds':120,'date':1767268800}.items()]
+        value=helper(panel,'qualityRows',rows)[0]
+        self.assertEqual((value['overall'],value['aa'],value['observed'],value['n']),('72.3','70','80',5))
+        self.assertEqual(value['passes'],'4/5')
+        self.assertEqual(value['quota'],'—')
+        self.assertEqual(value['findings'],'—')
+        self.assertFalse(value['provisional'])
+        empty=helper(panel,'qualityRows',[{**labels,'evidence_state':'producer_unavailable','field':'info','value':1}])[0]
+        self.assertEqual((empty['overall'],empty['observed'],empty['passes']),('—','—','no evidence yet'))
+        self.assertTrue(empty['evidenceMissing'])
+        self.assertLess(self.page['panels'].index(self.panels[210]),self.page['panels'].index(panel))
+
+    def test_quality_collapses_efforts_and_only_offers_comparison_when_observations_differ(self):
+        import model_quality
+        from test_ai_usage_model_quality import candidate,rounds,NOW
+        active=candidate()
+        spent=candidate('spent')
+        spent['capacity']['remaining_ratio']=0
+        records=rounds(n=5)+rounds(effort='high',n=5)
+        for different in (False,True):
+            if different:records[-1]['wall_seconds']=300
+            result=model_quality.build([active,spent],records,NOW)
+            selection=model_selection.build({'candidates':[active,spent]},[])
+            model_quality.annotate(result,selection)
+            rows=[{**labels,'field':name.removeprefix('ghostship_ai_quality_'),'value':value}
+                  for name,labels,value in model_quality.samples(result)]
+            models=helper(self.panels[250],'qualityModels',rows)
+            self.assertEqual(len(models),2)
+            chosen=next(model for model in models if model['model']=='model')
+            self.assertTrue(chosen['active'])
+            self.assertEqual(chosen['compare'],different)
+            self.assertFalse(next(model for model in models if model['model']=='spent')['active'])
+            self.assertFalse(chosen['hasFindings'])
+            self.assertFalse(chosen['hasQuota'])
+        self.assertIn('data-quality-all',self.panels[250]['options']['content'])
+
     def test_pi_is_absent_from_dashboard_queries(self):
         for variable in self.page['templating']['list']:
             query=variable.get('definition','')
@@ -156,7 +210,7 @@ class ProvidersPageTests(unittest.TestCase):
         models=helper(self.panels[233],'selectionModels',rows)
         self.assertEqual([m['model'] for m in models],['z','a'])
         self.assertEqual(models[0]['quality'],'Unknown')
-        self.assertEqual(models[0]['percent'],'No long-window reading')
+        self.assertEqual(models[0]['percent'],'No published limit')
         self.assertEqual(models[0]['rounds'],'rounds unknown')
         self.assertNotIn('NaN',json.dumps(models))
 

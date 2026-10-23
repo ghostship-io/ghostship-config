@@ -1003,13 +1003,7 @@ How a model enters a tier:
   withheld from that work while its provider has less than half of its
   capacity left.
 
-How quality is scored: the quality of a model is 0 to 100 and starts from the
-prior of its lineage, matched on the catalog family first and on the model id
-second. A model released within thirty days gains 3 and one released within
-ninety days gains 1, a model with no release date loses 5, a model older than
-a year loses 15, a context window of 200k or 500k tokens gains 1 or 3,
-reasoning and tool calls gain 1 each, and a preview, experimental or beta
-model loses 6.
+Model selection uses the [overall quality and observed effort](#overall-quality-and-observed-effort) contract. No lineage or release-age heuristic supplies that score.
 
 How capacity and expiry drive the order: the window that matters is the one
 that frees up soonest while it still has capacity, because that is the
@@ -1075,8 +1069,8 @@ zero. They publish no expected-use or numeric pace series. Positive short
 windows publish the blue `on_pace` colour state without a pace line; zero is
 red `spent`. Only weekly/monthly periods, including inferred periods of those
 lengths, supply pace. Their own usage is compared with their own line even
-when a short window binds the route's capacity. Short quota windows also stay
-outside the model selection's displayed limiting window.
+when a short window binds the route's capacity. The model graph displays the
+actual binding window, including a short window.
 
 The pace state of a route is the band its Paced Availability falls in, the
 share left minus the expected share left of the most constraining window, in
@@ -1115,19 +1109,9 @@ runtime policy), the runtime policy, the delegation ledger
 that is missing, unreadable or empty is an empty history, and every model is
 trusted.
 
-The display quality score is one number per model, so every page - the
-orchestrators, the workers, the 3D tier and the free tier - reads the same
-comparable value. Its prior is global: the model's intelligence inside the
-range of every ranked candidate, across every tier
-(`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, and `0.5`
-without an index), and its counts are every task type of the model identity,
-summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`: an
-integer from 0 to 100. The basis is published with it: `AA + outcomes` when
-the index and the rounds are both there, `AA only` with the index alone,
-`outcomes + default prior` with the rounds alone, and `default prior` with
-neither. The display score never orders a tier: the per-tier outcome above
-does, and the score is published beside it, on every candidate row and every
-winner.
+The model-selection and quality panels use `model_quality` and the
+`ghostship_ai_quality_*` projection documented below. The older tier outcome
+metrics describe their raw calculation and do not choose picker models.
 
 * `ghostship_ai_model_trust_info{provider,model,tier,task_type,level,source,reason}`
   - 1 for the trust of a model in a tier, with the level it holds, where the
@@ -1450,10 +1434,11 @@ container and security dashboards.
 
 `model_selection` is the shared `ghostship.model-selection/v1` contract for
 orchestrator and worker recommendations, grouped by provider. Native catalog
-membership and quota availability govern favorites; short windows can make a
-model unavailable but never become its displayed limiting window. The first
-available native worker is the new-thread default. Effort follows the role's
-supported native setting, with standard billing only.
+membership and quota availability govern favorites. A short window may be the
+displayed binding window; a spent model remains visible in grey until reset.
+The first available native worker is the new-thread default. Evidence chooses
+a supported native effort, with the role default used while evidence ties;
+billing remains standard only.
 
 The collector calls the policy input's authenticated picker reconciler on its
 normal cadence. Incremental settings patches preserve unrelated favorites and
@@ -1543,3 +1528,45 @@ Unused pools are declared in the same policy's `excluded_pools`; their
 model candidates are omitted. Their account windows remain visible as grey
 "not used" rows with reported remaining/reset values, without pace or binding
 capacity. Other pools retain their readings and eligibility.
+
+### Overall quality and observed effort
+
+The `model_quality` snapshot is the canonical score used by the provider
+selection and its dashboard. Each exact model and actual supported effort has
+separate evidence; dated model builds are never collapsed. The prior is the
+public Artificial Analysis intelligence index, clamped to 0–100, with its
+source URL and fetch date. A dated last-good public prior remains visible with a stale label when the daily pull fails; it is never represented as a fresh reading. Incompatible feed versions and missing AA stay unknown. The scheduled pull refreshes once per UTC calendar day, independently of the
+collector's 36-hour reading grace. Daily intelligence collection uses the public
+boards directly; optional individual-page cost enrichment does not delay it.
+
+Shared `ghostship_t3.models.read_evidence` supplies independently verified bench
+and work records from `GHOSTSHIP_MODEL_EVIDENCE_PATH`. Missing producer/store
+reports **no evidence yet**. An outcome counts once by source/event ID; future
+and older-than-30-day evidence is excluded. No private task text or event IDs
+are emitted in metrics. Observed score is `100 * passed / n`, including failed
+tasks in `n`. Below five verified outcomes it is provisional and has no weight.
+Thereafter `w = (n - 4) / (n + 6)` and
+`overall = (1 - w) * AA + w * observed`; observed becomes the majority at 15.
+Without AA, five outcomes are required for an observed-only overall score.
+
+The default table contains one row per model in the active, available native
+selection pool. All models includes spent and unused models. Efforts collapse
+to the best measured setting, with a comparison only when observed effort
+results differ; columns without evidence are omitted. Unmeasured efforts cannot
+erase established outcomes once a supported effort has five verified samples.
+
+The table publishes overall, AA, observed, sample count, pass/merge counts,
+median time, total time/tokens per passed task and evidence source/date. Unknown
+review findings and task-attributed quota remain unknown: shared-window deltas
+are not attributed task costs. New evidence changes the provider's chosen
+model and supported effort; worker input/output/cache prices must each stay
+within the reference model's published price. No guessed price blend is used.
+
+The model page contains orchestrator and worker lanes, provider usage, then
+quality. Free routes have their own dashboard. Lanes show selected native
+models only, retaining a grey exhausted model when its provider has no available
+selection. Each model has exactly one graph for its actual binding window,
+including five-hour windows. Short windows are never paced; positive capacity
+stays eligible, zero capacity is unavailable until reset. Quality chooses a
+provider's model; live availability/capacity order the provider choices and
+new-thread default. The canonical list is also consumed by `agent models pick`.
