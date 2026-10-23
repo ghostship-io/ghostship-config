@@ -59,6 +59,7 @@ import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
 import quota as quota_module
+import ranking as ranking_module
 import usage_inference
 import value_policy
 
@@ -83,6 +84,16 @@ DEFAULT_MAX_AGE_SECONDS = 900
 QUOTA_AVAILABLE = "available"
 QUOTA_EXHAUSTED = "exhausted"
 QUOTA_UNKNOWN = "unknown"
+
+# Why a route the instance does not offer is unusable. The ranking decides
+# that the route is not offered; the catalog says whether the model behind
+# it is deprecated, and the reason names both facts. A route without a
+# catalog status keeps the bare fact, and a reader never sees an unavailable
+# route with an empty reason.
+NOT_OFFERED_REASON = "not offered by the T3 instance"
+NOT_OFFERED_DEPRECATED_REASON = (
+    "not offered by the T3 instance (deprecated in the catalog)"
+)
 
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
@@ -675,6 +686,30 @@ def _intelligence_record(
     }
 
 
+def _not_offered_reason(catalog: Any, provider: str, model: str) -> str:
+    """Why a route the instance does not offer is unusable, in words.
+
+    The ranking decides that the route is not offered. The catalog is the
+    only source that says whether the model behind the route is deprecated,
+    so the reason names the retirement when it is published and stays at the
+    bare fact when it is not.
+    """
+    entry = None
+    if catalog is not None:
+        getter = getattr(catalog, "model_entry", None)
+        if callable(getter):
+            try:
+                entry = getter(provider, model)
+            except Exception:  # pragma: no cover - a catalog without the model
+                entry = None
+    status = ""
+    if isinstance(entry, Mapping):
+        status = str(entry.get("status") or "")
+    if status.strip().lower() == "deprecated":
+        return NOT_OFFERED_DEPRECATED_REASON
+    return NOT_OFFERED_REASON
+
+
 def _candidate(
     provider: str,
     model: str,
@@ -685,6 +720,7 @@ def _candidate(
     aa_cache: Mapping[str, Any] | None = None,
     free_set: set[tuple[str, str]] | None = None,
     promo_set: set[tuple[str, str]] | None = None,
+    catalog: Any = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -696,6 +732,7 @@ def _candidate(
     remaining: float | None = None
     expires_in: float | None = None
     available = False
+    not_offered = False
     settled = True
     pending_reason = ""
     used_tokens = 0.0
@@ -721,6 +758,13 @@ def _candidate(
         if entry.expires_in_seconds is not None:
             expires_in = float(entry.expires_in_seconds)
         available = bool(entry.available)
+        # The ranking decides that a route is not offered; the snapshot keeps
+        # that judgement so the published reason can say it instead of
+        # rebuilding an empty one from the windows.
+        not_offered = not_offered or (
+            str(getattr(entry, "availability_reason", "") or "")
+            == ranking_module.REASON_NOT_OFFERED
+        )
         settled = bool(entry.settled)
         pending_reason = entry.pending_reason
         used_tokens = float(entry.used_tokens)
@@ -820,7 +864,11 @@ def _candidate(
                     else (
                         "a window is spent"
                         if quota_state == QUOTA_EXHAUSTED
-                        else unknown_reason
+                        else (
+                            _not_offered_reason(catalog, provider, model)
+                            if not_offered
+                            else unknown_reason
+                        )
                     )
                 )
             ),
@@ -2896,6 +2944,7 @@ def build_snapshot(
             aa_cache,
             free_set,
             promo_set,
+            catalog,
         )
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
