@@ -351,11 +351,9 @@ runs, and avoids full fleet builds to conserve runner time. PRs run the fast
 `scripts/check-unit.py`, workflow/shell lint and the same secret scan; host and
 container evaluations run on main.
 
-Apply the built generation:
-
-```fish
-./result/bin/switch-to-configuration switch
-```
+Deploy the merged configuration with `agent deploy run`. It records the system
+generation and checks activation gates and live health. Use `--agent-rev REV`
+to pin an agent change before deploying.
 
 Build a different host without switching:
 
