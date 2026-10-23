@@ -81,6 +81,24 @@ except ImportError:  # pragma: no cover - standalone use
     quota_module = None  # type: ignore[assignment]
 
 
+def _published_tier_names(tier: str) -> tuple[str, ...]:
+    """The published names of a tier: its canonical name and its aliases.
+
+    The table of the aliases lives in the snapshot module, and the snapshot
+    module imports this one, so the import happens here, where the samples
+    are built, and never at the top of the module. Without the snapshot
+    module the tier keeps its own name and nothing else.
+    """
+    try:
+        import snapshot as snapshot_module
+    except ImportError:  # pragma: no cover - standalone use
+        return (str(tier),)
+    names = getattr(snapshot_module, "tier_names", None)
+    if names is None:  # pragma: no cover - a half-imported module
+        return (str(tier),)
+    return names(tier)
+
+
 @dataclasses.dataclass
 class ModelRecord:
     """One model we can use, with the provider that serves it."""
@@ -2172,6 +2190,11 @@ def rank_samples(
         provider = label_value(entry.provider)
         model = label_value(entry.model)
         tier = label_value(entry.tier)
+        # The published names of the tier: its own name and the name it
+        # carried before this release. Every tier-labelled gauge of this
+        # publisher is written under both, with the same labels and the same
+        # value, so a reader of either name reads one answer.
+        tiers = _published_tier_names(tier)
         key = (provider, model)
         if key not in seen:
             seen.add(key)
@@ -2198,21 +2221,23 @@ def rank_samples(
             if entry.remaining is not None:
                 # An unknown capacity is not reported as zero or as unlimited.
                 # A spent allowance is reported as zero.
-                samples.append(
-                    (
-                        "ghostship_ai_model_capacity_remaining",
-                        {**labels, "tier": tier},
-                        float(entry.remaining),
+                for name in tiers:
+                    samples.append(
+                        (
+                            "ghostship_ai_model_capacity_remaining",
+                            {**labels, "tier": name},
+                            float(entry.remaining),
+                        )
                     )
-                )
             if entry.expires_in_seconds is not None:
-                samples.append(
-                    (
-                        "ghostship_ai_model_capacity_expires_in_seconds",
-                        {**labels, "tier": tier},
-                        float(entry.expires_in_seconds),
+                for name in tiers:
+                    samples.append(
+                        (
+                            "ghostship_ai_model_capacity_expires_in_seconds",
+                            {**labels, "tier": name},
+                            float(entry.expires_in_seconds),
+                        )
                     )
-                )
             # Where the capacity of this route comes from: a reading the
             # provider reported, an inference from the limit failures of the
             # route, a statement the provider publishes, or nothing at all.
@@ -2302,22 +2327,24 @@ def rank_samples(
             )
         # The rank of every model, including the ones that hold no tier: a
         # model that is not usable stays visible with its rank.
-        samples.append(
-            (
-                "ghostship_ai_model_rank",
-                {"tier": tier, "provider": provider, "model": model},
-                float(entry.rank),
+        for name in tiers:
+            samples.append(
+                (
+                    "ghostship_ai_model_rank",
+                    {"tier": name, "provider": provider, "model": model},
+                    float(entry.rank),
+                )
             )
-        )
         if not entry.tier or not entry.available:
             continue
-        tier_labels = {"tier": tier, "provider": provider, "model": model}
-        samples.append(("ghostship_ai_model_score", dict(tier_labels), float(entry.score)))
-        samples.append(
-            (
-                "ghostship_ai_model_tier",
-                {"provider": provider, "model": model, "tier": tier},
-                1.0,
+        for name in tiers:
+            tier_labels = {"tier": name, "provider": provider, "model": model}
+            samples.append(("ghostship_ai_model_score", dict(tier_labels), float(entry.score)))
+            samples.append(
+                (
+                    "ghostship_ai_model_tier",
+                    {"provider": provider, "model": model, "tier": name},
+                    1.0,
+                )
             )
-        )
     return samples

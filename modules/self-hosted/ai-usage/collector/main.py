@@ -1890,7 +1890,10 @@ def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
     for the task type of the tier it holds. The reason is published with
     it, so a reader sees why a route is held back instead of only that it
     is. The outcome is published as its own fields, so the prior, the
-    observed rounds and the quality can be read apart.
+    observed rounds and the quality can be read apart. Every tier-labelled
+    gauge is published under the name of the tier and under the name the
+    tier carried before this release, with the same labels and the same
+    value.
     """
     samples: list[Sample] = []
     for row in snapshot.get("candidates") or []:
@@ -1903,21 +1906,25 @@ def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
         for tier, record in (row.get("trust") or {}).items():
             if not isinstance(record, Mapping):
                 continue
-            samples.append(
-                (
-                    "ghostship_ai_model_trust_info",
-                    {
-                        "provider": provider,
-                        "model": model,
-                        "tier": str(tier),
-                        "task_type": str(record.get("task_type") or ""),
-                        "level": str(record.get("level") or "trusted"),
-                        "source": str(record.get("source") or "default"),
-                        "reason": str(record.get("reason") or ""),
-                    },
-                    1.0,
+            # The trust is published under the name of the tier and under the
+            # name the tier carried before this release, with the same labels
+            # and the same value.
+            for name in snapshot_module.tier_names(tier):
+                samples.append(
+                    (
+                        "ghostship_ai_model_trust_info",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "tier": name,
+                            "task_type": str(record.get("task_type") or ""),
+                            "level": str(record.get("level") or "trusted"),
+                            "source": str(record.get("source") or "default"),
+                            "reason": str(record.get("reason") or ""),
+                        },
+                        1.0,
+                    )
                 )
-            )
         for tier, record in (row.get("outcome") or {}).items():
             if not isinstance(record, Mapping):
                 continue
@@ -1925,19 +1932,20 @@ def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
                 value = record.get(field)
                 if not isinstance(value, (int, float)) or isinstance(value, bool):
                     continue
-                samples.append(
-                    (
-                        "ghostship_ai_model_outcome",
-                        {
-                            "provider": provider,
-                            "model": model,
-                            "tier": str(tier),
-                            "task_type": str(record.get("task_type") or ""),
-                            "field": field,
-                        },
-                        float(value),
+                for name in snapshot_module.tier_names(tier):
+                    samples.append(
+                        (
+                            "ghostship_ai_model_outcome",
+                            {
+                                "provider": provider,
+                                "model": model,
+                                "tier": name,
+                                "task_type": str(record.get("task_type") or ""),
+                                "field": field,
+                            },
+                            float(value),
+                        )
                     )
-                )
         # The display score is one number per model, so neither series
         # carries a tier: every page reads the same score of the same model.
         score = row.get("quality_score")
@@ -2065,20 +2073,24 @@ def decision_input_samples(
         reserve = row.get("reserve") or {}
         if reserve.get("3d"):
             for tier in reserve.get("tiers") or ():
-                samples.append(
-                    (
-                        "ghostship_ai_model_reserved",
-                        {
-                            **labels,
-                            "tier": str(tier),
-                            "reserve": "3d",
-                            "withheld": (
-                                "withheld" if reserve.get("withheld") else "ordered_last"
-                            ),
-                        },
-                        1.0,
+                # The reserve is published under the name of the tier and
+                # under the name the tier carried before this release. The
+                # tiers that have no alias keep their own name.
+                for name in snapshot_module.tier_names(tier):
+                    samples.append(
+                        (
+                            "ghostship_ai_model_reserved",
+                            {
+                                **labels,
+                                "tier": name,
+                                "reserve": "3d",
+                                "withheld": (
+                                    "withheld" if reserve.get("withheld") else "ordered_last"
+                                ),
+                            },
+                            1.0,
+                        )
                     )
-                )
     frontier = (snapshot.get("coverage") or {}).get("frontier") or {}
     for member in frontier.get("eligible") or ():
         if not isinstance(member, Mapping):
