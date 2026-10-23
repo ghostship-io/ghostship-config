@@ -106,7 +106,7 @@ let
     name = "ghostship-worker";
     tag = "free-runtime";
     contents = [
-      tools.agent tools.free-inference-bridge opencode
+      opencode
       pkgs.bash pkgs.coreutils pkgs.python3 pkgs.git pkgs.curl pkgs.jq pkgs.ripgrep pkgs.nodejs
       pkgs.bubblewrap pkgs.cacert pkgs.glibc pkgs.stdenv.cc.cc.lib
       pkgs.dockerTools.binSh pkgs.dockerTools.usrBinEnv
@@ -138,6 +138,16 @@ let
 in
 {
   config = lib.mkIf enabled {
+    ghostship.containerRuntimes.ghostship-worker = {
+      runtime = tools.agent;
+      extraPackages = [ tools.free-inference-bridge opencode current
+        pkgs.bash pkgs.coreutils pkgs.python3 pkgs.git pkgs.curl pkgs.jq pkgs.ripgrep pkgs.nodejs
+        pkgs.bubblewrap pkgs.cacert pkgs.glibc pkgs.stdenv.cc.cc.lib
+        pkgs.dockerTools.binSh pkgs.dockerTools.usrBinEnv ];
+      # The container only sleeps. Its host-managed broker and scheduler pick
+      # up the published packages through their own units, without recreation.
+      restart = false;
+    };
     ghostship.apps.ghostship-worker = {
       name = "Free workers";
       group = "Services";
@@ -226,6 +236,10 @@ in
         "--cpus=2"
       ];
     };
+    # A switch may restart these host processes while the container stays up.
+    # Order them after copying the new packages into its private store.
+    systemd.services.ghostship-inference-bridge.after = [ "ghostship-runtime-ghostship-worker.service" ];
+    systemd.services.ghostship-inference-scheduler.after = [ "ghostship-runtime-ghostship-worker.service" ];
     systemd.services.podman-ghostship-worker.after = [ "apparmor.service" ];
     systemd.services.podman-ghostship-worker.path = [ pkgs.coreutils ];
     systemd.services.podman-ghostship-worker.serviceConfig.ExecStartPre = [ prepare ];

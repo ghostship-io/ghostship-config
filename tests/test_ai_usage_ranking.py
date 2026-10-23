@@ -1066,7 +1066,7 @@ class ModelQuotaWindowTests(unittest.TestCase):
                 ],
                 "antigravity/gemini-3.8-pro": [
                     ranking.QuotaWindow(
-                        kind="model", used_ratio=0.99, reset_epoch=NOW + 3600.0
+                        kind="model", used_ratio=1.0, reset_epoch=NOW + 3600.0
                     , observed_at=NOW
                     )
                 ],
@@ -1081,7 +1081,7 @@ class ModelQuotaWindowTests(unittest.TestCase):
             if item.model in ("gemini-3.8-pro", "gemini-3.8-flash")
         }
         self.assertFalse(found["gemini-3.8-pro"].available)
-        self.assertFalse(found["gemini-3.8-flash"].available)
+        self.assertTrue(found["gemini-3.8-flash"].available)
 
 
 class ExcludedProviderTests(unittest.TestCase):

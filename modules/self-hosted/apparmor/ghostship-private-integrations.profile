@@ -1,8 +1,7 @@
-# Container policy, inspected on chill-penguin (aarch64), 2026-10-20:
-# localhost/ghostship-private-integrations:6dd3aiff387mg9sb8g96jfy6vk8w73dv, the
-# ghostship-private-agent Nix image (private-integrations.nix). uid/gid 62020;
-# --cap-drop=ALL, no-new-privileges, read-only root, /tmp tmpfs noexec.
-# Process tree: ghostship-integration-supervisor (bash) -> python3 supervisor.py
+# Private MCP code and clients arrive through its root-owned managed Nix store.
+# The image contains only base utilities. uid/gid 62020; --cap-drop=ALL,
+# no-new-privileges, read-only root and store, /tmp tmpfs noexec.
+# Process tree: managed start (bash) -> python3 supervisor.py
 #   -> python3 -m ghostship_mcp.server (backend on /tmp/ghostship-mcp/*.sock)
 #   -> tunnel-client (OpenAI relay) -> ghostship-mcp (sh) -> env -> python3
 #      -m ghostship_mcp.stdio_proxy, one per relay session.
@@ -37,9 +36,9 @@ profile ghostship-private-integrations flags=(complain,attach_disconnected,media
   /nix/store/*-{bazarr,chaptarr,costco,gluetun,grimmory,nzbget,plex,prowlarr,pyload,qbittorrent,radarr,romm,seerr,sonarr,tautulli,tdarr,ultrahuman}-pp-cli-0.0.0/bin/{bazarr,chaptarr,costco,gluetun,grimmory,nzbget,plex,prowlarr,pyload,qbittorrent,radarr,romm,seerr,sonarr,tautulli,tdarr,ultrahuman}-pp-cli rix,
   # Script entrypoints: the container entrypoint (bash) and the relay's
   # ghostship-mcp launcher (sh); exec of a script is mediated on the script.
-  /nix/store/*-ghostship-integration-supervisor/bin/ghostship-integration-supervisor rix,
+  /nix/store/*-ghostship-integrations-entrypoint/bin/start rix,
+  /nix/store/*-ghostship-service-source/tools/python/ghostship_mcp/supervisor.py r,
   /nix/store/*-ghostship-private-mcp-runtime/bin/ghostship-mcp rix,
-  /nix/store/*-supervisor.py r,
   /nix/store/*-ghostship-private-mcp-runtime/{,**} r,
 
   # ---- Libraries ----

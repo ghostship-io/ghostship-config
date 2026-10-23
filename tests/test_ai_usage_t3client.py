@@ -5,6 +5,7 @@ import json
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "collector"
@@ -88,13 +89,13 @@ def huge_handler(connection):
 
 class TransportTests(unittest.TestCase):
     def test_the_socket_url_is_derived_from_the_endpoint(self):
-        client = t3client.T3Client("http://10.89.0.225:3773", "token")
+        client = t3client.T3Client("http://127.0.0.1:3773", "token")
         self.assertEqual(
-            client.socket_url(), "ws://10.89.0.225:3773/ws?orchestrationProtocol=2"
+            client.socket_url(), "ws://127.0.0.1:3773/ws?orchestrationProtocol=2"
         )
-        secure = t3client.T3Client("https://t3code.ghostship.io", "token")
+        secure = t3client.T3Client("https://example.invalid", "token")
         self.assertEqual(
-            secure.socket_url(), "wss://t3code.ghostship.io/ws?orchestrationProtocol=2"
+            secure.socket_url(), "wss://example.invalid/ws?orchestrationProtocol=2"
         )
 
     def test_an_https_endpoint_is_never_reached_over_a_plain_socket(self):
@@ -120,7 +121,7 @@ class TransportTests(unittest.TestCase):
         original = t3client._websocket_connect
         t3client._websocket_connect = fake_connect
         try:
-            client = t3client.T3Client("https://t3code.ghostship.io", "token")
+            client = t3client.T3Client("https://example.invalid", "token")
             with client:
                 client.call("server.getConfig", {})
         finally:
@@ -160,6 +161,69 @@ class TransportTests(unittest.TestCase):
                 with self.assertRaises(t3client.T3Error) as raised:
                     client.call("server.getConfig", {})
         self.assertNotIn(SECRET, str(raised.exception))
+
+
+class ResponseIsolationTests(unittest.TestCase):
+    def test_late_response_cannot_satisfy_the_next_call(self):
+        class Connection:
+            def __init__(self):
+                self.ids=[]
+                self.responses=[(1,'first'),(1,'late first'),(2,'second')]
+            def send(self,message):self.ids.append(json.loads(message)['id'])
+            def recv(self,timeout=None):
+                identifier,value=self.responses.pop(0)
+                return json.dumps({'_tag':'Exit','requestId':identifier,
+                    'exit':{'_tag':'Success','value':value}})
+            def close(self):pass
+        connection=Connection()
+        client=t3client.T3Client('http://localhost','synthetic-bearer')
+        client._connection=connection
+        self.assertEqual(client.call('server.refreshProviders'),'first')
+        self.assertEqual(client.call('server.getConfig'),'second')
+        self.assertEqual(connection.ids,[1,2])
+
+    def test_timeout_discards_connection_before_cached_config_fallback(self):
+        class Connection:
+            closed=False
+            def send(self,message):pass
+            def recv(self,timeout=None):raise TimeoutError('synthetic')
+            def close(self):self.closed=True
+        connection=Connection()
+        client=t3client.T3Client('http://localhost','synthetic-bearer')
+        client._connection=connection
+        with self.assertRaises(t3client.T3Error) as raised:client.call('server.refreshProviders')
+        self.assertEqual(raised.exception.reason,'timeout')
+        self.assertTrue(connection.closed)
+        self.assertIsNone(client._connection)
+        class FreshConnection:
+            def send(self,message):self.identifier=json.loads(message)['id']
+            def recv(self,timeout=None):
+                return json.dumps({'_tag':'Exit','requestId':self.identifier,
+                    'exit':{'_tag':'Success','value':{'cached':'config'}}})
+            def close(self):pass
+        fresh=FreshConnection()
+        with patch.object(t3client,'_websocket_connect',return_value=fresh):
+            self.assertEqual(client.call('server.getConfig'),{'cached':'config'})
+        self.assertEqual(fresh.identifier,2)
+
+    def test_ack_frames_cannot_restart_the_total_rpc_budget(self):
+        class Connection:
+            def __init__(self):self.timeouts=[]
+            def send(self,message):pass
+            def recv(self,timeout=None):
+                self.timeouts.append(timeout)
+                if len(self.timeouts)>2:raise TimeoutError('bounded synthetic stream')
+                return json.dumps({'_tag':'Ack'})
+            def close(self):pass
+        connection=Connection()
+        client=t3client.T3Client('http://localhost','synthetic-bearer',timeout=1)
+        client._connection=connection
+        with patch.object(t3client,'_monotonic',side_effect=[0,.4,.9,1.1],create=True):
+            with self.assertRaises(t3client.T3Error) as raised:client.call('server.getConfig')
+        self.assertEqual(raised.exception.reason,'timeout')
+        self.assertEqual(len(connection.timeouts),2)
+        self.assertAlmostEqual(connection.timeouts[0],.6)
+        self.assertAlmostEqual(connection.timeouts[1],.1)
 
 
 if __name__ == "__main__":

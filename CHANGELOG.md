@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.17.187] - 2026-10-23
+
+- Deliver GhostShip service code and worker tooling separately from base container images.
+- Reconcile dashboard configuration without restarting Homepage or Muximux.
+- Check image/runtime independence and report container restart causes before activation.
+
+PR #353.
+
+## [3.17.186] - 2026-10-23
+
+- Keep models usable until quota is exhausted and recover them from newer reported quota.
+- Isolate T3 RPC replies and enforce a total read deadline.
+
+PR #352.
+
+## [3.17.185] - 2026-10-23
+
+- Put canonical orchestrator/worker model selection before provider capacity.
+- Show effort, Quality, pool order, limiting windows and explicit custom resets.
+- Apply weekly/monthly pace colours and remove the old category tables and repeated evidence sections.
+
+PR #351.
+
 ## [3.17.184] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 1f7edec3; the lock's narHash is the `nix flake prefetch` hash of that revision.
