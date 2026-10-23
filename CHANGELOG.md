@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.17.148] - 2026-10-23
+
+- Deploy: `agent deploy run` replaces the deploy slot. `scripts/deploy-slot` is removed, and `scripts/activate-host` no longer takes `--holder`; rollout step 3 points to the command.
+
+
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+PR #312.
+
 ## [3.17.147] - 2026-10-23
 
 - Keep account and deployment identifiers in runtime settings
