@@ -353,7 +353,7 @@
         "x": 0,
         "y": 59,
         "w": 24,
-        "h": 38
+        "h": 56
       },
       "description": "Canonical picker selection; one model per card, preferred order supplied by the collector.",
       "targets": [
@@ -412,7 +412,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 99,
+        "y": 115,
         "w": 24,
         "h": 1
       },
