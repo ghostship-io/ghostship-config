@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.229] - 2026-10-23
+
+- Replace URL anchor leases with target-bound public run records across the desktop runtime.
+- Preserve every remaining human page during idle shutdown.
+
+PR #394.
+
 ## [3.17.228] - 2026-10-23
 
 Add a Free models and providers Grafana page generated from the Providers dashboard, with the same model cards, capacity graphics, units and evidence panels. Select free/promotion model rows and free account scope, and display the public-only policy.
