@@ -1469,3 +1469,16 @@ time remain provider measurements. Published windows and selection limits say
 `reset_source: custom` and `reset_label: custom reset`, retain
 `provider_reset_at`, and use the effective reset for pace. Invalid or duplicate
 overrides fail visibly. Keep owner-specific reset times in runtime state.
+
+### Exact worker builds
+
+`ghostship.aiUsage.workerBuilds` maps a provider to an exact native model ID.
+The configured Ollama choice is `ollama-cloud/deepseek-v4.1-flash:1017`. An
+undated alias keeps its own measured quality and outcomes, but cannot replace
+that build. Missing or spent configured builds yield no worker for that provider;
+other providers remain available. Orchestrator choices are independent.
+
+The generated versioned preferences reach the collector through
+`--model-selection-preferences` and are published as `model_selection.worker_builds`.
+Candidate `selection_eligible` and `selection_reason` explain the choice separately
+from quota availability and Quality.

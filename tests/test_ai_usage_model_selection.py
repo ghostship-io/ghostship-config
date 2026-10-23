@@ -175,6 +175,77 @@ class SelectionTests(unittest.TestCase):
         value = self.build([behind, candidate('two', 'ordinary', quality=70)])
         self.assertEqual(value['default_worker']['model'], 'ordinary')
 
+    def test_owner_named_dated_build_wins_without_inheriting_alias_outcomes(self):
+        alias = candidate('ollama', 'deepseek-v4.1-flash', quality=74)
+        dated = candidate('ollama', 'deepseek-v4.1-flash:1017', quality=53)
+        for row, n, accepted in ((alias, 40, 32), (dated, 5, 3)):
+            row['native'].update(provider_instance_id='opencode',
+                                 model_id='ollama-cloud/' + row['model'])
+            row.update(quality_p0=.5, quality_n=n, quality_s=accepted)
+        evidence = {'policy': {'model_selection': {'worker_builds': {
+            'ollama': 'ollama-cloud/deepseek-v4.1-flash:1017'}}}}
+        value = selection.build({'candidates': [alias, dated]}, [], evidence=evidence)
+        expected = {'instanceId': 'opencode', 'model': 'ollama-cloud/deepseek-v4.1-flash:1017'}
+        self.assertEqual(value['providers']['ollama']['selected']['worker'], expected)
+        self.assertEqual(value['default_worker'], expected)
+        by_model = {row['model']: row for row in value['worker']}
+        self.assertEqual((by_model[alias['model']]['quality_n'], by_model[alias['model']]['quality_s']), (40,32))
+        self.assertEqual((by_model[dated['model']]['quality_n'], by_model[dated['model']]['quality_s']), (5,3))
+        self.assertGreater(by_model[alias['model']]['quality_p'], by_model[dated['model']]['quality_p'])
+        self.assertTrue(by_model[alias['model']]['available'])
+        self.assertFalse(by_model[alias['model']]['selection_eligible'])
+
+    def test_missing_or_spent_named_build_cannot_fall_back_to_alias(self):
+        for dated_remaining in (None, 0):
+            with self.subTest(dated_remaining=dated_remaining):
+                alias = candidate('ollama', 'alias', quality=99)
+                alias['native']['model_id'] = 'ollama-cloud/alias'
+                rows = [alias, candidate('other', 'available', quality=60)]
+                if dated_remaining is not None:
+                    dated = candidate('ollama', 'dated:1017', remaining=dated_remaining)
+                    dated['native']['model_id'] = 'ollama-cloud/dated:1017'
+                    rows.append(dated)
+                evidence = {'policy': {'model_selection': {'worker_builds': {
+                    'ollama': 'ollama-cloud/dated:1017'}}}}
+                value = selection.build({'candidates': rows}, [], evidence=evidence)
+                self.assertIsNone(value['providers']['ollama']['selected']['worker'])
+                self.assertEqual(value['default_worker']['model'], 'available')
+
+    def test_build_preferences_reach_published_selection_through_real_entrypoint(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+        import main
+        evidence = {'policy': {'roles': {'orchestrator': [{'instance_id':'codex', 'model':'reviewer'}]},
+                              'model_selection': {'categories': list(selection.CATEGORIES)}},
+                    'identities': [{'id':'example'}]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prefs = root / 'preferences.json'
+            builds = {'ollama':'ollama-cloud/deepseek-v4.1-flash:1017'}
+            prefs.write_text(json.dumps({'schema':'ghostship.model-selection-preferences/v1',
+                                         'worker_builds':builds}))
+            with patch.object(main,'collect',return_value=([],[],{})), \
+                 patch.object(main,'read_outcomes',return_value=evidence), \
+                 patch.object(main,'log'):
+                self.assertEqual(main.main(['--model-selection-preferences',str(prefs),
+                    '--output',str(root/'metrics.prom'),'--snapshot',str(root/'routing.json'),
+                    '--aa-catalog',str(root/'missing-catalog.json'),'--now','1000']),0)
+            published = json.loads((root/'routing.json').read_text())
+            self.assertEqual(published['model_selection']['worker_builds'],builds)
+            prefs.write_text('{}')
+            with self.assertRaises(ValueError):
+                selection.load_worker_builds(str(prefs))
+
+    def test_worker_build_choice_preserves_separate_orchestrator_authority(self):
+        alias = candidate('codex','reviewer',quality=90)
+        worker = candidate('codex','dated:1017',quality=70)
+        evidence = {'policy': {'model_selection': {'worker_builds': {'codex':'dated:1017'}}}}
+        value = selection.build({'candidates':[alias,worker]},
+            [{'instance_id':'codex','model':'reviewer'}],evidence=evidence)
+        self.assertEqual(value['providers']['codex']['selected']['orchestrator']['model'],'reviewer')
+        self.assertEqual(value['providers']['codex']['selected']['worker']['model'],'dated:1017')
+
     def test_subpoint_quality_differences_are_not_alphabetical_ties(self):
         weaker = candidate('example', 'a-model', quality=85)
         stronger = candidate('example', 'z-model', quality=85)
