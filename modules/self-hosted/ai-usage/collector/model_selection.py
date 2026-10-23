@@ -10,6 +10,7 @@ from datetime import datetime
 
 import value_policy
 import outcomes as outcomes_module
+import quota
 from metrics import ExactLabel
 from typing import Any, Mapping
 
@@ -53,7 +54,8 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
         kind = str(window.get("kind") or "").lower()
         duration = number(window.get("duration_seconds"))
         short = (any(token in kind for token in ("session", "hour", "daily", "minute"))
-                 or (kind == "inferred" and duration is not None and duration < 7 * 86400))
+                 or (duration is not None and duration < 7 * 86400
+                     and not any(token in kind for token in ("week", "month"))))
         long = (any(token in kind for token in ("week", "month", "quota", "credit"))
                 or (duration is not None and duration >= 7 * 86400))
         if short or not long:
@@ -63,7 +65,7 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
             continue
         seconds = number(window.get("seconds_to_reset"))
         expected = None
-        if duration is not None and duration >= 7 * 86400 and seconds is not None:
+        if quota.is_paced_window(window) and duration is not None and duration > 0 and seconds is not None:
             expected = min(1.0, max(0.0, seconds / duration))
         delta = None if expected is None else round(100 * (remaining - expected), 6)
         eligible.append({"kind": kind, "quota_id": window.get("quota_id"),
