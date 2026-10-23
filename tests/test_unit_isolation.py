@@ -72,6 +72,13 @@ os.chdir(source)
 g._source=str(source)
 g._forbidden=(str(source.parent),)
 assert fixture.resolve().read_text() == 'fixture'
+import argparse
+parser=argparse.ArgumentParser()
+parser.add_argument('--state',default='firing')
+parser.add_argument('--preferences',default=str(fixture))
+parsed=parser.parse_args([])
+assert parsed.state == 'firing'
+assert parsed.preferences == str(fixture)
 fd=os.open(scratch,os.O_RDONLY)
 os.remove('file',dir_fd=fd)
 os.close(fd)
@@ -85,3 +92,8 @@ else:
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('host state access', log)
+
+    def test_runtime_socket_alias_default_is_remapped_without_inspecting_host(self):
+        result, log = self.probe("import argparse,os; p=argparse.ArgumentParser(); p.add_argument('--socket',default='/var/run/podman/podman.sock'); assert p.parse_args([]).socket.startswith(os.environ['GHOSTSHIP_UNIT_ROOT'])")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log, '')
