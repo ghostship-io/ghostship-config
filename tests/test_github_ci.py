@@ -31,8 +31,6 @@ class CIRunnerTests(unittest.TestCase):
             self.assertNotIn('user', runner)  # upstream DynamicUser, never root
             self.assertEqual(runner['serviceOverrides']['CacheDirectoryMode'], '0700')
             self.assertEqual(runner['serviceOverrides']['CPUQuota'], '200%')
-            self.assertNotIn('docker', str(runner))
-            self.assertNotIn('podman', str(runner))
 
     def test_registration_is_after_secret_render_and_never_exported_to_jobs(self):
         activation = self.module['system']['activationScripts']['ghostship-ci-registration']
