@@ -5,9 +5,14 @@ let
   agent = inputs.ghostship-private-agent;
   tools = agent.packages.${system};
   # The platform owns the runtime and generated service clients; the deployment supplies its icon.
-  privateAddons = agent.lib.mkPrivateIntegrations {
+  runtimes = import ./agent-service-runtimes.nix {
+    inherit agent;
     inherit system;
     mcpIcon = ./private-integrations/ghostship.png;
+  };
+  privateAddons = runtimes.private;
+  baseImage = import ./service-base-image.nix {
+    inherit pkgs; name = "ghostship-private-integrations"; uid = "62020";
   };
   # The account the owner signs in as is supplied by the deployment outside
   # this repository; the template keeps only the placeholder name.
@@ -428,12 +433,13 @@ in {
         RandomizedDelaySec = 600;
       };
     };
+    ghostship.containerRuntimes.ghostship-private-integrations.runtime = runtimes.integrations;
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
-      image = "ghostship-private-integrations:${privateAddons.image.imageTag}";
-      imageFile = privateAddons.image;
+      image = "ghostship-private-integrations:${baseImage.imageTag}";
+      imageFile = baseImage;
       pull = "never";
       user = "62020:62020";
-      environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${privateAddons.image.imageTag}";
+      environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${baseImage.imageTag}";
       # The MCP runtime's account settings come from a root-owned file outside the
       # repository: GHOSTSHIP_GOOGLE_OWNER_ACCOUNT, GHOSTSHIP_GOOGLE_AGENT_ACCOUNT
       # and GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS (the only Drive folders, and their

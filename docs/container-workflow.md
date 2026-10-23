@@ -136,6 +136,11 @@ worktree, verify and commit changes, push, and open a PR. Keep `VERSION` and
 Write release notes in the PR body under `## Changelog`; patch is the default,
 with `Release: minor` or `Release: major` selecting a larger bump.
 
+## Service container updates
+
+GhostShip code and dashboard updates follow the [container runtime contract](container-runtime-updates.md).
+Use its generation comparison command to inspect affected containers before activation.
+
 ## Remote deployment
 
 ### Preserve the active T3 Code session

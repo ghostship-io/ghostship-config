@@ -62,6 +62,7 @@
     ./t3code.nix
     ./t3code-hardening.nix
     ./t3code-podman.nix
+    ./container-runtimes.nix
     ./podman-only.nix
     ../agent-host
 
