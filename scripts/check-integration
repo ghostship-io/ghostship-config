@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+printf 'Checking tracked Nix syntax and workflow scripts\n'
+while IFS= read -r -d '' source; do
+  nix-instantiate --parse "$source" >/dev/null
+done < <(git ls-files -z -- '*.nix')
+shellcheck scripts/check scripts/check-integration
+actionlint
+git diff --check
+git diff --cached --check
+
+printf 'Checking AppArmor policy, evidence collector, and public-service guards\n'
+# Every policy the host loads is parsed as the host renders it, and the
+# named transition budget is held (tests/check-apparmor-profiles.py).
+python3 tests/check-apparmor-profiles.py
+python3 -m unittest discover -s tests -p test_apparmor_profile_paths.py
+python3 -m unittest discover -s tests -p test_apparmor_review.py
+python3 -m unittest discover -s tests -p test_cloudflare_access.py
+python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
+python3 -m unittest discover -s tests -p test_security_monitoring.py
+python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
+python3 -m unittest discover -s tests -p test_opencode_model_catalog.py
+nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
+nix eval --impure --json --file tests/t3code-hardening.nix >/dev/null
+nix eval --impure --json --file tests/t3code-podman.nix >/dev/null
+python3 tests/check_podman_runtime.py
+python3 tests/check_podman_runtime.py --selftest
+nix eval --impure --json --file tests/security-package-fixes.nix >/dev/null
+python3 -m unittest discover -s tests -p 'test_t3code_podman_*.py'
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  modules/self-hosted/apparmor/t3code.profile
+
+printf 'Checking shared network allocation admission\n'
+nix eval --impure --json --file tests/shared-network.nix >/dev/null
+python3 -m unittest discover -s tests -p test_shared_network_range.py
+check_system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+nix build --no-link ".#checks.${check_system}.podman-ipam"
+
+printf 'Checking the container containment policy model and module\n'
+nix eval --impure --json --file tests/container-isolation.nix >/dev/null
+python3 tests/check_container_isolation.py selftest >/dev/null
+
+printf 'Checking the configuration drift check\n'
+python3 -m unittest discover -s tests -p test_configuration_drift.py
+nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
+
+printf 'Checking the kernel audit backlog limit\n'
+nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
+
+printf 'Checking the kernel module denials\n'
+nix eval --impure --json --file tests/kernel-module-deny.nix >/dev/null
+
+printf 'Checking the agent SSH command guard\n'
+python3 -m unittest discover -s tests -p test_ssh_command_guard.py
+
+printf 'Checking the boot generation drift check\n'
+python3 -m unittest discover -s tests -p test_boot_generation_drift.py
+
+printf 'Checking the host activation helper\n'
+python3 -m unittest discover -s tests -p test_activate_host.py
+
+printf 'Checking the agent pin against a regression\n'
+python3 scripts/check-agent-pin.py
+python3 -m unittest discover -s tests -p test_agent_pin_guard.py
+
+printf 'Checking the private source owners\n'
+python3 -m unittest discover -s tests -p test_private_source_owner.py
+
+printf 'Checking the owner identity settings\n'
+python3 -m unittest discover -s tests -p test_owner_identity.py
+
+printf 'Checking the T3 restart guard\n'
+python3 -m unittest discover -s tests -p test_t3code_restart_guard.py
+
+printf 'Checking that the tests read only committed fixtures\n'
+python3 scripts/check-test-fixtures.py tests
+python3 -m unittest discover -s tests -p test_test_fixture_lint.py
+
+printf 'Checking SIEM log parsing and secret redaction\n'
+vector --quiet test tests/siem-vector.toml
+python3 -m unittest discover -s tests -p test_siem_alerts.py
+python3 -m unittest discover -s tests -p test_siem_grafana.py
+python3 -m unittest discover -s tests -p test_siem_podman_snapshot.py
+python3 -m unittest discover -s tests -p test_siem_watchdog.py
+python3 -m unittest discover -s tests -p test_siem_grafana_plugins.py
+python3 -m unittest discover -s tests -p test_newsletter_health.py
+python3 -m unittest discover -s tests -p test_ghostship_notify.py
+vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
+  -rule=modules/self-hosted/siem/rules/logs.yml
+vmalert -dryRun -loggerLevel=ERROR -rule=modules/self-hosted/siem/rules/metrics.yml
+python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/suppressions.json
+
+printf 'Checking the AI usage collector and its model ranking\n'
+python3 -m unittest discover -s tests -p test_ai_usage_collector.py
+python3 -m unittest discover -s tests -p test_ai_usage_ranking.py
+python3 -m unittest discover -s tests -p test_ai_usage_outcome_value.py
+python3 -m unittest discover -s tests -p test_ai_usage_quality_score.py
+python3 -m unittest discover -s tests -p test_ai_usage_threed.py
+python3 -m unittest discover -s tests -p test_ai_usage_snapshot.py
+python3 -m unittest discover -s tests -p test_ai_usage_routing.py
+python3 -m unittest discover -s tests -p test_ai_usage_ranking_bounds.py
+python3 -m unittest discover -s tests -p test_ai_usage_frontier_surplus.py
+python3 -m unittest discover -s tests -p test_ai_usage_t3client.py
+python3 -m unittest discover -s tests -p test_ai_usage_privacy.py
+python3 -m unittest discover -s tests -p test_ai_usage_workload.py
+python3 -m unittest discover -s tests -p test_ai_usage_facts.py
+python3 -m unittest discover -s tests -p test_ai_usage_boundaries.py
+python3 -m unittest discover -s tests -p test_ai_usage_integration.py
+python3 -m unittest discover -s tests -p test_ai_usage_aa_normalize.py
+python3 -m unittest discover -s tests -p test_ai_usage_aa_pull.py
+python3 -m unittest discover -s tests -p test_ai_usage_gate.py
+python3 -m unittest discover -s tests -p test_ai_usage_providers_page.py
+python3 -m unittest discover -s tests -p test_ai_usage_free_pool.py
+python3 -m unittest discover -s tests -p test_ai_usage_pool_recent_jobs.py
+python3 -m unittest discover -s tests -p test_ai_usage_duplicate_series.py
+python3 -m unittest discover -s tests -p test_ai_usage_quota.py
+python3 -m unittest discover -s tests -p test_ai_usage_headroom.py
+python3 -m unittest discover -s tests -p test_ai_usage_retired_routes.py
+python3 -m unittest discover -s tests -p test_ai_usage_retired_records.py
+python3 -m unittest discover -s tests -p test_ai_usage_opencode_reader.py
+python3 -m unittest discover -s tests -p test_ai_usage_pool_reader.py
+python3 -m unittest discover -s tests -p test_ai_usage_inference.py
+python3 -m unittest discover -s tests -p test_ai_usage_inference_wiring.py
+python3 -m unittest discover -s tests -p test_ai_usage_inferred_publication.py
+python3 -m unittest discover -s tests -p test_ai_usage_outcomes.py
+python3 -m unittest discover -s tests -p test_ai_usage_pace_state.py
+python3 -m unittest discover -s tests -p test_ai_usage_trust_order.py
+python3 -m unittest discover -s tests -p test_ai_usage_free_selection.py
+python3 -m unittest discover -s tests -p test_ai_usage_not_offered_reason.py
+python3 -m unittest discover -s tests -p test_ai_usage_pool_unavailable_reason.py
+python3 -m unittest discover -s tests -p test_ai_usage_probe_field.py
+python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
+
+printf 'Checking the agent desktop browser stage\n'
+desktop=containers/agent-desktop/root/opt/ghostship-agent-desktop
+python3 -m unittest discover -s "$desktop" -p 'test_stage_control.py'
+python3 -m unittest discover -s "$desktop/viewer" -p 'test_viewer.py'
+
+printf 'Evaluating development shells for both Linux architectures\n'
+for system in x86_64-linux aarch64-linux; do
+  for shell in ci default browser; do
+    nix eval --no-write-lock-file --raw ".#devShells.$system.$shell.drvPath" >/dev/null
+  done
+done
+
+# Evaluate full system derivations, including module assertions, without building
+# kernels, container images, or firmware that belongs on the target host.
+hosts="$(nix eval --no-write-lock-file --json .#nixosConfigurations --apply builtins.attrNames)"
+for host in $(jq -r '.[]' <<<"$hosts"); do
+  printf 'Evaluating %s\n' "$host"
+  nix eval --no-write-lock-file --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" >/dev/null
+done
+
+printf 'Repository checks passed\n'

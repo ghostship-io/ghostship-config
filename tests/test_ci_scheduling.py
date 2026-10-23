@@ -22,6 +22,18 @@ class CISchedulingTests(unittest.TestCase):
         self.assertIn('.#checks.x86_64-linux.host-evaluation', text)
         self.assertIn('scripts/check', text)
 
+    def test_fast_and_integration_entrypoints_retain_their_coverage(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text()
+        fast = (ROOT / 'scripts/check').read_text()
+        integration = (ROOT / 'scripts/check-integration').read_text()
+        self.assertIn('-c scripts/check\n', text)
+        self.assertIn('-c scripts/check-integration\n', text)
+        self.assertIn('scripts/check-unit.py', fast)
+        self.assertIn('gitleaks dir --redact --no-banner .', fast)
+        self.assertNotIn('nix eval', fast)
+        self.assertIn('nixosConfigurations.$host.config.system.build.toplevel.drvPath', integration)
+        self.assertIn('tests/apparmor-public.nix', integration)
+
     def test_browser_integration_is_nightly_or_manual_without_pr_push_triggers(self):
         text = (ROOT / '.github/workflows/t3code.yml').read_text()
         triggers = text.split('permissions:', 1)[0]

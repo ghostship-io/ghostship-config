@@ -1,5 +1,52 @@
 # Changelog
 
+## [3.17.173] - 2026-10-23
+
+- Read coordinator routing from the live runtime coordination list and reject a missing list at startup.
+- Align newsletter incident consumer tests with active-worker routing and digest overflow.
+
+PR #339.
+
+## [3.17.172] - 2026-10-23
+
+- Prepare writable worker state and allow the nested sandbox to mount its private proc.
+
+PR #337.
+
+## [3.17.171] - 2026-10-23
+
+- Pin the agent release with T3 selector parity and pyLoad query dispatch fixes.
+- Align newsletter incident consumer fixtures with bounded worker wake routing.
+
+PR #334.
+
+## [3.17.170] - 2026-10-23
+
+- Repair stale Seerr integration profiles after initial setup and keep managed credentials current.
+- Enable authenticated request lifecycle notifications and include Seerr regression tests in CI.
+
+PR #336.
+
+## [3.17.169] - 2026-10-23
+
+- Pace weekly and monthly quota windows only; preserve short-window capacity and resets.
+- Use each long window's own usage for model pace and keep short quota windows outside displayed limiting limits.
+
+PR #335.
+
+## [3.17.168] - 2026-10-23
+
+- Reconcile retained service account aliases and prevent an obsolete PAM home from breaking engine startup.
+
+PR #333.
+
+## [3.17.167] - 2026-10-23
+
+- Make scripts/check a measured fast pre-merge gate and preserve full host and integration coverage nightly.
+- Enforce module duration budgets and fast-check execution context.
+
+PR #332.
+
 ## [3.17.166] - 2026-10-23
 
 - Add the separate public free-worker Podman runtime and declarative Zen/Go OAuth separation without replacing T3.

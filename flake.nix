@@ -5,7 +5,7 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/5b865b9462ae2a5b9e49823675e62aee3b2d1f81";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/91db92aae1872f1d4eb26ab793db3d0d67e7e4f2";
 
     # The owner's runtime policy, read by the AI usage collector for the
     # model-selection identities and trust evidence. It is a plain
@@ -137,6 +137,7 @@
               # The AI usage collector talks to T3 Code over a WebSocket. The
               # tests need the same library the collector uses.
               python3Packages.websockets
+              python3Packages.requests
               ripgrep
               jq
               curl

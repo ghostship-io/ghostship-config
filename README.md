@@ -337,19 +337,18 @@ fail with `get-env.sh failed to produce an environment`. After changing the
 default shell, run `direnv reload` or start a fresh shell to pick up the updated
 environment.
 
-Run the full validation used by GitHub Actions after merging to main:
+Run the fast checks used by GitHub Actions on PRs and main:
 
 ```sh
-nix develop --no-write-lock-file -c scripts/check
+nix develop .#ci --no-write-lock-file -c scripts/check
 ```
 
-This parses tracked Nix files, checks the workflow script, and evaluates both
-Linux architectures' development shells and all four host system derivations. It does not
-build or activate host systems. Stage new Nix files before evaluation so the
-flake can see them. CI runs once per PR update and main push, cancels superseded
-runs, and avoids full fleet builds to conserve runner time. PRs run the fast
-`scripts/check-unit.py`, workflow/shell lint and the same secret scan; host and
-container evaluations run on main.
+This runs unit tests, workflow/shell lint, fixture and whitespace checks and
+the redacted secret scan. The commit hooks retain the local privacy gate.
+Nightly/manual CI runs `scripts/check-integration`, all host evaluations and
+the complete regression suite. Stage new Nix files before evaluation so the
+flake can see them. Host evaluation constructs derivations without activating
+systems. CI cancels superseded PR and main runs.
 
 Deploy the merged configuration with `agent deploy run`. It records the system
 generation and checks activation gates and live health. Use `--agent-rev REV`

@@ -155,7 +155,7 @@ class SelectionTests(unittest.TestCase):
         self.assertIsNone(selection.limiting_window([short], '2026-10-23T12:00:00Z'))
 
     def test_daily_hourly_minute_and_short_inferred_never_limit(self):
-        for kind in ('daily', 'hourly', 'minute', 'inferred'):
+        for kind in ('daily', 'hourly', 'minute', 'inferred', 'quota', 'credits'):
             with self.subTest(kind=kind):
                 self.assertIsNone(selection.limiting_window(
                     [{'kind': kind, 'duration_seconds': 3600, 'remaining_ratio': 0}],

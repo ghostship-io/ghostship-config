@@ -99,7 +99,7 @@ class PaceTests(unittest.TestCase):
         ]
         samples = quota.quota_pace_samples(windows, NOW)
         quotas = {labels["quota"] for name, labels, _value in samples}
-        self.assertEqual(quotas, {"weekly", "monthly", "session"})
+        self.assertEqual(quotas, {"weekly", "monthly"})
         names = {name for name, _labels, _value in samples}
         self.assertEqual(
             names,
