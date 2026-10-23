@@ -246,13 +246,15 @@ in
 
       ${pkgs.nix}/bin/nix copy --no-check-sigs \
         --to 'local?root=${t3codeNixRoot}' ${tooling} ${config.ghostship.t3codePodman.bridgePackage}
-      tool_state=${t3codeHome}/.local/state/ghostship-t3-tools
-      install -d -m0755 -o3000 -g3000 "$tool_state"
-      if [ ! -e "$tool_state/current" ]; then
-        ln -s ${tooling} "$tool_state/current"
-        chown -h 3000:3000 "$tool_state/current"
-      fi
-      ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeHome}/.local/state/t3code-podman-bridge
+      # Home is container-writable: seed its links with the home owner's UID.
+      ${pkgs.su-exec}/bin/su-exec 3000:3000 ${pkgs.bash}/bin/bash -euc ${lib.escapeShellArg ''
+        tool_state=${t3codeHome}/.local/state/ghostship-t3-tools
+        mkdir -p "$tool_state"
+        if [ ! -e "$tool_state/current" ] && [ ! -L "$tool_state/current" ]; then
+          ln -s ${tooling} "$tool_state/current"
+        fi
+        ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeHome}/.local/state/t3code-podman-bridge
+      ''}
       install -d -m0755 ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools
       ln -sfn ${tooling} ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools/pinned
       ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools/bridge
