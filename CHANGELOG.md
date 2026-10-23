@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.240] - 2026-10-23
+
+- Separate engineering credentials from runner registration and keep the registration PAT inside the privileged registrar.
+
+PR #403.
+
 ## [3.17.239] - 2026-10-23
 
 - Providers, Paid models and Free models are three compact Grafana pages: Paid and Free provider pools with capacity, next reset, confirmed Codex reset and T3 token/cost; paid selection ranked by Paced Availability; free selection one model per provider.
