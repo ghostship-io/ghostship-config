@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.175] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to bf86b0af; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #341.
+
 ## [3.17.174] - 2026-10-23
 
 - Fix Seerr profile reconciliation against the released instance-update API.
