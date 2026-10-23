@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.232] - 2026-10-23
+
+- Protect Claude review headroom when selecting Sonnet workers.
+
+PR #397.
+
 ## [3.17.231] - 2026-10-23
 
 - Probe desktop API health for readiness
