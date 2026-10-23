@@ -30,7 +30,12 @@ def selection_rows(quality=80, left=.55, delta=-17, state='behind', custom=False
                   'options':[{'id':'effort','values':['medium','high','max']}]},
         'pool':{'id':'claude:all','label':'All models','basis':'audit'},
         'access':{'billing':'subscription'}}
-    value=model_selection.build({'generated_at':'2026-01-01T12:00:00Z','candidates':[candidate]},[])
+    value=model_selection.build({'generated_at':'2026-01-01T12:00:00Z','candidates':[candidate],
+        'quota': {'accounts': {'claude': [{'kind': 'weekly', 'remaining_ratio': .9,
+            'check_at': '2026-01-01T12:00:00Z', 'reset_at': '2026-01-02T12:00:00Z',
+            'duration_seconds': 604800}]}}}, [], evidence={'policy': {'model_selection': {
+                'worker_pool_guards': {'claude': {'kind': 'weekly', 'minimum_remaining_ratio': .2,
+                                                'require_pace_headroom': True}}}}})
     value['worker'][0]['limiting_window']={'kind':'weekly','quota_id':'seven_day','remaining_ratio':left,
         'pace_delta':delta,'pace_state':state,'reset_at':'2026-01-01T13:00:00Z',
         'reset_source':'custom' if custom else 'provider'}
