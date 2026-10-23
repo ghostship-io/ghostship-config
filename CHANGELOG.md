@@ -1,8 +1,13 @@
 # Changelog
 
-## [3.17.133] - 2026-10-23
+## [3.17.134] - 2026-10-23
 
 - ai-usage: the tiers are renamed for the redesigned pages. `bulk` is `worker`, `frontier` is `orchestrator`, and `free` and `3d` stay. For one release every published name keeps its old alias: `tiers`, `tier_winners`, `tier_members` and `coverage.tiers` carry `worker` beside `bulk` and `orchestrator` beside `frontier` with identical content, and every gauge with a tier label is published under both names. The alias set is one constant in the collector, so the next release deletes it in one place. The order of every tier is unchanged: the same candidates hold the same tier in the same order, and the page dashboard keeps reading the old names through the alias. Two member gauges are added for the model panes: `ghostship_ai_model_member_position{provider,model,tier}` is the 1-based position of every member of a tier, winners and non-winners, in the tier's own order, with the winners first in their winner order and an unavailable or spent member last, so a winner's member position is never after a non-winner's; and `ghostship_ai_model_reserved_for{provider,model,tier,role}` is 1 for a member whose provider is reserved for another workload in that tier, with the workload as the role (e.g. `review-roles`). A winner and a member therefore reach a model pane as rows: DeepSeek V4.1 Flash 1017 is a member card and Claude Sonnet is a reserved one. The collector HELP lines and the README name the new tiers and both gauges.
+
+## [3.17.133] - 2026-10-23
+
+- ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
+
 
 ## [3.17.132] - 2026-10-23
 
