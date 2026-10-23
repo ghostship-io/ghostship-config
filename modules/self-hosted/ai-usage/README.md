@@ -59,7 +59,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
-| `free_pool` | The free inference pool: the provider states, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
+| `free_pool` | The free inference pool: the provider states with the pool's own probe of each route and the reason it parks a candidate, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
 | `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to | OpenCode's own SQLite database, read only, with the collector's cache of the events in its state directory |
 | `pool_events` | The request records of the free pool's routes, and the capacity they imply | The free pool's own reservation ledger, read only |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
@@ -822,6 +822,13 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_model_available{provider,model}` and
   `ghostship_ai_pool_model_selected{provider,model}` - whether the model is
   available, and whether it is the selected or preferred one.
+* `ghostship_ai_pool_model_unavailable_reason{provider,model,reason}` - 1 for
+  a candidate the pool marks unavailable, with the pool's own reason. `reason`
+  is `suspended`, `account_policy`, `hosting_restricted` or `cooldown`.
+* `ghostship_ai_pool_probe{provider,model,state,category}` - 1 for the pool's
+  own probe of a route, with the state of the answer and its category.
+  `ghostship_ai_pool_probe_timestamp_seconds{provider,model}` is when the pool
+  checked it.
 * `ghostship_ai_pool_model_cooldown_until_seconds{provider,model}` - when the
   model's cooldown ends.
 * `ghostship_ai_pool_model_admission{provider,model,workload}` - whether the
@@ -1183,6 +1190,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `frontier_required` | true when the model holds the frontier and a delegate may not stand in for it |
 | `tiers`, `rank`, `score`, `reasons` | where the model sits and why |
 | `quota_state` | `available`, `exhausted`, or `unknown` |
+| `probe` | whether the route answered its last live probe: `state` is `works`, `fails` or `unprobed`; `class` names the failure (`success`, `quota`, `auth`, `model_not_found`, `catalog_mismatch`, `policy_parked`, `timeout` or `upstream_error`, and empty when unprobed); `checked_at` is the UTC moment of the newest reading; `source` is `pool_probe` or `t3_probe`; `max_age_seconds` is 172800. The newer of the free pool's own probe and the latest OpenCode request of the route is the reading. A reading older than `max_age_seconds` is kept with its moment and its source, and the state falls back to `unprobed`: a route nothing probed reads `unprobed` with no moment and no source |
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
 | `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count and the state. It is empty for a route whose capacity was not inferred |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
@@ -1193,6 +1201,20 @@ the reasons, the quota state, the components, and the eligibility:
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
 | `provenance` | where the reading came from and when it was observed |
 | `access` | how the route is reached and how it is paid for: the access kind (`dedicated_free`, `provider_promo`, `provider_paid`, `unknown`), the billing class, the price, and whether the route runs as a provider-native thread or as an inference job |
+
+The probe is one reading, not two: the free pool's own check of a route and
+the latest OpenCode request of it are both candidates for the row, and the
+newer one is published. The pool marks a route `quota_or_cooldown` when it
+sent nothing at all, which is not a probe. An OpenCode success works, a
+limit fails as `quota`, and a retirement fails as `model_not_found`. A probe
+of another model never answers for the row, and a reading older than two
+days no longer counts even though its moment stays visible.
+
+A free-pool route the ranking parked repeats the pool's own reason:
+`hosting_restricted`, `account_policy`, `suspended`, or a `cooldown` that
+names the moment it ends. A candidate the pool published without a reason
+keeps the text the snapshot built before it, so no parked row is ever
+unavailable without a reason.
 
 Three kinds of statement never mix: a `policy` is what the owner decided, a
 `measured` value is what a provider reported, and a `prior` is what the
