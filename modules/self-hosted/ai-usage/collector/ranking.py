@@ -1314,24 +1314,7 @@ def _frontier_surplus(
         ),
         "entitlement_quota_id": str(quota_id or ""),
     }
-    _expected, _actual = _pace(window, now, remaining)
     pace = None
-    if session is not None and session[1] is not None:
-        expected, actual = _pace(session[0], now, session[1])
-        if expected is not None and actual is not None:
-            pace = expected - actual
-    if reserve is not None and pace is not None and pace < 0:
-        # The session window is ahead of the line: the review capacity is
-        # under pressure, so nothing is spared.
-        return {
-            "available": False,
-            "reason": "the session window is ahead of the line; the review capacity is under pressure",
-            "expires_in_seconds": expires_in,
-            "surplus_ratio": 0.0,
-            "reserve_ratio": round(reserve, 4),
-            "pace_delta": round(pace, 4),
-            **entitlement,
-        }
     if remaining <= 0:
         return {
             "available": False,
