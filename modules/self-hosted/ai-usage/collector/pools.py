@@ -22,7 +22,7 @@ def pool_of_route(provider: str, model: str, billing: str = '') -> str:
     if provider in PER_MODEL:
         return f'{provider}:{model}'
     if provider == 'antigravity':
-        if text.startswith(('claude-', 'gpt-oss-')):
+        if text.startswith(('claude-', 'gpt-')):
             return 'antigravity:3p'
         if text.startswith('gemini-'):
             return 'antigravity:gemini'

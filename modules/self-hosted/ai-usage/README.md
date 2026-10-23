@@ -1497,3 +1497,6 @@ Provider role restrictions are declared only in runtime policy's
 and publishes explicit native role exclusions, so the reconciler can remove
 previously managed worker favorites even when another source is unavailable.
 Orchestrator review authority remains independent of worker eligibility.
+Unused pools are declared in the same policy's `excluded_pools`; their
+model candidates and account capacity windows are omitted together. Other
+pools on the provider retain their readings and eligibility.

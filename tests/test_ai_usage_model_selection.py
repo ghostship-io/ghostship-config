@@ -47,6 +47,13 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(pool['worker'], [])
             self.assertIsNone(pool['selected']['worker'])
 
+    def test_excluded_pool_keeps_the_other_provider_pool(self):
+        rows = [candidate('antigravity', model) for model in ('claude-opus-5-5','gpt-6.1-sol','gemini-4-argon')]
+        result = selection.build({'candidates':rows}, [], evidence={
+            'policy':{'model_selection':{'excluded_pools':['antigravity:3p']}}})
+        self.assertEqual([row['model'] for row in result['worker']], ['gemini-4-argon'])
+        self.assertEqual(set(result['providers']['antigravity']['pools']), {'antigravity:gemini'})
+
     def test_effort_comes_from_each_native_models_supported_choices(self):
         for identifier, choices, expected, review_expected in (
             ('reasoningEffort', ['high', 'low', 'ultra', 'max'], 'high', 'high'),
