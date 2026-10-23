@@ -29,6 +29,7 @@ in
   '';
   coordinator = start "coordinator" ''
     export PYTHONPATH=${coordinator.coordinatorRuntime}/share/ghostship-github/python
+    export GHOSTSHIP_REVIEW_GIT_BIN=${coordinator.coordinatorRuntime}/bin/git
     export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     exec ${coordinator.coordinatorPython}/bin/python3 -B -m ghostship_github.coordinator "$@"
   '';
