@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
 import aa_3d  # noqa: E402
+import account_availability as account_availability_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
@@ -417,6 +418,15 @@ METRIC_HELP = {
     ),
     "ghostship_ai_account_window_learning": (
         "One for an account that publishes no window of its own yet."
+    ),
+    "ghostship_ai_account_availability": (
+        "Whether an account can serve right now, with the reason it cannot "
+        "when it cannot, and the basis of its limit: learning, unpublished or "
+        "published."
+    ),
+    "ghostship_ai_account_availability_check_timestamp_seconds": (
+        "When the availability of an account was observed: the newest "
+        "observation of the routes that were counted."
     ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
@@ -2132,6 +2142,10 @@ def render(
     for name, labels, value in free_selection_module.samples(
         snapshot or {}, display_names
     ):
+        writer.add(name, labels, value)
+    # The availability of every account: whether it can serve right now, why
+    # not when it cannot, and where its limit comes from.
+    for name, labels, value in account_availability_module.samples(snapshot or {}, now):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
