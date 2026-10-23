@@ -1036,6 +1036,20 @@ runtime policy), the runtime policy, the delegation ledger
 that is missing, unreadable or empty is an empty history, and every model is
 trusted.
 
+The display quality score is one number per model, so every page - the
+orchestrators, the workers, the 3D tier and the free tier - reads the same
+comparable value. Its prior is global: the model's intelligence inside the
+range of every ranked candidate, across every tier
+(`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, and `0.5`
+without an index), and its counts are every task type of the model identity,
+summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`: an
+integer from 0 to 100. The basis is published with it: `AA + outcomes` when
+the index and the rounds are both there, `AA only` with the index alone,
+`outcomes + default prior` with the rounds alone, and `default prior` with
+neither. The display score never orders a tier: the per-tier outcome above
+does, and the score is published beside it, on every candidate row and every
+winner.
+
 * `ghostship_ai_model_trust_info{provider,model,tier,task_type,level,source,reason}`
   - 1 for the trust of a model in a tier, with the level it holds, where the
   level came from, and the reason it holds it.
@@ -1043,6 +1057,13 @@ trusted.
   outcome of a model in a tier, field by field: `p0` the prior, `k` the
   strength of the prior, `n` the observed rounds, `s` the accepted rounds,
   and `p` the quality they produced.
+* `ghostship_ai_model_quality_score{provider,model,basis}` - the display
+  quality score of a model, an integer 0 to 100, with the basis it was built
+  from. It carries no tier: the score is one number per model, across every
+  tier and every page.
+* `ghostship_ai_model_quality_rounds{provider,model,field}` - the global
+  rounds behind the display score: `n` the rounds and `s` the accepted ones,
+  summed over every task type and not read per tier.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
   best. Every ranked model keeps it, including the models that cannot be

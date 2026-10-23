@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.133] - 2026-10-23
+## [3.17.134] - 2026-10-23
 
 - ai-usage: the collector publishes the place of every provider card. The Providers page draws one card per provider account in the order the owner approved, and a Grafana variable keeps only the order of the query that fills it, so the page could not sort the cards itself: the collector now publishes the place of every account, and the page reads it. The new series `ghostship_ai_account_card_order{account}` holds the place of every card, counted from one, with no gap between the places and one series per account. The order is the approved list of the owner, `APPROVED_CARD_ORDER` in `collector/card_order.py`: Claude, Codex, Ollama, OpenCode Go, Antigravity, Grok and OpenRouter, in that order. The accounts that are not on the list follow it: the ones that publish at least one window with a number come first, by name, and the accounts that publish none come after them, by name. A spent window holds the number zero, and a zero is a number, so an account whose window is spent keeps its place ahead of the accounts that are still learning theirs. An account of the approved list that the snapshot does not hold is skipped, and the cards behind it move up, so the places are the places of the cards that exist and they never leave a hole. The accounts are every key of `quota.accounts` and every provider of the candidates, the same set of accounts the availability of an account covers.
+
+## [3.17.133] - 2026-10-23
+
+- ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
 
 ## [3.17.132] - 2026-10-23
 
