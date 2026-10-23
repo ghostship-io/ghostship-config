@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.147] - 2026-10-23
+
+- Keep account and deployment identifiers in runtime settings
+
+PR #245.
+
 ## [3.17.146] - 2026-10-23
 
 - Run fast PR checks and host integration on main
