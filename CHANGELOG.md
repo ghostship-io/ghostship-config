@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.228] - 2026-10-23
+
+Add a Free models and providers Grafana page generated from the Providers dashboard, with the same model cards, capacity graphics, units and evidence panels. Select free/promotion model rows and free account scope, and display the public-only policy.
+
+The generator asserts every selector substitution and refuses leftover paid selectors or an orchestrator repeat. Removing paid-only rows preserves side-by-side card positions and dimensions. A fast drift check keeps the committed dashboard synchronized with the generator and current Providers source.
+
+PR #294.
+
 ## [3.17.227] - 2026-10-23
 
 - Stop selecting exhausted Antigravity models by reading provider quota notices from completed T3 runs and retaining their reset deadlines.
