@@ -1,6 +1,5 @@
-"""The activation helper: the system profile is set before the switch, the
-two generation links are verified afterwards, and the deploy slot guards the
-whole activation."""
+"""The activation helper: the system profile is set before the switch, and the
+two generation links are verified afterwards."""
 import os
 import shutil
 import subprocess
@@ -65,43 +64,15 @@ class ActivateHostTests(unittest.TestCase):
             f"ln -sfn {self.toplevel} {self.current}\n"
         )
         switch.chmod(0o700)
-        # A stand-in for deploy-slot that records each call as tab-separated
-        # arguments, so a test sees the exact argument boundaries.
-        self.slot_log = self.root / "slot-log"
-        self.slot_bin = self.bin / "deploy-slot"
-        self.slot_bin.write_text(
-            "#!/bin/sh\n"
-            "{\n"
-            "  printf 'call'\n"
-            "  for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done\n"
-            "  printf '\\n'\n"
-            "} >> \"$FAKE_SLOT_LOG\"\n"
-            "case \"$1\" in\n"
-            "  check)\n"
-            "    [ -z \"${FAKE_SLOT_CHECK_OUTPUT:-}\" ] || printf '%s\\n' \"$FAKE_SLOT_CHECK_OUTPUT\"\n"
-            "    exit \"${FAKE_SLOT_CHECK_STATUS:-0}\"\n"
-            "    ;;\n"
-            "  release)\n"
-            "    [ -z \"${FAKE_SLOT_RELEASE_OUTPUT:-}\" ] || printf '%s\\n' \"$FAKE_SLOT_RELEASE_OUTPUT\"\n"
-            "    exit \"${FAKE_SLOT_RELEASE_STATUS:-0}\"\n"
-            "    ;;\n"
-            "esac\n"
-            "exit 1\n"
-        )
-        self.slot_bin.chmod(0o700)
         self.environment = {
             **os.environ,
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "GHOSTSHIP_CURRENT_SYSTEM": str(self.current),
             "GHOSTSHIP_SYSTEM_PROFILE": str(self.profile),
-            "GHOSTSHIP_DEPLOY_SLOT_BIN": str(self.slot_bin),
-            "FAKE_SLOT_LOG": str(self.slot_log),
         }
-        self.environment.pop("GHOSTSHIP_DEPLOY_HOLDER", None)
 
-    def run_helper(self, *arguments, environment=None):
-        return subprocess.run([interpreter(), str(SCRIPT), *arguments],
-                              env=environment or self.environment,
+    def run_helper(self, *arguments):
+        return subprocess.run([interpreter(), str(SCRIPT), *arguments], env=self.environment,
                               capture_output=True, text=True, timeout=30)
 
     def steps(self):
@@ -109,20 +80,8 @@ class ActivateHostTests(unittest.TestCase):
             return []
         return self.log.read_text().splitlines()
 
-    def slot_calls(self):
-        if not self.slot_log.exists():
-            return []
-        return [line.split("\t")[1:]
-                for line in self.slot_log.read_text().splitlines()]
-
-    def matching_generation(self, name="generation"):
-        target = self.root / name
-        target.mkdir(exist_ok=True)
-        self.current.symlink_to(target)
-        self.profile.symlink_to(target)
-
     def test_the_profile_is_set_before_the_switch(self):
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
+        result = self.run_helper("--toplevel", str(self.toplevel))
         self.assertEqual(result.returncode, 0, result.stderr)
         steps = self.steps()
         self.assertEqual(len(steps), 2)
@@ -140,7 +99,7 @@ class ActivateHostTests(unittest.TestCase):
             f"ln -sfn {self.root}/other {self.current}\n"
         )
         switch.chmod(0o700)
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
+        result = self.run_helper("--toplevel", str(self.toplevel))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match the system profile", result.stderr)
 
@@ -164,98 +123,6 @@ class ActivateHostTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("is not a built system generation", result.stderr)
         self.assertEqual(self.steps(), [])
-
-    def test_activation_without_a_holder_is_refused(self):
-        result = self.run_helper("--toplevel", str(self.toplevel))
-        self.assertEqual(result.returncode, 3, result.stderr)
-        self.assertIn("agent deploy slot acquire", result.stderr)
-        self.assertEqual(self.steps(), [])
-        self.assertEqual(self.slot_calls(), [])
-
-    def test_a_slot_check_that_refuses_the_holder_is_refused(self):
-        self.environment["FAKE_SLOT_CHECK_STATUS"] = "3"
-        self.environment["FAKE_SLOT_CHECK_OUTPUT"] = '{"holder": "other-session"}'
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
-        self.assertEqual(result.returncode, 3, result.stderr)
-        self.assertIn("other-session", result.stderr)
-        self.assertEqual(self.steps(), [])
-        self.assertEqual(self.slot_calls(), [["check", "--holder", "test-holder"]])
-
-    def test_a_missing_slot_tool_fails_closed(self):
-        self.environment["GHOSTSHIP_DEPLOY_SLOT_BIN"] = str(self.root / "no-such-deploy-slot")
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn("missing or not executable", result.stderr)
-        self.assertEqual(self.steps(), [])
-
-    def test_a_slot_check_error_fails_closed(self):
-        for status in ("1", "2"):
-            with self.subTest(status=status):
-                if self.slot_log.exists():
-                    self.slot_log.unlink()
-                self.environment["FAKE_SLOT_CHECK_STATUS"] = status
-                result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(self.steps(), [])
-                self.assertEqual(self.slot_calls(), [["check", "--holder", "test-holder"]])
-
-    def test_the_holder_environment_variable_is_used(self):
-        self.environment["GHOSTSHIP_DEPLOY_HOLDER"] = "env-holder"
-        result = self.run_helper("--toplevel", str(self.toplevel))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [["check", "--holder", "env-holder"]])
-
-    def test_verify_only_releases_the_verified_generation(self):
-        self.matching_generation("system-413-link")
-        result = self.run_helper("--verify-only", "--holder", "test-holder")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(),
-                         [["release", "--holder", "test-holder", "--generation", "413"]])
-
-    def test_verify_only_a_mismatch_does_not_release(self):
-        self.matching_generation("system-413-link")
-        result = self.run_helper("--verify-only", "--holder", "test-holder")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.slot_calls()), 1)
-        self.profile.unlink()
-        self.profile.symlink_to(self.root / "other")
-        result = self.run_helper("--verify-only", "--holder", "test-holder")
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn("does not match the system profile", result.stderr)
-        self.assertEqual(len(self.slot_calls()), 1)
-
-    def test_verify_only_a_refused_release_exits_three(self):
-        self.matching_generation("system-413-link")
-        self.environment["FAKE_SLOT_RELEASE_STATUS"] = "3"
-        self.environment["FAKE_SLOT_RELEASE_OUTPUT"] = '{"holder": "another-deploy"}'
-        result = self.run_helper("--verify-only", "--holder", "test-holder")
-        self.assertEqual(result.returncode, 3, result.stderr)
-        self.assertIn("another-deploy", result.stderr)
-
-    def test_verify_only_without_a_holder_never_calls_the_slot_tool(self):
-        self.matching_generation()
-        result = self.run_helper("--verify-only")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [])
-        # A holder is what makes verify-only touch the slot at all.
-        result = self.run_helper("--verify-only", "--holder", "test-holder")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [["release", "--holder", "test-holder"]])
-
-    def test_the_holder_reaches_the_slot_tool_as_one_argument(self):
-        holder = "it's \"me\""
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", holder)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [["check", "--holder", holder]])
-
-    def test_an_activation_keeps_the_slot_held(self):
-        # The deploy's checks after the switch (T3 unchanged, the upgrade timer
-        # off) run inside the slot; only verify-only releases it.
-        self.matching_generation("system-413-link")
-        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("release", [call[0] for call in self.slot_calls()])
-        self.assertIn("still holds the deploy slot", result.stdout)
 
 
 if __name__ == "__main__":

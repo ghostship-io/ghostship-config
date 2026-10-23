@@ -223,7 +223,7 @@ moves data under `/srv/retired-apps` and has no automatic purge.
 
 T3 Code runs at `https://t3code.ghostship.io`, with native
 Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps its own home,
-projects, Docker state, and Nix store under `/srv/apps/t3code`. See
+projects, development engine state, and Nix store under `/srv/apps/t3code`. See
 [T3 Code setup and operations](docs/t3code.md) for browser access, provider
 sign-in, project import, and maintenance. Android Chrome can install it as a
 standalone app from the browser menu;
@@ -351,11 +351,9 @@ runs, and avoids full fleet builds to conserve runner time. PRs run the fast
 `scripts/check-unit.py`, workflow/shell lint and the same secret scan; host and
 container evaluations run on main.
 
-Apply the built generation:
-
-```fish
-./result/bin/switch-to-configuration switch
-```
+Deploy the merged configuration with `agent deploy run`. It records the system
+generation and checks activation gates and live health. Use `--agent-rev REV`
+to pin an agent change before deploying.
 
 Build a different host without switching:
 

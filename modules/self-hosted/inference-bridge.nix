@@ -129,6 +129,7 @@ in
       path = [ pkgs.coreutils ];
       restartTriggers = [ config.age.secrets.inference-bridge-token.file inputs.ghostship-private-agent ];
       serviceConfig = {
+        EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
         ExecStartPre = publish;
         ExecStart = lib.escapeShellArgs ([
           "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"

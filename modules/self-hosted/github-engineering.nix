@@ -18,15 +18,15 @@ let
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
     "ghostship-io/ghostship-config" = {
-      project_id = "the owner's local area";
+      project_id = "@GHOSTSHIP_T3_PROJECT_CONFIG@";
       required_checks = [ "check" "browser" ];
     };
-    "ghostship-io/ghostship-agent".project_id = "the owner's local area";
-    "ghostship-io/ghostship-3dprinting".project_id = "the owner's local area";
-    "ghostship-io/ghostship-roms".project_id = "the owner's local area";
-    "ghostship-io/ghostship-xplus4".project_id = "the owner's local area";
-    "ghostship-io/ghostship-newsletter".project_id = "the owner's local area";
-    "ghostship-io/ghostship-orca".project_id = "the owner's local area";
+    "ghostship-io/ghostship-agent".project_id = "@GHOSTSHIP_T3_PROJECT_AGENT@";
+    "ghostship-io/ghostship-3dprinting".project_id = "@GHOSTSHIP_T3_PROJECT_3DPRINTING@";
+    "ghostship-io/ghostship-roms".project_id = "@GHOSTSHIP_T3_PROJECT_ROMS@";
+    "ghostship-io/ghostship-xplus4".project_id = "@GHOSTSHIP_T3_PROJECT_XPLUS4@";
+    "ghostship-io/ghostship-newsletter".project_id = "@GHOSTSHIP_T3_PROJECT_NEWSLETTER@";
+    "ghostship-io/ghostship-orca".project_id = "@GHOSTSHIP_T3_PROJECT_ORCA@";
   };
   # The previous owner and the two renamed repositories, so that existing
   # issue owners, queued deliveries, CI issue mappings and pull request links
@@ -47,9 +47,9 @@ let
     exec ${pkgs.python3}/bin/python3 ${./render-owner-config.py} "$@"
   '';
   coordinatorConfigTemplate = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
-    allowed_user_ids = [ a local store id ];
+    allowed_user_ids = [ "@GHOSTSHIP_GITHUB_USER_ID@" ];
     ntfy_url = "http://ntfy:8080";
-    t3_environment_id = "the owner's local area";
+    t3_environment_id = "@GHOSTSHIP_T3_ENVIRONMENT_ID@";
     # The chief reviewer leads launched threads; the backup reviewer stands in
     # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
     # remains delegated under the canonical engineering/routing policy.

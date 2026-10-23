@@ -10,6 +10,7 @@
     ./ca-distrust.nix
     ./siem
     ./container-hardening.nix
+    ./container-isolation.nix
     ./security-monitoring.nix
     ./cloudflare-sync.nix
     ./reliability.nix
@@ -59,6 +60,9 @@
     ./inference-bridge.nix
     ./free-worker.nix
     ./t3code.nix
+    ./t3code-hardening.nix
+    ./t3code-podman.nix
+    ./podman-only.nix
     ../agent-host
 
     # Games

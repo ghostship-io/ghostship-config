@@ -87,7 +87,8 @@ let
     install -d -m0750 -o63000 -g62020 ${data}/socket ${data}/control ${data}/secrets
     install -m0400 -o63000 -g62020 ${token} ${data}/control/token.new
     mv -fT ${data}/control/token.new ${data}/control/token
-    install -m0600 -o63000 -g63000 ${poolConfig} ${data}/home/.config/ghostship/free-inference.json.new
+    ${pkgs.python3}/bin/python3 ${./render-owner-config.py} ${poolConfig} ${data}/home/.config/ghostship/free-inference.json.new
+    chown 63000:63000 ${data}/home/.config/ghostship/free-inference.json.new
     mv -fT ${data}/home/.config/ghostship/free-inference.json.new ${data}/home/.config/ghostship/free-inference.json
     ${projectCredentials}
   '';
@@ -214,6 +215,7 @@ in
     systemd.services.podman-ghostship-worker.after = [ "apparmor.service" ];
     systemd.services.podman-ghostship-worker.path = [ pkgs.coreutils ];
     systemd.services.podman-ghostship-worker.serviceConfig.ExecStartPre = [ prepare ];
+    systemd.services.podman-ghostship-worker.serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
     systemd.services.ghostship-free-worker-auth = {
       description = "Separate the Go and Zen Console OAuth roles";
       wantedBy = [ "multi-user.target" ];
