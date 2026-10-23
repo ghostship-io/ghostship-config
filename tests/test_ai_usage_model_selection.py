@@ -109,6 +109,9 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(limit['provider_reset_at'], snapshot._iso(at + 600000))
         self.assertEqual(limit['seconds_to_reset'], 18000)
         self.assertEqual(limit['pace_state'], 'ahead')
+        gauges = snapshot.account_window_samples({'quota': {'accounts': {'codex': [window]}}})
+        self.assertTrue(gauges)
+        self.assertTrue(all('custom reset' in labels['label'] for _, labels, _ in gauges))
         expired = [SourceResult('t3', 'ok', windows=[measured.copy()])]
         reset_overrides.apply(expired, [override], at + 18001)
         self.assertEqual(expired[0].windows[0], measured)

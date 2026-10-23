@@ -4515,6 +4515,8 @@ def account_window_samples(
             if str(window.get("evidence") or "") == "inferred":
                 scope = ()
             label = _window_label(kind, quota_id, siblings.get(kind, []))
+            if window.get("reset_source") == "custom":
+                label += " · custom reset"
             labels = {
                 "account": account,
                 "kind": kind,
