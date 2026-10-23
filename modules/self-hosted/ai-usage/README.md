@@ -676,6 +676,12 @@ route, never measured again:
 * `ghostship_ai_static_route_paced_availability{row}` - the candidate's
   `capacity.pace_delta`, the same number the page calls the Paced
   Availability. A promotion with no pace publishes no series.
+* `ghostship_ai_static_route_pace_state{row,state}` - the band of the row
+  against its own line, in `state`: `ahead`, `on_pace`, `behind`,
+  `far_behind`, `spent` or `unknown`. One series per row. The line is the
+  share left minus the row's Paced Availability, and the band is the value
+  policy's: a row with no share, or with no pace to compare it with, is
+  `unknown`, and a row with nothing left is `spent`.
 * `ghostship_ai_static_route_reset_timestamp_seconds{row}` - the
   `capacity.capacity_binding.reset_at` of the candidate, in epoch seconds.
 * `ghostship_ai_static_route_policy_ok` - 1 when the policy was read, 0 when
@@ -720,6 +726,13 @@ the capacity of the winning route, read from the candidate of that route:
 * `ghostship_ai_free_provider_selection_paced_availability{provider}` - the
   candidate's `capacity.pace_delta`, the same number the page calls the Paced
   Availability.
+* `ghostship_ai_free_provider_selection_pace_state{provider,state}` - the
+  band of the selection against its own line, in `state`: `ahead`,
+  `on_pace`, `behind`, `far_behind`, `spent` or `unknown`. One series per
+  free provider. The line is the share left minus the selection's Paced
+  Availability, and the band is the value policy's: a selection with no
+  share, or with no pace to compare it with, is `unknown`, and one with
+  nothing left is `spent`.
 * `ghostship_ai_free_provider_selection_reset_timestamp_seconds{provider}` -
   the `capacity.capacity_binding.reset_at` of the candidate, in epoch
   seconds.
@@ -1019,10 +1032,15 @@ removed (`100 * (0.50 - 0.55)` is `-5`). A window with nothing left is
 twenty points behind and five behind is `behind`; more than twenty points
 behind is `far_behind`; and a route with no window, or no line to compare it
 with, is `unknown`. The collector publishes the state as `pace_state` in the
-`capacity` of every candidate row, as `pace_state` of every winner, and as
+`capacity` of every candidate row, as `pace_state` of every winner, as
 `ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`
-for every window of an account, so the Providers page colours amber and red
-by the collector's band instead of drawing its own.
+for every window of an account, as
+`ghostship_ai_static_route_pace_state{row,state}` for every static row, and
+as `ghostship_ai_free_provider_selection_pace_state{provider,state}` for
+every free provider, so the Providers page colours amber and red by the
+collector's band instead of drawing its own. The collector half is the one
+that publishes the two new series; the page keeps its own identical band
+until it is switched to them.
 
 The published value of a route is the outcome-weighted value: the measured
 intelligence placed inside the range of the tier it competes in
