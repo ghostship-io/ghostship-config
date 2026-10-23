@@ -177,23 +177,62 @@ class PublicationTestCase(unittest.TestCase):
 
 
 class RefusedRouteWindowTests(PublicationTestCase):
-    """A never-refused route never hides the window of a refused one."""
+    """A never-refused route never hides the window of a refused one.
+
+    The provider is one whose limits are not published per model, so the
+    route that was never refused and the route that was refused belong to
+    the same account: the learned window of the refused route is the
+    account's, and it is filed under the provider key.
+    """
 
     def setUp(self):
         super().setUp()
-        self.routes = [("google", QUIET_ROUTE), ("google", REFUSED_ROUTE)]
-        self.inferred = self.infer(MATHS, self.routes)
+        self.provider = "mistral"
+        self.routes = [
+            (self.provider, QUIET_ROUTE),
+            (self.provider, REFUSED_ROUTE),
+        ]
+        self.inferred = self.infer(
+            [
+                record(at(9), provider=self.provider, model=QUIET_ROUTE, usage=1000),
+                record(
+                    at(13, 20),
+                    provider=self.provider,
+                    model=QUIET_ROUTE,
+                    usage=2000,
+                ),
+                record(
+                    at(8),
+                    provider=self.provider,
+                    model=REFUSED_ROUTE,
+                    usage=200000,
+                ),
+                record(
+                    at(10, 30),
+                    provider=self.provider,
+                    model=REFUSED_ROUTE,
+                    limit=True,
+                ),
+                record(
+                    at(13, 2),
+                    provider=self.provider,
+                    model=REFUSED_ROUTE,
+                    usage=0,
+                ),
+            ],
+            self.routes,
+        )
 
     def test_the_quiet_route_does_not_take_the_provider_key(self):
         windows = self.windows(self.inferred, self.routes)
-        self.assertIn("google", windows)
+        self.assertIn(self.provider, windows)
         self.assertEqual(
-            [window.quota_id for window in windows["google"]], ["inferred:5h"]
+            [window.quota_id for window in windows[self.provider]], ["inferred:5h"]
         )
 
     def test_the_learned_window_is_the_one_published(self):
         windows = self.windows(self.inferred, self.routes)
-        window = windows["google"][0]
+        window = windows[self.provider][0]
         self.assertEqual(window.kind, "inferred")
         self.assertEqual(window.quota_id, "inferred:5h")
         self.assertEqual(window.duration_seconds, 5 * HOUR)
