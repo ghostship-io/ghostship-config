@@ -77,13 +77,11 @@ is whoever used the window last, so a person closing the viewer does not
 release an agent's lease (that would close the Chrome menu the agent is
 working with); only an explicit admin request forces a lease down, and an
 agent never sends one.
-`stage-control` pairs sway windows with Chrome's DevTools window ids (home-tab
-title, then unique tab titles, then elimination; ambiguous windows stay
-unpaired), which tells the viewer which run a window belongs to. Sway does not
-re-announce the windows it already has, so a restart reads the tree once and
-pairs the windows it finds there. Whoever opens
-a run window waits until the stage has paired it by its home tab before
-opening a working tab, which takes the window title over.
+`stage-control` pairs sway windows with Chrome's DevTools window ids by
+unique tab titles, then elimination; ambiguous windows stay unpaired. Pairs
+remain stable across page navigation. A restart reads the compositor tree and
+rebuilds only unambiguous pairs. Public run records associate a Chrome window
+with its run only while the recorded work target still belongs to that window.
 
 Every agent drives its own window with target-scoped DevTools input, which
 needs no focus and no global lock. Measured on Chrome 155 (2026-10-20): 8 and
@@ -119,20 +117,27 @@ outside the s6-rc `user` bundle, so s6 supervises them in the down state:
 - **No startup window:** Chrome runs with `--no-startup-window`, so a started
   profile has no window until an agent creates one with
   `Target.createTarget {newWindow: true, background: true}`.
-- **Lease reaping:** each agent window's home tab is
-  `about:blank#ghostship-window-<token>.<expires>` (Unix seconds), which the
-  leasing runtime slides while the lease is in use. Every idle check runs
-  `chrome-lease-reaper` on each reachable identity: once `expires` is more
-  than 120 s past (`CHROME_LEASE_SLACK_SECONDS`), it closes that window's
-  tabs and the popups they opened, anchor last, and logs one line. Legacy
-  anchors without `.<expires>`, unexpired leases and other windows are never
-  closed, whichever host opened them.
+- **Lease reaping:** each agent window has an atomically renewed
+  `/config/agent-desktop/runs/<marker>.json` record (schema 2, identity,
+  numeric Chrome window id, work target binding and Unix expiry; never the
+  bearer). Every idle check runs `chrome-lease-reaper`: after expiry plus
+  120 s (`CHROME_LEASE_SLACK_SECONDS`), it closes a window only if the
+  recorded target still belongs to it. A stale record cannot authorize a
+  reused window id. Dedicated descendant popup windows are included;
+  human windows and unexpired recorded windows are protected. For one rollout
+  release, an existing schema-1 record and matching anchor URL retain their
+  old lease expiry behavior; idle checks also preserve those pages.
+- **Work tabs:** a claim creates its window only at the first real URL.
+  Later tabs open from a verified work tab in an isolated JavaScript world,
+  with placement verified afterwards; mismatch closes the new target and
+  fails. Closing the final work tab leaves an explicit claim unbound until
+  its normal expiry; the same bearer creates a new window on navigation.
+  Default claims end and reopen lazily.
 - **Idle stop:** `svc-agent-desktop-chrome-idle` samples `/json/list` every
-  60 s (`CHROME_IDLE_CHECK_SECONDS`). When an identity has had no page
-  targets, or only plain `about:blank` ones, for 10 minutes
-  (`CHROME_IDLE_TIMEOUT_SECONDS`, 600), it stops that service and logs one
-  line. Any other page, including a page a human opened and agent anchors in
-  either form, and any `chrome-ensure` call reset the clock.
+  60 s (`CHROME_IDLE_CHECK_SECONDS`). After lease reaping, only a profile
+  with no page targets can stop after 600 s (`CHROME_IDLE_TIMEOUT_SECONDS`).
+  Every remaining page, including a human blank page, prevents shutdown.
+  A `chrome-ensure` call resets the idle clock.
 - **Supervision:** starting is `s6-svc -u` and stopping is `s6-svc -d`, so s6
   relaunches a crashed Chrome while it is wanted up and keeps an idle-stopped
   one down until the next `chrome-ensure`. The idle service grants the `abc`

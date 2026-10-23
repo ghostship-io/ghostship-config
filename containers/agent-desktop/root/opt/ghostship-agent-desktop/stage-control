@@ -27,8 +27,7 @@ window. Chrome listens to one Wayland seat, so this stage has one focus:
   until its holder releases it or LEASE_IDLE seconds pass without input, so
   a menu or extension popup stays open between an agent's calls.
 - Sway windows are paired with Chrome windows (DevTools window ids) so the
-  viewer knows which run a window belongs to: by the run's home-tab URL when
-  sway sees it as the window title, else by the window title matching tab
+  viewer knows which run a window belongs to: by the window title matching tab
   titles in exactly one Chrome window, else by elimination. Pairs are sticky;
   an ambiguous window stays unpaired (the viewer then shows page content
   only) rather than risk showing another run's window. Sway does not
@@ -66,6 +65,7 @@ import time
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 sys.path.insert(0, os.path.join(HERE, "tools"))
+from desktop_leases import records, bound_records
 from cdp_ws import Cdp, CdpError  # noqa: E402
 from ghostship_actions import Actions, InputError  # noqa: E402
 from ghostship_wl import VirtualInput, socket_path  # noqa: E402
@@ -75,7 +75,6 @@ PORTS = {"agent": 9222, "personal": 9223}
 OUTPUT_W, OUTPUT_H = 1920, 1080
 LEASE_IDLE = 20.0
 SCREEN_SETTLE = 0.5
-ANCHOR = re.compile(r"about:blank#ghostship-window-([A-Za-z0-9_-]{1,64})")
 MAGIC = b"i3-ipc"
 RUN_COMMAND, GET_WORKSPACES, SUBSCRIBE, GET_OUTPUTS, GET_TREE = 0, 1, 2, 3, 4
 
@@ -143,7 +142,6 @@ class Stage:
         self.cdp: Cdp | None = None
         self.target_windows: dict[str, int] = {}  # CDP target id -> Chrome window id
         self.pairs: dict[int, int] = {}            # sway con id -> Chrome window id (sticky)
-        self.anchor_titles: dict[int, str] = {}    # sway con id -> run id seen in its title
         self.refresh_timer: threading.Timer | None = None
         self.pointers: dict[int, tuple[int, int]] = {}  # sway con id -> pointer, in window pixels
 
@@ -157,11 +155,6 @@ class Stage:
         self.ipc.command("workspace idle")
         self.outputs = [o["name"] for o in outputs[1:]]
         for con in self.tree_windows():
-            # Sway does not re-announce the windows it already has, so a restart
-            # learns their anchor titles (the run id in the title) from the tree.
-            match = ANCHOR.search(con.get("name") or "")
-            if match:
-                self.anchor_titles[con["id"]] = match.group(1)
             # After a restart, adopt windows that already have their own output.
             if con["output"] != self.base_output and con.get("workspace") == f"w-{con['output']}":
                 self.windows[con["id"]] = {"output": con["output"]}
@@ -262,7 +255,6 @@ class Stage:
         with self.lock:
             info = self.windows.pop(con, None)
             self.pairs.pop(con, None)
-            self.anchor_titles.pop(con, None)
             self.pointers.pop(con, None)
             if self.lease and self.lease["con"] == con:
                 self.lease = None
@@ -281,9 +273,6 @@ class Stage:
             if not container.get("pid"):
                 continue
             try:
-                match = ANCHOR.search(container.get("name") or "")
-                if match:
-                    self.anchor_titles[container["id"]] = match.group(1)
                 if change == "new":
                     self.place(container["id"], container.get("name") or "")
                 elif change == "close":
@@ -340,13 +329,10 @@ class Stage:
                         "lease": bool(self.lease and self.lease["con"] == node["id"])})
         return out
 
-    @staticmethod
-    def run_of(targets: list[dict]) -> str | None:
-        for target in targets:
-            match = ANCHOR.fullmatch(target.get("url", "").split(".")[0])
-            if match:
-                return match.group(1)
-        return None
+    def run_of(self, targets: list[dict]) -> str | None:
+        windows = {t["targetId"]: self.target_windows.get(t["targetId"]) for t in targets}
+        rows = bound_records(records(RUNS, self.identity), windows)
+        return rows[0]["run_id"] if len(rows) == 1 else None
 
     def pair(self, nodes: list[dict], groups: dict[int, list[dict]]) -> dict[int, int]:
         """Sway con id -> Chrome window id, extending the sticky pairs where it is unambiguous."""
@@ -356,11 +342,6 @@ class Stage:
         for con, window in list(self.pairs.items()):
             if con not in cons or window not in groups:
                 self.pairs.pop(con)
-        by_run = {self.run_of(targets): window for window, targets in groups.items() if self.run_of(targets)}
-        for con, run in self.anchor_titles.items():
-            if con in cons and con not in self.pairs and by_run.get(run) not in self.pairs.values():
-                if run in by_run:
-                    self.pairs[con] = by_run[run]
         while True:
             free_cons = [c for c in cons if c not in self.pairs]
             free_windows = [w for w in groups if w not in self.pairs.values()]
