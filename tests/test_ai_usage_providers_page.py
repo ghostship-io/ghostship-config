@@ -1668,8 +1668,25 @@ class ModelSelectionTests(unittest.TestCase):
         for metric in SELECTION_METRICS:
             self.assertIn(metric, expression, metric)
         self.assertIn("ghostship_ai_routing_enabled", expression)
-        # The same freshness guard as the rest of the page.
-        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+        # A row counts only if it is from the newest scrape.
+        self.assertIn("ghostship_ai_static_route_policy_ok", expression)
+        self.assertIn(") - 15", expression)
+
+    def test_every_selection_series_reads_only_the_newest_scrape(self):
+        """No series of the table is read from an older scrape than the newest.
+
+        The guard was 90 s wide while a scrape is 30 s, so after a policy
+        edit the rows of the policy before it stayed on the table for about
+        two minutes. The policy gauge is published on every collection, so
+        its newest timestamp is the newest scrape.
+        """
+        expression = expressions(self.panel)
+        guard = "scalar(max(timestamp(ghostship_ai_static_route_policy_ok))) - 15"
+        self.assertNotIn("ghostship_ai_collection_duration_seconds", expression)
+        self.assertEqual(expression.count(guard), 10)
+        for metric in SELECTION_METRICS:
+            self.assertIn(f"timestamp({metric}", expression, metric)
+        self.assertIn("timestamp(ghostship_ai_routing_enabled)", expression)
 
     def test_the_columns_are_role_model_provider_used_for_and_left(self):
         """The table reads in the owner's columns, and Left comes last."""
@@ -1894,7 +1911,7 @@ class ModelSelectionTests(unittest.TestCase):
         expression = expressions(self.panel)
         for metric in FREE_SELECTION_METRICS:
             self.assertIn(metric, expression, metric)
-        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+        self.assertIn("ghostship_ai_static_route_policy_ok", expression)
         for metric in (
             "ghostship_ai_model_winner_position",
             "ghostship_ai_account_window_",
@@ -2213,6 +2230,52 @@ class ModelSelectionStoreTests(unittest.TestCase):
             [(row[0], row[4]) for row in FREE_ROWS],
         )
 
+    def test_a_route_from_an_older_scrape_is_not_shown(self):
+        """After a policy edit the table keeps only the newest scrape's rows.
+
+        The row below is 60 s older than the newest scrape: it was still on
+        the table while the guard was 90 s wide, although a scrape is 30 s.
+        """
+        store = VictoriaMetricsFixture()
+        self.addCleanup(store.stop)
+        if not store.start():
+            self.skipTest("VictoriaMetrics did not start")
+        panel = section(self.page, "Model selection")
+        target = find_target(panel, "ghostship_ai_static_route_info")
+        moment = int(time.time())
+        lines = [
+            f"ghostship_ai_static_route_policy_ok 1 {moment * 1000}",
+            f"ghostship_ai_collection_duration_seconds 1 {moment * 1000}",
+            f"ghostship_ai_routing_enabled 0 {moment * 1000}",
+        ]
+        for model, seconds_ago in (("newest", 0), ("one-scrape-older", 60)):
+            stamp = (moment - seconds_ago) * 1000
+            lines.append(
+                f'ghostship_ai_static_route_info{{row="{model}",role="Bulk 1",'
+                f'provider="ollama",model="{model}",display_name="{model}",'
+                f'used_for="Narrow implementation (1st)"}} 1 {stamp}'
+            )
+            lines.append(
+                f'ghostship_ai_static_route_remaining_ratio{{row="{model}"}} 0.5 {stamp}'
+            )
+        store.import_text("\n".join(lines) + "\n")
+        expression = target["expr"].replace("$provider", ".*")
+        deadline = time.time() + 30
+        while True:
+            result = store.query(expression)
+            models = {
+                row["metric"].get("model")
+                for row in result
+                if row["metric"].get("field") == "info"
+            }
+            if "newest" in models:
+                break
+            if time.time() > deadline:
+                self.fail("the store never answered the newest row")
+            time.sleep(0.2)
+        self.assertIn("newest", models)
+        self.assertNotIn("one-scrape-older", models)
+
 
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
@@ -2263,9 +2326,12 @@ class VictoriaMetricsFixture:
             shutil.rmtree(self.directory, ignore_errors=True)
 
     def import_fixture(self, path):
+        self.import_text(path.read_text(encoding="utf-8"))
+
+    def import_text(self, text):
         request = urllib.request.Request(
             self.url + "/api/v1/import/prometheus",
-            data=path.read_bytes(),
+            data=text.encode("utf-8"),
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=10):
