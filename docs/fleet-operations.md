@@ -219,8 +219,14 @@ released query-based API and the newer POST/PUT API. Legacy queries include any
 enabled library IDs because omitting them disables selections; the parameter is
 omitted only for an intentionally empty selection, since empty values are rejected.
 New Plex users require explicit import. After successful first-run setup, the marker
-`/srv/apps/seerr/.ghostship-provisioned` preserves later settings. Verify a
-request as an ordinary user remains pending until an administrator approves it.
+`/srv/apps/seerr/.ghostship-provisioned` preserves login policy and library selections.
+The provisioner still validates Plex authentication, Servarr roots and profiles every
+15 minutes. It repairs removed profile IDs only when the saved profile name has a
+unique replacement, refreshes the managed API key and preserves valid custom profiles.
+Missing roots or ambiguous profile names fail without rewriting that instance.
+The unconfigured ntfy agent is wired to the internal authenticated operations topic;
+custom destinations are preserved. Changes require a successful test and fresh read.
+Verify a request as an ordinary user remains pending until an administrator approves it.
 
 The new credentials are encrypted in the service source bundles. Do not store
 runtime env files, setup cookies, push tokens, or plaintext exports in Git.
