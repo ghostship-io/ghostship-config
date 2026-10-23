@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage/colle
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import main  # noqa: E402
 import ranking  # noqa: E402
 import snapshot  # noqa: E402
 
@@ -98,8 +99,8 @@ def aa_record(route):
     }
 
 
-def build(routes):
-    """The routing snapshot of the given routes."""
+def ranking_inputs(routes):
+    """The feed, the catalog and the native models of the given routes."""
     feed = {
         "status": "ok",
         "index_version": "4.3",
@@ -116,10 +117,16 @@ def build(routes):
         }
         for route in routes
     }
+    return feed, catalog, native
+
+
+def ranked_models(routes):
+    """The ranked models of the given routes."""
+    feed, catalog, native = ranking_inputs(routes)
     extra = {}
     if "frontier_workhorses" in inspect.signature(ranking.rank_models).parameters:
         extra["frontier_workhorses"] = ("gpt-6.1-sol",)
-    ranked = ranking.rank_models(
+    return ranking.rank_models(
         models=[
             ranking.ModelRecord(route["provider"], route["model"]) for route in routes
         ],
@@ -133,6 +140,12 @@ def build(routes):
         now=NOW,
         **extra,
     )
+
+
+def build(routes):
+    """The routing snapshot of the given routes."""
+    feed, catalog, native = ranking_inputs(routes)
+    ranked = ranked_models(routes)
     return snapshot.build_snapshot(
         now=NOW,
         sources=[
@@ -344,6 +357,202 @@ class TierNameTests(unittest.TestCase):
         )
         self.assertIn(
             "claude:claude-sonnet-5", data["tier_members"]["worker"]
+        )
+
+
+def keyed(published):
+    """The samples of a publisher, keyed by name and labels."""
+    return {
+        (name, tuple(sorted(labels.items()))): value
+        for name, labels, value in published
+    }
+
+
+def reserved_for_3d():
+    """A snapshot of a model the owner keeps for the 3D tier."""
+    return {
+        "candidates": [
+            {
+                "provider": "ollama",
+                "model": "minimax-m3.1-flash",
+                "reserve": {
+                    "3d": True,
+                    "withheld": True,
+                    "tiers": ["worker", "free"],
+                },
+            }
+        ]
+    }
+
+
+class TierMetricAliasTests(unittest.TestCase):
+    """Every tier-labelled gauge keeps the old name of its tier as well.
+
+    For one release a reader of the old names keeps reading the same
+    numbers: every gauge with a tier label is published under the name of
+    the tier and under the name the tier carried before this release, with
+    the same labels and the same value. The tiers that were not renamed keep
+    one name, and a gauge that carries no tier keeps its name.
+    """
+
+    def assert_one_name(self, published, canonical, alias):
+        """Every sample of a tier has the same sample under the old name."""
+        found = keyed(published)
+        for name, labels, value in published:
+            tier = dict(labels).get("tier")
+            if tier not in (canonical, alias):
+                continue
+            other = alias if tier == canonical else canonical
+            key = (name, tuple(sorted({**labels, "tier": other}.items())))
+            self.assertIn(
+                key, found, f"{name} has no series for the tier {other}"
+            )
+            self.assertEqual(
+                found[key], value, f"{name} holds another value under {other}"
+            )
+
+    def publishers(self, data, routes):
+        """The gauges of every publisher of the snapshot."""
+        return {
+            "decision": list(snapshot.decision_samples(data)),
+            "trust": list(main.trust_samples(data)),
+            "decision_input": list(main.decision_input_samples(data)),
+            "ranking": list(ranking.rank_samples(ranked_models(routes), now=NOW)),
+        }
+
+    def test_the_trust_and_the_outcome_of_a_worker_are_published_under_both_names(self):
+        data = build(workers())
+        published = list(main.trust_samples(data))
+        names = {name for name, _labels, _value in published}
+        self.assertIn("ghostship_ai_model_trust_info", names)
+        self.assertIn("ghostship_ai_model_outcome", names)
+        # The old name of the tier carries the same trust and the same
+        # outcome, with the same labels and the same value.
+        self.assert_one_name(published, "worker", "bulk")
+        tiers = {
+            dict(labels)["tier"]
+            for name, labels, _value in published
+            if name == "ghostship_ai_model_trust_info"
+        }
+        self.assertEqual(tiers, {"worker", "bulk"})
+
+    def test_the_trust_and_the_outcome_of_an_orchestrator_are_published_under_both_names(self):
+        data = build(reserved())
+        published = list(main.trust_samples(data))
+        self.assert_one_name(published, "orchestrator", "frontier")
+        tiers = {
+            dict(labels)["tier"]
+            for name, labels, _value in published
+            if name == "ghostship_ai_model_trust_info"
+            and dict(labels)["provider"] == "codex"
+        }
+        self.assertEqual(tiers, {"orchestrator", "frontier"})
+
+    def test_the_reserve_of_a_three_d_model_is_published_under_both_names(self):
+        published = list(main.decision_input_samples(reserved_for_3d()))
+        reserved = [
+            (name, labels, value)
+            for name, labels, value in published
+            if name == "ghostship_ai_model_reserved"
+        ]
+        self.assertTrue(reserved, "the reserve of the 3D model is published")
+        # The worker and its old name, and the free tier with its own name.
+        self.assertEqual(
+            sorted({dict(labels)["tier"] for _name, labels, _value in reserved}),
+            ["bulk", "free", "worker"],
+        )
+        self.assert_one_name(published, "worker", "bulk")
+        free = [
+            labels for _name, labels, _value in reserved if dict(labels)["tier"] == "free"
+        ]
+        self.assertEqual(len(free), 1, "the free tier is published once")
+
+    def test_every_ranking_gauge_of_a_tier_is_published_under_both_names(self):
+        routes = workers() + reserved()
+        published = list(ranking.rank_samples(ranked_models(routes), now=NOW))
+        names = {name for name, _labels, _value in published}
+        self.assertIn("ghostship_ai_model_rank", names)
+        self.assertIn("ghostship_ai_model_score", names)
+        self.assertIn("ghostship_ai_model_tier", names)
+        self.assert_one_name(published, "worker", "bulk")
+        self.assert_one_name(published, "orchestrator", "frontier")
+
+    def test_no_publisher_writes_the_same_series_twice(self):
+        routes = workers() + reserved()
+        data = build(routes)
+        published = self.publishers(data, routes)
+        for label, samples in published.items():
+            # Every publisher covers both names of a tier, and none of them
+            # writes a series twice: the alias is a second series, never a
+            # repeat of the first one.
+            self.assert_one_name(samples, "worker", "bulk")
+            self.assert_one_name(samples, "orchestrator", "frontier")
+            series = [
+                (name, tuple(sorted(labels.items()))) for name, labels, _value in samples
+            ]
+            self.assertEqual(
+                len(series), len(set(series)), f"{label} writes a series twice"
+            )
+        # And no two publishers write the same series.
+        together = [
+            (name, tuple(sorted(labels.items())))
+            for samples in published.values()
+            for name, labels, _value in samples
+        ]
+        self.assertEqual(
+            len(together), len(set(together)), "two publishers write the same series"
+        )
+
+    def test_the_ranks_and_the_winners_did_not_change(self):
+        routes = workers() + reserved()
+        data = build(routes)
+        published = list(snapshot.decision_samples(data))
+        found = keyed(published)
+        for (name, labels), value in found.items():
+            tier = dict(labels).get("tier")
+            if tier not in ("worker", "bulk", "orchestrator", "frontier"):
+                continue
+            other = {
+                "worker": "bulk",
+                "bulk": "worker",
+                "orchestrator": "frontier",
+                "frontier": "orchestrator",
+            }[tier]
+            key = (name, tuple(sorted({**dict(labels), "tier": other}.items())))
+            self.assertEqual(found.get(key), value, f"{name} changed under {other}")
+        # The order of the tiers is the order of the release before it.
+        self.assertEqual(
+            build(workers())["tier_members"]["worker"],
+            ["ollama:minimax-m3.1-flash", "ollama:deepseek-v4.1-flash:1017"],
+        )
+
+    def test_the_tiers_that_were_not_renamed_keep_one_name(self):
+        names = getattr(snapshot, "tier_names", None)
+        self.assertIsNotNone(names, "the collector publishes the names of a tier")
+        self.assertEqual(names("free"), ("free",))
+        self.assertEqual(names("3d"), ("3d",))
+        self.assertEqual(names("worker"), ("worker", "bulk"))
+        self.assertEqual(names("orchestrator"), ("orchestrator", "frontier"))
+
+    def test_the_frontier_fields_that_carry_no_tier_keep_their_names(self):
+        data = {
+            "coverage": {
+                "frontier": {
+                    "eligible": [
+                        {
+                            "provider": "codex",
+                            "model": "gpt-6.1-sol",
+                            "state": "available",
+                            "seconds_to_reset": 12.0,
+                        }
+                    ]
+                }
+            }
+        }
+        published = list(main.decision_input_samples(data))
+        self.assertEqual(
+            {name for name, _labels, _value in published},
+            {"ghostship_ai_frontier_member", "ghostship_ai_frontier_wait_seconds"},
         )
 
 

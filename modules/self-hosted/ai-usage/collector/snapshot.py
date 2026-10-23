@@ -175,9 +175,23 @@ TIER_ALIAS_NAMES = frozenset(
 )
 
 
-def _tier_names(tier: str) -> tuple[str, ...]:
-    """The published names of a tier: its own name, then its aliases."""
-    return (str(tier), *TIER_ALIASES.get(str(tier), ()))
+def tier_names(tier: str) -> tuple[str, ...]:
+    """The published names of a tier: its canonical name, then its aliases.
+
+    The alias of a tier is the name the tier carried before this release.
+    Every publisher writes a tier-labelled gauge under the canonical name and
+    under every alias of it, with the same labels and the same value, so a
+    reader of either name reads exactly one answer. A name that is an alias
+    maps back to its canonical name first, so a tier is never published twice
+    under one label set. The tiers that have no alias keep their own name.
+    """
+    name = str(tier)
+    canonical = name
+    for base, aliases in TIER_ALIASES.items():
+        if name in aliases:
+            canonical = base
+            break
+    return (canonical, *TIER_ALIASES.get(canonical, ()))
 
 
 def _with_tier_aliases(by_tier: Mapping[str, Any]) -> dict[str, Any]:
@@ -188,7 +202,7 @@ def _with_tier_aliases(by_tier: Mapping[str, Any]) -> dict[str, Any]:
     """
     published: dict[str, Any] = {}
     for tier, value in (by_tier or {}).items():
-        for name in _tier_names(str(tier)):
+        for name in tier_names(str(tier)):
             published[name] = value
     return published
 
@@ -4892,7 +4906,7 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
             provider, _, model = str(key).partition(":")
             row = rows_by_key.get(str(key)) or {}
             reservation = str((row.get("reservation") or {}).get(str(tier)) or "")
-            for name in _tier_names(str(tier)):
+            for name in tier_names(str(tier)):
                 labels = {
                     "tier": name,
                     "provider": provider,

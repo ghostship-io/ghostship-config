@@ -1090,6 +1090,10 @@ winner.
 * `ghostship_ai_model_reserved_for{provider,model,tier,role}` - 1 for a member
   whose provider is reserved for another workload in this tier; `role` is the
   workload, e.g. `review-roles`.
+* `ghostship_ai_model_reserved{provider,model,tier,reserve,withheld}` - 1 for a
+  model the owner keeps for the 3D tier, in every tier it is held away from;
+  `reserve` is the 3D reserve and `withheld` says whether the model is held
+  back right now or only ordered last.
 * Every gauge above with a `tier` label is published under the new name and
   its old name (`frontier`, `bulk`) for one release, with identical labels
   and value.
