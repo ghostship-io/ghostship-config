@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.120] - 2026-10-23
+
+- ai-usage: a free pool route the pool parked says why it is unusable. The routing snapshot rebuilt `availability.reason` from the quota windows alone, so a pool route the pool reports as unavailable read `available: false` with an empty reason whenever the quota of its account was available; the live pool providers held 23 such candidates. The ranking already knows that the pool parked the route, and the snapshot now reads that judgement: a route whose pool cooldown has not run out says "cooling down in the free pool until <the moment the cooldown ends>", and a route without a cooldown says "the free pool does not offer the route for development work". The pool publishes no reason of its own, so those two cases are the whole of it. The availability state, `available`, `quota_state` and the capacity are unchanged, and so is every other reason.
+
 ## [3.17.119] - 2026-10-23
 
 - AI usage: the age of a capacity reading is published, so a card of the Providers page can be compared with the provider's own site. The check time of the record the row is drawn from is published in seconds as `ghostship_ai_account_window_check_timestamp_seconds`, with the labels of the row, and a reading without a check time publishes none: the other series of the row stay as they are. Two readings of one window are one row, and the check time of that row is the check time of the reading that won. An inferred window that rolls carries the mark of the inference, and the collector publishes it as `ghostship_ai_account_window_rolling`, so the page can say 'rolling'. The mark is carried as the inference published it, and a window of an inference that carries no mark publishes no rolling series.
