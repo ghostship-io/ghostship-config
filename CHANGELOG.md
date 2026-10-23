@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.132] - 2026-10-23
+## [3.17.133] - 2026-10-23
 
 - ai-usage: `agent worker route` inside the T3 Code container can read the routing snapshot. The collector's MCP projection lives at `/run/ghostship-integrations/model-routing.json`, which the container does not mount, so the command reported "the ranking snapshot is missing". The path unit `ghostship-ai-usage-t3-projection.path` now watches that file (`PathChanged`) and activates the oneshot `ghostship-ai-usage-t3-projection.service` whenever the collector publishes, by rename. The oneshot seeds a small writer into the container's own store, creates `/run/ghostship-model-routing` as root (`-m0755 -o3000 -g3000`), and runs the writer as the container user through `podman exec -i --user 3000:3000 t3code`; the writer replaces `/run/ghostship-model-routing/model-routing.json` at mode 0644 by `mv -fT` from a `.new` file. Consumers read it read-only. The unit is `requisite` and `after` `podman-t3code.service`, so a stopped container fails the copy instead of being started: the container is never started, stopped or recreated, and its volumes and environment are unchanged.
+
+## [3.17.132] - 2026-10-23
+
+- Merge freeze: main can require a `ghostship/freeze` commit status, so a freeze set with `agent freeze set` refuses every merge, including `gh pr merge`, `--admin`, the merge API and the web button, not only `agent pr land`. The new `Merge freeze` workflow marks each pull request head from the repository variable `GHOSTSHIP_FREEZE` through `scripts/freeze-status`: success when no freeze runs or it has expired, failure while it runs, and failure for a record it cannot read. It runs as `pull_request_target`, so a pull request cannot mark itself unfrozen. `docs/fleet-operations.md` names the commands, the one-time protection and the marked-tip force-push a history rewrite needs.
 
 ## [3.17.131] - 2026-10-23
 
