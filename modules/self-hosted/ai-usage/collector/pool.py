@@ -186,13 +186,35 @@ _DURATION_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _finite_number(value: Any) -> float | None:
-    """A finite number, or None. A boolean is not a number."""
+    """A finite number, or None. A boolean is not a number.
+
+    An integer too large for a float fails closed: it has no measured
+    capacity and it never crashes the reading.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    number = float(value)
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return None
     if not math.isfinite(number):
         return None
     return number
+
+
+def _diagnostic_number(value: Any) -> float | None:
+    """A number for a diagnostic series, or None when it cannot be one.
+
+    The diagnostics are tolerant of what they publish, but a number too
+    large for a float is not a reading: it is skipped rather than allowed
+    to overflow the run. A boolean keeps the value it had.
+    """
+    if not isinstance(value, (int, float)):
+        return None
+    try:
+        return float(value)
+    except (OverflowError, ValueError):
+        return None
 
 
 def _strict_duration_seconds(value: Any) -> float | None:
@@ -212,7 +234,8 @@ def _strict_duration_seconds(value: Any) -> float | None:
     if not text:
         return None
     if _DURATION_NUMBER.fullmatch(text):
-        return float(text)
+        seconds = float(text)
+        return seconds if math.isfinite(seconds) and seconds >= 0.0 else None
     if not _DURATION_TEXT.fullmatch(text):
         return None
     parts = _DURATION_PART.findall(text)
@@ -220,7 +243,9 @@ def _strict_duration_seconds(value: Any) -> float | None:
         return None
     scale = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
     seconds = sum(float(part) * scale[unit] for part, unit in parts)
-    return seconds if seconds >= 0.0 else None
+    if not math.isfinite(seconds) or seconds < 0.0:
+        return None
+    return seconds
 
 
 def _reported_windows(status: dict[str, Any], now: float) -> list[dict[str, Any]]:
@@ -274,8 +299,12 @@ def _reported_windows(status: dict[str, Any], now: float) -> list[dict[str, Any]
             if refill is None:
                 continue
             reset = observed + refill
-            if reset <= now:
-                # The window the provider reported has already refilled.
+            if not math.isfinite(reset) or reset <= now:
+                # A reset that overflows or is already behind us is not a
+                # window the provider has ahead of it.
+                continue
+            used = 1.0 - remaining / limit
+            if not math.isfinite(used):
                 continue
             windows.append(
                 {
@@ -284,7 +313,7 @@ def _reported_windows(status: dict[str, Any], now: float) -> list[dict[str, Any]
                     "model": model,
                     "kind": kind,
                     "quotaId": str(unit),
-                    "usedRatio": 1.0 - remaining / limit,
+                    "usedRatio": used,
                     "resetEpoch": reset,
                     "durationSeconds": duration,
                     "observedAtEpoch": observed,
@@ -486,8 +515,8 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
             if not isinstance(values, dict):
                 continue
             for kind in ("limit", "remaining"):
-                value = values.get(kind)
-                if not isinstance(value, (int, float)):
+                amount = _diagnostic_number(values.get(kind))
+                if amount is None:
                     continue
                 samples.append(
                     _pool_sample(
@@ -498,16 +527,14 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                             "kind": kind,
                             "unit": str(unit),
                         },
-                        float(value),
+                        amount,
                     )
                 )
             # A limit the provider's own response headers carried is an
             # observation. It is published with the observed basis, beside
             # the pool's own ceiling and the provider's published number.
-            observed_limit = values.get("limit")
-            if isinstance(observed_limit, (int, float)) and not isinstance(
-                observed_limit, bool
-            ):
+            observed_limit = _diagnostic_number(values.get("limit"))
+            if observed_limit is not None:
                 samples.append(
                     _pool_sample(
                         "ghostship_ai_pool_observed_limit",
@@ -517,29 +544,37 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                             "limit": str(unit),
                             "scope": scope,
                         },
-                        float(observed_limit),
+                        observed_limit,
                     )
                 )
             reset = values.get("reset")
             if isinstance(reset, str) and reset:
                 seconds = _duration_seconds(reset)
                 if seconds is None and reset.replace(".", "", 1).isdigit():
-                    seconds = float(reset)
-                if seconds is not None:
-                    base = observed if isinstance(observed, (int, float)) else 0.0
-                    samples.append(
-                        _pool_sample(
-                            "ghostship_ai_pool_quota_reset_seconds",
-                            {"provider": provider, "model": model, "unit": str(unit)},
-                            base + seconds,
+                    try:
+                        seconds = float(reset)
+                    except ValueError:
+                        seconds = None
+                if seconds is not None and math.isfinite(seconds):
+                    base = _diagnostic_number(observed)
+                    if base is None:
+                        base = 0.0
+                    reset_epoch = base + seconds
+                    if math.isfinite(reset_epoch):
+                        samples.append(
+                            _pool_sample(
+                                "ghostship_ai_pool_quota_reset_seconds",
+                                {"provider": provider, "model": model, "unit": str(unit)},
+                                reset_epoch,
+                            )
                         )
-                    )
-        if isinstance(observed, (int, float)):
+        observed_sample = _diagnostic_number(observed)
+        if observed_sample is not None:
             samples.append(
                 _pool_sample(
                     "ghostship_ai_pool_quota_observed_timestamp_seconds",
                     {"provider": provider, "model": model},
-                    float(observed),
+                    observed_sample,
                 )
             )
     for row in status.get("concurrency") or []:
