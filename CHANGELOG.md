@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.166] - 2026-10-23
+
+- Add the separate public free-worker Podman runtime and declarative Zen/Go OAuth separation without replacing T3.
+
+PR #326.
+
 ## [3.17.165] - 2026-10-23
 
 - Keep the public HTTPS hostname out of the container's internal DNS identity.
