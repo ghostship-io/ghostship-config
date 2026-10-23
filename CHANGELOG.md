@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.221] - 2026-10-23
+
+Restore the live model-quality table when Grafana HTML sanitization removes form controls. Build only fixed trusted search, toggle, pager and effort buttons through the panel's DOM hook, scope it to the plugin-provided panel element, and disconnect the resize observer on unmount. Keep Grafana sanitization enabled and preserve every panel ID. Scores, ranking and selection are unchanged.
+
+Validation: 26 focused page unit tests pass. The new regression executes the actual hook against sanitized markup with no controls and a second refresh, checks filtering/toggle/effort event binding, and verifies cleanup. It fails on the prior hook. Actual-template 1600/390 renders retain six active models, working All models/filter/effort comparison, no overflow and no JavaScript errors. Privacy/security and whitespace pass. Final live screenshots follow this repair's deployment; the prior standalone preview did not exercise Grafana's sanitization boundary.
+
+PR #387.
+
 ## [3.17.220] - 2026-10-23
 
 Keep healthy model reasons neutral and warnings distinct. Capacity bars show their remaining level in blue (red only when spent, grey when unavailable or not used); weekly/monthly pace stays in its coloured marker and text. Hide the AA link and date when no AA score is measured. An applicable reported quota takes precedence over an inherited account-level “no window” description on the model card.
