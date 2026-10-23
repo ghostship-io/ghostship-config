@@ -223,8 +223,15 @@ The rules:
 * The window of a route that was never refused reads like the window of a
   route the provider publishes as unlimited: all of the allowance is left,
   there is no pace, and the headroom is never unknown.
-* A route that was refused and has not worked since is spent: it has
-  nothing left, and it resets when the window it spent is known.
+* A route that was refused and has not worked since is spent for the learned
+  window that holds the refusal: it has nothing left until that window ends.
+  Once that window has rolled over the route reads available again, with all
+  of its allowance and a window that starts at the rollover; a refusal in
+  the new window spends it again.
+* The quota id of an inferred window names the window it was learned from
+  (`inferred:1h`, `inferred:5h`), not the state of the route. A refusal with
+  no learned window reads `inferred:exhausted`, and a route that was never
+  refused reads `inferred:no-limit-seen`.
 * An event whose route is not in the inventory is counted and published as
   unmatched. A reading never invents a route. The model ids are matched
   exactly, and apart from their case: a provider may spell a route id in
