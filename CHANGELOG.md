@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.176] - 2026-10-23
+
+- Keep the isolated engine alive through manager re-execution and restore relay recovery after manager exit.
+
+PR #342.
+
 ## [3.17.175] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to bf86b0af; the lock's narHash is the `nix flake prefetch` hash of that revision.
