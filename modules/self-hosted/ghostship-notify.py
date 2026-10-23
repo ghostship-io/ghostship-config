@@ -46,8 +46,11 @@ def password() -> str:
 def server() -> str:
     if os.environ.get("GHOSTSHIP_NOTIFY_URL"):
         return os.environ["GHOSTSHIP_NOTIFY_URL"].rstrip("/")
+    podman = ["@podman@"]
+    if os.environ.get("CONTAINER_HOST"):
+        podman.append("--remote")
     address = subprocess.run(
-        ["@podman@", "inspect", "ntfy", "--format",
+        [*podman, "inspect", "ntfy", "--format",
          '{{(index .NetworkSettings.Networks "ghostship_net").IPAddress}}'],
         capture_output=True, text=True, check=True, timeout=15).stdout.strip()
     return f"http://{address}:8080"
