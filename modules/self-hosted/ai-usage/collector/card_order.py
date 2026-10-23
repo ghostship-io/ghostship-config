@@ -12,7 +12,7 @@ say which accounts hold a route.
 
 The contract::
 
-    ghostship_ai_account_card_order{account} 1
+    ghostship_ai_account_card_order{account,scope} 1
 
 The place is 1-based and holds no gap: the first card is 1, the last card is
 the number of accounts, and every account holds exactly one series.
@@ -138,7 +138,17 @@ def samples(snapshot: Mapping[str, Any] | None) -> list[Sample]:
 
     One series per account, and the value is the place its card takes.
     """
+    native_accounts = {
+        str(row.get("provider") or "")
+        for row in _candidates(snapshot)
+        if isinstance(row.get("native"), Mapping)
+        and row["native"].get("mapped") is True
+    }
     return [
-        ("ghostship_ai_account_card_order", {"account": name}, float(place))
+        (
+            "ghostship_ai_account_card_order",
+            {"account": name, "scope": "t3" if name in native_accounts else "free"},
+            float(place),
+        )
         for name, place in positions(snapshot)
     ]
