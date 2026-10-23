@@ -42,6 +42,16 @@ def load_worker_builds(path: str) -> dict[str, str]:
     return builds
 
 
+def apply_worker_builds(policy: dict[str, Any], preferences: Mapping[str, str]) -> None:
+    """Host build choices augment, never erase or widen, runtime policy."""
+    selection = policy.setdefault('model_selection', {})
+    declared = selection.setdefault('worker_builds', {})
+    if any(provider in declared and declared[provider] != model
+           for provider, model in preferences.items()):
+        raise ValueError('worker build preference conflicts with runtime policy')
+    declared.update(preferences)
+
+
 def policy_ready(evidence: Mapping[str, Any]) -> bool:
     policy = evidence.get('policy') or {}
     declared = {record.get('id') for record in evidence.get('identities') or []
@@ -211,6 +221,55 @@ def applicable_windows(snapshot: Mapping[str, Any], source: Mapping[str, Any]) -
     return windows
 
 
+def worker_pool_guard(snapshot: Mapping[str, Any], provider: str,
+                      policy: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A worker can spend only the shared headroom above the review reserve."""
+    unknown = {'allowed': False, 'state': 'unknown',
+               'reason': 'current shared weekly review headroom is unknown'}
+    guards = policy.get('worker_pool_guards') or {}
+    if not isinstance(guards, Mapping):
+        return unknown
+    rule = guards.get(provider)
+    if rule is None:
+        return unknown if provider == 'claude' else None
+    if not isinstance(rule, Mapping):
+        return unknown
+    reserve = number(rule.get('minimum_remaining_ratio'))
+    if (rule.get('kind') != 'weekly' or reserve is None or not 0 <= reserve <= 1
+            or rule.get('require_pace_headroom') is not True):
+        return unknown
+    try:
+        now = datetime.fromisoformat(str(snapshot.get('generated_at')).replace('Z', '+00:00')).timestamp()
+    except ValueError:
+        return unknown
+    readings = []
+    for window in ((snapshot.get('quota') or {}).get('accounts') or {}).get(provider) or []:
+        # This is the shared account window, never Fable's unused allowance,
+        # a per-model sublimit, or the unpaced five-hour window.
+        if (window.get('kind') != 'weekly' or window.get('not_used') or window.get('applies_to')):
+            continue
+        remaining, duration = number(window.get('remaining_ratio')), number(window.get('duration_seconds'))
+        try:
+            checked = datetime.fromisoformat(str(window.get('check_at')).replace('Z', '+00:00')).timestamp()
+            reset = datetime.fromisoformat(str(window.get('reset_at')).replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            continue
+        if (remaining is None or not 0 <= remaining <= 1 or duration is None or duration <= 0
+                or not now - quota.STALE_AFTER_SECONDS <= checked <= now + quota.FUTURE_TOLERANCE_SECONDS
+                or reset <= now):
+            continue
+        expected = min(1.0, (reset - now) / duration)
+        allowed = remaining >= reserve and remaining >= expected
+        readings.append({'allowed': allowed, 'state': 'available' if allowed else 'reserved',
+                         'remaining_ratio': remaining, 'expected_remaining_ratio': expected,
+                         'minimum_remaining_ratio': reserve, 'check_at': window.get('check_at'),
+                         'reset_at': window.get('reset_at'), 'source': window.get('source'),
+                         'reason': ('shared weekly headroom covers pace and review reserve' if allowed else
+                                    'shared weekly headroom is below its pace line or review reserve')})
+    return min(readings, key=lambda row: (row['allowed'], row['remaining_ratio'] -
+                                         max(reserve, row['expected_remaining_ratio']))) if readings else unknown
+
+
 def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
           *, evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Publish eligible sets and each provider's best available model.
@@ -227,6 +286,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
     provider_roles = (((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("provider_roles") or {}
     worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
+    worker_policy = (((evidence or {}).get('policy') or {}).get('model_selection') or {})
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
         instance, model = native.get("provider_instance_id"), native.get("model_id")
@@ -302,11 +362,15 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 role_exclusions.extend({'provider':row['provider'], 'native':row['native'],
                                         'category':category, 'reason':'pool_excluded'} for category in CATEGORIES)
             continue
-        # Orchestrator models can also be workers; the categories describe use,
-        # not reservations. No review subscription is withheld from the owner.
         allowed = provider_roles.get(row['provider'], CATEGORIES)
         if "worker" in allowed:
-            categories["worker"].append(row)
+            worker = dict(row)
+            guard = worker_pool_guard(snapshot, row['provider'], worker_policy)
+            if guard is not None:
+                worker['worker_pool_guard'] = guard
+                if not guard['allowed'] and worker['available']:
+                    worker.update(available=False, state='reserved', reason=guard['reason'])
+            categories["worker"].append(worker)
         elif mapped:
             role_exclusions.append({'provider':row['provider'], 'native':row['native'],
                                     'category':'worker', 'reason':'provider_role_policy'})

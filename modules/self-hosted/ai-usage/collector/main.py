@@ -2498,7 +2498,7 @@ def main(argv: list[str] | None = None) -> int:
         backfill=args.delegation_backfill,
     )
     if args.model_selection_preferences:
-        outcomes['policy'].setdefault('model_selection', {})['worker_builds'] = worker_builds
+        model_selection.apply_worker_builds(outcomes['policy'], worker_builds)
     measured_evidence, evidence_state = model_quality.read_evidence(now)
     snapshot = build_snapshot(
         results,
