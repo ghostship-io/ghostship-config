@@ -184,6 +184,40 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     return record
 
 
+def _inferred_window_record(
+    window: Any, now: float, applies_to: Iterable[str] = ()
+) -> dict[str, Any]:
+    """One inferred window, as the account section publishes it.
+
+    The numbers are the inference's own: a limit failure measured the
+    window, the budget and the episode, and the evidence says so. An
+    inferred window is never published as a reading the provider reported,
+    and it never replaces one. A limit that belongs to a model keeps that
+    model as its scope, so a reader sees which family it constrains.
+    """
+    record = _window_record(window, now)
+    inference = getattr(window, "inference", None)
+    if inference is None and isinstance(window, Mapping):
+        inference = window.get("inference")
+    inference = dict(inference) if isinstance(inference, Mapping) else {}
+    record["kind"] = "inferred"
+    record["evidence"] = "inferred"
+    record["inference"] = {
+        "window": inference.get("window"),
+        "budget": inference.get("budget"),
+        "unit": inference.get("unit") or None,
+        "scope": inference.get("scope") or None,
+        "weights": dict(inference.get("weights") or {}),
+        "weights_basis": inference.get("weights_basis") or None,
+        "episodes": inference.get("episodes"),
+        "state": inference.get("state") or None,
+    }
+    scope = [str(token) for token in applies_to or ()]
+    if scope:
+        record["applies_to"] = scope
+    return record
+
+
 def _pace_record(
     window: Any, now: float, remaining: float | None
 ) -> tuple[float | None, float | None]:
@@ -2779,6 +2813,7 @@ def build_snapshot(
     free_models: Iterable[Any] | None = None,
     promo_models: Iterable[Any] | None = None,
     pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+    inferred_windows: Iterable[Mapping[str, Any]] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
@@ -2816,6 +2851,21 @@ def build_snapshot(
         if not account:
             continue
         record = _window_record(measured, now)
+        known = accounts.setdefault(account, [])
+        if record not in known:
+            known.append(record)
+    # The windows the limit failures of the routes measured, beside the
+    # readings the provider reported and never over one. They are published
+    # once per account, and a refused route keeps its record even while the
+    # ranking holds no row for it: the account's capacity is not a property
+    # of the ranked rows.
+    for inferred in inferred_windows or ():
+        account = str(inferred.get("provider") or "")
+        if not account:
+            continue
+        record = _inferred_window_record(
+            inferred.get("window"), now, inferred.get("applies_to") or ()
+        )
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -2886,7 +2936,11 @@ def build_snapshot(
         reported = [
             window
             for window in applicable
-            if window.get("evidence") == "provider_reported"
+            # A provider-reported reading and a window the limit failures of
+            # the account's routes learned are both evidence of the share
+            # that is left; an inferred window is never counted as a number
+            # it did not measure.
+            if window.get("evidence") in ("provider_reported", "inferred")
             and isinstance(window.get("remaining_ratio"), (int, float))
             and not isinstance(window.get("remaining_ratio"), bool)
         ]
