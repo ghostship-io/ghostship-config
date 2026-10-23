@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.209] - 2026-10-23
+
+- Align process documentation and agent instructions with the 0.44 orchestrator-worker delegation model.
+
+PR #370.
+
 ## [3.17.208] - 2026-10-23
 
 Render unused Fable and Antigravity third-party limits grey while preserving usage truth and excluding their model routes from selection. Keep optional announcement-cache failures from aborting usage collection.
