@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.116] - 2026-10-23
+
+- Providers page: the Model selection panel renders again. Live it read "An unexpected error happened": its `externalStyles` option was an empty string, and Business Text 6.3.0 maps that option as a list (`e.externalStyles.map is not a function`). It is a list now, and its query reads as one table like every other section. A test holds every Business Text panel to list-valued `externalStyles`, `editors` and `contentPartials` and table-format queries.
+
 ## [3.17.115] - 2026-10-23
 
 - ai-usage: a published window series carries a quota id of its own. The card of a provider keys its rows by the account, the kind and the quota id, so a provider that publishes one quota id for several model families drew one row of the card for all of them: the Antigravity account publishes 'quotaInfo' for the Gemini, the Claude and the GPT models, and the card showed one of the three. The scope of the window is named after the id when the id does not name it already, so the quota of the Gemini models is 'quotaInfo@gemini' and a window of two families is 'quotaInfo@claude+gpt'. A window whose id names its scope keeps it: '3p-5h' names the Claude and the GPT models of the third-party group, and 'seven_day_fable' names the Fable models of the Claude account. A window of the whole account keeps its id, an inferred window keeps the name of the window it was learned over, and the account records of the routing snapshot keep the quota id of the provider.
