@@ -1,7 +1,11 @@
-"""The desktop lease reaper closes only expired lease windows and their popups."""
+"""Public lease records authorize only bound, expired Chrome windows."""
 import importlib.machinery
 import importlib.util
+import json
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 PATH = Path(__file__).resolve().parents[1] / "containers/agent-desktop/root/opt/ghostship-agent-desktop/chrome-lease-reaper"
@@ -9,67 +13,102 @@ loader = importlib.machinery.SourceFileLoader("chrome_lease_reaper", str(PATH))
 spec = importlib.util.spec_from_loader("chrome_lease_reaper", loader)
 reaper = importlib.util.module_from_spec(spec)
 loader.exec_module(reaper)
-
-HEX = "0123456789abcdef" * 2
-NOW = 1_800_000_000
+NOW = 1800000000
 
 
-def anchor(expires=None, token=HEX):
-    return f"about:blank#ghostship-window-{token}" + ("" if expires is None else f".{expires}")
+def lease(target="A", window=1, expiry=NOW-1000, marker="a"*32, identity="agent"):
+    return dict(schema=2, run_id=marker, identity=identity, target_id=target,
+                chrome_window_id=window, expires_at=expiry)
 
 
-def page(target_id, url="https://example.test/", opener=None):
-    info = {"targetId": target_id, "url": url, "type": "page"}
-    if opener:
-        info["openerId"] = opener
-    return info
-
-
-class Matching(unittest.TestCase):
-    def test_expiry_parsing(self):
-        self.assertEqual(reaper.expires_at(anchor(NOW)), NOW)
-        for url in (anchor(), anchor(12345678), anchor(NOW) + "x", anchor(NOW, "A" * 32),
-                    anchor(NOW, "0" * 31), "https://x/#ghostship-window-" + HEX + ".1800000000",
-                    "about:blank", ""):
-            self.assertIsNone(reaper.expires_at(url), url)
-
-    def test_slack_is_respected(self):
-        pages = [page("a", anchor(NOW - 120)), page("b", anchor(NOW - 121))]
-        self.assertEqual(reaper.expired_anchors(pages, NOW, 120), ["b"])
+def page(tid, opener=None):
+    return dict(targetId=tid, openerId=opener, type="page", url="https://example.test/")
 
 
 class Plan(unittest.TestCase):
-    def test_reaps_expired_window_its_tabs_and_popups_anchor_last(self):
-        pages = [
-            page("tab", opener="anc"), page("anc", anchor(NOW - 1000)),
-            page("popup", opener="tab"), page("grandpopup", opener="popup"),
-            page("live", anchor(NOW + 60)), page("live-tab", opener="live"),
-            page("legacy", anchor()), page("legacy-tab"),
-            page("user"),
-        ]
-        windows = {"tab": 1, "anc": 1, "popup": 2, "grandpopup": 3, "live": 4, "live-tab": 4,
-                   "legacy": 5, "legacy-tab": 5, "user": 6}
-        [(window, targets)] = reaper.plan(pages, windows, NOW, 120)
-        self.assertEqual(window, 1)
-        self.assertEqual(targets[-1], "anc")
-        self.assertEqual(set(targets), {"tab", "anc", "popup", "grandpopup"})
+    def test_expired_owner_window_and_dedicated_popups_close_human_survives(self):
+        pages = [page("A"), page("B"), page("POP", "B"), page("CHILD", "POP"), page("HUMAN")]
+        windows = dict(A=1, B=1, POP=2, CHILD=3, HUMAN=4)
+        [(wid, targets)] = reaper.plan(pages, windows, [lease()], NOW, 120)
+        self.assertEqual(wid, 1)
+        self.assertEqual(set(targets), {"A", "B", "POP", "CHILD"})
 
-    def test_never_touches_unexpired_legacy_or_user_windows(self):
-        pages = [page("live", anchor(NOW + 60)), page("legacy", anchor()), page("user")]
-        self.assertEqual(reaper.plan(pages, {"live": 1, "legacy": 2, "user": 3}, NOW, 120), [])
+    def test_stale_target_binding_cannot_reap_a_reused_window_id(self):
+        self.assertEqual(reaper.plan([page("HUMAN")], {"HUMAN": 1}, [lease()], NOW, 0), [])
+        self.assertEqual(reaper.plan([page("A")], {"A": 9}, [lease()], NOW, 0), [])
 
-    def test_window_with_any_other_anchor_is_protected(self):
-        pages = [page("old", anchor(NOW - 1000)), page("legacy", anchor(token="f" * 32))]
-        self.assertEqual(reaper.plan(pages, {"old": 1, "legacy": 1}, NOW, 120), [])
+    def test_surviving_recorded_tab_binds_window_after_first_tab_was_closed_by_hand(self):
+        row = dict(lease(), target_ids=["A", "B"])
+        self.assertEqual(reaper.plan([page("B")], {"B": 1}, [row], NOW, 0), [(1, ["B"])])
 
-    def test_popup_in_another_lease_window_survives(self):
-        pages = [page("old", anchor(NOW - 1000)), page("live", anchor(NOW + 60, "e" * 32)),
-                 page("opened", opener="old")]
-        [(_, targets)] = reaper.plan(pages, {"old": 1, "live": 2, "opened": 2}, NOW, 120)
-        self.assertEqual(targets, ["old"])
+    def test_unexpired_and_slack_boundary_are_protected(self):
+        for expires in (NOW+10, NOW-120):
+            self.assertEqual(reaper.plan([page("A")], {"A": 1}, [lease(expiry=expires)], NOW, 120), [])
 
-    def test_anchor_without_known_window_is_skipped(self):
-        self.assertEqual(reaper.plan([page("old", anchor(NOW - 1000))], {}, NOW, 120), [])
+    def test_live_record_protects_window_even_with_an_expired_record(self):
+        self.assertEqual(reaper.plan([page("A"), page("B")], dict(A=1, B=1),
+                         [lease(), lease("B", expiry=NOW+60)], NOW, 0), [])
+
+    def test_popup_moved_into_human_or_live_lease_window_is_untouched(self):
+        pages = [page("A"), page("POP", "A"), page("HUMAN")]
+        [(_, targets)] = reaper.plan(pages, dict(A=1, POP=2, HUMAN=2), [lease()], NOW, 0)
+        self.assertEqual(targets, ["A"])
+        [(_, targets)] = reaper.plan(pages, dict(A=1, POP=2, HUMAN=2),
+                                  [lease(), lease("HUMAN", 2, NOW+60)], NOW, 0)
+        self.assertEqual(targets, ["A"])
+
+
+class Rollout(unittest.TestCase):
+    def test_schema1_anchor_window_remains_protected_until_its_lease_expires(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = "b" * 32
+            row = dict(schema=1, run_id=marker, identity="agent", label="Existing run")
+            (Path(directory)/(marker+".json")).write_text(json.dumps(row))
+            pages = [dict(page("OLD"), url=f"about:blank#ghostship-window-{marker}.{NOW+60}"),
+                     page("WORK"), page("HUMAN")]
+            windows = dict(OLD=1, WORK=1, HUMAN=2)
+            from unittest.mock import patch
+            with patch.object(reaper, "RUNS_DIR", directory):
+                rows = reaper.load_leases("agent", pages, windows)
+                self.assertEqual(reaper.plan(pages, windows, rows, NOW, 120), [])
+                self.assertEqual(reaper.plan(pages, windows, rows, NOW+181, 120), [(1,["OLD","WORK"])])
+                self.assertEqual(reaper.load_leases("personal", pages, windows), [])
+
+    def test_schema1_compatibility_requires_matching_record_and_exact_anchor(self):
+        marker = "b" * 32
+        rows = reaper.legacy_leases([dict(page("OLD"), url=f"about:blank#ghostship-window-{marker}.{NOW-1000}")],
+                                   {"OLD": 1}, set())
+        self.assertEqual(rows, [])
+
+
+class Records(unittest.TestCase):
+    def test_malformed_symlink_oversize_wrong_identity_and_nonfinite_are_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/("a"*32+".json")
+            good = lease()
+            path.write_text(json.dumps(good))
+            self.assertEqual(reaper.records(directory, "agent"), [good])
+            self.assertEqual(reaper.records(directory, "personal"), [])
+            for change in ({"target_id": "../x"}, {"chrome_window_id": True}, {"expires_at": float("nan")},
+                           {"schema": 1}, {"run_id": "b"*32}):
+                path.write_text(json.dumps(dict(good, **change)))
+                self.assertEqual(reaper.records(directory, "agent"), [])
+            path.write_text("x"*16385)
+            self.assertEqual(reaper.records(directory, "agent"), [])
+            path.unlink()
+            outside=Path(directory)/"outside"
+            outside.write_text(json.dumps(good))
+            path.symlink_to(outside)
+            self.assertEqual(reaper.records(directory, "agent"), [])
+
+    def test_idle_never_stops_a_human_blank_page(self):
+        text=PATH.with_name("chrome-idle").read_text()
+        function=text[text.index("no_pages() {"):text.index("\nreachable()")]
+        for targets, idle in (([], True), ([dict(type="page", url="about:blank")], False),
+                              ([dict(type="page",url="https://example.test/")], False)):
+            result=subprocess.run(["bash","-c",function+"\nno_pages"], input=json.dumps(targets),
+                                  text=True, capture_output=True)
+            self.assertEqual(result.returncode == 0, idle, result.stderr)
 
 
 if __name__ == "__main__":
