@@ -90,6 +90,61 @@ def record(when, provider="openrouter", model="example-model", usage=None, limit
     return {"at": when, "data": data}
 
 
+# The clock of the rolling cases. The events of the record are written on
+# it directly, so the window they measure is worked out by the inference
+# and nothing else.
+D0 = DAY0
+
+# The window of the worked case: a route that is refused twice inside a
+# minute, and used again after every refusal. The inference reads it as a
+# one minute window, and the collector reads the record every five minutes.
+ROLLING_EVENTS = [
+    {"provider": "acme", "model": "m", "at": D0 + 0, "outcome": "success", "usage": 100},
+    {"provider": "acme", "model": "m", "at": D0 + 10, "outcome": "limit", "usage": None},
+    {"provider": "acme", "model": "m", "at": D0 + 40, "outcome": "success", "usage": 0},
+    {"provider": "acme", "model": "m", "at": D0 + 50, "outcome": "success", "usage": 100},
+    {"provider": "acme", "model": "m", "at": D0 + 60, "outcome": "limit", "usage": None},
+    {"provider": "acme", "model": "m", "at": D0 + 90, "outcome": "success", "usage": 0},
+    {"provider": "acme", "model": "m", "at": D0 + 100, "outcome": "success", "usage": 5},
+]
+
+
+def window_events(span, tail=10):
+    """The events of a route refused twice, each episode `span` long.
+
+    The two episodes run the same length, so the window the inference
+    reads is the standard window nearest to that length.
+    """
+    return [
+        {"provider": "acme", "model": "m", "at": D0, "outcome": "success", "usage": 100},
+        {"provider": "acme", "model": "m", "at": D0 + 30, "outcome": "limit", "usage": None},
+        {"provider": "acme", "model": "m", "at": D0 + span, "outcome": "success", "usage": 0},
+        {"provider": "acme", "model": "m", "at": D0 + span + 30, "outcome": "success", "usage": 100},
+        {"provider": "acme", "model": "m", "at": D0 + span + 60, "outcome": "limit", "usage": None},
+        {"provider": "acme", "model": "m", "at": D0 + 2 * span + 30, "outcome": "success", "usage": 0},
+        {"provider": "acme", "model": "m", "at": D0 + 2 * span + 60, "outcome": "success", "usage": tail},
+    ]
+
+
+def exhausted_events(span=60):
+    """The events of a route whose last request was refused."""
+    return [
+        {"provider": "acme", "model": "m", "at": D0, "outcome": "success", "usage": 100},
+        {"provider": "acme", "model": "m", "at": D0 + 30, "outcome": "limit", "usage": None},
+        {"provider": "acme", "model": "m", "at": D0 + span, "outcome": "success", "usage": 0},
+        {"provider": "acme", "model": "m", "at": D0 + span + 30, "outcome": "success", "usage": 100},
+        {"provider": "acme", "model": "m", "at": D0 + span + 60, "outcome": "limit", "usage": None},
+    ]
+
+
+def quiet_events():
+    """The events of a route that was never refused."""
+    return [
+        {"provider": "acme", "model": "m", "at": D0, "outcome": "success", "usage": 100},
+        {"provider": "acme", "model": "m", "at": D0 + 60, "outcome": "success", "usage": 100},
+    ]
+
+
 def build_database(directory, records):
     """Build an OpenCode database with the given request records."""
     path = Path(directory) / "opencode.db"
@@ -494,6 +549,60 @@ class ExhaustedTests(WiringTestCase):
         self.assertFalse(entry.available)
         self.assertEqual(entry.capacity_basis, "inferred")
         self.assertEqual(entry.capacity_inference["state"], "exhausted")
+
+
+class RollingWindowTests(WiringTestCase):
+    """A window shorter than the collector's own run interval rolls.
+
+    The collector reads the request record every five minutes, so a window
+    that ends inside that interval is already over by the time the reading
+    is published. Such a window is published as a rolling window: it
+    carries no fixed reset, and it says that it rolls.
+    """
+
+    def window(self, events, now):
+        """The window the record implies for the route."""
+        capacity = usage().inference_module.infer_capacity(events, now)[("acme", "m")]
+        return usage().window_for(capacity, now)
+
+    def test_a_window_shorter_than_the_run_interval_has_no_reset(self):
+        # The worked case: a route refused twice inside a minute. The
+        # inference reads a one minute window, and its reset is the end
+        # of the minute the reading was taken in.
+        window = self.window(ROLLING_EVENTS, D0 + 130)
+        self.assertIsNone(window.reset_epoch)
+        self.assertEqual(window.duration_seconds, 60.0)
+        self.assertTrue(window.inference["rolling"])
+        self.assertEqual(window.quota_id, "inferred:1m")
+        # The share that is used is the measured one, and it does not move.
+        self.assertAlmostEqual(window.used_ratio, 0.05)
+
+    def test_an_exhausted_window_shorter_than_the_run_interval_has_no_reset(self):
+        window = self.window(exhausted_events(), D0 + 130)
+        self.assertIsNone(window.reset_epoch)
+        self.assertEqual(window.used_ratio, 1.0)
+        self.assertTrue(window.inference["rolling"])
+        self.assertEqual(window.duration_seconds, 60.0)
+
+    def test_a_window_of_an_hour_keeps_its_reset(self):
+        window = self.window(window_events(3600), D0 + 2 * 3600 + 90)
+        self.assertEqual(window.reset_epoch, D0 + 10860)
+        self.assertEqual(window.duration_seconds, 3600.0)
+        self.assertFalse(window.inference["rolling"])
+
+    def test_a_long_window_is_never_rolling(self):
+        for span, reset in ((18000, 54060), (86400, 259260)):
+            with self.subTest(window=span):
+                window = self.window(window_events(span), D0 + 2 * span + 90)
+                self.assertEqual(window.reset_epoch, D0 + reset)
+                self.assertFalse(window.inference["rolling"])
+
+    def test_a_route_that_was_never_refused_is_unchanged(self):
+        window = self.window(quiet_events(), D0 + 130)
+        self.assertIsNone(window.reset_epoch)
+        self.assertIsNone(window.duration_seconds)
+        self.assertEqual(window.used_ratio, 0.0)
+        self.assertFalse(window.inference["rolling"])
 
 
 class ReportedWindowTests(WiringTestCase):

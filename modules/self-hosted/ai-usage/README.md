@@ -225,6 +225,12 @@ The rules:
   there is no pace, and the headroom is never unknown.
 * A route that was refused and has not worked since is spent: it has
   nothing left, and it resets when the window it spent is known.
+* A window that ends inside the collector's own run interval of five
+  minutes rolls. The collector reads the request record every five
+  minutes, so the instant the inference measured is already past by the
+  time the reading is published: the page showed "resets in 0m" for a
+  window of a minute. Such a window keeps its length and carries no fixed
+  reset, and the inference behind it says that it rolls.
 * An event whose route is not in the inventory is counted and published as
   unmatched. A reading never invents a route. The model ids are matched
   exactly, and apart from their case: a provider may spell a route id in
@@ -985,7 +991,7 @@ The contract, version 1:
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
-| `quota.accounts` | the windows of each account, once per account: the ones the provider reported, and the ones learned from the limit failures of its routes (`evidence: inferred`, with the learned window, budget, unit, scope and episodes) |
+| `quota.accounts` | the windows of each account, once per account: the ones the provider reported, and the ones learned from the limit failures of its routes (`evidence: inferred`, with the learned window, budget, unit, scope and episodes). A learned window that ends inside the collector's own run interval of five minutes carries no reset: it rolls, and the instant the inference measured is already past when the reading is published |
 | `quality_feed` | the Artificial Analysis feed: its status, the intelligence index version, the fetch time, the age, and the attribution. A missing feed is a coverage gap, never an empty quality |
 | `workload_policy` | the workload classes, their complexity ceiling, and the free route rule |
 | `recommendations` | the recommended model per workload class, with its native identity, its role, and the reason |
