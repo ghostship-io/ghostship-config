@@ -41,7 +41,7 @@ def Row(provider, model, tier, mapped=True, instance="opencode", score=50.0, ava
             "options": [],
             "mapped": mapped,
         },
-        "role": "prime" if tier == "frontier" else "delegate",
+        "role": "prime" if tier == "orchestrator" else "delegate",
         "quota_state": "available",
                 "aa": {"state": "measured"},
         "access": {
@@ -51,7 +51,7 @@ def Row(provider, model, tier, mapped=True, instance="opencode", score=50.0, ava
             "execution": "inference_job" if tier == "free" else "provider_native",
         },
         "eligibility": {
-            "frontier_prime": {"allowed": tier == "frontier", "basis": "policy:owner"},
+            "frontier_prime": {"allowed": tier == "orchestrator", "basis": "policy:owner"},
             "delegate": {"allowed": mapped, "basis": "policy:owner+native+tier"},
             "background": {"allowed": False, "basis": "policy:owner"},
             "gpt_model_allowed": {"allowed": True, "basis": "policy:owner"},
@@ -63,8 +63,8 @@ def rows():
     return [
         Row("opencode-go", "minimax-m3.1-flash-free", "free", mapped=True, instance="opencode"),
         Row("kilo", "kimi-k3", "free", mapped=False, instance=None),
-        Row("codex", "gpt-6.1-sol", "frontier", mapped=True, instance="codex", score=90.0),
-        Row("ollama", "deepseek-v4.1-flash", "bulk", mapped=True, instance="opencode", score=40.0),
+        Row("codex", "gpt-6.1-sol", "orchestrator", mapped=True, instance="codex", score=90.0),
+        Row("ollama", "deepseek-v4.1-flash", "worker", mapped=True, instance="opencode", score=40.0),
     ]
 
 
@@ -92,16 +92,16 @@ class WorkloadTests(unittest.TestCase):
 
     def test_the_review_waits_when_the_frontier_is_not_available(self):
         without_frontier = [
-            Row("ollama", "deepseek-v4.1-flash", "bulk", mapped=True, instance="opencode")
+            Row("ollama", "deepseek-v4.1-flash", "worker", mapped=True, instance="opencode")
         ]
         result = snapshot._recommendations(without_frontier, snapshot.WORKLOAD_CLASSES)
         self.assertIsNone(result["review"]["model"])
         self.assertIn("waits for the frontier", result["review"]["reason"])
 
     def test_a_class_without_a_free_route_says_so(self):
-        paid_only = [Row("codex", "gpt-6.1-sol", "frontier", mapped=True, instance="codex")]
+        paid_only = [Row("codex", "gpt-6.1-sol", "orchestrator", mapped=True, instance="codex")]
         result = snapshot._recommendations(paid_only, snapshot.WORKLOAD_CLASSES)
-        self.assertEqual(result["research"]["tier"], "frontier")
+        self.assertEqual(result["research"]["tier"], "orchestrator")
         self.assertIn("no free route", result["research"]["reason"])
 
     def test_a_high_complexity_class_needs_admission_evidence(self):

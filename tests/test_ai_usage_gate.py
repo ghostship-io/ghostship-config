@@ -154,8 +154,8 @@ class QuotaPanelTests(unittest.TestCase):
 class SelectionTests(unittest.TestCase):
     def test_a_gpt_id_with_different_punctuation_does_not_inherit_permission(self):
         policy = {"allowedGptModels": ("gpt-6.1-sol",), "frontierPrimeModels": ("gpt-6.1-sol",)}
-        allowed = snapshot._eligibility("codex", "gpt-6.1-sol", ["bulk"], {"mapped": True}, policy)
-        other = snapshot._eligibility("codex", "gpt-61-sol", ["bulk"], {"mapped": True}, policy)
+        allowed = snapshot._eligibility("codex", "gpt-6.1-sol", ["worker"], {"mapped": True}, policy)
+        other = snapshot._eligibility("codex", "gpt-61-sol", ["worker"], {"mapped": True}, policy)
         self.assertTrue(allowed["gpt_model_allowed"]["allowed"])
         self.assertFalse(other["gpt_model_allowed"]["allowed"])
 
@@ -206,7 +206,7 @@ class PendingBackoffTests(unittest.TestCase):
             {
                 "provider": "p",
                 "model": "m",
-                "tiers": ["bulk"],
+                "tiers": ["worker"],
                 "native": {"mapped": True, "options": []},
             }
         ]

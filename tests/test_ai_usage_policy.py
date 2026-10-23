@@ -160,7 +160,7 @@ class FrontierAndExclusionTests(unittest.TestCase):
                 record("claude-fable-5-1", 61.0, 0.2),
             ],
         )
-        frontier = {key for key in data["tiers"].get("frontier", [])}
+        frontier = {key for key in data["tiers"].get("orchestrator", [])}
         self.assertEqual(frontier, {"codex:gpt-6.1-sol", "claude:claude-opus-5-5"})
 
     def test_astra_and_fable_are_never_a_winner_or_a_recommendation(self):

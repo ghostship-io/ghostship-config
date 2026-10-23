@@ -23,7 +23,7 @@ class Ranked:
     """A ranked model, shaped like the ranking engine's own entry."""
 
     def __init__(self, **kwargs):
-        self.tier = kwargs.get("tier", "frontier")
+        self.tier = kwargs.get("tier", "orchestrator")
         self.provider = kwargs.get("provider", "claude")
         self.model = kwargs.get("model", "claude-opus-5-5")
         self.rank = kwargs.get("rank", 1)
@@ -170,11 +170,11 @@ class SnapshotContractTests(unittest.TestCase):
         self.assertFalse(row["eligibility"]["frontier_prime"]["allowed"])
 
     def test_the_quota_state_is_explicit(self):
-        available = build([Ranked(tier="bulk", windows=(Window(),))])
+        available = build([Ranked(tier="worker", windows=(Window(),))])
         self.assertEqual(available["candidates"][0]["quota_state"], "available")
-        exhausted = build([Ranked(tier="bulk", windows=(Window(used=1.0),), remaining=0.0)])
+        exhausted = build([Ranked(tier="worker", windows=(Window(used=1.0),), remaining=0.0)])
         self.assertEqual(exhausted["candidates"][0]["quota_state"], "exhausted")
-        unknown = build([Ranked(tier="bulk", remaining=None, windows=())])
+        unknown = build([Ranked(tier="worker", remaining=None, windows=())])
         self.assertEqual(unknown["candidates"][0]["quota_state"], "unknown")
 
     def test_the_quality_is_the_verified_record(self):
@@ -203,12 +203,12 @@ class SnapshotContractTests(unittest.TestCase):
         self.assertEqual(review["authority"]["model_id"], "gpt-6.1-sol")
 
     def test_the_coverage_says_whether_a_frontier_is_available(self):
-        data = build([Ranked(tier="frontier", windows=(Window(),))])
+        data = build([Ranked(tier="orchestrator", windows=(Window(),))])
         self.assertTrue(data["coverage"]["frontier"]["available"])
         blocked = build(
             [
                 Ranked(
-                    tier="frontier",
+                    tier="orchestrator",
                     windows=(Window(used=1.0),),
                     remaining=0.0,
                 )
@@ -218,10 +218,10 @@ class SnapshotContractTests(unittest.TestCase):
         self.assertTrue(blocked["coverage"]["frontier"]["reason"])
 
     def test_a_prime_row_says_that_it_needs_the_frontier(self):
-        data = build([Ranked(tier="frontier")])
+        data = build([Ranked(tier="orchestrator")])
         self.assertTrue(data["candidates"][0]["frontier_required"])
         self.assertEqual(data["candidates"][0]["role"], "prime")
-        delegate = build([Ranked(tier="bulk", model="kimi-k3")])
+        delegate = build([Ranked(tier="worker", model="kimi-k3")])
         self.assertFalse(delegate["candidates"][0]["frontier_required"])
         self.assertEqual(delegate["candidates"][0]["role"], "delegate")
 

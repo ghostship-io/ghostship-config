@@ -544,7 +544,7 @@ class FreeTierOrderTests(unittest.TestCase):
         ]
         data = free_tier(routes, native=[("mistral", "mistral/mixtral-8x7b")])["snapshot"]
         winners = data.get("tier_winners") or {}
-        bulk = winners.get("bulk") or []
+        bulk = winners.get("worker") or []
         free = winners.get("free") or []
         self.assertTrue(bulk, "the bulk tier has its own winners")
         self.assertTrue(

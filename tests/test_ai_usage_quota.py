@@ -235,7 +235,7 @@ class FrontierMembershipTests(unittest.TestCase):
         self.assertTrue(claude["reset_at"])
         # And it is not a phantom winner: the winner list holds only what can
         # be used now.
-        self.assertEqual(data["tiers"]["frontier"], ["codex:gpt-6.1-sol"])
+        self.assertEqual(data["tiers"]["orchestrator"], ["codex:gpt-6.1-sol"])
 
     def test_a_healthy_frontier_model_is_eligible_and_available(self):
         data = self._data(0.2)
@@ -243,7 +243,7 @@ class FrontierMembershipTests(unittest.TestCase):
             entry["model"]: entry for entry in data["coverage"]["frontier"]["eligible"]
         }
         self.assertEqual(eligible["claude-opus-5-5"]["state"], "available")
-        self.assertIn("claude:claude-opus-5-5", data["tiers"]["frontier"])
+        self.assertIn("claude:claude-opus-5-5", data["tiers"]["orchestrator"])
 
 
 class ThreeDVisualTests(unittest.TestCase):

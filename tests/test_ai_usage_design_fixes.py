@@ -477,9 +477,9 @@ class HonestScoreTests(unittest.TestCase):
             {
                 "provider": "opencode-go",
                 "model": "minimax-m3.1-flash-free",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 1},
-                "score": {"bulk": 999.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 1},
+                "score": {"worker": 999.0},
                 "value": {"value": 0.4},
                 "available": True,
                 "availability": {"state": "available"},
@@ -500,9 +500,9 @@ class HonestScoreTests(unittest.TestCase):
             {
                 "provider": "opencode-go",
                 "model": "deepseek-v4-pro",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 2},
-                "score": {"bulk": 1.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 2},
+                "score": {"worker": 1.0},
                 "value": {"value": 0.7},
                 "available": True,
                 "availability": {"state": "available"},
@@ -1608,7 +1608,7 @@ class UnmeasuredModelTests(unittest.TestCase):
             }
         ]
         ranked = self._rank(records, models)
-        bulk = [item for item in ranked if item.tier == "bulk"]
+        bulk = [item for item in ranked if item.tier == "worker"]
         self.assertTrue(bulk)
         self.assertEqual(bulk[0].model, "grok-4.7")
         # The unmeasured models are visible and they are not in the tier.
@@ -1662,7 +1662,7 @@ class UnmeasuredModelTests(unittest.TestCase):
             aa_cache=cache,
             now=NOW,
         )
-        bulk = [item for item in ranked if item.tier == "bulk"]
+        bulk = [item for item in ranked if item.tier == "worker"]
         self.assertEqual([item.model for item in bulk], ["grok-4.7"])
 
     def test_a_measured_grok_4_6_may_win_the_bulk_tier(self):
@@ -1693,7 +1693,7 @@ class UnmeasuredModelTests(unittest.TestCase):
             },
         ]
         ranked = self._rank(records, models)
-        bulk = [item for item in ranked if item.tier == "bulk"]
+        bulk = [item for item in ranked if item.tier == "worker"]
         self.assertTrue(bulk)
         # The measured 4.6 is ahead of the measured 4.7: its value is higher
         # and its cost is lower.
@@ -1937,7 +1937,7 @@ class ReserveTests(unittest.TestCase):
         )
 
     def _bulk_order(self, data):
-        members = (data.get("tier_members") or {}).get("bulk") or []
+        members = (data.get("tier_members") or {}).get("worker") or []
         return [key.split(":", 1)[1] for key in members]
 
     def test_the_bulk_order_follows_the_published_value(self):
@@ -1965,7 +1965,7 @@ class ReserveTests(unittest.TestCase):
         self.assertTrue(reserve["withheld"])
         self.assertAlmostEqual(reserve["capacity"], 0.4, places=6)
         # The reserved model is not a bulk winner while the capacity is low.
-        winners = (data.get("tier_winners") or {}).get("bulk") or []
+        winners = (data.get("tier_winners") or {}).get("worker") or []
         self.assertNotIn(
             "mimo-v2-6-pro", [winner["model"] for winner in winners]
         )
@@ -2016,7 +2016,7 @@ class ReserveTests(unittest.TestCase):
         ]
         self.assertTrue(reserved)
         self.assertEqual(reserved[0]["reserve"], "3d")
-        self.assertIn(reserved[0]["tier"], ("bulk", "free"))
+        self.assertIn(reserved[0]["tier"], ("worker", "free"))
 
 
 class PoolLimitTests(unittest.TestCase):

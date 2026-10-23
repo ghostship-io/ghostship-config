@@ -219,9 +219,9 @@ class PermissionTests(unittest.TestCase):
             "provider": provider,
             "model": model,
             "native": {"mapped": mapped, "provider_instance_id": provider, "model_id": model},
-            "tiers": ["bulk"],
-            "rank": {"bulk": 1},
-            "score": {"bulk": 10.0},
+            "tiers": ["worker"],
+            "rank": {"worker": 1},
+            "score": {"worker": 10.0},
             "value": {"value": 10.0, "strength": 80.0},
             "availability": {"state": "available"},
             "admission": {"state": "settled"},
@@ -232,20 +232,20 @@ class PermissionTests(unittest.TestCase):
         }
 
     def test_only_the_permitted_gpt_model_is_permitted(self):
-        allowed = snapshot._eligibility("codex", "gpt-6.1-sol", ["bulk"], self._row("codex", "gpt-6.1-sol")["native"], self.POLICY)
-        other = snapshot._eligibility("codex", "gpt-6-luna", ["bulk"], self._row("codex", "gpt-6-luna")["native"], self.POLICY)
+        allowed = snapshot._eligibility("codex", "gpt-6.1-sol", ["worker"], self._row("codex", "gpt-6.1-sol")["native"], self.POLICY)
+        other = snapshot._eligibility("codex", "gpt-6-luna", ["worker"], self._row("codex", "gpt-6-luna")["native"], self.POLICY)
         self.assertTrue(allowed["gpt_model_allowed"]["allowed"])
         self.assertFalse(other["gpt_model_allowed"]["allowed"])
 
     def test_a_name_that_only_contains_a_permitted_model_is_not_permitted(self):
         row = self._row("codex", "gpt-6.1-sol-unapproved")
-        flags = snapshot._eligibility("codex", "gpt-6.1-sol-unapproved", ["bulk"], row["native"], self.POLICY)
+        flags = snapshot._eligibility("codex", "gpt-6.1-sol-unapproved", ["worker"], row["native"], self.POLICY)
         self.assertFalse(flags["gpt_model_allowed"]["allowed"])
         self.assertFalse(flags["delegate"]["allowed"])
 
     def test_a_permitted_model_keeps_its_frontier_permission(self):
         row = self._row("codex", "gpt-6.1-sol")
-        flags = snapshot._eligibility("codex", "gpt-6.1-sol", ["frontier"], row["native"], self.POLICY)
+        flags = snapshot._eligibility("codex", "gpt-6.1-sol", ["orchestrator"], row["native"], self.POLICY)
         self.assertTrue(flags["frontier_prime"]["allowed"])
 
     def test_a_model_that_is_not_permitted_never_wins_a_tier(self):
@@ -254,9 +254,9 @@ class PermissionTests(unittest.TestCase):
                 "provider": "codex",
                 "model": "gpt-6-luna",
                 "key": "codex:gpt-6-luna",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 1},
-                "score": {"bulk": 200.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 1},
+                "score": {"worker": 200.0},
                 "value": {"value": 200.0, "strength": 90.0},
                 "availability": {"state": "available"},
                 "admission": {"state": "settled"},
@@ -272,9 +272,9 @@ class PermissionTests(unittest.TestCase):
                 "provider": "codex",
                 "model": "gpt-6.1-sol",
                 "key": "codex:gpt-6.1-sol",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 2},
-                "score": {"bulk": 100.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 2},
+                "score": {"worker": 100.0},
                 "value": {"value": 100.0, "strength": 100.0},
                 "availability": {"state": "available"},
                 "admission": {"state": "settled"},
@@ -287,8 +287,8 @@ class PermissionTests(unittest.TestCase):
                 "native": {"mapped": True},
             },
         ]
-        winners, _coverage = snapshot._winners(rows, {"bulk": ["codex:gpt-6-luna", "codex:gpt-6.1-sol"]})
-        self.assertEqual([winner["model"] for winner in winners["bulk"]], ["gpt-6.1-sol"])
+        winners, _coverage = snapshot._winners(rows, {"worker": ["codex:gpt-6-luna", "codex:gpt-6.1-sol"]})
+        self.assertEqual([winner["model"] for winner in winners["worker"]], ["gpt-6.1-sol"])
 
 
 class TierContractTests(unittest.TestCase):
@@ -300,9 +300,9 @@ class TierContractTests(unittest.TestCase):
                 "provider": "ollama",
                 "model": "a",
                 "key": "ollama:a",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 1},
-                "score": {"bulk": 10.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 1},
+                "score": {"worker": 10.0},
                 "value": {"value": 10.0, "strength": 80.0},
                 "availability": {"state": "available"},
                 "admission": {"state": "settled"},
@@ -318,9 +318,9 @@ class TierContractTests(unittest.TestCase):
                 "provider": "ollama",
                 "model": "b",
                 "key": "ollama:b",
-                "tiers": ["bulk"],
-                "rank": {"bulk": 2},
-                "score": {"bulk": 5.0},
+                "tiers": ["worker"],
+                "rank": {"worker": 2},
+                "score": {"worker": 5.0},
                 "value": {"value": 5.0, "strength": 70.0},
                 "availability": {"state": "available"},
                 "admission": {"state": "settled"},
@@ -333,10 +333,10 @@ class TierContractTests(unittest.TestCase):
                 "native": {"mapped": True},
             },
         ]
-        winners, coverage = snapshot._winners(rows, {"bulk": ["ollama:a", "ollama:b"]})
-        self.assertEqual([winner["key"] for winner in winners["bulk"]], ["ollama:a"])
-        self.assertEqual(coverage["bulk"]["members"], 2)
-        self.assertEqual(coverage["bulk"]["winners"], 1)
+        winners, coverage = snapshot._winners(rows, {"worker": ["ollama:a", "ollama:b"]})
+        self.assertEqual([winner["key"] for winner in winners["worker"]], ["ollama:a"])
+        self.assertEqual(coverage["worker"]["members"], 2)
+        self.assertEqual(coverage["worker"]["winners"], 1)
 
 
 if __name__ == "__main__":

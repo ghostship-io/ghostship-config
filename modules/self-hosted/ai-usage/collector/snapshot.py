@@ -114,15 +114,50 @@ ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
 
 # The tiers the snapshot reports, in the order the dashboard reads them.
-TIER_NAMES = ("frontier", "bulk", "free", "3d")
+TIER_NAMES = ("orchestrator", "worker", "free", "3d")
+
+# The names the tiers carried before this release. For one release every
+# published name keeps its alias: each tier key is published beside its old
+# name with the same content, and every gauge with a tier label is published
+# under both. The next release deletes this constant, and the old names go
+# with it.
+TIER_ALIASES: dict[str, tuple[str, ...]] = {
+    "orchestrator": ("frontier",),
+    "worker": ("bulk",),
+}
+
+# Every alias of a tier, in one set, so a publisher can skip the aliases a
+# canonical name already covers.
+TIER_ALIAS_NAMES = frozenset(
+    alias for aliases in TIER_ALIASES.values() for alias in aliases
+)
+
+
+def _tier_names(tier: str) -> tuple[str, ...]:
+    """The published names of a tier: its own name, then its aliases."""
+    return (str(tier), *TIER_ALIASES.get(str(tier), ()))
+
+
+def _with_tier_aliases(by_tier: Mapping[str, Any]) -> dict[str, Any]:
+    """A per-tier mapping with the old names beside the new ones.
+
+    The alias holds the same object as its canonical name, never a copy, so
+    a reader of either name reads exactly one answer.
+    """
+    published: dict[str, Any] = {}
+    for tier, value in (by_tier or {}).items():
+        for name in _tier_names(str(tier)):
+            published[name] = value
+    return published
+
 
 # The task type of every tier. The trust of a model is read for the task
 # type of the tier it holds, and the outcomes of a model are the rounds of
 # that task type: the work of the frontier, the bulk and the free tiers is
 # implementation work, and the work of the 3D tier is CAD execution.
 TIER_TASK_TYPES = {
-    "frontier": "implementation",
-    "bulk": "implementation",
+    "orchestrator": "implementation",
+    "worker": "implementation",
     "free": "implementation",
     "3d": "cad-execution",
 }
@@ -132,7 +167,7 @@ TIER_TASK_TYPES = {
 # a reserved provider is not a worker of the tiers outside its workload: it
 # follows every unreserved route of its trust group, and it says why.
 RESERVATION_PROVIDERS = {"claudeAgent": "claude", "codex": "codex", "grok": "grok"}
-RESERVATION_TIERS = {"review-roles": ("frontier",), "3d": ("3d",)}
+RESERVATION_TIERS = {"review-roles": ("orchestrator",), "3d": ("3d",)}
 RESERVATION_IN_FORCE = ("active", "interim")
 
 # The visible label of a window whose state the provider publishes rather
@@ -905,8 +940,8 @@ def _candidate(
         "provider": provider,
         "model": model,
         "native": native_record,
-        "role": ROLE_PRIME if "frontier" in tiers else ROLE_DELEGATE,
-        "frontier_required": "frontier" in tiers,
+        "role": ROLE_PRIME if "orchestrator" in tiers else ROLE_DELEGATE,
+        "frontier_required": "orchestrator" in tiers,
         "tiers": sorted(tiers),
         "rank": ranks,
         "score": scores,
@@ -1287,7 +1322,7 @@ def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
 
 def _display_tier(tiers: list[str]) -> str:
     """The tier that describes a recommendation best."""
-    for tier in ("frontier", "bulk", "free", "3d"):
+    for tier in ("orchestrator", "worker", "free", "3d"):
         if tier in tiers:
             return tier
     return (tiers or [""])[0]
@@ -1407,7 +1442,7 @@ def _recommendations(
             frontier_rows = [
                 row
                 for row in eligible
-                if "frontier" in row["tiers"]
+                if "orchestrator" in row["tiers"]
                 and row["native"]["mapped"]
                 and (row.get("eligibility") or {}).get("frontier_prime", {}).get("allowed")
             ]
@@ -1430,7 +1465,7 @@ def _recommendations(
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
-                "tier": "frontier",
+                "tier": "orchestrator",
                 "native": chosen["native"],
                 "role": chosen["role"],
                 "reason": "the frontier authority reviews the change",
@@ -2324,7 +2359,7 @@ RESERVE_CAPACITY_FLOOR = 0.50
 
 # The tiers a reserve withholds a model from. The 3D tier is the tier the
 # model is reserved for.
-RESERVED_TIERS = ("bulk", "free")
+RESERVED_TIERS = ("worker", "free")
 
 # The width of the quality band of the free tier, in Artificial Analysis
 # intelligence points. The eligible routes within this many points of the
@@ -2499,7 +2534,7 @@ def _winners(
         # level: it costs nothing, so being close is enough, and among the
         # free routes that lead the published value decides.
         best_quality: dict[str, float] = {}
-        if tier == "bulk":
+        if tier == "worker":
             for key in members:
                 row = by_key.get(key)
                 if row is None or not _holds_the_tier(row, tier):
@@ -2513,7 +2548,7 @@ def _winners(
 
         def _free_leads(row: dict[str, Any]) -> int:
             """Zero when a free route leads its trust level, one otherwise."""
-            if tier != "bulk" or not _is_free_route(row):
+            if tier != "worker" or not _is_free_route(row):
                 return 1
             quality = _outcome_quality(row, tier)
             if quality is None:
@@ -2574,7 +2609,7 @@ def _winners(
                 # The free tier keeps the order it had: the band, the
                 # headroom and the last use.
                 return (trust, _far_behind(row), reserved, _free_key(row))
-            if tier == "bulk":
+            if tier == "worker":
                 published = _published_value_for(row, tier)
                 return (
                     trust,
@@ -3223,7 +3258,7 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         # Astra and Fable are read, counted and shown; they are never picked.
         return False
     eligibility = row.get("eligibility") or {}
-    if tier == "frontier":
+    if tier == "orchestrator":
         # The frontier is the owner's workhorses and nothing else.
         return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and bool(
             selection.get("frontier_workhorse")
@@ -3681,7 +3716,7 @@ def build_snapshot(
     frontier_rows = [
         row
         for row in candidates
-        if "frontier" in row["tiers"] and row["quota_state"] == "available"
+        if "orchestrator" in row["tiers"] and row["quota_state"] == "available"
     ]
     # The models the policy admits to the frontier, whether their quota
     # allows them right now or not. A spent frontier model stays a member,
@@ -3729,7 +3764,7 @@ def build_snapshot(
     blocked = [
         row
         for row in candidates
-        if "frontier" in row["tiers"] and row["quota_state"] != "available"
+        if "orchestrator" in row["tiers"] and row["quota_state"] != "available"
     ]
     frontier_reason = ""
     if not frontier_rows and blocked:
@@ -3763,7 +3798,7 @@ def build_snapshot(
             ),
             "sources_failed": len(failed),
             "sources": source_records,
-            "tiers": tier_coverage,
+            "tiers": _with_tier_aliases(tier_coverage),
             "frontier": {
                 "available": bool(frontier_rows),
                 "models": frontier_models,
@@ -3791,9 +3826,9 @@ def build_snapshot(
             },
             "basis": str(policy.get("basis") or ""),
         },
-        "tiers": tiers,
-        "tier_winners": winners,
-        "tier_members": tier_members,
+        "tiers": _with_tier_aliases(tiers),
+        "tier_winners": _with_tier_aliases(winners),
+        "tier_members": _with_tier_aliases(tier_members),
         "calculation": CALCULATION,
         "value_policy": value_policy.policy_document(COST_TRANSFORM),
         "quota": {
@@ -4314,6 +4349,52 @@ def account_window_samples(
     return samples
 
 
+def _member_positions(
+    snapshot: Mapping[str, Any], tier: str
+) -> list[tuple[str, int]]:
+    """Every member of a tier, 1-based, in the order a member position counts.
+
+    The winners come first in their winner order, so a winner never follows a
+    non-winner of the tier. The other members follow in the tier's own order,
+    and a member that is unavailable or spent is last of all. The relative
+    order inside each group is the tier order the snapshot holds, so a tier's
+    order never changes for the sake of the positions.
+    """
+    members = [
+        str(key)
+        for key in (snapshot.get("tier_members") or {}).get(tier) or []
+    ]
+    rows: dict[str, Mapping[str, Any]] = {}
+    for row in snapshot.get("candidates") or []:
+        if isinstance(row, Mapping):
+            rows[_key(row.get("provider"), row.get("model"))] = row
+
+    def _unavailable(key: str) -> bool:
+        row = rows.get(key) or {}
+        availability = row.get("availability") or {}
+        return (
+            str(availability.get("state") or "") != "available"
+            or row.get("quota_state") == QUOTA_EXHAUSTED
+        )
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for winner in (snapshot.get("tier_winners") or {}).get(tier) or []:
+        if not isinstance(winner, Mapping):
+            continue
+        key = str(winner.get("key") or _key(winner.get("provider"), winner.get("model")))
+        if key in seen or key not in members:
+            continue
+        ordered.append(key)
+        seen.add(key)
+    rest = [key for key in members if key not in seen]
+    # A stable partition: the members in the order they hold, with the
+    # unavailable or spent ones last.
+    rest.sort(key=_unavailable)
+    ordered.extend(rest)
+    return [(key, position) for position, key in enumerate(ordered, start=1)]
+
+
 def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:
     """The metrics behind a decision, so the dashboard can show the inputs.
 
@@ -4515,6 +4596,41 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                     float(position),
                 )
             )
+    # Every member of a tier, in the tier's own order, with a winner before a
+    # non-winner and an unavailable or spent member last. The position is
+    # published for the canonical name and for the old name of the release,
+    # so a reader of either name reads one answer.
+    rows_by_key = {
+        _key(row.get("provider"), row.get("model")): row
+        for row in snapshot.get("candidates") or []
+        if isinstance(row, Mapping)
+    }
+    for tier in (snapshot.get("tier_members") or {}):
+        if str(tier) in TIER_ALIAS_NAMES:
+            # The aliases carry the same members as their canonical name, and
+            # they are published below with it.
+            continue
+        for key, position in _member_positions(snapshot, str(tier)):
+            provider, _, model = str(key).partition(":")
+            row = rows_by_key.get(str(key)) or {}
+            reservation = str((row.get("reservation") or {}).get(str(tier)) or "")
+            for name in _tier_names(str(tier)):
+                labels = {
+                    "tier": name,
+                    "provider": provider,
+                    "model": model,
+                }
+                samples.append(
+                    ("ghostship_ai_model_member_position", dict(labels), float(position))
+                )
+                if reservation:
+                    samples.append(
+                        (
+                            "ghostship_ai_model_reserved_for",
+                            {**labels, "role": reservation},
+                            1.0,
+                        )
+                    )
     return samples
 
 

@@ -156,18 +156,18 @@ class FrontierTierTests(unittest.TestCase):
     def test_the_best_models_are_frontier(self):
         ranked = self.rank()
         tiers = tiers_of(ranked)
-        self.assertIn(("anthropic", "claude-opus-5-5", "frontier"), tiers)
-        self.assertIn(("openai", "gpt-6.1-sol", "frontier"), tiers)
+        self.assertIn(("anthropic", "claude-opus-5-5", "orchestrator"), tiers)
+        self.assertIn(("openai", "gpt-6.1-sol", "orchestrator"), tiers)
 
     def test_a_flash_variant_of_a_frontier_family_is_not_frontier(self):
         ranked = self.rank()
         tiers = tiers_of(ranked)
-        self.assertNotIn(("anthropic", "claude-opus-5-5-flash", "frontier"), tiers)
-        self.assertIn(("anthropic", "claude-opus-5-5-flash", "bulk"), tiers)
+        self.assertNotIn(("anthropic", "claude-opus-5-5-flash", "orchestrator"), tiers)
+        self.assertIn(("anthropic", "claude-opus-5-5-flash", "worker"), tiers)
 
     def test_frontier_ranks_start_at_one(self):
         ranked = self.rank()
-        frontier = tier_members(ranked, "frontier")
+        frontier = tier_members(ranked, "orchestrator")
         self.assertEqual([item.model for item in frontier], ["claude-opus-5-5", "gpt-6.1-sol"])
         self.assertEqual([item.rank for item in frontier], [1, 2])
 
@@ -218,7 +218,7 @@ class CapacityTests(unittest.TestCase):
             usage_tokens={},
             now=NOW,
         )
-        frontier = tier_members(ranked, "frontier")
+        frontier = tier_members(ranked, "orchestrator")
         self.assertEqual([item.model for item in frontier], ["claude-opus-5-5", "gpt-6.1-sol"])
         claude = frontier[0]
         codex = frontier[1]
@@ -249,7 +249,7 @@ class CapacityTests(unittest.TestCase):
         self.assertTrue(claude)
         self.assertFalse(claude[0].available)
         self.assertEqual(claude[0].rank, 0)
-        self.assertNotIn("frontier", {item.tier for item in claude})
+        self.assertNotIn("orchestrator", {item.tier for item in claude})
 
 
 class FreeTierTests(unittest.TestCase):
@@ -300,7 +300,7 @@ class FreeTierTests(unittest.TestCase):
     def test_a_promotional_free_model_is_bulk_and_free(self):
         tiers = tiers_of(self.rank())
         self.assertIn(("opencode-go", "minimax-m3.1-flash-free", "free"), tiers)
-        self.assertIn(("opencode-go", "minimax-m3.1-flash-free", "bulk"), tiers)
+        self.assertIn(("opencode-go", "minimax-m3.1-flash-free", "worker"), tiers)
 
     def test_a_paid_model_is_not_free(self):
         tiers = tiers_of(self.rank())
@@ -353,8 +353,8 @@ class ThreeDTests(unittest.TestCase):
         )
 
     def test_three_d_eligibility_does_not_change_the_bulk_order(self):
-        with_3d = [item.model for item in tier_members(self.rank(self.three_d), "bulk")]
-        without = [item.model for item in tier_members(self.rank(), "bulk")]
+        with_3d = [item.model for item in tier_members(self.rank(self.three_d), "worker")]
+        without = [item.model for item in tier_members(self.rank(), "worker")]
         self.assertEqual(with_3d, without)
 
     def test_a_three_d_member_needs_explicit_eligibility(self):
@@ -374,8 +374,8 @@ class ThreeDTests(unittest.TestCase):
             "usage_tokens": 500000,
             "eligible": True,
         }
-        with_three_d = tier_members(self.rank(three_d), "frontier")
-        without_three_d = tier_members(self.rank(), "frontier")
+        with_three_d = tier_members(self.rank(three_d), "orchestrator")
+        without_three_d = tier_members(self.rank(), "orchestrator")
         self.assertEqual(
             [(item.model, item.rank) for item in with_three_d],
             [(item.model, item.rank) for item in without_three_d],
@@ -469,7 +469,7 @@ class UnknownModelTests(unittest.TestCase):
         found = [item for item in ranked if item.model == "claude-opus-9-9"]
         self.assertTrue(found)
         self.assertEqual(found[0].quality, AA_INDEX)
-        self.assertEqual(found[0].tier, "bulk")
+        self.assertEqual(found[0].tier, "worker")
         self.assertEqual(found[0].rank, 1)
 
     def test_the_samples_carry_the_ranking_metrics(self):
@@ -510,7 +510,7 @@ class UnknownModelTests(unittest.TestCase):
             for name, labels, value in samples
             if name == "ghostship_ai_model_rank"
         ]
-        self.assertEqual(ranks[0][0]["tier"], "bulk")
+        self.assertEqual(ranks[0][0]["tier"], "worker")
         self.assertEqual(ranks[0][1], 1.0)
 
     def test_an_unavailable_model_is_reported_but_not_ranked(self):
@@ -600,15 +600,15 @@ class LineageFrontierTests(unittest.TestCase):
 
     def test_only_the_newest_model_of_a_lineage_is_a_frontier_model(self):
         ranked = self.rank()
-        frontier = {item.model for item in tier_members(ranked, "frontier")}
+        frontier = {item.model for item in tier_members(ranked, "orchestrator")}
         self.assertEqual(frontier, {"claude-opus-5-5", "gpt-6.1-sol"})
 
     def test_the_older_models_of_a_lineage_stay_in_the_bulk_tier(self):
         ranked = self.rank()
         tiers = tiers_of(ranked)
         for model in ("claude-opus-4-8", "claude-opus-5", "gpt-5.6-sol"):
-            self.assertNotIn(("anthropic" if model.startswith("claude") else "openai", model, "frontier"), tiers)
-            self.assertIn(("anthropic" if model.startswith("claude") else "openai", model, "bulk"), tiers)
+            self.assertNotIn(("anthropic" if model.startswith("claude") else "openai", model, "orchestrator"), tiers)
+            self.assertIn(("anthropic" if model.startswith("claude") else "openai", model, "worker"), tiers)
 
     def test_a_new_release_takes_the_frontier_over_on_its_own(self):
         catalog = make_catalog(
@@ -636,12 +636,12 @@ class LineageFrontierTests(unittest.TestCase):
             usage_tokens={},
             now=NOW,
         )
-        frontier = {item.model for item in tier_members(ranked, "frontier")}
+        frontier = {item.model for item in tier_members(ranked, "orchestrator")}
         # The frontier is the owner's explicit workhorse list; a newer
         # release does not take it over.
         self.assertEqual(frontier, {"claude-opus-5-5"})
         self.assertNotIn(
-            ("anthropic", "claude-opus-6", "frontier"), tiers_of(ranked)
+            ("anthropic", "claude-opus-6", "orchestrator"), tiers_of(ranked)
         )
 
     def test_the_version_of_the_id_decides_when_the_dates_are_missing(self):
@@ -668,7 +668,7 @@ class LineageFrontierTests(unittest.TestCase):
         )
         # Without a release date no model is fresh enough for the frontier,
         # but the newer version of the id is still the newer one.
-        self.assertEqual(tier_members(ranked, "frontier"), [])
+        self.assertEqual(tier_members(ranked, "orchestrator"), [])
         self.assertEqual(
             ranking._newness(None, "claude-opus-5-5", "anthropic")
             > ranking._newness(None, "claude-opus-4-8", "anthropic"),
@@ -717,7 +717,7 @@ class HonestScoreTests(unittest.TestCase):
         )
 
     def test_a_name_suffix_does_not_change_the_score(self):
-        bulk = tier_members(self.rank(), "bulk")
+        bulk = tier_members(self.rank(), "worker")
         self.assertEqual(len(bulk), 2)
         self.assertEqual(bulk[0].quality, bulk[1].quality)
         # The measured value is the same, so the score is the same: the
@@ -755,7 +755,7 @@ class HonestScoreTests(unittest.TestCase):
             usage_tokens={},
             now=NOW,
         )
-        bulk = {item.model: item for item in tier_members(ranked, "bulk")}
+        bulk = {item.model: item for item in tier_members(ranked, "worker")}
         self.assertAlmostEqual(
             bulk["kimi-k2"].score, bulk["kimi-k3"].score, places=6
         )
@@ -763,7 +763,7 @@ class HonestScoreTests(unittest.TestCase):
     def test_a_capacity_or_pace_term_is_not_in_the_score(self):
         without = {
             (item.provider, item.model): item
-            for item in tier_members(self.rank(), "bulk")
+            for item in tier_members(self.rank(), "worker")
         }
         ranked = ranking.rank_models(
             models=self.models,
@@ -783,7 +783,7 @@ class HonestScoreTests(unittest.TestCase):
             now=NOW,
         )
         with_window = {
-            item.model: item for item in tier_members(ranked, "bulk")
+            item.model: item for item in tier_members(ranked, "worker")
         }
         for model, item in with_window.items():
             self.assertAlmostEqual(
@@ -829,7 +829,7 @@ class HonestScoreTests(unittest.TestCase):
             aa_cache=cache,
             now=NOW,
         )
-        bulk = tier_members(ranked, "bulk")
+        bulk = tier_members(ranked, "worker")
         self.assertEqual(bulk[0].model, "minimax-m3.1-flash-free")
         self.assertGreater(bulk[0].score, bulk[1].score)
 
@@ -1122,25 +1122,25 @@ class ExcludedProviderTests(unittest.TestCase):
         )
 
     def test_an_excluded_provider_leaves_the_tier(self):
-        ranked = self.rank({"bulk": ["pool"]})
+        ranked = self.rank({"worker": ["pool"]})
         tiers = tiers_of(ranked)
-        self.assertNotIn(("pool", "gemini-3.8-flash", "bulk"), tiers)
+        self.assertNotIn(("pool", "gemini-3.8-flash", "worker"), tiers)
 
     def test_an_excluded_provider_keeps_the_other_tiers(self):
-        ranked = self.rank({"bulk": ["pool"]})
+        ranked = self.rank({"worker": ["pool"]})
         tiers = tiers_of(ranked)
         self.assertIn(("pool", "gemini-3.8-flash", "free"), tiers)
-        self.assertIn(("anthropic", "claude-haiku-4-5", "bulk"), tiers)
-        self.assertIn(("anthropic", "claude-opus-5-5", "frontier"), tiers)
+        self.assertIn(("anthropic", "claude-haiku-4-5", "worker"), tiers)
+        self.assertIn(("anthropic", "claude-opus-5-5", "orchestrator"), tiers)
 
     def test_the_default_keeps_every_provider_in_every_tier(self):
         ranked = self.rank()
         tiers = tiers_of(ranked)
-        self.assertIn(("pool", "gemini-3.8-flash", "bulk"), tiers)
+        self.assertIn(("pool", "gemini-3.8-flash", "worker"), tiers)
         self.assertIn(("pool", "gemini-3.8-flash", "free"), tiers)
 
     def test_an_excluded_model_is_still_reported(self):
-        ranked = self.rank({"bulk": ["pool"], "free": ["pool"]})
+        ranked = self.rank({"worker": ["pool"], "free": ["pool"]})
         found = [item for item in ranked if item.model == "gemini-3.8-flash"]
         self.assertTrue(found)
         self.assertTrue(found[0].available)
@@ -1194,7 +1194,7 @@ class ModelNameTests(unittest.TestCase):
     def _aa_cache(self):
         return json.loads(self.AA_CACHE.read_text(encoding="utf-8"))
 
-    def _ranked(self, provider, model, tier="bulk"):
+    def _ranked(self, provider, model, tier="worker"):
         return [
             ranking.RankedModel(
                 tier=tier,
@@ -1351,7 +1351,7 @@ class ModelNameLabelTests(unittest.TestCase):
         }
         ranked = [
             ranking.RankedModel(
-                tier="bulk",
+                tier="worker",
                 provider=provider,
                 model=model,
                 rank=1,

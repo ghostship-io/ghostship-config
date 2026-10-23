@@ -144,7 +144,7 @@ MINIMAX = {
 class AAOnlyTests(unittest.TestCase):
     def test_an_unmatched_model_cannot_beat_a_matched_one(self):
         data = build([MINIMAX])
-        winners = {entry["model"] for entry in data["tier_winners"].get("bulk", [])}
+        winners = {entry["model"] for entry in data["tier_winners"].get("worker", [])}
         self.assertEqual(winners, {"minimax-m3.1-flash-free"})
         deepseek = [row for row in data["candidates"] if "deepseek" in row["model"]]
         if deepseek:
@@ -203,19 +203,19 @@ class AAOnlyTests(unittest.TestCase):
 
     def test_a_stale_record_is_unranked(self):
         data = build([MINIMAX], fetched=NOW - 10 * DAY)
-        winners = {entry["model"] for entry in data["tier_winners"].get("bulk", [])}
+        winners = {entry["model"] for entry in data["tier_winners"].get("worker", [])}
         self.assertEqual(winners, set())
         row = [row for row in data["candidates"] if row["model"] == "minimax-m3.1-flash-free"][0]
         self.assertEqual(row["value"]["strength_source"], "unknown")
 
     def test_a_cache_without_a_version_is_unusable(self):
         data = build([MINIMAX], aa_version="")
-        winners = {entry["model"] for entry in data["tier_winners"].get("bulk", [])}
+        winners = {entry["model"] for entry in data["tier_winners"].get("worker", [])}
         self.assertEqual(winners, set())
 
     def test_a_record_from_the_future_is_unranked(self):
         data = build([MINIMAX], fetched=NOW + DAY)
-        winners = {entry["model"] for entry in data["tier_winners"].get("bulk", [])}
+        winners = {entry["model"] for entry in data["tier_winners"].get("worker", [])}
         self.assertEqual(winners, set())
 
     def test_the_public_metrics_carry_no_prior(self):

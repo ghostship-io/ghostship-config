@@ -205,7 +205,7 @@ BASIS_UNKNOWN = "unknown"
 
 
 # The tiers, in the order the dashboard reads them.
-TIERS = ("frontier", "bulk", "free", "3d")
+TIERS = ("orchestrator", "worker", "free", "3d")
 
 # The reasons a model is not usable right now. They are fixed labels, never
 # the provider's own text, and they are published with the availability of
@@ -1858,7 +1858,7 @@ def rank_models(
 
         tiers: list[str] = []
         if candidate.key in frontier_keys:
-            tiers.append("frontier")
+            tiers.append("orchestrator")
         surplus = candidate.frontier_surplus
         # A tier holds a model on its measured value. A model without one has
         # no value, so it is not ranked: the score of a tier is the value,
@@ -1867,7 +1867,7 @@ def rank_models(
             candidate.available
             and candidate.value is not None
             and (
-                "frontier" not in tiers
+                "orchestrator" not in tiers
                 # A frontier model may carry volume work when an allowance
                 # of its own resets within a day and the review capacity is
                 # not under pressure. The surplus never empties the review
@@ -1875,7 +1875,7 @@ def rank_models(
                 or bool(surplus.get("available"))
             )
         ):
-            tiers.append("bulk")
+            tiers.append("worker")
         if candidate.available and candidate.free and candidate.value is not None:
             tiers.append("free")
         if candidate.key in three_d_keys:
