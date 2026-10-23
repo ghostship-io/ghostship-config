@@ -58,9 +58,12 @@ if [ "$skip_sync" -eq 0 ]; then
   sync_checkout "$workspace/nixos-config"
 fi
 
-# The host owns the current installer/package pin, including in an older image.
+# Once bootstrapped, the agent resolver owns monotonic selection of host/main.
+canonical="$HOME/.local/bin/t3code-shared-agents"
 managed_installer="$HOME/.local/state/t3code-shared-agents/managed-installer"
-if [ -x "$managed_installer" ]; then
+if [ -f "$HOME/.local/state/t3code-shared-agents/release.json" ] && [ -x "$canonical" ]; then
+  installer="$canonical"
+elif [ -x "$managed_installer" ]; then
   installer="$managed_installer"
 fi
 exec "$installer" "$@"
