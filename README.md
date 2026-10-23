@@ -337,7 +337,7 @@ fail with `get-env.sh failed to produce an environment`. After changing the
 default shell, run `direnv reload` or start a fresh shell to pick up the updated
 environment.
 
-Run the same validation used by GitHub Actions:
+Run the full validation used by GitHub Actions after merging to main:
 
 ```sh
 nix develop --no-write-lock-file -c scripts/check
@@ -347,7 +347,9 @@ This parses tracked Nix files, checks the workflow script, and evaluates both
 Linux architectures' development shells and all four host system derivations. It does not
 build or activate host systems. Stage new Nix files before evaluation so the
 flake can see them. CI runs once per PR update and main push, cancels superseded
-runs, and avoids full fleet builds to conserve runner time.
+runs, and avoids full fleet builds to conserve runner time. PRs run the fast
+`scripts/check-unit.py`, workflow/shell lint and the same secret scan; host and
+container evaluations run on main.
 
 Apply the built generation:
 
