@@ -302,21 +302,16 @@ class GoWindowStatusTests(unittest.TestCase):
 
 
 class GoFreeRouteGuardTests(unittest.TestCase, SnapshotFixture):
-    """No free Go route is ever bound by the paid allowance, in a full snapshot."""
+    """OpenCode Go is a paid subscription: no Go route is ever free or promotional."""
 
-    def test_no_free_go_route_is_bound_by_a_paid_allowance_window(self):
+    def test_every_go_route_is_a_subscription_even_when_the_catalog_lists_a_zero_price(self):
         _inputs, data = self.build([], [spent_go_monthly()])
-        guarded = [
-            row
-            for row in data["candidates"]
-            if row["provider"] == "opencode-go"
-            and (row.get("access") or {}).get("billing") in ("free", "promotion")
-        ]
-        self.assertTrue(guarded, "the fixture must hold a free Go route")
-        for row in guarded:
-            binding = row["capacity"]["capacity_binding"] or {}
+        routes = [row for row in data["candidates"] if row["provider"] == "opencode-go"]
+        self.assertTrue(routes, "the fixture must hold Go routes")
+        self.assertIn("cat-jam-free", {row["model"] for row in routes})
+        for row in routes:
             with self.subTest(model=row["model"]):
-                self.assertNotIn(binding.get("quota"), ALLOWANCE_QUOTAS)
+                self.assertEqual((row.get("access") or {}).get("billing"), "subscription")
 
 
 if __name__ == "__main__":

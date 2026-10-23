@@ -1,4 +1,4 @@
-"""Free models and workers dashboard mirrors the Providers and model decisions page."""
+"""Free models dashboard is generated from Paid models: one selected model per free provider."""
 import json
 import copy
 import importlib.util
@@ -15,6 +15,7 @@ import model_selection
 import snapshot
 
 PAGE = ROOT / 'modules/self-hosted/siem/dashboards/free-workers.json'
+PROVIDERS = ROOT / 'modules/self-hosted/siem/dashboards/ai-usage.json'
 
 
 def helper(panel, name, rows, now=1767268800000):
@@ -61,26 +62,41 @@ class FreeWorkersPageTests(unittest.TestCase):
         self.assertEqual(self.page['timezone'], 'utc')
         self.assertFalse(self.page['editable'])
         titles = [link['title'] for link in self.page['links']]
-        self.assertEqual(titles, ['Providers'])
+        self.assertEqual(titles, ['Providers', 'Paid models', 'Free models'])
 
-    def test_selection_precedes_capacity_and_has_free_pool_scope(self):
-        panels = self.page['panels']
-        self.assertLess(next(i for i, p in enumerate(panels) if p['id'] == 233),
-                        next(i for i, p in enumerate(panels) if p['id'] == 210))
+    def test_one_full_width_free_lane_with_free_pool_scope(self):
+        self.assertEqual([p['id'] for p in self.page['panels']], [201, 233, 250, 240])
         panel = self.panels[233]
-        self.assertEqual(panel['repeat'], 'worker_model')
-        self.assertEqual((panel['repeatDirection'], panel['maxPerRow'], panel['gridPos']['w']), ('h', 4, 6))
+        self.assertNotIn('repeat', panel)
+        self.assertEqual((panel['gridPos']['x'], panel['gridPos']['w']), (0, 24))
         self.assertIn('category="worker"', panel['targets'][0]['expr'])
         self.assertIn('billing=~"free|promotion"', panel['targets'][0]['expr'])
+        queries = json.dumps([t for p in self.page['panels'] if p['id'] in (233, 250) for t in p['targets']]
+                             + self.page['templating']['list'])
+        self.assertNotIn('opencode-go', queries)
+        self.assertNotIn('subscription', queries)
+        self.assertIn('data-lane="free"', panel['options']['content'])
+        self.assertIn('one selected model per free provider', panel['options']['content'])
 
     def test_repeat_variables_use_free_scope_and_published_order(self):
         vars_by_name = {v['name']: v for v in self.page['templating']['list']}
         self.assertIn('provider', vars_by_name)
         self.assertIn('worker_model', vars_by_name)
-        self.assertIn('capacity_account', vars_by_name)
         self.assertNotIn('orchestrator_model', vars_by_name)
-        self.assertIn('scope="free"', vars_by_name['capacity_account']['query']['query'])
         self.assertIn('billing=~"free|promotion"', vars_by_name['worker_model']['query']['query'])
+        self.assertIn('ghostship_ai_picker_model_selected', vars_by_name['worker_model']['query']['query'])
+
+    def test_a_free_provider_with_no_available_model_stays_visible_and_grey(self):
+        panel = self.panels[233]
+        self.assertIn('ghostship_ai_provider_free_models{state="unavailable"', panel['targets'][0]['expr'])
+        self.assertIn('unless on(provider)', panel['targets'][0]['expr'])
+        rows = [{'provider': 'opencode', 'field': 'free_blocked', 'value': 46, 'category': 'worker'},
+                {'provider': 'cohere', 'field': 'free_blocked', 'value': 0, 'category': 'worker'}]
+        blocked = helper(panel, 'freeBlocked', rows)
+        self.assertEqual(blocked, [{'provider': 'opencode', 'count': 46, 'name': 'OpenCode Zen', 'icon': 'O'}])
+        self.assertIn('{{#each (freeBlocked data)}}', panel['options']['content'])
+        self.assertIn('No model available', panel['options']['content'])
+        self.assertIn('restricted blocked', panel['options']['content'])
 
     def test_model_selection_card_renders_capacity_bar_and_public_policy(self):
         panel = self.panels[233]
@@ -89,7 +105,7 @@ class FreeWorkersPageTests(unittest.TestCase):
         self.assertEqual(len(models), 1)
         model = models[0]
         self.assertEqual(model['display_name'], 'DeepSeek V4.1 Flash')
-        self.assertEqual(model['providerName'], 'nvidia')
+        self.assertEqual(model['providerName'], 'NVIDIA')
         self.assertEqual(model['percent'], '72% left')
         self.assertEqual(model['paceClass'], 'ahead')
         self.assertFalse(model['restricted'])
@@ -128,7 +144,7 @@ class FreeWorkersPageTests(unittest.TestCase):
 class FreeProviderCapacityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.panel = next(p for p in json.loads(PAGE.read_text())['panels'] if p['id'] == 210)
+        cls.panel = next(p for p in json.loads(PROVIDERS.read_text())['panels'] if p['id'] == 210)
 
     def card(self, account='nvidia', kind='daily', left=.65, state='behind', extra=()):
         common = {'account': account, 'kind': kind, 'quota_id': 'daily', 'label': kind, 'evidence': 'provider_reported'}
@@ -176,8 +192,7 @@ class FreeDashboardGeneratorTests(unittest.TestCase):
     def test_changed_source_selectors_fail_instead_of_publishing_paid_models(self):
         # Each transformation must find its expected source contract.
         for old in ('picker_eligible="true",provider!="openrouter"',
-                    'picker_eligible="true",provider=~"$provider",provider!="openrouter"',
-                    'scope="t3",account!="openrouter"'):
+                    'picker_eligible="true",provider=~"$provider",provider!="openrouter"'):
             with self.subTest(selector=old):
                 raw = json.dumps(self.source)
                 changed = raw.replace(json.dumps(old)[1:-1], 'unexpected_selector')
@@ -193,34 +208,17 @@ class FreeDashboardGeneratorTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Paid selector remains'):
                     self.generate(source)
 
-    def test_side_by_side_cards_keep_their_row_and_dimensions(self):
-        source = copy.deepcopy(self.source)
-        # Replace the layout with two kept cards sharing a row, a removed row,
-        # and another pair. Different card heights must not stack the cards.
-        source['panels'] = [
-            {'id': 901, 'gridPos': {'x': 0, 'y': 0, 'w': 12, 'h': 4}},
-            {'id': 902, 'gridPos': {'x': 12, 'y': 0, 'w': 12, 'h': 6}},
-            {'id': 230, 'gridPos': {'x': 0, 'y': 6, 'w': 24, 'h': 2}},
-            {'id': 903, 'gridPos': {'x': 0, 'y': 8, 'w': 12, 'h': 5}},
-            {'id': 904, 'gridPos': {'x': 12, 'y': 8, 'w': 12, 'h': 7}},
-            *[p for p in source['panels'] if p['id'] not in {230, 231}],
-        ]
-        # Selector-bearing original panels stay in a later section.
-        for panel in source['panels'][5:]:
-            panel['gridPos']['y'] += 30
-        page = self.generate(source)
-        positions = {p['id']: p['gridPos'] for p in page['panels'] if p['id'] in {901, 902, 903, 904}}
-        self.assertEqual(positions, {
-            901: {'x': 0, 'y': 0, 'w': 12, 'h': 4},
-            902: {'x': 12, 'y': 0, 'w': 12, 'h': 6},
-            903: {'x': 0, 'y': 6, 'w': 12, 'h': 5},
-            904: {'x': 12, 'y': 6, 'w': 12, 'h': 7},
-        })
+    def test_generated_lane_replaces_the_orchestrator_lane_and_keeps_stable_ids(self):
+        page = self.generate(copy.deepcopy(self.source))
+        self.assertEqual([p['id'] for p in page['panels']], [201, 233, 250, 240])
+        self.assertEqual(page['panels'][1]['gridPos']['w'], 24)
+        evidence = next(p for p in page['panels'] if p['type'] == 'row')
+        self.assertEqual([p['id'] for p in evidence['panels']], [241, 242])
+        self.assertTrue(all(p['gridPos']['y'] > evidence['gridPos']['y'] for p in evidence['panels']))
 
-    def test_removing_one_card_does_not_remove_an_occupied_row(self):
+    def test_changed_lane_markup_fails_instead_of_dropping_blocked_providers(self):
         source = copy.deepcopy(self.source)
-        source['panels'].append({'id': 905, 'gridPos': {'x': 12, 'y': 15, 'w': 12, 'h': 14}})
-        page = self.generate(source)
-        card = next(p for p in page['panels'] if p['id'] == 905)
-        # Only the two-unit heading above it was removed.
-        self.assertEqual(card['gridPos']['y'], 13)
+        panel = next(p for p in source['panels'] if p['id'] == 233)
+        panel['options']['content'] = panel['options']['content'].replace('</div></section>', '</div>')
+        with self.assertRaisesRegex(ValueError, 'blocked free providers'):
+            self.generate(source)

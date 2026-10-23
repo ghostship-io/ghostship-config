@@ -192,7 +192,8 @@ class RelayConfirmationTests(unittest.TestCase):
         self.assertIn('ghostship_ai_announced_reset_info', text)
         dashboard = json.loads((Path(__file__).resolve().parents[1] /
             'modules/self-hosted/siem/dashboards/ai-usage.json').read_text())
-        panel = next(item for item in dashboard['panels'] if item['id'] == 202)
+        rows = [item for item in dashboard['panels'] if item['type'] == 'row']
+        panel = next(item for row in rows for item in row['panels'] if item['id'] == 202)
         self.assertIn('ghostship_ai_announced_reset_info', panel['targets'][0]['expr'])
         self.assertTrue(panel['options']['enablePagination'])
         link = panel['fieldConfig']['overrides'][0]['properties'][0]['value'][0]

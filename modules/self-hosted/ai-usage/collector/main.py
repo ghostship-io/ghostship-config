@@ -540,6 +540,10 @@ for field in ('info', *model_quality.FIELDS):
     METRIC_HELP['ghostship_ai_quality_' + field] = 'Canonical AA and verified observed model quality: ' + field + '.'
 
 METRIC_HELP['ghostship_ai_announced_reset_info'] = 'Recorded public reset announcement, including unverified relays awaiting confirmation.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_timestamp_seconds'] = 'Start of the UTC-offset day of one T3 daily usage bucket, as T3 reports it.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_tokens'] = 'Tokens of one T3 daily usage bucket by kind; total is T3 usage-page tokens (reasoning is part of output).'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_cost_usd'] = 'T3 costUsd of one daily usage bucket; provider_reported or api_equivalent, never locally repriced.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_unpriced_records'] = 'Records of one T3 daily usage bucket that T3 could not price.'
 GAUGE_METRICS = tuple(METRIC_HELP)
 
 # How many dropped series a run names. A run that drops a handful of series
