@@ -110,7 +110,11 @@ class SourceClosureTests(unittest.TestCase):
         data=json.loads(result.stdout)
         self.assertIn('/worker-home/.local/state/ghostship/reviews:/reviews:ro,noexec,nosuid,nodev',data['volumes'])
         self.assertEqual(data['environment']['GHOSTSHIP_REVIEW_STORE'],'/reviews')
-        self.assertFalse(any('/.t3/userdata' in value or '/.config/gh' in value for value in data['volumes']))
+        self.assertIn('/worker-home/.config/ghostship:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev', data['volumes'])
+        self.assertEqual(data['environment']['GHOSTSHIP_ORCHESTRATOR_FILE'],
+                         '/run/ghostship-orchestrator/session-rotation.env')
+        self.assertFalse(any('session-rotation.env:' in value for value in data['volumes']))
+        self.assertFalse(any('/.t3/userdata' in value or ('/.config/gh:' in value or '/.config/gh/' in value) for value in data['volumes']))
 
     @unittest.skipUnless(shutil.which('setfacl') and shutil.which('getfacl'), 'requires POSIX ACL tools')
     def test_review_acl_survives_ownership_reconciliation_and_atomic_replacement(self):
