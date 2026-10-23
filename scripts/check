@@ -78,6 +78,7 @@ printf 'Checking the AI usage collector and its model ranking\n'
 python3 -m unittest discover -s tests -p test_ai_usage_collector.py
 python3 -m unittest discover -s tests -p test_ai_usage_ranking.py
 python3 -m unittest discover -s tests -p test_ai_usage_outcome_value.py
+python3 -m unittest discover -s tests -p test_ai_usage_quality_score.py
 python3 -m unittest discover -s tests -p test_ai_usage_threed.py
 python3 -m unittest discover -s tests -p test_ai_usage_snapshot.py
 python3 -m unittest discover -s tests -p test_ai_usage_routing.py

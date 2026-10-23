@@ -2581,6 +2581,14 @@ def _winners(
                 "value_aa": (row.get("value") or {}).get("value"),
                 "strength": (row.get("value") or {}).get("strength"),
                 "strength_source": (row.get("value") or {}).get("strength_source"),
+                # The display score of the model, the same one every page
+                # reads: one number per model, with the basis it was built
+                # from and the global counts behind it.
+                "quality_score": row.get("quality_score"),
+                "quality_p0": row.get("quality_p0"),
+                "quality_n": row.get("quality_n"),
+                "quality_s": row.get("quality_s"),
+                "quality_basis": row.get("quality_basis"),
                 "relative_cost": (row.get("value") or {}).get("relative_cost"),
                 "pace_delta": (row.get("capacity") or {}).get("pace_delta"),
                 # The owner's name for the ordering measure: the Paced
@@ -2966,6 +2974,25 @@ class _Trust:
             int(accepted) if isinstance(accepted, (int, float)) else 0,
         )
 
+    def totals(self, identity: str) -> tuple[int, int]:
+        """The rounds and the accepted rounds of a model, every task type.
+
+        The display score of a model is one number, so it reads every round
+        the model was measured on, not only the rounds of the task type of
+        one tier. An identity with no round sums to zero.
+        """
+        rounds = 0
+        accepted = 0
+        for (name, _task_type), entry in self.counts().items():
+            if name != identity:
+                continue
+            observed = entry.get("n")
+            succeeded = entry.get("s")
+            rounds += int(observed) if isinstance(observed, (int, float)) else 0
+            accepted += int(succeeded) if isinstance(succeeded, (int, float)) else 0
+        return rounds, accepted
+
+
     def trust(self, identity: str, task_type: str) -> dict[str, Any]:
         """The trust of a model for a task type, and the reason it holds."""
         key = (str(identity or ""), str(task_type or ""))
@@ -3050,6 +3077,23 @@ def _efficiency_of(row: Mapping[str, Any]) -> float | None:
     return None
 
 
+def _quality_basis(intelligence: float | None, rounds: int) -> str:
+    """The basis of a display score: the measurements that built it.
+
+    The intelligence of the model and the rounds it was measured on are two
+    evidences, and the basis names which of them were there. A model with
+    neither keeps the neutral prior, and its basis says so.
+    """
+    if intelligence is not None:
+        if rounds > 0:
+            return value_policy.QUALITY_BASIS_AA_OUTCOMES
+        return value_policy.QUALITY_BASIS_AA_ONLY
+    if rounds > 0:
+        return value_policy.QUALITY_BASIS_OUTCOMES_DEFAULT
+    return value_policy.QUALITY_BASIS_DEFAULT
+
+
+
 def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
     """The trust and the outcome of every row, for every tier it holds.
 
@@ -3058,6 +3102,11 @@ def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
     outcome of a model is its measured intelligence inside its tier, shrunk
     toward the rounds that were actually observed, combined with the
     measured efficiency, and scaled by the trust of the model.
+
+    The display score of a model is added beside the per-tier outcome: one
+    number per model, from the intelligence of every ranked candidate and
+    the rounds of every task type. It never orders a tier, and the tier
+    order is unchanged.
     """
     for row in candidates:
         row["trust"] = {}
@@ -3153,6 +3202,45 @@ def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
                 # the model. An untrusted route keeps half of it.
                 "published": published,
             }
+
+    # The display score of a model is one number, not one per tier. The
+    # prior places the model inside the range of every ranked candidate,
+    # across every tier, and the counts are every task type of the identity:
+    # two routes of one model read the same score. It is published beside
+    # the per-tier outcome and it does not order a tier.
+    ranked = [
+        row
+        for row in candidates
+        if any(
+            tier in (row.get("tiers") or []) and _holds_the_tier(row, tier)
+            for tier in TIER_NAMES
+        )
+    ]
+    strengths = [
+        strength
+        for strength in (_intelligence_of(row) for row in ranked)
+        if strength is not None
+    ]
+    i_min_all = min(strengths) if strengths else None
+    i_max_all = max(strengths) if strengths else None
+    for row in candidates:
+        identity = trust.identity(
+            str(row.get("provider") or ""), str(row.get("model") or "")
+        )
+        intelligence = _intelligence_of(row)
+        p0 = value_policy.outcome_prior(intelligence, i_min_all, i_max_all)
+        rounds, accepted = trust.totals(identity)
+        try:
+            score = value_policy.quality_score(p0, rounds, accepted)
+        except ValueError:
+            # A count that cannot exist is not a score: the display number
+            # stays unknown rather than invented.
+            score = None
+        row["quality_score"] = score
+        row["quality_p0"] = p0
+        row["quality_n"] = rounds
+        row["quality_s"] = accepted
+        row["quality_basis"] = _quality_basis(intelligence, rounds)
 
 
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:

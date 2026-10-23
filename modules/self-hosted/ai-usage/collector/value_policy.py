@@ -89,6 +89,14 @@ OUTCOME_PRIOR_SPAN = OUTCOME_PRIOR_CEILING - OUTCOME_PRIOR_FLOOR
 # available model: it need not be the best, it is close enough to cost nothing.
 FREE_ROUTE_MARGIN = 0.10
 
+# The basis of the display score: which inputs built the number. The score is
+# one number per model, so the basis names the measurements that were there
+# and the prior that stood in for the ones that were not.
+QUALITY_BASIS_AA_OUTCOMES = "AA + outcomes"
+QUALITY_BASIS_AA_ONLY = "AA only"
+QUALITY_BASIS_OUTCOMES_DEFAULT = "outcomes + default prior"
+QUALITY_BASIS_DEFAULT = "default prior"
+
 # The factor the value of an untrusted route is multiplied by.
 UNTRUSTED_VALUE_FACTOR = 0.5
 
@@ -256,6 +264,26 @@ def outcome_quality(
     if strength is None or strength <= 0.0:
         raise ValueError(f"the prior strength must be a positive number, not {k!r}")
     return (strength * prior + successes) / (strength + outcomes)
+
+
+def quality_score(
+    p0: Any, n: Any, s: Any, k: Any = OUTCOME_PRIOR_STRENGTH
+) -> int:
+    """The display score of a model: its outcome quality as an integer 0..100.
+
+    The score is the same quality the ranking is valued by, rounded to an
+    integer so every page reads one comparable number::
+
+        score = round(100 * (k * p0 + s) / (k + n))
+
+    The prior p0 and the counts n and s are the global ones: the intelligence
+    of the model inside the range of every ranked model, not of its tier, and
+    the rounds of every task type. The score is therefore one number per
+    model, and it never depends on the tier it is read in. A count that
+    cannot exist raises, exactly as it does in ``outcome_quality``.
+    """
+    return int(round(100.0 * outcome_quality(p0, n, s, k)))
+
 
 
 def outcome_value(quality: Any, efficiency: Any) -> float | None:

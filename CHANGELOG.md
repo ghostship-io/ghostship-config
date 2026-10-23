@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.129] - 2026-10-23
+
+- ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
+
 ## [3.17.128] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
