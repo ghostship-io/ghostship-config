@@ -875,3 +875,16 @@ persist; job workspaces reset. The upstream NixOS runner sandbox hides the
 registration PAT and host homes, runs jobs as a dynamic user without root or
 Podman access, and applies CPU, memory and task limits. Hosted integration stays
 manual on main. PR gates are not repeated on main pushes.
+
+
+### CI source admission
+
+Repository-scoped CI runners also use an immutable host job-start hook. It checks
+the runner-generated webhook payload against the repository bound in Nix and
+refuses foreign, missing or malformed PR sources before checkout. The YAML job
+condition remains a scheduling filter; the host check cannot be removed by a PR
+editing its workflow. Repository-bound manual dispatches are allowed for cache
+warming. No payload values are printed.
+
+GitHub's [job-hook contract](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts)
+stops a job when its start hook fails; continue-on-error cannot override it.
