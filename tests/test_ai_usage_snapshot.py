@@ -125,6 +125,25 @@ def build(entries, native=None, sources=None, aa_cache=None):
 
 
 class SnapshotContractTests(unittest.TestCase):
+    def test_policy_excluded_pool_has_no_candidates_or_capacity_windows(self):
+        rows = [Ranked(provider='antigravity', model=model, tier='worker')
+                for model in ('claude-opus-5-5','gpt-6.1-sol','gemini-4-argon')]
+        windows = [{'provider':'antigravity','quota_id':quota,'kind':kind,
+                    'remaining_ratio':.7,'reset_at':'2027-01-15T09:00:00Z','applies_to':scope}
+                   for quota,kind,scope in (('3p-5h','session',['claude','gpt']),
+                                           ('3p-weekly','weekly',['claude','gpt']),
+                                           ('gemini-5h','session',['gemini']))]
+        result = snapshot.build_snapshot(now=NOW, sources=[], ranked=rows,
+            measured_windows=windows,
+            outcomes={'policy':{'model_selection':{'excluded_pools':['antigravity:3p']}}})
+        self.assertEqual([row['model'] for row in result['candidates']], ['gemini-4-argon'])
+        accounts = result['quota']['accounts']['antigravity']
+        self.assertEqual([row['quota_id'] for row in accounts], ['gemini-5h'])
+        rendered = list(snapshot.account_window_samples(result))
+        self.assertTrue(rendered)
+        self.assertFalse(any('3p-' in str(labels) for _,labels,_ in rendered))
+
+
     def test_the_header_carries_the_version_and_the_freshness(self):
         data = build([Ranked()])
         self.assertEqual(data["schema_version"], 1)

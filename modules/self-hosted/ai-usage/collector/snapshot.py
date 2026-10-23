@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json
 import math
+import pools
 import os
 import re
 import time
@@ -3656,6 +3657,7 @@ def build_snapshot(
     does not carry. It is optional: without it every model is trusted and
     no round was observed.
     """
+    excluded_pools = set((((outcomes or {}).get('policy') or {}).get('model_selection') or {}).get('excluded_pools') or [])
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
     for record in free_models or ():
@@ -3692,6 +3694,8 @@ def build_snapshot(
         # covers one model family is never published as a window of the
         # whole account. A reading of one model that names no family is
         # not a window of the account at all.
+        if pools.pool_of_window(account, measured) in excluded_pools:
+            continue
         scope = quota_module.measured_scope(measured)
         if scope is None:
             continue
@@ -3713,6 +3717,8 @@ def build_snapshot(
         record = _inferred_window_record(
             inferred.get("window"), now, inferred.get("applies_to") or ()
         )
+        if pools.pool_of_window(account, record) in excluded_pools:
+            continue
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -3731,6 +3737,8 @@ def build_snapshot(
             (pool_evidence or {}).get((provider, model)),
             (t3_probes or {}).get((provider, model)),
         )
+        if pools.pool_of_route(provider, model, (row.get('access') or {}).get('billing') or '') in excluded_pools:
+            continue
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
         fact = facts_module.lookup_by_model(

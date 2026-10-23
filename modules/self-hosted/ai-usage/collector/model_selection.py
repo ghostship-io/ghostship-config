@@ -52,6 +52,10 @@ def policy_ready(evidence: Mapping[str, Any]) -> bool:
             or not categories or any(category not in CATEGORIES for category in categories)
             for provider, categories in roles.items()):
         return False
+    excluded_pools = (policy.get('model_selection') or {}).get('excluded_pools', [])
+    if (not isinstance(excluded_pools, list) or
+            any(not isinstance(pool, str) or not pool for pool in excluded_pools)):
+        return False
     return (bool(declared) and exclusions <= declared
             and (policy.get('model_selection') or {}).get('categories') == list(CATEGORIES)
             and bool((policy.get('roles') or {}).get('orchestrator')))
@@ -182,6 +186,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     providers: dict[str, dict[str, Any]] = {}
     trust_cache = {}
     role_exclusions = []
+    excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
     provider_roles = (((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("provider_roles") or {}
     worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
     for source in snapshot.get("candidates") or []:
@@ -235,6 +240,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "pool": source.get("pool") or pools.record(str(source.get("provider") or ""),
                 str(source.get("model") or ""), (source.get("access") or {}).get("billing") or ""),
         }
+        if row['pool']['id'] in excluded_pools:
+            if mapped:
+                role_exclusions.extend({'provider':row['provider'], 'native':row['native'],
+                                        'category':category, 'reason':'pool_excluded'} for category in CATEGORIES)
+            continue
         # Orchestrator models can also be workers; the categories describe use,
         # not reservations. No review subscription is withheld from the owner.
         allowed = provider_roles.get(row['provider'], CATEGORIES)
