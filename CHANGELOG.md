@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.118] - 2026-10-23
+
+- ai-usage: the Providers page lists every free provider under the static rows, and every capacity card says how many free models its provider holds. The static selection ends in a Free divider and one row per free provider in the order of the cards: the model the provider selected for the free tier, with the share left and the collector's Paced Availability, "learning window" for an account that never saw a limit failure, and "no eligible free model" for a provider with no winner. The numbers are the collector's free selection series, so the page never builds a row out of the candidates or out of an account window. OpenCode Go reads both at once: its monthly allowance is spent, and its card says "Free models · available · 2 models" in green under it, while a provider whose free routes are all out says "none available" in grey, and a provider that holds no free route has no line at all. The review fixture holds the live set of sixteen free providers and the free routes of six. The Free divider is five cells rather than one spanned cell, because a spanned cell takes the room the hidden columns leave on a phone and squeezed the model name into 56 px. The selection panel is sized for the headroom of twenty free providers: 883 px at 390 px (24 rows) and 861 px at 1600 px. The capacity cards grow by two rows for the free line: 1798 px at 390 px (49 rows) and 538 px at 1600 px.
+
 ## [3.17.117] - 2026-10-23
 
 - Providers page: the Model selection panel renders again. Live it read "An unexpected error happened": its `externalStyles` option was an empty string, and Business Text 6.3.0 maps that option as a list (`e.externalStyles.map is not a function`). It is a list now, and its query reads as one table like every other section. A test holds every Business Text panel to list-valued `externalStyles`, `editors` and `contentPartials` and table-format queries.
