@@ -68,6 +68,55 @@ class AuthCutoverTests(unittest.TestCase):
         self.assertEqual(source.records(), before)
         self.assertEqual(source.events, [])
 
+    def test_cooling_zen_is_unavailable_without_removing_source_logins(self):
+        source, free = Side(), Side(free=True)
+        before = source.records()
+        # Captured canonical pool contract: exhausted/cooling routes leave a
+        # durable queued job instead of inventing a successful probe result.
+        free.call = lambda *args, **kwargs: json.dumps({'job': {
+            'id': 'public-probe', 'status': 'queued', 'result': {
+                'attempts': [], 'reason': 'all eligible routes unavailable; retry drain after cooldown'}}})
+        result = auth.migrate(source, free, self.manifest, PLAN)
+        self.assertEqual(result['phase'], 'unavailable')
+        self.assertTrue(result['source_login_preserved'])
+        self.assertEqual(source.records(), before)
+        self.assertEqual(source.events, [])
+        self.assertNotEqual(json.loads(self.manifest.read_text())['phase'], 'complete')
+        self.assertEqual(auth.migrate(source, free, self.manifest, PLAN), result)
+        free.call = Side(free=True).call
+        self.assertEqual(auth.migrate(source, free, self.manifest, PLAN)['phase'], 'complete')
+
+    def test_unavailable_probe_exits_the_service_entrypoint_successfully(self):
+        import contextlib
+        import io
+        import os
+        source, free = Side(), Side(free=True)
+        free.call = lambda *args, **kwargs: json.dumps({'job': {
+            'id': 'public-probe', 'status': 'queued', 'result': {
+                'reason': 'all eligible routes unavailable; retry drain after cooldown'}}})
+        plan = self.manifest.with_name('plan.json')
+        plan.write_text(json.dumps(PLAN))
+        output = io.StringIO()
+        previous_umask = os.umask(0o077)
+        try:
+            with patch.object(auth, 'Target', side_effect=[source, free]), patch('sys.argv', [
+                    'auth', '--podman', 'podman', '--manifest', str(self.manifest), '--plan', str(plan)]), \
+                    contextlib.redirect_stdout(output):
+                self.assertEqual(auth.main(), 0)
+        finally:
+            os.umask(previous_umask)
+        self.assertEqual(json.loads(output.getvalue())['phase'], 'unavailable')
+        self.assertEqual(len(source.records()), 2)
+
+    def test_malformed_or_unexplained_queued_probe_is_not_unavailable(self):
+        for raw in ('not JSON', json.dumps({'job': {'id':'public-probe', 'status':'queued'}})):
+            with self.subTest(raw=raw):
+                source, free = Side(), Side(free=True)
+                free.call = lambda *args, **kwargs: raw
+                with self.assertRaises(auth.MigrationError):
+                    auth.migrate(source, free, self.manifest, PLAN)
+                self.assertEqual(len(source.records()), 2)
+
     def test_successful_cutover_is_idempotent_and_does_not_repeat_the_public_task(self):
         source, free = Side(), Side(free=True)
         receipt = auth.migrate(source, free, self.manifest, PLAN)
