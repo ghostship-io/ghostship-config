@@ -54,9 +54,7 @@ let
     ntfy_url = "http://ntfy:8080";
     orchestrator_thread_file = "/run/ghostship-handoffs/coordination-list.md";
     t3_environment_id = "@GHOSTSHIP_T3_ENVIRONMENT_ID@";
-    # The chief reviewer leads launched threads; the backup reviewer stands in
-    # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
-    # remains delegated under the canonical engineering/routing policy.
+    # One orchestrator reviews each diff; workers implement and ship their own approved PRs.
     model_selection = {
       instanceId = "claudeAgent"; model = "claude-opus-5-5";
       options = [ { id = "effort"; value = "high"; } ];
