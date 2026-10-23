@@ -138,6 +138,33 @@ class ProvidersPageTests(unittest.TestCase):
         variables={v['name'] for v in self.page['templating']['list']}
         self.assertNotIn('free_model',variables)
 
+    def test_healthy_capacity_is_neutral_and_pace_does_not_colour_the_bar(self):
+        panel=self.panels[233]
+        rows=selection_rows(left=.76,delta=-23,state='far_behind')
+        for row in rows:
+            row['reason']='every applicable window has headroom'
+        model=helper(panel,'selectionModels',rows)[0]
+        self.assertEqual(model['graphClass'],'')
+        self.assertEqual(model['paceClass'],'far_behind')
+        self.assertEqual(model['reasonClass'],'')
+        self.assertEqual(model['reasonText'],'every applicable window has headroom')
+        self.assertIn('.selection-card .reason{font-size:10.5px;margin-top:7px;color:#8b8f99',panel['options']['styles'])
+        for row in rows:
+            row['provider']='antigravity'
+            row['reason']='the provider publishes no quota window for this account'
+        model=helper(panel,'selectionModels',rows)[0]
+        self.assertEqual(model['reasonText'],'Applicable reported quota has headroom')
+        self.assertEqual(model['windowName'],'weekly')
+
+    def test_unmeasured_aa_has_neither_source_link_nor_date(self):
+        panel=self.panels[250]
+        row={'provider':'example','model':'unmeasured','effort':'low','aa_date':'2026-10-23T00:00:00Z',
+             'field':'info','value':1}
+        model=helper(panel,'qualityRows',[row])[0]
+        self.assertFalse(model['hasAA'])
+        self.assertEqual(model['aaDate'],'')
+        self.assertIn('{{#if this.hasAA}}<a href=',panel['options']['content'])
+
     def test_quality_table_uses_published_scores_and_preserves_missing_evidence(self):
         panel=self.panels[250]
         labels={'provider':'example','model':'model','display_name':'Example','effort':'low',
@@ -294,16 +321,15 @@ class ProviderCapacityTests(unittest.TestCase):
                     self.assertNotIn('behind',window['sub'])
             self.assertEqual(self.card(kind=kind,left=0)['fillClass'],'spent')
 
-    def test_long_window_text_and_fill_take_the_same_owner_colour(self):
+    def test_long_window_pace_colour_is_text_only_and_capacity_stays_blue(self):
         for state,fill,symbol in (('ahead','ahead','▲'),('on_pace','','●'),('behind','behind','▼'),
                                   ('far_behind','spent','▼')):
             with self.subTest(state=state):
                 window=self.card(state=state)
-                self.assertEqual(window['fillClass'],fill)
+                self.assertEqual(window['fillClass'],'')
                 self.assertEqual(window['paceClass'],state)
                 self.assertIn(symbol,window['sub'])
         styles=self.panel['options']['styles']
-        self.assertIn('.capacity .fill.ahead{background:#8fc98f}',styles)
         self.assertIn('.capacity .sub.on_pace{color:#5b9bd5}',styles)
 
     def test_no_limit_working_route_is_solid_blue_and_unavailable_is_grey(self):
@@ -357,5 +383,5 @@ class ProviderCapacityTests(unittest.TestCase):
         self.assertFalse(session['hasTick'])
         self.assertEqual(weekly['pct'],'55%')
         self.assertEqual(weekly['sub'],'▼ 17 behind')
-        self.assertEqual(weekly['fillClass'],'behind')
+        self.assertEqual(weekly['fillClass'],'')
         self.assertTrue(weekly['hasTick'])
