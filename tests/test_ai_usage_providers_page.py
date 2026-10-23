@@ -206,7 +206,11 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertFalse(next(model for model in models if model['model']=='spent')['active'])
             self.assertFalse(chosen['hasFindings'])
             self.assertFalse(chosen['hasQuota'])
-        self.assertIn('data-quality-all',self.panels[250]['options']['content'])
+        self.assertIn('data-quality-controls',self.panels[250]['options']['content'])
+
+    def test_quality_hook_builds_controls_after_grafana_sanitization(self):
+        subprocess.run(['node',str(ROOT/'tests/fixtures/ai-usage/quality-hook-dom.cjs'),str(PAGE)],check=True)
+        self.assertNotIn('<input',self.panels[250]['options']['content'])
 
     def test_pi_is_absent_from_dashboard_queries(self):
         for variable in self.page['templating']['list']:
