@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.112] - 2026-10-23
+
+- AI usage: a route the T3 instance does not offer says why it is unusable. The routing snapshot rebuilt `availability.reason` from the quota windows alone, so an unavailable route whose headroom was known read `available: false` with an empty reason; the live Go free routes `cat-jam-free` and `step-5-preview-free` were the example. The snapshot now reads the ranking's own judgement: the reason reads "not offered by the T3 instance", and a catalog entry marked deprecated appends "(deprecated in the catalog)". The availability state, `available`, `quota_state` and the capacity are unchanged, and so is every other reason.
+
 ## [3.17.111] - 2026-10-23
 
 - AI usage: an inferred route that was refused reads "spent" only for the learned window that holds its last refusal, and it becomes available again once that window rolls over, with all of its allowance and a reset one window later. A refusal in the new window spends it again; a route with no learned window keeps its spent state with no reset. The quota id of an inferred window now names the learned window (`inferred:1h`, `inferred:5h`) rather than the state, so a spent route with a known window no longer reads `inferred:exhausted`; a refusal with no learned window keeps that id.
