@@ -74,6 +74,7 @@ TESTS = (
     "test_ai_usage_aa_pull.py",
     "test_ai_usage_gate.py",
     "test_ai_usage_providers_page.py",
+    "test_free_workers_page.py",
     "test_ai_usage_free_pool.py",
     "test_ai_usage_pool_recent_jobs.py",
     "test_ai_usage_duplicate_series.py",
