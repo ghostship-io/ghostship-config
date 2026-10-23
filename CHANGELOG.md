@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.17.153] - 2026-10-23
+
+- Remove superseded engineering handoff and deployment instructions.
+
+PR #315.
+
+## [3.17.152] - 2026-10-23
+
+- Exclude non-model causes from historical quality counts and preserve explicit backfill causes.
+
+PR #314.
+
 ## [3.17.151] - 2026-10-23
 
 - Stage opt-in per-container network containment
