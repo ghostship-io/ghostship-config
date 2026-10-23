@@ -55,7 +55,7 @@ from util import now as wall_clock  # noqa: E402
 
 T3_HOME = "/srv/apps/t3code/home"
 T3_SERVER_FILE = "/run/ghostship-integrations/t3-server.json"
-T3_SESSION_FILE = f"{T3_HOME}/.t3code-container/access/session.json"
+T3_SESSION_FILE = "/run/ghostship-integrations/t3-token"
 SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
@@ -433,6 +433,7 @@ METRIC_HELP = {
         "The place a window takes in the card of its account: 1 is the "
         "session window, and a monthly window comes after a weekly one."
     ),
+    "ghostship_ai_account_window_missing": "Reported provider limits could not be read; this is not a learned window.",
     "ghostship_ai_account_window_learning": (
         "One for an account that publishes no window of its own yet."
     ),
@@ -651,9 +652,8 @@ def _resolve_name(name: str, resolver: str, timeout: float = 5.0) -> str:
 
 
 def read_session_token(path: str) -> str:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    token = data.get("token") if isinstance(data, dict) else None
-    return token if isinstance(token, str) else ""
+    """Read the current managed bearer projection, shared with the bridge."""
+    return Path(path).read_text(encoding="utf-8").strip()
 
 
 def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResult]:
@@ -678,7 +678,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             )
         ]
     try:
-        with T3Client(base_url, token, timeout=180) as client:
+        with T3Client(base_url, token, timeout=20) as client:
             return t3source.collect(client, now, catalog=catalog, context=context)
     except (T3Error, OSError) as error:
         return [

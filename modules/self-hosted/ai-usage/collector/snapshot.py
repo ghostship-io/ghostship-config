@@ -4487,13 +4487,12 @@ def account_window_samples(
     for account in sorted(set(accounts) | set(capacity)):
         windows = _kept_windows(accounts.get(account) or [])
         if not windows:
-            samples.append(
-                (
-                    "ghostship_ai_account_window_learning",
-                    {"account": account},
-                    1.0,
-                )
-            )
+            # Subscription counters are reported, never learned. A failed
+            # source read must not pretend the provider publishes no limit.
+            metric = ('ghostship_ai_account_window_missing' if account in
+                      ('claude', 'codex', 'opencode-go', 'ollama', 'grok', 'antigravity')
+                      else 'ghostship_ai_account_window_learning')
+            samples.append((metric, {'account': account}, 1.0))
             continue
         published = [(window, _scoped_quota_id(window)) for window in windows]
         siblings: dict[str, list[str]] = {}
