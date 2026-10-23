@@ -94,11 +94,12 @@ BACKFILL_FIELDS = (
 def load_identities(path: str | Path | None) -> list[dict[str, Any]]:
     """The model identities of the file, as a list of records.
 
-    The file holds an ``identities`` list, and every record names the id of
-    the model, the model itself and the routes that serve it::
+    The file holds a ``models`` map, and every key of it is the id of a
+    model, with the label and the routes that serve it::
 
-        {"identities": [{"id": "beam", "model": "beam",
-                         "routes": ["ollama/beam"]}]}
+        {"schema": "ghostship.model-identities/v1",
+         "models": {"beam": {"label": "Beam",
+                             "routes": ["ollama/beam"]}}}
 
     A file that is missing, unreadable or empty is no identity at all, and
     every route keeps its own model name.
@@ -113,15 +114,17 @@ def load_identities(path: str | Path | None) -> list[dict[str, Any]]:
 
 
 def _identity_records(document: Any) -> list[dict[str, Any]]:
-    """The identity records of a loaded document, in the order they are read."""
+    """The identity records of a loaded document, in the order they are read.
+
+    The file holds a ``models`` map, and the key of every entry of it is
+    the id of the model. A list of records is read as it is, so the
+    records of a loaded file can be read again without the file.
+    """
     raw: list[Any] = []
     if isinstance(document, Mapping):
-        entries = document.get("identities")
-        if isinstance(entries, list):
-            raw = list(entries)
-        else:
-            # The other form: the id of the identity is the key of the map.
-            for key, value in document.items():
+        models = document.get("models")
+        if isinstance(models, Mapping):
+            for key, value in models.items():
                 if not isinstance(value, Mapping):
                     continue
                 record = dict(value)
@@ -141,6 +144,7 @@ def _identity_records(document: Any) -> list[dict[str, Any]]:
         records.append(
             {
                 "id": identifier,
+                "label": str(entry.get("label") or ""),
                 "model": str(entry.get("model") or ""),
                 "routes": [
                     str(route) for route in routes if isinstance(route, str)
