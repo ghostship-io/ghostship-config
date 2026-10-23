@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.17.220] - 2026-10-23
+
+Keep healthy model reasons neutral and warnings distinct. Capacity bars show their remaining level in blue (red only when spent, grey when unavailable or not used); weekly/monthly pace stays in its coloured marker and text. Hide the AA link and date when no AA score is measured. An applicable reported quota takes precedence over an inherited account-level “no window” description on the model card.
+
+All panel IDs and selection/ranking logic are unchanged. This is the four-item presentation follow-up authorized after #372/#381; no separate review round requested for presentation-only changes.
+
+Validation: 25 focused page tests pass, including failing-first coverage for healthy text, a 76%-remaining far-behind bar, absent AA evidence, and an inherited Antigravity quota explanation. Existing short-window, unused-grey, source-health and dynamic selection checks remain green. Actual-template desktop/phone rendering has no overflow or JavaScript errors. Privacy/security and whitespace pass. Live verification follows the private runtime build repair.
+
+PR #385.
+
 ## [3.17.219] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 97935734; the lock's narHash is the `nix flake prefetch` hash of that revision.
