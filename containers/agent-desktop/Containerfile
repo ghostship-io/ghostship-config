@@ -122,4 +122,6 @@ RUN chmod 0755 \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-agent /usr/local/bin/bladebro-mcp-agent \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-personal /usr/local/bin/bladebro-mcp-personal \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-agent /usr/local/bin/bladebro-agent \
- && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-personal /usr/local/bin/bladebro-personal
+ && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-personal /usr/local/bin/bladebro-personal \
+ && if getent group docker >/dev/null; then groupdel docker; fi \
+ && ! getent group docker

@@ -48,6 +48,16 @@ def findings(root):
         }:
             continue
         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            # Only these exact image cleanup and absence checks remove a group.
+            if (
+                relative == "containers/agent-desktop/Containerfile"
+                and line.strip()
+                in {
+                    "&& if getent group docker >/dev/null; then groupdel docker; fi \\",
+                    "&& ! getent group docker",
+                }
+            ):
+                continue
             # Comments describe the prohibition; they do not install a runtime.
             code = line.split("#", 1)[0]
             negative_reads = {
@@ -98,6 +108,20 @@ class RuntimePolicy(unittest.TestCase):
                 'image = pkgs.dockerTools.buildLayeredImage {};\nimageName = "docker.io/library/alpine";\nExecStart=podman system service;'
             )
             self.assertEqual(findings(root), [])
+
+    def test_group_cleanup_exception_cannot_install_a_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "containers/agent-desktop/Containerfile"
+            source.parent.mkdir(parents=True)
+            cleanup = (
+                "&& if getent group docker >/dev/null; then groupdel docker; fi "
+                + chr(92)
+            )
+            source.write_text(cleanup + "\n&& ! getent group docker\n")
+            self.assertEqual(findings(root), [])
+            source.write_text(cleanup + " && docker run image\n")
+            self.assertTrue(findings(root))
 
 
 if __name__ == "__main__":
