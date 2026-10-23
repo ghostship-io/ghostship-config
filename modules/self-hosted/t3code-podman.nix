@@ -222,6 +222,9 @@ let
         "/etc/machine-id" = "c2bfbc68932f4e7f9b11fd7087ccbb5f\n";
         "/etc/os-release" = "ID=nixos\n";
       };
+      # NixOS compiles this alias into systemd's re-exec path. It points only
+      # at the seeded private closure, never the host's current-system tree.
+      symlinks."/run/current-system/systemd" = toString pkgs.systemd;
       directories = [
         "/tmp"
         "/var/tmp"
@@ -569,6 +572,7 @@ in
         };
         systemd.services.t3code-podman = {
           requires = [ "user@${uid}.service" ];
+          bindsTo = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
           serviceConfig = {
             # The relay owns no listener: systemd hands over the socket on
@@ -609,6 +613,7 @@ in
         };
         systemd.services.t3code-podman-ports = {
           requires = [ "user@${uid}.service" ];
+          bindsTo = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
           serviceConfig = {
             ExecStart = "${cfg.bridgePackage}/bin/t3code-podman-bridge gateway";
