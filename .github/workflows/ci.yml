@@ -3,14 +3,16 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 5 * * *'
   workflow_dispatch:
 permissions:
   contents: read
-# A pull request's newer push supersedes its older run. Each commit on main
-# runs to completion (its own group), so merges never cancel each other.
+# Fast PR/main checks never queue behind a repository integration concurrency
+# group. Slow coverage runs nightly/manual only, one job per workflow.
 concurrency:
-  group: fleet-ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: fleet-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || 'integration' }}
+  cancel-in-progress: true
 jobs:
   check:
     # Neither private-source environment asks for a reviewer. Pull requests use
@@ -19,7 +21,7 @@ jobs:
     # to. A pull request from a fork gets no environment secrets at all.
     environment: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'private-source-main' || 'private-source-ci' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 4 || 35 }}
+    timeout-minutes: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 4 || 35 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -38,17 +40,17 @@ jobs:
           GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
         run: python3 scripts/ci-private-inputs.py
       - name: Run unit tests
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: nix develop .#ci --no-write-lock-file -c python3 scripts/check-unit.py
       - name: Validate container development workflow
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           # The agent pin guard compares the pinned agent revision with the base
           # branch's, which needs the read-only agent key.
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
         run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Evaluate hosts and run regression tests
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
       - name: Check workflows and backup script
         run: |
