@@ -80,6 +80,24 @@ class AuthCutoverTests(unittest.TestCase):
         self.assertEqual(self.manifest.stat().st_mode & 0o777, 0o600)
         self.assertNotIn('synthetic-access', self.manifest.read_text())
 
+    def test_task_uses_published_runtime_when_image_path_has_no_agent(self):
+        source, free = Side(), Side(free=True)
+        call = free.call
+
+        def published_only(command, **kwargs):
+            # Stable images contain /bin tools but agent is hot-published
+            # separately. A bare command fails before the pool can run.
+            if command[0] == 'agent':
+                return ''
+            if command[0] != '/run/ghostship-runtime/current/bin/agent':
+                self.fail('task did not use the managed worker runtime')
+            return call(command, **kwargs)
+
+        free.call = published_only
+        receipt = auth.migrate(source, free, self.manifest, PLAN)
+        self.assertEqual(receipt['zen_worker'], 'answered')
+        self.assertEqual(free.tasks, 1)
+
     def test_an_unexpected_free_login_is_not_overwritten(self):
         source, free = Side(), Side(free=True)
         free.rows = [record('other', True)]
