@@ -1,12 +1,20 @@
 # Changelog
 
+## [3.17.141] - 2026-10-23
+
+- ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, a non-finite parsed duration or reset epoch, an integer too large for a float, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, except that the observation's limit now keeps its reported `scope="model"` and a diagnostic value too large to render is skipped instead of crashing the run. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
+
+## [3.17.140] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `3f108af0` (agent 0.43.55). It adds the read-only `containers resources` host operation for CPU, memory against the declared limit, PIDs and host headroom, with 1 h/24 h peaks and a `stale` outcome when the container snapshot stops writing or a container restarted after it; the broker needs no new pipeline and no `metrics` section because it reads the counters the SIEM already collects. The bump also carries #152 (deploy slot), #157 (routing and worker policy), #139 (session handoff) and #155 (brief lesson), and #158, which retires the deployment freezes so that an owner deploy request is what deploys - the reason this pin goes out now.
+
 ## [3.17.139] - 2026-10-23
 
-- ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, and the observation's limit now keeps its reported `scope="model"`. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
+- ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
 
 ## [3.17.138] - 2026-10-23
 
-- ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
+- Allow the intentional SIEM URL credential fixture through the shared secret scan with a detector, value digest and path fingerprint in `.ghostship-secrets-ignore`. The exemption preserves the fixture and assertions, permits only this finding, and leaves privacy and commit identity checks active.
 
 ## [3.17.137] - 2026-10-23
 
