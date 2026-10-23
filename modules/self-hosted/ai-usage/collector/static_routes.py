@@ -15,6 +15,7 @@ The contract::
     ghostship_ai_static_route_info{row,role,provider,model,display_name,used_for} 1
     ghostship_ai_static_route_remaining_ratio{row}
     ghostship_ai_static_route_paced_availability{row}
+    ghostship_ai_static_route_pace_state{row,state} 1
     ghostship_ai_static_route_reset_timestamp_seconds{row}
     ghostship_ai_static_route_policy_ok 1 | 0
 
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import t3source
+import value_policy
 from metrics import ExactLabel, Sample, label_value
 from util import iso_to_epoch
 
@@ -258,8 +260,9 @@ def samples(
 
     A row's capacity is read from the candidate of the same route: the share
     left, the Paced Availability, and the reset of the binding window. A
-    route the snapshot does not carry keeps its info row and has no capacity
-    series: an unknown capacity is never published as zero. The display name
+    route the snapshot does not carry keeps its info row, has no capacity
+    reading, and says its pace is unknown: an unknown capacity is never
+    published as zero. The display name
     of a row is the name the collector already published for the model, and
     the row falls back to the model id. The name is found by the id of the
     route, and by the form of that id the exposition format allows, since a
@@ -292,17 +295,37 @@ def samples(
             )
         )
         candidate = candidates.get(key)
+        capacity: Mapping[str, Any] = {}
+        if candidate is not None:
+            found = candidate.get("capacity")
+            if isinstance(found, Mapping):
+                capacity = found
+        remaining = _number(capacity.get("remaining_ratio"))
+        pace = _number(capacity.get("pace_delta"))
+        # The line of a row is the share it has left minus its Paced
+        # Availability, and the state is the value policy's band of the two.
+        # A row with no share, or with no line to compare it with, is
+        # unknown: the module never draws a band of its own. One series is
+        # published per row, so a reader always has a state to colour.
+        expected_left = (
+            remaining - pace if remaining is not None and pace is not None else None
+        )
+        published.append(
+            (
+                "ghostship_ai_static_route_pace_state",
+                {
+                    "row": number,
+                    "state": value_policy.pace_state(remaining, expected_left),
+                },
+                1.0,
+            )
+        )
         if candidate is None:
             continue
-        capacity = candidate.get("capacity")
-        if not isinstance(capacity, Mapping):
-            capacity = {}
-        remaining = _number(capacity.get("remaining_ratio"))
         if remaining is not None:
             published.append(
                 ("ghostship_ai_static_route_remaining_ratio", {"row": number}, remaining)
             )
-        pace = _number(capacity.get("pace_delta"))
         if pace is not None:
             published.append(
                 (
