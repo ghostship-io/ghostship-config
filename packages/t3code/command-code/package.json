@@ -1,0 +1,6 @@
+{
+  "name": "t3-command-code-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": { "command-code": "1.88.0" }
+}
