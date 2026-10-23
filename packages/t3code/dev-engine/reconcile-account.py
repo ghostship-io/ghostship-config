@@ -65,7 +65,8 @@ def main():
             grp.getgrnam(name)
         except KeyError:
             continue
-        subprocess.run([args.groupdel, "--", name], check=True)
+        # The canonical group keeps this GID even while a stale name is removed.
+        subprocess.run([args.groupdel, "--force", "--", name], check=True)
     remaining = retired_identities(
         pwd.getpwall(), grp.getgrall(), args.name, args.uid, args.home
     )
