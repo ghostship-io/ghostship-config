@@ -669,7 +669,10 @@ def _access_record(
     from the pool runs as an inference job.
     """
     pair = (provider, model)
-    if pair in promo_models:
+    if provider == 'opencode-go':
+        kind = ACCESS_PROVIDER_PAID
+        basis = "the OpenCode Go subscription"
+    elif pair in promo_models:
         kind = ACCESS_PROVIDER_PROMO
         basis = "a paid provider route that costs nothing right now"
     elif pair in free_models:

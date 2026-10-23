@@ -281,6 +281,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     orchestrator_ids = {(entry.get("instance_id"), entry.get("model")) for entry in orchestrator}
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
+    free_selected: dict[str, str] = {}
     trust_cache = {}
     role_exclusions = list(snapshot.get("selection_exclusions") or [])
     excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
@@ -290,7 +291,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
         instance, model = native.get("provider_instance_id"), native.get("model_id")
-        mapped = bool(native.get("mapped") and instance and model)
+        billing = (source.get('access') or {}).get('billing') or 'unknown'
+        # Free inference choices are published independently of native T3
+        # identities. They never become T3 favorites or a new-thread default.
+        mapped = bool(native.get("mapped") and instance and model and billing not in ('free', 'promotion'))
         descriptors = native.get("options") or []
         effort = effort_options(descriptors) if mapped else []
         options = native_options(descriptors) if mapped else []
@@ -341,7 +345,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "selection_eligible": build_allowed and cost_allowed,
             "selection_reason": ('configured worker build: ' + required_build if not build_allowed else
                                  '' if cost_allowed else 'worker price exceeds reference or is unknown'),
-            "billing": (source.get("access") or {}).get("billing") or "unknown",
+            "billing": billing,
             "quality_basis": measured['basis'] if measured is not None else source.get("quality_basis"),
             "quality_n": measured['n'] if measured is not None else source.get("quality_n"),
             "quality_s": measured['passed'] if measured is not None else source.get("quality_s"),
@@ -417,6 +421,9 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 row['picker_pool_position'] = native_pools[pool_id]
             if row['available'] and row['selection_eligible'] and group['selected'][category] is None:
                 group['selected'][category] = row['native']
+            if (category == 'worker' and row['available'] and row['selection_eligible']
+                    and row['billing'] in ('free', 'promotion')):
+                free_selected.setdefault(row['provider'], row['key'])
             if row["available"] and row["selection_eligible"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
     # Quality chooses the provider's model. Capacity orders those provider
@@ -428,7 +435,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             for provider, group in providers.items()}
         def lane_key(row):
             displayed = displayed_choices[row['provider']]
-            picked = row['native'] is not None and row['native'] == displayed
+            picked = ((row['native'] is not None and row['native'] == displayed)
+                      or (category == 'worker' and row['key'] == free_selected.get(row['provider'])))
             capacity = row['remaining_ratio']
             return (not picked, not row['available'], TRUST.get(row['trust_level'],3),
                     row.get('ranking_pace_state', row['pace_state']) == 'far_behind', -(capacity if capacity is not None else -1),
@@ -440,6 +448,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "partial": bool(snapshot.get("partial", False)),
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
             "providers": providers, "worker_builds": dict(worker_builds),
+            "free_selected": free_selected,
             "role_exclusions": role_exclusions, **categories,
             "default_worker": next((row["native"] for row in categories["worker"]
                                     if row["available"] and row["picker_eligible"] and row["selection_eligible"]), None)}
@@ -467,10 +476,12 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'effort': str(effort.get('value') or ''),
                       'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown'))}
             numbers = {'info': 1.0, 'position': row['position'],
-                       'selected': float(row.get('native') is not None and row.get('native') == (
+                       'selected': float((row['key'] == (selection.get('free_selected') or {}).get(row['provider'])
+                                           if category == 'worker' and row.get('billing') in ('free', 'promotion') else
+                                           row.get('native') is not None and row.get('native') == (
                            (((selection.get('providers') or {}).get(row['provider']) or {}).get('selected') or {}).get(category)
                            or next((item['native'] for item in selection.get(category) or []
-                               if item['provider'] == row['provider'] and item['picker_eligible'] and item['selection_eligible']), None))),
+                               if item['provider'] == row['provider'] and item['picker_eligible'] and item['selection_eligible']), None)))),
                        'provider_position': row.get('picker_provider_position', row.get('provider_position')),
                        'pool_position': row.get('picker_pool_position', row.get('pool_position')),
                        'quality': row.get('quality_score'),
@@ -480,6 +491,9 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                        'quality_accepted': row.get('quality_s'),
                        'remaining_ratio': limit.get('remaining_ratio'),
                        'pace_delta': limit.get('pace_delta')}
+            guard = row.get('worker_pool_guard') or {}
+            numbers['guard_remaining_ratio'] = guard.get('remaining_ratio')
+            numbers['guard_expected_remaining_ratio'] = guard.get('expected_remaining_ratio')
             if limit.get('reset_at'):
                 try:
                     numbers['reset_timestamp_seconds'] = datetime.fromisoformat(

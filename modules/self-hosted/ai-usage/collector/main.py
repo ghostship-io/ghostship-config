@@ -534,6 +534,8 @@ for field, description in {
     'remaining_ratio': 'Remaining share of the displayed long or quota limiting window.',
     'pace_delta': 'Weekly or monthly limiting window pace in percentage points.',
     'reset_timestamp_seconds': 'Effective limiting-window reset; reset_source identifies custom resets.',
+    'guard_remaining_ratio': 'Shared weekly remaining share read by the worker pool guard.',
+    'guard_expected_remaining_ratio': 'Share the shared weekly window should have left at this point of its period.',
 }.items():
     METRIC_HELP['ghostship_ai_picker_model_' + field] = description
 
@@ -541,6 +543,10 @@ for field in ('info', *model_quality.FIELDS):
     METRIC_HELP['ghostship_ai_quality_' + field] = 'Canonical AA and verified observed model quality: ' + field + '.'
 
 METRIC_HELP['ghostship_ai_announced_reset_info'] = 'Recorded public reset announcement, including unverified relays awaiting confirmation.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_timestamp_seconds'] = 'Start of the UTC-offset day of one T3 daily usage bucket, as T3 reports it.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_tokens'] = 'Tokens of one T3 daily usage bucket by kind; total is T3 usage-page tokens (reasoning is part of output).'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_cost_usd'] = 'T3 costUsd of one daily usage bucket; provider_reported or api_equivalent, never locally repriced.'
+METRIC_HELP['ghostship_ai_t3_usage_bucket_unpriced_records'] = 'Records of one T3 daily usage bucket that T3 could not price.'
 GAUGE_METRICS = tuple(METRIC_HELP)
 
 # How many dropped series a run names. A run that drops a handful of series
@@ -787,17 +793,15 @@ def free_model_samples(
 # never blocks a route.
 MAX_COOLDOWN_SECONDS = 366 * 24 * 3600.0
 
-# The providers whose zero-price listing is a free route of its own. The
-# OpenRouter free models and the Go subscription's free models cost nothing
-# by construction, so they are dedicated free routes and they may hold the
-# free tier.
-FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
+# OpenCode Zen and OpenRouter publish dedicated zero-price routes. Go is
+# a paid subscription, even when its catalog also lists zero-price models.
+FREE_ROUTE_PROVIDERS = ("opencode", "openrouter")
 
 # The providers whose zero-price listing is a promotional route of a paid
 # account. It costs nothing right now, it is not a free route of its own,
 # and it competes in bulk. A model that is in both sets is a promotional
 # route: the promotional zero price is checked first.
-PROMO_PROVIDERS = ("opencode", "ollama")
+PROMO_PROVIDERS = ("ollama",)
 
 
 def _published_unlimited_routes(
