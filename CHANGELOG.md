@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.113] - 2026-10-23
+
+- ai-usage: the capacity cards are sized for the live set and read the age of a reading. The panel took a fixed height from an eight-card fixture, so a phone clipped about 576 px behind an inner scroll while a desktop left about 800 px empty. The review fixture now holds twelve cards with twenty-two windows and seventeen learning accounts, the live set with the headroom of the next collection, labelled with the scope of a window ("Session · Claude & GPT", "Weekly · Claude & GPT", "Quota · Gemini", "Weekly · Fable"). Under 520 px a row of a card is the label, the bar and the share on one line and the pace with the reset under it, with the reset clock dropped and nothing wrapped, and the accounts that are learning are one wrapped line instead of a grid of chips. The share left keeps one decimal, a reset that is due reads "resets now", a window the collector marks as rolling reads "rolling 1m" with no reset, no tick and no pace, the header of a card dates its oldest reading ("read 2m ago"), the repeated inner heading is gone, and the account "opencode" is read as OpenCode Zen. The panel takes the taller of the two measured readings in whole 37 px rows: 1713 px at 390 px (47 rows) and 577 px at 1600 px.
+
 ## [3.17.112] - 2026-10-23
 
 - AI usage: a route the T3 instance does not offer says why it is unusable. The routing snapshot rebuilt `availability.reason` from the quota windows alone, so an unavailable route whose headroom was known read `available: false` with an empty reason; the live Go free routes `cat-jam-free` and `step-5-preview-free` were the example. The snapshot now reads the ranking's own judgement: the reason reads "not offered by the T3 instance", and a catalog entry marked deprecated appends "(deprecated in the catalog)". The availability state, `available`, `quota_state` and the capacity are unchanged, and so is every other reason.

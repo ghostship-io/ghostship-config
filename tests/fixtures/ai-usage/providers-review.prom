@@ -304,86 +304,142 @@ ghostship_ai_provider_coverage{provider="azure",source="t3"} 1
 ghostship_ai_provider_coverage{provider="cohere",source="t3"} 1
 
 # --- Provider capacity ------------------------------------------------------
-# The account windows of the live set: seven accounts hold fourteen windows
-# between them, one invented free account holds a window that was inferred
-# from a limit failure, and seventeen accounts publish no window of their own
-# yet, so they are learning.
+# The account windows of the live set: twelve accounts hold twenty-two windows
+# between them, two of the windows were inferred from a limit failure (one of
+# them rolls), and seventeen accounts publish no window of their own yet, so
+# they are learning. The set is the live set with the headroom of the next
+# collection, so the height of the panel is sized for the cards it will hold.
 #
-# The resets are read at 2026-10-22T21:01:17Z, the moment the worked cases
+# The labels carry the scope of the window, as the collector publishes it
+# since the account record keeps the scope of the ranking: 'Session · Claude &
+# GPT', 'Weekly · Claude & GPT', 'Quota · Gemini' and 'Weekly · Fable'. The
+# Antigravity account holds four rows.
+#
+# The values are read at 2026-10-22T21:01:17Z, the moment the worked cases
 # are computed from. A window that publishes no reset of its own says so by
-# publishing none: the weekly window of Ollama and the quota window of
-# Antigravity are two of them.
-ghostship_ai_account_window_remaining_ratio{account="claude",kind="session",quota_id="five_hour",label="Session",evidence="provider_reported"} 0.67
-ghostship_ai_account_window_expected_remaining_ratio{account="claude",kind="session",quota_id="five_hour",label="Session",evidence="provider_reported"} 0.429
-ghostship_ai_account_window_reset_timestamp_seconds{account="claude",kind="session",quota_id="five_hour",label="Session",evidence="provider_reported"} 1792710599
-ghostship_ai_account_window_order{account="claude",kind="session",quota_id="five_hour",label="Session",evidence="provider_reported"} 1
-ghostship_ai_account_window_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day",label="Weekly",evidence="provider_reported"} 0.74
-ghostship_ai_account_window_expected_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day",label="Weekly",evidence="provider_reported"} 0.881
-ghostship_ai_account_window_reset_timestamp_seconds{account="claude",kind="weekly",quota_id="seven_day",label="Weekly",evidence="provider_reported"} 1793235706
-ghostship_ai_account_window_order{account="claude",kind="weekly",quota_id="seven_day",label="Weekly",evidence="provider_reported"} 3
+# publishing none: the weekly window of Ollama, the quota windows of
+# Antigravity and the inferred window of Example Free are four of them. The
+# check time is the moment the provider reported the window, and the age of a
+# card is read from the oldest window it holds.
+ghostship_ai_account_window_remaining_ratio{account="claude",kind="session",quota_id="five_hour",label="Session · Claude & GPT",evidence="provider_reported"} 0.67
+ghostship_ai_account_window_expected_remaining_ratio{account="claude",kind="session",quota_id="five_hour",label="Session · Claude & GPT",evidence="provider_reported"} 0.429
+ghostship_ai_account_window_reset_timestamp_seconds{account="claude",kind="session",quota_id="five_hour",label="Session · Claude & GPT",evidence="provider_reported"} 1792710599
+ghostship_ai_account_window_check_timestamp_seconds{account="claude",kind="session",quota_id="five_hour",label="Session · Claude & GPT",evidence="provider_reported"} 1792702782
+ghostship_ai_account_window_order{account="claude",kind="session",quota_id="five_hour",label="Session · Claude & GPT",evidence="provider_reported"} 1
+ghostship_ai_account_window_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day",label="Weekly · Claude & GPT",evidence="provider_reported"} 0.74
+ghostship_ai_account_window_expected_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day",label="Weekly · Claude & GPT",evidence="provider_reported"} 0.881
+ghostship_ai_account_window_reset_timestamp_seconds{account="claude",kind="weekly",quota_id="seven_day",label="Weekly · Claude & GPT",evidence="provider_reported"} 1793235706
+ghostship_ai_account_window_check_timestamp_seconds{account="claude",kind="weekly",quota_id="seven_day",label="Weekly · Claude & GPT",evidence="provider_reported"} 1792702782
+ghostship_ai_account_window_order{account="claude",kind="weekly",quota_id="seven_day",label="Weekly · Claude & GPT",evidence="provider_reported"} 3
 ghostship_ai_account_window_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day_fable",label="Weekly · Fable",evidence="provider_reported"} 1.0
 ghostship_ai_account_window_expected_remaining_ratio{account="claude",kind="weekly",quota_id="seven_day_fable",label="Weekly · Fable",evidence="provider_reported"} 0.881
 ghostship_ai_account_window_reset_timestamp_seconds{account="claude",kind="weekly",quota_id="seven_day_fable",label="Weekly · Fable",evidence="provider_reported"} 1793235706
+ghostship_ai_account_window_check_timestamp_seconds{account="claude",kind="weekly",quota_id="seven_day_fable",label="Weekly · Fable",evidence="provider_reported"} 1792702782
 ghostship_ai_account_window_order{account="claude",kind="weekly",quota_id="seven_day_fable",label="Weekly · Fable",evidence="provider_reported"} 3
-ghostship_ai_account_window_remaining_ratio{account="codex",kind="weekly",quota_id="primary",label="Weekly",evidence="provider_reported"} 0.98
-ghostship_ai_account_window_expected_remaining_ratio{account="codex",kind="weekly",quota_id="primary",label="Weekly",evidence="provider_reported"} 0.966
-ghostship_ai_account_window_reset_timestamp_seconds{account="codex",kind="weekly",quota_id="primary",label="Weekly",evidence="provider_reported"} 1793287114
-ghostship_ai_account_window_order{account="codex",kind="weekly",quota_id="primary",label="Weekly",evidence="provider_reported"} 3
-ghostship_ai_account_window_remaining_ratio{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 0.9994
+ghostship_ai_account_window_remaining_ratio{account="codex",kind="session",quota_id="primary_session",label="Session · GPT",evidence="provider_reported"} 0.91
+ghostship_ai_account_window_expected_remaining_ratio{account="codex",kind="session",quota_id="primary_session",label="Session · GPT",evidence="provider_reported"} 0.9
+ghostship_ai_account_window_reset_timestamp_seconds{account="codex",kind="session",quota_id="primary_session",label="Session · GPT",evidence="provider_reported"} 1792720000
+ghostship_ai_account_window_check_timestamp_seconds{account="codex",kind="session",quota_id="primary_session",label="Session · GPT",evidence="provider_reported"} 1792702637
+ghostship_ai_account_window_order{account="codex",kind="session",quota_id="primary_session",label="Session · GPT",evidence="provider_reported"} 1
+ghostship_ai_account_window_remaining_ratio{account="codex",kind="weekly",quota_id="primary",label="Weekly · GPT",evidence="provider_reported"} 0.98
+ghostship_ai_account_window_expected_remaining_ratio{account="codex",kind="weekly",quota_id="primary",label="Weekly · GPT",evidence="provider_reported"} 0.966
+ghostship_ai_account_window_reset_timestamp_seconds{account="codex",kind="weekly",quota_id="primary",label="Weekly · GPT",evidence="provider_reported"} 1793287114
+ghostship_ai_account_window_check_timestamp_seconds{account="codex",kind="weekly",quota_id="primary",label="Weekly · GPT",evidence="provider_reported"} 1792702637
+ghostship_ai_account_window_order{account="codex",kind="weekly",quota_id="primary",label="Weekly · GPT",evidence="provider_reported"} 3
+ghostship_ai_account_window_remaining_ratio{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 0.9585
 ghostship_ai_account_window_expected_remaining_ratio{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 0.994
 ghostship_ai_account_window_reset_timestamp_seconds{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 1792720769
+ghostship_ai_account_window_check_timestamp_seconds{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 1792702757
 ghostship_ai_account_window_order{account="ollama",kind="session",quota_id="session",label="Session",evidence="provider_reported"} 1
-ghostship_ai_account_window_remaining_ratio{account="ollama",kind="weekly",quota_id="weekly",label="Weekly",evidence="provider_reported"} 0.4134
+ghostship_ai_account_window_remaining_ratio{account="ollama",kind="weekly",quota_id="weekly",label="Weekly",evidence="provider_reported"} 0.3948
 ghostship_ai_account_window_expected_remaining_ratio{account="ollama",kind="weekly",quota_id="weekly",label="Weekly",evidence="provider_reported"} 0.4463
+ghostship_ai_account_window_check_timestamp_seconds{account="ollama",kind="weekly",quota_id="weekly",label="Weekly",evidence="provider_reported"} 1792702757
 ghostship_ai_account_window_order{account="ollama",kind="weekly",quota_id="weekly",label="Weekly",evidence="provider_reported"} 3
 ghostship_ai_account_window_remaining_ratio{account="opencode-go",kind="session",quota_id="go_rolling",label="Session",evidence="provider_reported"} 1.0
 ghostship_ai_account_window_expected_remaining_ratio{account="opencode-go",kind="session",quota_id="go_rolling",label="Session",evidence="provider_reported"} 1.0
 ghostship_ai_account_window_reset_timestamp_seconds{account="opencode-go",kind="session",quota_id="go_rolling",label="Session",evidence="provider_reported"} 1792720877
+ghostship_ai_account_window_check_timestamp_seconds{account="opencode-go",kind="session",quota_id="go_rolling",label="Session",evidence="provider_reported"} 1792702802
 ghostship_ai_account_window_order{account="opencode-go",kind="session",quota_id="go_rolling",label="Session",evidence="provider_reported"} 1
 ghostship_ai_account_window_remaining_ratio{account="opencode-go",kind="weekly",quota_id="go_weekly",label="Weekly",evidence="provider_reported"} 1.0
 ghostship_ai_account_window_expected_remaining_ratio{account="opencode-go",kind="weekly",quota_id="go_weekly",label="Weekly",evidence="provider_reported"} 0.434
 ghostship_ai_account_window_reset_timestamp_seconds{account="opencode-go",kind="weekly",quota_id="go_weekly",label="Weekly",evidence="provider_reported"} 1792965360
+ghostship_ai_account_window_check_timestamp_seconds{account="opencode-go",kind="weekly",quota_id="go_weekly",label="Weekly",evidence="provider_reported"} 1792702802
 ghostship_ai_account_window_order{account="opencode-go",kind="weekly",quota_id="go_weekly",label="Weekly",evidence="provider_reported"} 3
 ghostship_ai_account_window_remaining_ratio{account="opencode-go",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 0.0
 ghostship_ai_account_window_expected_remaining_ratio{account="opencode-go",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 0.266
 ghostship_ai_account_window_reset_timestamp_seconds{account="opencode-go",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 1793399640
+ghostship_ai_account_window_check_timestamp_seconds{account="opencode-go",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 1792702802
 ghostship_ai_account_window_order{account="opencode-go",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 4
-ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="session",quota_id="3p-5h",label="Session",evidence="provider_reported"} 1.0
-ghostship_ai_account_window_expected_remaining_ratio{account="antigravity",kind="session",quota_id="3p-5h",label="Session",evidence="provider_reported"} 1.0
-ghostship_ai_account_window_reset_timestamp_seconds{account="antigravity",kind="session",quota_id="3p-5h",label="Session",evidence="provider_reported"} 1792720877
-ghostship_ai_account_window_order{account="antigravity",kind="session",quota_id="3p-5h",label="Session",evidence="provider_reported"} 1
-ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly",evidence="provider_reported"} 1.0
-ghostship_ai_account_window_expected_remaining_ratio{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly",evidence="provider_reported"} 1.0
-ghostship_ai_account_window_reset_timestamp_seconds{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly",evidence="provider_reported"} 1793307677
-ghostship_ai_account_window_order{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly",evidence="provider_reported"} 3
-ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="quota",quota_id="quotaInfo",label="Quota",evidence="provider_reported"} 1.0
-ghostship_ai_account_window_order{account="antigravity",kind="quota",quota_id="quotaInfo",label="Quota",evidence="provider_reported"} 5
+ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="session",quota_id="3p-5h",label="Session · Gemini",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_expected_remaining_ratio{account="antigravity",kind="session",quota_id="3p-5h",label="Session · Gemini",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_reset_timestamp_seconds{account="antigravity",kind="session",quota_id="3p-5h",label="Session · Gemini",evidence="provider_reported"} 1792720877
+ghostship_ai_account_window_check_timestamp_seconds{account="antigravity",kind="session",quota_id="3p-5h",label="Session · Gemini",evidence="provider_reported"} 1792702577
+ghostship_ai_account_window_order{account="antigravity",kind="session",quota_id="3p-5h",label="Session · Gemini",evidence="provider_reported"} 1
+ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly · Gemini",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_expected_remaining_ratio{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly · Gemini",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_reset_timestamp_seconds{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly · Gemini",evidence="provider_reported"} 1793307677
+ghostship_ai_account_window_check_timestamp_seconds{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly · Gemini",evidence="provider_reported"} 1792702577
+ghostship_ai_account_window_order{account="antigravity",kind="weekly",quota_id="3p-weekly",label="Weekly · Gemini",evidence="provider_reported"} 3
+ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="quota",quota_id="quotaInfo",label="Quota · Gemini",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_check_timestamp_seconds{account="antigravity",kind="quota",quota_id="quotaInfo",label="Quota · Gemini",evidence="provider_reported"} 1792702577
+ghostship_ai_account_window_order{account="antigravity",kind="quota",quota_id="quotaInfo",label="Quota · Gemini",evidence="provider_reported"} 5
+ghostship_ai_account_window_remaining_ratio{account="antigravity",kind="quota",quota_id="quota-claude",label="Quota · Claude & GPT",evidence="provider_reported"} 1.0
+ghostship_ai_account_window_check_timestamp_seconds{account="antigravity",kind="quota",quota_id="quota-claude",label="Quota · Claude & GPT",evidence="provider_reported"} 1792702577
+ghostship_ai_account_window_order{account="antigravity",kind="quota",quota_id="quota-claude",label="Quota · Claude & GPT",evidence="provider_reported"} 6
 ghostship_ai_account_window_remaining_ratio{account="grok",kind="weekly",quota_id="subscription",label="Weekly",evidence="provider_reported"} 0.0
 ghostship_ai_account_window_expected_remaining_ratio{account="grok",kind="weekly",quota_id="subscription",label="Weekly",evidence="provider_reported"} 0.611
 ghostship_ai_account_window_reset_timestamp_seconds{account="grok",kind="weekly",quota_id="subscription",label="Weekly",evidence="provider_reported"} 1793072410
+ghostship_ai_account_window_check_timestamp_seconds{account="grok",kind="weekly",quota_id="subscription",label="Weekly",evidence="provider_reported"} 1792702277
 ghostship_ai_account_window_order{account="grok",kind="weekly",quota_id="subscription",label="Weekly",evidence="provider_reported"} 3
 ghostship_ai_account_window_remaining_ratio{account="openrouter",kind="daily",quota_id="free-models-per-day",label="Daily",evidence="provider_reported"} 0.0
 ghostship_ai_account_window_expected_remaining_ratio{account="openrouter",kind="daily",quota_id="free-models-per-day",label="Daily",evidence="provider_reported"} 0.04
 ghostship_ai_account_window_reset_timestamp_seconds{account="openrouter",kind="daily",quota_id="free-models-per-day",label="Daily",evidence="provider_reported"} 1792706333
+ghostship_ai_account_window_check_timestamp_seconds{account="openrouter",kind="daily",quota_id="free-models-per-day",label="Daily",evidence="provider_reported"} 1792702832
 ghostship_ai_account_window_order{account="openrouter",kind="daily",quota_id="free-models-per-day",label="Daily",evidence="provider_reported"} 2
+ghostship_ai_account_window_remaining_ratio{account="opencode",kind="inferred",quota_id="inferred:1m",label="Inferred · 1m",evidence="inferred"} 1.0
+ghostship_ai_account_window_expected_remaining_ratio{account="opencode",kind="inferred",quota_id="inferred:1m",label="Inferred · 1m",evidence="inferred"} 0.5
+ghostship_ai_account_window_check_timestamp_seconds{account="opencode",kind="inferred",quota_id="inferred:1m",label="Inferred · 1m",evidence="inferred"} 1792702847
+ghostship_ai_account_window_rolling{account="opencode",kind="inferred",quota_id="inferred:1m",label="Inferred · 1m",evidence="inferred"} 1
+ghostship_ai_account_window_order{account="opencode",kind="inferred",quota_id="inferred:1m",label="Inferred · 1m",evidence="inferred"} 8
+ghostship_ai_account_window_remaining_ratio{account="opencode",kind="inferred",quota_id="inferred:1h",label="Inferred · 1h",evidence="inferred"} 0.34
+ghostship_ai_account_window_expected_remaining_ratio{account="opencode",kind="inferred",quota_id="inferred:1h",label="Inferred · 1h",evidence="inferred"} 0.34
+ghostship_ai_account_window_reset_timestamp_seconds{account="opencode",kind="inferred",quota_id="inferred:1h",label="Inferred · 1h",evidence="inferred"} 1792702817
+ghostship_ai_account_window_check_timestamp_seconds{account="opencode",kind="inferred",quota_id="inferred:1h",label="Inferred · 1h",evidence="inferred"} 1792702847
+ghostship_ai_account_window_order{account="opencode",kind="inferred",quota_id="inferred:1h",label="Inferred · 1h",evidence="inferred"} 9
+ghostship_ai_account_window_remaining_ratio{account="requesty",kind="inferred",quota_id="inferred:5h",label="Inferred · Exhausted",evidence="inferred"} 0.0
+ghostship_ai_account_window_expected_remaining_ratio{account="requesty",kind="inferred",quota_id="inferred:5h",label="Inferred · Exhausted",evidence="inferred"} 0.02
+ghostship_ai_account_window_reset_timestamp_seconds{account="requesty",kind="inferred",quota_id="inferred:5h",label="Inferred · Exhausted",evidence="inferred"} 1792712777
+ghostship_ai_account_window_check_timestamp_seconds{account="requesty",kind="inferred",quota_id="inferred:5h",label="Inferred · Exhausted",evidence="inferred"} 1792702847
+ghostship_ai_account_window_order{account="requesty",kind="inferred",quota_id="inferred:5h",label="Inferred · Exhausted",evidence="inferred"} 8
+ghostship_ai_account_window_remaining_ratio{account="google",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 0.97
+ghostship_ai_account_window_expected_remaining_ratio{account="google",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 0.81
+ghostship_ai_account_window_reset_timestamp_seconds{account="google",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 1792710000
+ghostship_ai_account_window_check_timestamp_seconds{account="google",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 1792702727
+ghostship_ai_account_window_order{account="google",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 8
 ghostship_ai_account_window_remaining_ratio{account="example-free",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 0.4
 ghostship_ai_account_window_expected_remaining_ratio{account="example-free",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 0.55
 ghostship_ai_account_window_reset_timestamp_seconds{account="example-free",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 1792712777
+ghostship_ai_account_window_check_timestamp_seconds{account="example-free",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 1792702667
 ghostship_ai_account_window_order{account="example-free",kind="inferred",quota_id="inferred:5h",label="Inferred · 5h",evidence="inferred"} 8
+ghostship_ai_account_window_remaining_ratio{account="cursor",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 0.5
+ghostship_ai_account_window_expected_remaining_ratio{account="cursor",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 0.5
+ghostship_ai_account_window_reset_timestamp_seconds{account="cursor",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 1793399640
+ghostship_ai_account_window_check_timestamp_seconds{account="cursor",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 1792702697
+ghostship_ai_account_window_order{account="cursor",kind="monthly",quota_id="monthly",label="Monthly",evidence="provider_reported"} 4
 ghostship_ai_account_window_learning{account="cloudflare-workers-ai"} 1
 ghostship_ai_account_window_learning{account="cohere"} 1
-ghostship_ai_account_window_learning{account="google"} 1
+ghostship_ai_account_window_learning{account="deepseek"} 1
 ghostship_ai_account_window_learning{account="groq"} 1
 ghostship_ai_account_window_learning{account="inception"} 1
 ghostship_ai_account_window_learning{account="kilo"} 1
 ghostship_ai_account_window_learning{account="kilo-keyed"} 1
 ghostship_ai_account_window_learning{account="mistral"} 1
+ghostship_ai_account_window_learning{account="moonshot"} 1
 ghostship_ai_account_window_learning{account="nvidia"} 1
 ghostship_ai_account_window_learning{account="orcarouter"} 1
 ghostship_ai_account_window_learning{account="ovh"} 1
 ghostship_ai_account_window_learning{account="pi"} 1
 ghostship_ai_account_window_learning{account="poolside"} 1
-ghostship_ai_account_window_learning{account="requesty"} 1
 ghostship_ai_account_window_learning{account="upstage"} 1
 ghostship_ai_account_window_learning{account="vercel"} 1
 ghostship_ai_account_window_learning{account="zai"} 1
