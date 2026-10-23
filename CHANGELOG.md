@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.124] - 2026-10-23
+## [3.17.125] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
+
+## [3.17.124] - 2026-10-23
+
+- ai-usage: the Free group of Model selection lists only the providers that hold an eligible free model. A provider whose `ghostship_ai_free_provider_selection_info` reads basis `none` is not a row any more, and the "no eligible free model" sentence is gone with it: live on generation 412 the eight providers Cohere, Mistral, OpenCode Zen, Orcarouter, Poolside, Requesty, Vercel and Zai stopped taking a row, and they come back by themselves once `routing.json` gives them a free-tier winner. The filter is the panel's own; the collector keeps publishing those rows, which the capacity cards' "Free models" line and the other readers of the free selection still read. Rows that are learning their window and rows with a published, reported or inferred share stay as they were. The panel is 30 grid rows, measured in Playwright in Inter with the five static rows, the Free divider and sixteen free rows: 1049 px at 358 px and 820 px at 1568 px, so the body of 1084 px holds both without an inner scroll, 264 px stay empty at 1568 px, and the panels below move up by the 10 rows it shrank. The review fixture holds the live set of nineteen free providers, eleven with a model and eight without.
 
 ## [3.17.123] - 2026-10-23
 
