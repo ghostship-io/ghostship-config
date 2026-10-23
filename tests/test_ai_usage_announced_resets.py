@@ -107,7 +107,37 @@ class AnnouncedResetTests(unittest.TestCase):
         self.assertEqual(result["announcements"], document["announcements"])
         self.assertEqual(calls[-1], ("browser.window", {"action": "close", "window_id": "lease"}))
         self.assertEqual(announcements.check(result, call, NOW + 100), result)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(result["sources"], [{"source_url": announcements.SOURCE, "status": "blocked"},
+                                            {"source_url": announcements.RELAY, "status": "blocked"}])
+
+    def test_personal_profile_is_explicit_in_desktop_calls(self):
+        with patch.object(announcements.subprocess, "run") as run:
+            run.return_value.stdout = json.dumps({"outcome": "success", "data": {"window_id": "lease"}})
+            announcements.cli_call(["desktop"], "browser.window", action="open")
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--identity") + 1], "personal")
+
+    def test_readable_relay_keeps_primary_blocked_and_never_grants_capacity(self):
+        calls = []
+        def call(op, **kw):
+            calls.append((op, kw))
+            if kw.get("action") == "open":
+                return {"window_id": "lease"}
+            if op == "browser.op":
+                primary = kw["steps"][0]["url"] == announcements.SOURCE
+                return {"extracts": {"announcements": {"blocked": primary,
+                                                        "posts": [] if primary else [post()]}}}
+            return {}
+        result = announcements.check({"schema": 1, "announcements": []}, call, NOW)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["sources"][0]["status"], "blocked")
+        self.assertEqual(result["sources"][1]["status"], "ok")
+        self.assertEqual(result["announcements"][0]["confidence"], "low")
+        self.assertEqual(result["announcements"][0]["primary_source_url"], URL)
+        self.assertTrue(result["announcements"][0]["source_url"].startswith(announcements.RELAY))
+        self.assertEqual(announcements.overrides([], result, NOW), [])
+        self.assertEqual(len(calls), 4)
 
     def test_unavailable_desktop_records_fixed_status(self):
         def call(*args, **kwargs):

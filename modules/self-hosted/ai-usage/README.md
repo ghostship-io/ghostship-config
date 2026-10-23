@@ -1473,10 +1473,20 @@ overrides fail visibly. Keep owner-specific reset times in runtime state.
 ### Announced resets
 
 `ghostship-ai-usage-announcements` checks the public Codex announcement profile
-through the agent identity's Agent Desktop browser tools, at most once per
+through the personal identity's Agent Desktop browser tools, at most once per
 eight hours (including retries and manual service starts). It owns and closes
 one browser lease. A sign-in wall or challenge records `blocked`; the check
 does not bypass it or use mirrors. Transport failures record `unavailable`.
+
+When X is blocked, the same check reads the public OpenAI-hosted
+[community announcement relay](https://community.openai.com/t/another-reset-day-18-of-28-days-of-quality-of-life-improvements-and-or-a-full-reset/1403525).
+This page was verified to relay the reset announcements. Its content is written
+by the community, so records retain both the relay URL and primary post URL at
+low confidence and cannot change capacity. A wall or challenge on the relay
+also stops that source. `sources` preserves each source's status; `partial`
+means X was blocked and the relay was readable. A readable relay never clears
+the primary source's blocked status. Neither profile sign-ins nor private
+account details are stored in the cache.
 
 The separate runtime cache, `--announced-resets` (default
 `/var/lib/ghostship-ai-usage/announced-resets.json`), records reset time, scope,
