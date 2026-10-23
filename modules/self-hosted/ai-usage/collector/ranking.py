@@ -125,6 +125,8 @@ class QuotaWindow:
     # from, the budget, the unit, the scope, the weights, the episode count
     # and the state. It is empty for every window a provider reported.
     inference: Any = None
+    reset_source: str = "provider"
+    provider_reset_epoch: float | None = None
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""

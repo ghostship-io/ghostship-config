@@ -1,11 +1,11 @@
 """Collect AI provider usage, limits, and free models into Prometheus metrics.
 
-The collector is read-only. It reads T3 Code's own readings, the provider
+The collector reads T3 Code's own readings, the provider
 APIs T3 Code does not read, the free inference pool, and the public model
 catalog, and writes one textfile for node_exporter.
 
-Nothing here starts, stops, or reconfigures a provider, a container, or T3
-Code itself.
+Managed model favorites and the new-thread default use authenticated settings
+patches. Nothing here starts, stops or restarts a provider, container or T3.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from typing import Any, Iterable, Mapping
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
+import model_selection  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
@@ -37,6 +38,7 @@ import published as published_module  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
+import reset_overrides  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import static_routes as static_routes_module  # noqa: E402
@@ -1107,6 +1109,8 @@ def ranking_inputs(
                 else None
             ),
             gating=gating is not False,
+            reset_source=str(measured.get("resetSource") or "provider"),
+            provider_reset_epoch=measured.get("providerResetEpoch"),
         )
         if model == "*":
             windows.setdefault(provider, []).append(window)
@@ -1715,6 +1719,10 @@ def build_snapshot(
             quota_block["entitlements"] = quota_module.entitlements(
                 measured_windows or [], now
             )
+    if isinstance(snapshot, dict):
+        policy = (outcomes or {}).get("policy") or {}
+        orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
+        snapshot["model_selection"] = model_selection.build(snapshot, orchestrators)
     return snapshot
 
 
@@ -1734,6 +1742,7 @@ def collect(
     t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
+    custom_resets: list[dict[str, Any]] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
     """Run every source and return the results, the extra samples, and the context."""
     moment = wall_clock() if now is None else now
@@ -1783,6 +1792,7 @@ def collect(
         routes=routes,
     )
     results.extend(inferred.results)
+    reset_overrides.apply(results, custom_resets or [], moment)
     context["inferred_capacity"] = inferred.capacities
     context["inferred_retirements"] = dict(inferred.retirements)
     context["inferred_last_success"] = dict(inferred.last_success)
@@ -2169,6 +2179,8 @@ def render(
             writer.add(name, labels, value)
     for name, labels, value in extra:
         writer.add(name, labels, value)
+    for name, labels, value in model_selection.samples((snapshot or {}).get("model_selection") or {}):
+        writer.add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
@@ -2367,6 +2379,12 @@ def main(argv: list[str] | None = None) -> int:
             "verdict it corrects. A missing file is no round at all."
         ),
     )
+    parser.add_argument("--reconcile-picker", action="store_true",
+                        help="Synchronize managed model favorites and the worker default through authenticated RPC.")
+    parser.add_argument("--custom-resets", default="/var/lib/ghostship-ai-usage/custom-resets.json",
+                        help="Owner overrides; published explicitly as custom resets.")
+    parser.add_argument("--picker-state", default="/var/lib/ghostship-ai-usage/picker.json",
+                        help="Ownership journal for managed T3 model favorites.")
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -2382,6 +2400,7 @@ def main(argv: list[str] | None = None) -> int:
         events_cache=args.events_cache,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
+        custom_resets=reset_overrides.load(args.custom_resets),
     )
     duration = time.monotonic() - started
     measured: list[dict[str, Any]] = []
@@ -2434,6 +2453,13 @@ def main(argv: list[str] | None = None) -> int:
     log(f"wrote {written} bytes to {args.snapshot}")
     for path, size in snapshot_module.publish(snapshot, args.projection):
         log(f"wrote {size} bytes to {path}")
+    if args.reconcile_picker:
+        from ghostship_t3.bridge import Bridge
+        from ghostship_t3.model_selection import reconcile
+        bridge = Bridge(server=resolve_t3_base_url(T3_SERVER_FILE),
+                        bearer=read_session_token(T3_SESSION_FILE))
+        reconciliation = reconcile(snapshot, bridge, args.picker_state)
+        log(f"picker: {reconciliation['state']}; {reconciliation['favorite_changes']} favorite changes")
     for result in results:
         log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")
