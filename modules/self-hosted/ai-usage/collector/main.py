@@ -399,6 +399,12 @@ METRIC_HELP = {
         "The share of an account window that an even spend would have left "
         "by now; the line of the bar."
     ),
+    "ghostship_ai_account_window_pace_state": (
+        "The band of an account window against its own even-spend line, in "
+        "the state label: ahead, on_pace, behind, far_behind, spent or "
+        "unknown. One series per window, with the labels of "
+        "ghostship_ai_account_window_remaining_ratio plus the state."
+    ),
     "ghostship_ai_account_window_reset_timestamp_seconds": (
         "When an account window resets."
     ),

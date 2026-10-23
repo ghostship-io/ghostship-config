@@ -1046,6 +1046,18 @@ def _candidate(
                 binding, now, _window_record(binding, now)["remaining_ratio"]
             )
 
+    # The pace state of the row: where the share left sits on the line of the
+    # most constraining window, in points. The line of that window is the
+    # share left minus the Paced Availability, so the state is the one the
+    # published number draws; a row with no line, or with nothing left, says
+    # so instead of guessing.
+    expected_left = None
+    if remaining is not None and pace is not None:
+        expected_left = remaining - pace
+    elif expected is not None:
+        expected_left = 1.0 - expected
+    pace_state = value_policy.pace_state(remaining, expected_left)
+
     native_record = _native_record(provider, model, native)
     # The owner's lists, read once from the runtime policy. Every consumer
     # of them reads this block, so a policy change has one effect.
@@ -1231,6 +1243,11 @@ def _candidate(
             "paced_availability_window": _binding_id(
                 getattr(entries[0], "pace_binding", None) if entries else None
             ),
+            # The band the Paced Availability falls in: ahead, on_pace,
+            # behind, far_behind, spent or unknown. The Providers page colours
+            # a route by this state instead of drawing its own band, so the
+            # collector and the page cannot disagree about where a route is.
+            "pace_state": pace_state,
         },
         "usage": {
             "tokens_7d": round(used_tokens, 1),
@@ -2709,15 +2726,30 @@ def _winners(
             """One for a model that is reserved for the 3D tier."""
             return 1 if (row.get("reserve") or {}).get("3d") else 0
 
+        def _far_behind(row: dict[str, Any]) -> int:
+            """One for a route more than twenty points behind its line.
+
+            The owner's rule: a route whose binding window is far behind the
+            pace goes to the back of the pool. It follows every route of its
+            trust group that is not far behind, whatever the value of those
+            routes; an untrusted route stays last, and a route that is
+            merely behind keeps its place in the value order.
+            """
+            state = (row.get("capacity") or {}).get("pace_state")
+            return 1 if state == "far_behind" else 0
+
         def _tier_key(row: dict[str, Any]) -> tuple:
             """The order of one tier.
 
             The trust of the route comes first: a trusted route leads, a
             backup route follows, and an untrusted route comes last with
-            its reason. A model reserved for the 3D tier follows the other
-            members of the tiers it is reserved away from. The bulk tier
-            then reads the published value, and a free route that is close
-            enough to the best route of its trust level leads it.
+            its reason. A route that is far behind the pace of its binding
+            window follows every route of its trust group that is not, so
+            the pool puts it at the back of the group. A model reserved for
+            the 3D tier follows the other members of the tiers it is
+            reserved away from. The bulk tier then reads the published
+            value, and a free route that is close enough to the best route
+            of its trust level leads it.
             """
             trust = value_policy.trust_rank(_trust_level(row, tier))
             # A route of a provider reserved for another workload is not a
@@ -2729,11 +2761,12 @@ def _winners(
             if tier == "free":
                 # The free tier keeps the order it had: the band, the
                 # headroom and the last use.
-                return (trust, reserved, _free_key(row))
+                return (trust, _far_behind(row), reserved, _free_key(row))
             if tier == "bulk":
                 published = _published_value_for(row, tier)
                 return (
                     trust,
+                    _far_behind(row),
                     reserved,
                     _reserve_key(row),
                     _free_leads(row),
@@ -2744,6 +2777,7 @@ def _winners(
                 )
             return (
                 trust,
+                _far_behind(row),
                 reserved,
                 _reserve_key(row),
                 _pace_key(row),
@@ -2780,6 +2814,10 @@ def _winners(
                 "paced_availability_window": (row.get("capacity") or {}).get(
                     "paced_availability_window"
                 ),
+                # The band of that number: ahead, on_pace, behind,
+                # far_behind, spent or unknown. The order of the tier reads
+                # it, and so does the Providers page.
+                "pace_state": (row.get("capacity") or {}).get("pace_state"),
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
@@ -4398,6 +4436,7 @@ def account_window_samples(
                 )
             seconds = _finite(window.get("seconds_to_reset"))
             duration = _finite(window.get("duration_seconds"))
+            line = None
             if seconds is not None and duration is not None and duration > 0:
                 line = max(0.0, min(1.0, float(seconds) / float(duration)))
                 samples.append(
@@ -4407,6 +4446,17 @@ def account_window_samples(
                         round(line, ACCOUNT_WINDOW_LINE_DECIMALS),
                     )
                 )
+            # The band of the window's own line: ahead, on_pace, behind,
+            # far_behind, spent or unknown. A window with no line to compare
+            # with says unknown, so a card always has a state to colour and
+            # never draws a band of its own.
+            samples.append(
+                (
+                    "ghostship_ai_account_window_pace_state",
+                    {**labels, "state": value_policy.pace_state(remaining, line)},
+                    1.0,
+                )
+            )
             reset = _epoch_seconds(window.get("reset_at"))
             if reset is not None:
                 samples.append(
