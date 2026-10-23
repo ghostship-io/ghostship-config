@@ -61,6 +61,11 @@ RECOVERY_ROUNDS = 3
 COUNTED_VERDICTS = ("accepted", "reworked", "rejected")
 ACCEPTED_VERDICT = "accepted"
 
+# The causes that are the lead's, not the model's: a round the brief or the
+# chief reviewer caused says nothing about the model, so it is counted by
+# neither n nor s, exactly like a round of the environment.
+LEAD_CAUSES = ("brief", "chief")
+
 # The ledger's table and its columns. An older ledger has no verdict
 # source, so the columns that are read are the ones the ledger carries.
 LEDGER_TABLE = "rounds"
@@ -417,7 +422,8 @@ def _backfill_round(row: Mapping[str, Any]) -> dict[str, Any]:
         "task_type": str(row.get("task_type") or ""),
         "verdict": str(row.get("verdict") or "").strip().lower(),
         "verdict_source": "backfill",
-        "cause": str(row.get("summary") or ""),
+        # The backfill records no cause: its summary is never read as one.
+        "cause": "",
         "fabrication": row.get("fabrication"),
         "started_at": row.get("started_at"),
         "ref": reference,
@@ -503,7 +509,8 @@ def outcome_counts(
         key = (identity, round_["task_type"])
         entry = counts.setdefault(key, {"n": 0, "s": 0, "fabrications": []})
         verdict = round_["verdict"]
-        if verdict in COUNTED_VERDICTS:
+        lead_caused = str(round_.get("cause") or "").strip().lower() in LEAD_CAUSES
+        if verdict in COUNTED_VERDICTS and not lead_caused:
             entry["n"] += 1
             if verdict == ACCEPTED_VERDICT:
                 entry["s"] += 1
