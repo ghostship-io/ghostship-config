@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.160] - 2026-10-23
+
+- Route daily security investigations through the bounded, redacted SIEM command.
+
+PR #324.
+
 ## [3.17.159] - 2026-10-23
 
 - Keep routine AppArmor learning status and scheduled collector journal output bounded while preserving all evidence gates.
