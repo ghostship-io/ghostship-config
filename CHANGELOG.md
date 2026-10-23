@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.239] - 2026-10-23
+
+- Providers, Paid models and Free models are three compact Grafana pages: Paid and Free provider pools with capacity, next reset, confirmed Codex reset and T3 token/cost; paid selection ranked by Paced Availability; free selection one model per provider.
+- OpenCode Go is always a paid subscription; OpenCode Zen is the free OpenCode route.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+PR #405.
+
 ## [3.17.238] - 2026-10-23
 
 - Wait for desktop image startup before collecting container snapshots during activation.
