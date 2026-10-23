@@ -1069,6 +1069,15 @@ The order of a tier is then:
 * the pace of the account window, and a route with no window has no pace: it
   waits behind every route that has one.
 
+Session, hourly, minute and daily windows are unpaced. They retain their
+remaining share, reset and observation time, and still block availability at
+zero. They publish no expected-use or numeric pace series. Positive short
+windows publish the blue `on_pace` colour state without a pace line; zero is
+red `spent`. Only weekly/monthly periods, including inferred periods of those
+lengths, supply pace. Their own usage is compared with their own line even
+when a short window binds the route's capacity. Short quota windows also stay
+outside the model selection's displayed limiting window.
+
 The pace state of a route is the band its Paced Availability falls in, the
 share left minus the expected share left of the most constraining window, in
 points, rounded to six decimals so that only the noise of the subtraction is

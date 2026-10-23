@@ -809,7 +809,7 @@ def _pace(window: Any, now: float, remaining: float) -> tuple[float | None, floa
     if duration is None and isinstance(window, Mapping):
         duration = window.get("duration_seconds")
     reset = _window_reset(window)
-    if not duration or duration <= 0 or reset is None:
+    if not quota_module.is_paced_window(window) or not duration or duration <= 0 or reset is None:
         return None, None
     start = reset - float(duration)
     elapsed = now - start
