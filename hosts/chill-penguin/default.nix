@@ -24,6 +24,7 @@ in
   ghostship.githubEngineering.coordinatorAutoStart = false;
   ghostship.newsletterHealth.enable = true;
   ghostship.bootGenerationDrift.enable = true;
+  ghostship.configurationDrift.enable = true;
 
   ghostship.host.roles = {
     server = true;
@@ -45,10 +46,12 @@ in
   # The staged development engine may reach public IPv4 only through this NIC.
   ghostship.t3codePodman.egressInterface = "end0";
 
-  # T3 Code image changes are applied by t3code-deploy-when-idle, never by the switch.
+  # Unattended upgrading is off: it bypassed change control. The daily
+  # ghostship-configuration-drift check reports a host that is behind main.
   myOptions.autoUpgrade = {
-    enable = true;
-    # Pure evaluation cannot see /boot/asahi and would drop peripheral firmware.
+    enable = false;
+    # Kept for a deliberate, change-controlled upgrade; pure evaluation cannot
+    # see /boot/asahi and would drop peripheral firmware.
     extraFlags = [ "--impure" ];
   };
 
