@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.145] - 2026-10-23
+
+- Remove per-PR version bumps from configuration instructions and the weekly input-refresh workflow.
+- Record review and land finished changes through `agent pr land`, using the pinned identity-safe local merge and release tool.
+
+PR #310.
+
 ## [3.17.144] - 2026-10-23
 
 - chill-penguin: pin `ghostship-private-agent` to `f9779033` (agent 0.44.0). It activates the owner's engineering policy: frontier models self-review and land their own work, subagents serve reviews and public-safe free-tier background tasks only, one orchestrator owns the work queue, and threads report only to it. The generated agent instructions (CLAUDE.md/AGENTS.md) carry the new rules after this switch.
