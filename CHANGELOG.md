@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.108] - 2026-10-23
+## [3.17.109] - 2026-10-23
 
 - ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
+## [3.17.108] - 2026-10-23
+
+- ai-usage: a capacity window keeps the scope the ranking gives it. The account records of the routing snapshot dropped the scope of a window, so the session and the weekly window of the Antigravity third-party group read as the capacity of the whole account, the per-model quota readings of that account merged into one row of many models, and a spent Fable week of Claude blocked every Claude route. A measured window is filed under the scope the ranking gives it, a reading the provider reports for one model is filed under the family of that model, and a model id that names no family is not a window of the account at all. The label of the row names the scope: 'Session · Claude & GPT', 'Weekly · Claude & GPT', 'Quota · Gemini', 'Quota · Claude', 'Quota · GPT'. The provider capacity of an account counts the windows that cover the whole account only, and the ranking, the candidate rows and the windows they carry are unchanged.
 
 ## [3.17.107] - 2026-10-23
 
