@@ -1477,6 +1477,9 @@ through the personal identity's Agent Desktop browser tools, at most once per
 eight hours (including retries and manual service starts). It owns and closes
 one browser lease. A sign-in wall or challenge records `blocked`; the check
 does not bypass it or use mirrors. Transport failures record `unavailable`.
+The scheduled checker connects to the deployed MCP over one stdio session,
+using its existing Desktop configuration and lease ownership. It does not run
+a second local browser backend or copy Desktop credentials into T3.
 
 When X is blocked, the same check reads the public OpenAI-hosted
 [community announcement relay](https://community.openai.com/t/another-reset-day-18-of-28-days-of-quality-of-life-improvements-and-or-a-full-reset/1403525).
