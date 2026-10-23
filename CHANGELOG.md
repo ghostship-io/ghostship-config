@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.169] - 2026-10-23
+
+- Pace weekly and monthly quota windows only; preserve short-window capacity and resets.
+- Use each long window's own usage for model pace and keep short quota windows outside displayed limiting limits.
+
+PR #335.
+
 ## [3.17.168] - 2026-10-23
 
 - Reconcile retained service account aliases and prevent an obsolete PAM home from breaking engine startup.
