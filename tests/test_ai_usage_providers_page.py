@@ -37,7 +37,7 @@ FIXTURE = ROOT / "tests/fixtures/ai-usage/providers-review.prom"
 FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on.prom"
 
 # The sections of the page, in the order the owner approved.
-SECTIONS = ("Provider capacity", "Bulk", "Free", "Frontier", "3D", "Providers")
+SECTIONS = ("Provider capacity", "Model selection", "Bulk", "Free", "Frontier", "3D")
 TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
 
 # The account window gauges of the collector, and the field of a row each of
@@ -236,6 +236,66 @@ def fixture_capacity_rows():
     return rows
 
 
+# The metrics of the static route table, and the field of a row each one
+# fills. The panel reads them in one query, and the field says which one a
+# row holds.
+SELECTION_METRICS = {
+    "ghostship_ai_static_route_info": "info",
+    "ghostship_ai_static_route_remaining_ratio": "left",
+    "ghostship_ai_static_route_paced_availability": "pace",
+    "ghostship_ai_static_route_reset_timestamp_seconds": "reset",
+}
+
+# The live static route table the owner approved: row, role, provider, model,
+# display name and the work the route is used for.
+STATIC_ROUTES = (
+    ("1", "Bulk 1", "ollama", "minimax-m3.1-flash", "MiniMax-M3.1-Flash",
+     "Narrow implementation (1st), Research (2nd)"),
+    ("2", "Bulk 2", "ollama", "deepseek-v4.1-flash:1017",
+     "DeepSeek V4.1 Flash 1017",
+     "Narrow implementation (2nd), Research (1st)"),
+    ("3", "Large", "codex", "gpt-6.1-sol", "GPT-6.1-Sol",
+     "Large implementation (1st)"),
+    ("4", "Deploys", "opencode-go", "beam-free", "Beam Free",
+     "Deploys (1st), Research (3rd)"),
+    ("5", "Deploys", "ollama", "beam", "Beam 1.0 501B A23B", "Deploys (2nd)"),
+)
+
+
+def labels_of(inner):
+    """The labels of a series of the fixture, commas inside a value included."""
+    labels = {}
+    for match in re.finditer(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"', inner or ""):
+        labels[match.group(1)] = match.group(2)
+    return labels
+
+
+def fixture_selection_rows():
+    """The rows of the static route table, read from the committed fixture.
+
+    The panel reads the info series and the three capacity series in one
+    query, so a row is one series: the labels of the route (on the info
+    series only) and the field the series fills. The routing gauge is a row
+    of its own, read by the chip.
+    """
+    rows = []
+    for line in FIXTURE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.match(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*)\})?\s+(\S+)$", line)
+        if not match:
+            continue
+        metric, inner, value = match.groups()
+        field = SELECTION_METRICS.get(metric)
+        if field is None:
+            if metric != "ghostship_ai_routing_enabled":
+                continue
+            field = "routing"
+        rows.append({**labels_of(inner), "field": field, "value": float(value)})
+    return rows
+
+
 def run_panel_helper(panel, expression, env=None):
     """The answer of a helper of the panel, run the way Business Text runs it.
 
@@ -383,7 +443,7 @@ class ProvidersPageTests(unittest.TestCase):
         node = shutil.which("node")
         if node is None:
             self.fail("node is needed to run the helper")
-        for title in ("Bulk", "Free", "Frontier", "3D", "Providers"):
+        for title in ("Bulk", "Free", "Frontier", "3D"):
             panel = section(self.page, title)
             content = panel["options"]["content"]
             self.assertNotIn('{{date resetsAt', content, title)
@@ -583,7 +643,12 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertIn("{{#if name}}{{name}}{{else}}{{model}}{{/if}}", content, title)
 
     def test_the_routing_chip_reads_the_collector_s_gauge(self):
-        """The chip is the collector's routing state, not a fixed text."""
+        """The chip is the collector's routing state, not a fixed text.
+
+        The selection table carries the static table either way: its own
+        chip says so and reads the same gauge in its own query, and the
+        table below it does not change with the routing.
+        """
         header = section(self.page, "")
         joined = expressions(header)
         self.assertIn("ghostship_ai_routing_enabled", joined)
@@ -599,7 +664,7 @@ class ProvidersPageTests(unittest.TestCase):
     def test_no_hard_coded_routing_text_sits_outside_the_chip(self):
         """Only the chip of the header says the routing is off."""
         for panel, _ in panels(self.page):
-            if panel.get("id") == 200:
+            if panel.get("id") in (200, 206):
                 continue
             self.assertNotIn("Routing OFF", json.dumps(panel), panel.get("title"))
             self.assertNotIn("Routing ON", json.dumps(panel), panel.get("title"))
@@ -644,7 +709,7 @@ class ProvidersPageTests(unittest.TestCase):
                 f'^{code}$' in page or f'"{code}"' in page or "join (split" in page,
                 f"{code} would reach the page as it is",
             )
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             content = section(self.page, title)["options"]["content"]
             self.assertNotIn("no_window", content, title)
 
@@ -670,7 +735,7 @@ class ProvidersPageTests(unittest.TestCase):
         The header of the basis column went away while the cells stayed, so
         the columns of the table no longer lined up.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             head, row = table_columns(section(self.page, title)["options"]["content"])
             self.assertEqual(len(head), len(row), title)
             for index, (header, cell) in enumerate(zip(head, row)):
@@ -686,7 +751,7 @@ class ProvidersPageTests(unittest.TestCase):
         Without it the spent route keeps the place the collector gave it, and
         it stands above the routes that can run.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             panel = section(self.page, title)
             order = target_by_field(panel, "order")["expr"]
             spent = target_by_field(panel, "out")["expr"]
@@ -707,7 +772,7 @@ class ProvidersPageTests(unittest.TestCase):
         The name of the model and its tag shared one line that the narrow
         screen cut, so the tag became an empty grey box.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             panel = section(self.page, title)
             styles = panel["options"].get("styles") or ""
             rules = css_rules(media_body(styles))
@@ -728,7 +793,7 @@ class ProvidersPageTests(unittest.TestCase):
         A row that wraps is a row the panel cuts, and the rows a rule
         sinks to the bottom are the last ones of the table.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             panel = section(self.page, title)
             styles = panel["options"].get("styles") or ""
             rules = css_rules(media_body(styles))
@@ -744,13 +809,13 @@ class ProvidersPageTests(unittest.TestCase):
 
     def test_the_capacity_text_carries_its_whole_text(self):
         """The capacity text of a narrow screen is cut with an ellipsis: the title holds it all."""
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             content = section(self.page, title)["options"]["content"]
             self.assertIn('class="unk" title="', content, title)
 
     def test_every_provider_is_read_by_its_name(self):
         """A provider is read by the name the mockup gives it."""
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             expression = provider_name_target(section(self.page, title))["expr"]
             for identifier, name in PROVIDER_NAMES.items():
                 self.assertIn(f'"^{identifier}$"', expression, f"{title} {identifier}")
@@ -1026,6 +1091,357 @@ class ProviderCapacityTests(unittest.TestCase):
         self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 1651)
 
 
+class ModelSelectionTests(unittest.TestCase):
+    """The static route table the page shows under the capacity cards.
+
+    One row per route of the owner's static table, in the collector's row
+    order: the role, the model and its tag, the provider, the work the route
+    is used for, and the share of its window that is left with the pace
+    beside it. The numbers are the collector's static route series, so the
+    worked cases are the rows of the committed fixture and not a copy of
+    them.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+        cls.rows = fixture_selection_rows()
+
+    def setUp(self):
+        self.panel = section(self.page, "Model selection")
+
+    def selection(self, rows=None, now=CAPACITY_NOW):
+        """The rows of the table, as the helper of the panel builds them."""
+        expression = (
+            "const rows = "
+            + json.dumps(self.rows if rows is None else rows)
+            + ";\n"
+            + "const now = "
+            + json.dumps(now)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.selectionRows(rows, now)));"
+        )
+        return run_panel_helper(self.panel, expression)
+
+    def chip(self, rows):
+        """The text and the routing state of the chip, from the rows."""
+        expression = (
+            "const rows = "
+            + json.dumps(rows)
+            + ";\n"
+            + "console.log(JSON.stringify([helpers.selectionChip(rows), helpers.selectionRouting(rows)]));"
+        )
+        return run_panel_helper(self.panel, expression)
+
+    def test_the_page_puts_the_selection_under_the_capacity_cards(self):
+        """The owner reads the cards first, then the static table, then the rankings."""
+        capacity = section(self.page, "Provider capacity")
+        bulk = section(self.page, "Bulk")
+        self.assertEqual(self.panel["title"], "Model selection")
+        self.assertEqual(
+            capacity["gridPos"]["y"] + capacity["gridPos"]["h"],
+            self.panel["gridPos"]["y"],
+        )
+        self.assertEqual(
+            self.panel["gridPos"]["y"] + self.panel["gridPos"]["h"],
+            bulk["gridPos"]["y"],
+        )
+        # Nothing else stands above the table but the header and the cards.
+        above = [
+            panel.get("title", "")
+            for panel, collapsed in panels(self.page)
+            if not collapsed
+            and panel.get("type") == "marcusolsson-dynamictext-panel"
+            and panel["gridPos"]["y"] < self.panel["gridPos"]["y"]
+        ]
+        self.assertEqual(above, ["", "Provider capacity"])
+
+    def test_the_old_providers_table_is_gone(self):
+        """The cards replace the provider table: it is not on the page any more."""
+        self.assertFalse(
+            [panel for panel, _collapsed in panels(self.page) if panel.get("id") == 205]
+        )
+        self.assertNotIn(
+            "Providers", [panel.get("title", "") for panel, _collapsed in panels(self.page)]
+        )
+
+    def test_the_table_reads_the_collector_s_static_routes(self):
+        """Every number of the table is a static route series of the collector."""
+        expression = expressions(self.panel)
+        for metric in SELECTION_METRICS:
+            self.assertIn(metric, expression, metric)
+        self.assertIn("ghostship_ai_routing_enabled", expression)
+        # The same freshness guard as the rest of the page.
+        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+
+    def test_the_columns_are_role_model_provider_used_for_and_left(self):
+        """The table reads in the owner's columns, and Left comes last."""
+        content = self.panel["options"]["content"]
+        head = re.search(r"<thead>(.*?)</thead>", content, re.S).group(1)
+        self.assertEqual(
+            re.findall(r"<th[^>]*>([^<]*)</th>", head),
+            ["Role", "Model", "Provider", "Used for", "Left"],
+        )
+        head_cells, row_cells = table_columns(content)
+        for index, (header, cell) in enumerate(zip(head_cells, row_cells)):
+            self.assertEqual(
+                hide_marker(header), hide_marker(cell), f"column {index}"
+            )
+
+    def test_the_table_draws_no_bar(self):
+        """The selection is a static table: it has no bar and no track."""
+        content = self.panel["options"]["content"]
+        styles = self.panel["options"].get("styles") or ""
+        for className in ('class="bar"', 'class="track"', 'class="fill"', 'class="barrow"'):
+            self.assertNotIn(className, content)
+        for rule in (".bar", ".track", ".fill", ".barrow", ".mark", ".tick"):
+            self.assertNotIn(rule + " ", styles, rule)
+            self.assertNotIn(rule + "{", styles, rule)
+
+    def test_the_left_cell_carries_the_share_and_the_pace(self):
+        """The cell reads the share left, a dot, and the pace beside it.
+
+        The share keeps the colour of the row; the pace alone is grey on
+        pace, green ahead, amber behind and red when spent, as on the cards.
+        """
+        content = self.panel["options"]["content"]
+        self.assertIn(
+            '<span class="pct">{{leftPct}}</span>', content
+        )
+        self.assertIn(
+            '<span class="pace {{leftClass}}">{{leftPace}}</span>', content
+        )
+        styles = self.panel["options"].get("styles") or ""
+        self.assertIn(".left .pace { color: #8b8f99;", styles)
+        self.assertIn(".left .pace.spent { color: #d9534f; }", styles)
+        self.assertIn(".left .pace.ahead { color: #8fc98f; }", styles)
+        self.assertIn(".left .pace.behind { color: #e0a03a; }", styles)
+
+    def test_the_chip_reads_the_routing_gauge(self):
+        """The chip is the collector's routing state, and the table is static."""
+        off = [row for row in self.rows if row["field"] != "routing"]
+        off.append({"field": "routing", "value": 0.0})
+        self.assertEqual(
+            self.chip(off), ["Static table \u00b7 routing OFF", 0]
+        )
+        on = [row for row in self.rows if row["field"] != "routing"]
+        on.append({"field": "routing", "value": 1.0})
+        self.assertEqual(
+            self.chip(on),
+            ["Routing ON \u00b7 static table shown for reference", 1],
+        )
+
+    def test_the_fixture_holds_the_live_route_table(self):
+        """The five live rows: role, provider, model, name and work, in order."""
+        rows = self.selection()
+        self.assertEqual(
+            [(row["row"], row["role"]) for row in rows],
+            [(row[0], row[1]) for row in STATIC_ROUTES],
+        )
+        self.assertEqual(
+            [row["model"] for row in rows], [row[3] for row in STATIC_ROUTES]
+        )
+        self.assertEqual(
+            [row["displayName"] for row in rows], [row[4] for row in STATIC_ROUTES]
+        )
+        self.assertEqual(
+            [row["usedFor"] for row in rows], [row[5] for row in STATIC_ROUTES]
+        )
+        self.assertEqual(
+            [row["providerName"] for row in rows],
+            ["Ollama", "Ollama", "Codex", "OpenCode Go", "Ollama"],
+        )
+        # The bulk roles carry the blue bulk tag, the other rows none.
+        self.assertEqual([row["tag"] for row in rows], ["bulk", "bulk", "", "", ""])
+
+    def test_the_worked_left_cells(self):
+        """41% on pace, 99% on pace, and 100% with no pace series at all."""
+        rows = {row["model"]: row for row in self.selection()}
+        self.assertEqual(rows["minimax-m3.1-flash"]["left"], "41% \u00b7 \u25cf on pace")
+        self.assertEqual(rows["gpt-6.1-sol"]["left"], "99% \u00b7 \u25cf on pace")
+        self.assertEqual(rows["beam-free"]["left"], "100%")
+        self.assertEqual(rows["beam-free"]["leftClass"], "")
+
+    def test_a_spent_route_reads_spent_and_its_reset(self):
+        """A spent route reads zero, spent, and how long until it resets."""
+        now = CAPACITY_NOW / 1000
+        rows = [row for row in self.rows if row["field"] != "routing"]
+        rows += [
+            {
+                "row": "9",
+                "field": "info",
+                "role": "Bulk 3",
+                "provider": "grok",
+                "model": "grok-like",
+                "display_name": "Grok",
+                "used_for": "Research (4th)",
+                "value": 1.0,
+            },
+            {"row": "9", "field": "left", "value": 0.0},
+            {"row": "9", "field": "reset", "value": now + 4.4 * 86400},
+        ]
+        spent = next(row for row in self.selection(rows) if row["row"] == "9")
+        self.assertEqual(spent["left"], "0% \u00b7 \u2715 spent \u00b7 resets in 4.4d")
+        self.assertEqual(spent["leftClass"], "spent")
+
+    def test_a_route_ahead_or_behind_reads_its_points(self):
+        """More than ten points off the pace reads ahead or behind."""
+        now = CAPACITY_NOW / 1000
+
+        def route(pace):
+            rows = [
+                {
+                    "row": "7",
+                    "field": "info",
+                    "role": "Free 1",
+                    "provider": "ollama",
+                    "model": "worked",
+                    "display_name": "Worked",
+                    "used_for": "Research",
+                    "value": 1.0,
+                },
+                {"row": "7", "field": "left", "value": 0.5},
+                {"row": "7", "field": "reset", "value": now + 3600},
+            ]
+            if pace is not None:
+                rows.append({"row": "7", "field": "pace", "value": pace})
+            return next(row for row in self.selection(rows) if row["row"] == "7")
+
+        self.assertEqual(route(0.15)["left"], "50% \u00b7 \u25b2 15 ahead")
+        self.assertEqual(route(0.15)["leftClass"], "ahead")
+        self.assertEqual(route(-0.2)["left"], "50% \u00b7 \u25bc 20 behind")
+        self.assertEqual(route(-0.2)["leftClass"], "behind")
+        # Ten points is still on the pace.
+        self.assertEqual(route(0.1)["left"], "50% \u00b7 \u25cf on pace")
+        self.assertEqual(route(-0.1)["left"], "50% \u00b7 \u25cf on pace")
+
+    def test_a_route_with_no_remaining_reading_says_so(self):
+        """A route the snapshot does not carry has no share, and never a zero."""
+        rows = [
+            {
+                "row": "8",
+                "field": "info",
+                "role": "Large",
+                "provider": "codex",
+                "model": "unread",
+                "display_name": "Unread",
+                "used_for": "Large implementation (2nd)",
+                "value": 1.0,
+            }
+        ]
+        route = next(row for row in self.selection(rows) if row["row"] == "8")
+        self.assertEqual(route["left"], "no reading")
+        self.assertEqual(route["leftClass"], "")
+
+    def test_the_provider_name_and_icon_come_from_the_capacity_cards(self):
+        """The table reads a provider as the cards do: same name, icon and colour."""
+        capacity = section(self.page, "Provider capacity")
+        cards = run_panel_helper(
+            capacity,
+            "const rows = "
+            + json.dumps(["ollama", "codex", "opencode-go"])
+            + ".map((account) => ({ account: account, kind: 'session', quota_id: 'q', label: 'Session', evidence: 'provider_reported', field: 'left', value: 1 }));\n"
+            + "console.log(JSON.stringify(helpers.capacityCards(rows, 0)));",
+        )
+        by_provider = {card["account"]: card for card in cards}
+        selected = {row["provider"]: row for row in self.selection()}
+        for provider in ("ollama", "codex", "opencode-go"):
+            card = by_provider[provider]
+            row = selected[provider]
+            for key in ("name", "icon", "background", "foreground"):
+                self.assertEqual(
+                    row["providerName" if key == "name" else key],
+                    card[key],
+                    f"{provider} {key}",
+                )
+
+    def test_the_panel_is_tall_enough_for_its_rows(self):
+        """The panel holds every row of the live table at either width.
+
+        Measured in Playwright with the panel's own styles and the five live
+        rows of the fixture: the content is 198 px tall at 390 px and 208 px
+        at 1600 px, and a grid row of the dashboard is 37 px.
+        """
+        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 208)
+
+    def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
+        """The fixture is the live table, and the page reads it, not a copy."""
+        rows = {
+            (row["row"], row["field"]): row["value"]
+            for row in self.rows
+            if "row" in row
+        }
+        self.assertAlmostEqual(rows[("1", "left")], 0.4129)
+        self.assertAlmostEqual(rows[("1", "pace")], -0.033)
+        self.assertAlmostEqual(rows[("3", "left")], 0.99)
+        self.assertAlmostEqual(rows[("3", "pace")], 0.012)
+        self.assertAlmostEqual(rows[("4", "left")], 1.0)
+        self.assertNotIn(("4", "pace"), rows)
+
+
+@unittest.skipUnless(
+    os.environ.get("GHOSTSHIP_TEST_VMETRICS") or shutil.which("victoria-metrics"),
+    "Set GHOSTSHIP_TEST_VMETRICS or put victoria-metrics on the path",
+)
+class ModelSelectionStoreTests(unittest.TestCase):
+    """The static route query, executed against the store the page reads."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+        cls.store = VictoriaMetricsFixture()
+        if not cls.store.start():
+            raise unittest.SkipTest("VictoriaMetrics did not start")
+        cls.store.import_fixture(FIXTURE)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.store.stop()
+
+    def test_the_query_returns_the_live_route_table(self):
+        """The panel's own query is the five live routes and the routing gauge."""
+        panel = section(self.page, "Model selection")
+        target = find_target(panel, "ghostship_ai_static_route_info")
+        rows = self.store.wait_for(target["expr"].replace("$provider", ".*"))
+        by_field = {}
+        for row in rows:
+            by_field.setdefault(row["metric"].get("field"), []).append(row)
+        self.assertEqual(set(by_field), {"info", "left", "pace", "reset", "routing"})
+        info = {row["metric"]["row"]: row["metric"] for row in by_field["info"]}
+        self.assertEqual(sorted(info), ["1", "2", "3", "4", "5"])
+        self.assertEqual(
+            (info["1"]["role"], info["1"]["provider"], info["1"]["model"]),
+            ("Bulk 1", "ollama", "minimax-m3.1-flash"),
+        )
+        self.assertEqual(info["1"]["display_name"], "MiniMax-M3.1-Flash")
+        self.assertEqual(
+            info["1"]["used_for"], "Narrow implementation (1st), Research (2nd)"
+        )
+        self.assertEqual(info["4"]["display_name"], "Beam Free")
+        self.assertEqual([float(row["value"][1]) for row in by_field["routing"]], [0.0])
+        # Beam Free publishes no pace series at all.
+        self.assertEqual(
+            [row["metric"]["row"] for row in by_field["pace"]], ["1", "2", "3", "5"]
+        )
+        expression = (
+            "const rows = "
+            + json.dumps(
+                [{**row["metric"], "value": float(row["value"][1])} for row in rows]
+            )
+            + ";\n"
+            + "const now = "
+            + json.dumps(CAPACITY_NOW)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.selectionRows(rows, now)));"
+        )
+        left = {
+            row["model"]: row["left"] for row in run_panel_helper(panel, expression)
+        }
+        self.assertEqual(left["minimax-m3.1-flash"], "41% \u00b7 \u25cf on pace")
+        self.assertEqual(left["gpt-6.1-sol"], "99% \u00b7 \u25cf on pace")
+        self.assertEqual(left["beam-free"], "100%")
+
+
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
 
@@ -1199,36 +1615,6 @@ class WorkedCasesTests(unittest.TestCase):
                     continue
                 self.assertLess(order[model], order[other], f"{model} before {other}")
 
-    def test_a_spent_provider_comes_after_every_provider_that_can_run(self):
-        """The spent account of a provider stands below the accounts that can run."""
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        spent = self.rows(panel, target_by_field(panel, "out"), "provider")
-        exhausted = [provider for provider, flag in spent.items() if flag]
-        self.assertTrue(exhausted, "the fixture has a spent account")
-        for provider in exhausted:
-            for other, flag in spent.items():
-                if flag:
-                    continue
-                self.assertLess(order[provider], order[other], f"{provider} before {other}")
-
-    def test_an_unknown_provider_comes_after_every_provider_with_a_reading(self):
-        """A provider with no capacity reading stands below every provider with one.
-
-        The fixture's google publishes an entitlement reset and no capacity
-        window and no coverage series; it still reads "Limits unknown", and
-        it must still sort below the providers that have a reading.
-        """
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        has_cap = self.rows(panel, target_by_field(panel, "hasCap"), "provider")
-        unknown = [p for p in order if not has_cap.get(p)]
-        self.assertIn("google", unknown)
-        for provider in unknown:
-            for other, flag in has_cap.items():
-                if flag:
-                    self.assertLess(order[provider], order[other], f"{provider} before {other}")
-
     def test_a_tier_lists_its_winners_and_the_routes_that_are_out(self):
         """Bulk and Free list the ranked winners and the spent routes, nothing else.
 
@@ -1279,8 +1665,6 @@ class WorkedCasesTests(unittest.TestCase):
         expected = {
             "Free": {"nvidia": "NVIDIA", "deepseek": "DeepSeek", "google": "Google",
                      "opencode-go": "OpenCode Go", "fireworks": None},
-            "Providers": {"claude": "Claude", "nvidia": "NVIDIA", "google": "Google",
-                          "openrouter": "OpenRouter", "fireworks": None},
         }
         for title, names in expected.items():
             panel = section(self.page, title)
@@ -1293,7 +1677,7 @@ class WorkedCasesTests(unittest.TestCase):
             for provider, name in names.items():
                 self.assertEqual(found.get(provider), name, f"{title} {provider}")
         # The page reads the name where it shows the provider.
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             content = section(self.page, title)["options"]["content"]
             self.assertIn(
                 "{{#if providerName}}{{providerName}}{{else}}{{provider}}{{/if}}",
@@ -1344,15 +1728,6 @@ class WorkedCasesTests(unittest.TestCase):
         bands = {row["metric"]["model"]: row["metric"].get("qualityBand") for row in rows}
         self.assertEqual(bands.get("minimax_minimax-m3.1-flash"), "true")
         self.assertEqual(bands.get("glm-5.3-flash"), "true")
-
-    def test_the_providers_are_sorted_by_paced_availability_with_the_spent_last(self):
-        """The lowest window decides, and a spent or unknown account comes last."""
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        self.assertGreater(order["claude"], order["antigravity"])
-        self.assertGreater(order["antigravity"], order["codex"])
-        self.assertLess(order["ollama"], order["codex"])
-        self.assertLess(order["cursor"], order["ollama"])
 
     def test_the_routing_gauge_reads_one_when_the_collector_publishes_it(self):
         """The chip reads Routing ON when the gauge is one."""
