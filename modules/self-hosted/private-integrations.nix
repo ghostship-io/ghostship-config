@@ -13,6 +13,7 @@ let
   privateAddons = runtimes.private;
   baseImage = import ./service-base-image.nix {
     inherit pkgs; name = "ghostship-private-integrations"; uid = "62020";
+    runtimeBins = [ "ghostship-mcp" ];
   };
   # The account the owner signs in as is supplied by the deployment outside
   # this repository; the template keeps only the placeholder name.
