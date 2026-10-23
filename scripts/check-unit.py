@@ -33,6 +33,8 @@ TESTS = (
     "test_t3code_image_identity.py",
     "test_t3code_source_sync.py",
     "test_t3code_restart_guard.py",
+    "test_t3code_recovery.py",
+    "test_t3code_recovery_units.py",
     "test_t3code_candidate_receipt.py",
     "test_t3code_boot_environment.py",
     "test_test_fixture_lint.py",

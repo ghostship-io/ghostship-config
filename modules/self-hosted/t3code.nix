@@ -76,6 +76,8 @@ let
 
 in
 {
+  imports = [ ./t3code-recovery.nix ];
+
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {
     assertion = false;

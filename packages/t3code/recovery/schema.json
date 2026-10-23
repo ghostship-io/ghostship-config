@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["action", "diagnosis", "confidence", "evidence"],
+  "additionalProperties": false,
+  "properties": {
+    "action": { "type": "string", "enum": ["none", "start_server", "restart_proxy", "start_container", "restart_container"] },
+    "diagnosis": { "type": "string", "maxLength": 2000 },
+    "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+    "evidence": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 200 } }
+  }
+}
