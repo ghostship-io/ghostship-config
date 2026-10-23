@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.192] - 2026-10-23
+
+- Provision cached, isolated ephemeral CI runners for frequent repository gates.
+
+PR #356.
+
 ## [3.17.191] - 2026-10-23
 
 - Activate the repaired MCP browser window and human handoff interfaces.
