@@ -110,10 +110,10 @@ class SourceClosureTests(unittest.TestCase):
         data=json.loads(result.stdout)
         self.assertIn('/worker-home/.local/state/ghostship/reviews:/reviews:ro,noexec,nosuid,nodev',data['volumes'])
         self.assertEqual(data['environment']['GHOSTSHIP_REVIEW_STORE'],'/reviews')
-        self.assertIn('/worker-home/.config/ghostship:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev', data['volumes'])
+        self.assertIn('/worker-home/.local/state/ghostship/orchestrator:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev', data['volumes'])
         self.assertEqual(data['environment']['GHOSTSHIP_ORCHESTRATOR_FILE'],
-                         '/run/ghostship-orchestrator/session-rotation.env')
-        self.assertFalse(any('session-rotation.env:' in value for value in data['volumes']))
+                         '/run/ghostship-orchestrator/pointer.env')
+        self.assertFalse(any('pointer.env:' in value or '/.config/ghostship:' in value for value in data['volumes']))
         self.assertFalse(any('/.t3/userdata' in value or ('/.config/gh:' in value or '/.config/gh/' in value) for value in data['volumes']))
 
     @unittest.skipUnless(shutil.which('setfacl') and shutil.which('getfacl'), 'requires POSIX ACL tools')
@@ -138,3 +138,40 @@ class SourceClosureTests(unittest.TestCase):
             self.assertIn('mask::r--', acl)
             self.assertIn('default:user:62031:r-x', subprocess.check_output(
                 ['getfacl', '-cpn', str(root)], text=True))
+
+    def test_activation_seeds_pointer_before_explicit_reader_starts(self):
+        expression = r"""
+          let
+            suffix = a: b: let n = builtins.stringLength b - builtins.stringLength a;
+              in n >= 0 && builtins.substring n (builtins.stringLength a) b == a;
+            lib = {
+              mkIf = condition: value: value; mkBefore = value: value;
+              escapeShellArg = value: "'" + value + "'";
+              hasSuffix = suffix;
+              removeSuffix = a: b: if suffix a b then builtins.substring 0
+                (builtins.stringLength b - builtins.stringLength a) b else b;
+              findFirst = pred: fallback: values: let found = builtins.filter pred values;
+                in if found == [] then fallback else builtins.head found;
+            };
+            config = {
+              ghostship.githubEngineering.enable = true;
+              ghostship.selfHostedSecrets.renderFor = name: "/secret-projector";
+              virtualisation.oci-containers.containers.t3code.volumes = ["/worker-home:/home/t3code:rw"];
+            };
+            pkgs = {
+              coreutils = "/coreutils"; util-linux = "/util-linux";
+              findutils = "/findutils"; acl = "/acl";
+              python3.withPackages = packages: "/python";
+              writeShellScriptBin = name: text: "/script";
+              writeText = name: text: "/config";
+            };
+            result = import __SOURCE__ { inherit config lib pkgs;
+              inputs.ghostship-private-agent = "/pinned-agent"; };
+          in result.config.systemd.services.podman-ghostship-github-coordinator.preStart
+        """.replace('__SOURCE__', str(ROOT/'modules/self-hosted/github-engineering.nix'))
+        script = json.loads(subprocess.check_output(
+            ['nix','eval','--impure','--json','--expr',expression], text=True))
+        self.assertLess(script.index('seed_pointer()'), script.index('test -r'))
+        self.assertIn('PYTHONPATH=/pinned-agent/tools/python', script)
+        self.assertIn('setpriv', script)
+        self.assertIn("XDG_STATE_HOME='/worker-home/.local/state'", script)
