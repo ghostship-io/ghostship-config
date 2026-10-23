@@ -1,0 +1,168 @@
+{
+  "_comment": "Synthetic reservations of the free inference pool. No live row is copied: every identifier, model and token count here is invented. The epoch seconds are absolute and the test reads them at NOW = 1800000000, so the rows are inside the 35 day window unless a row says otherwise. A reservation without a job receipt is a probe of a route.",
+  "now": 1800000000,
+  "reservations": [
+    {
+      "id": "reservation-success",
+      "job": "job-success",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799996400,
+      "input": 120,
+      "output": 30
+    },
+    {
+      "id": "reservation-quota",
+      "job": "job-quota",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799996200,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-daily",
+      "job": "job-daily",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799996000,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-rate-limited",
+      "job": "job-rate-limited",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799995800,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-upstream-error",
+      "job": "job-upstream-error",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799995600,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-model-unavailable",
+      "job": "job-model-unavailable",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799995400,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-context-limit",
+      "job": "job-context-limit",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799995200,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-credentials",
+      "job": "job-credentials",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799995000,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-unexpected-tool",
+      "job": "job-unexpected-tool",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994800,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-two-first",
+      "job": "job-two-attempts",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994500,
+      "input": 100,
+      "output": 10
+    },
+    {
+      "id": "reservation-two-second",
+      "job": "job-two-attempts",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994600,
+      "input": 200,
+      "output": 20
+    },
+    {
+      "id": "reservation-three-first",
+      "job": "job-three-failures",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994200,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-three-second",
+      "job": "job-three-failures",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994300,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-three-third",
+      "job": "job-three-failures",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994400,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-probe",
+      "job": "probe-acme-free-0123456789ab",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1799994100,
+      "input": 4060,
+      "output": 8
+    },
+    {
+      "id": "reservation-probe-go",
+      "job": "probe-go",
+      "provider": "go-free",
+      "model": "go-model",
+      "at": 1799994000,
+      "input": 100,
+      "output": 2
+    },
+    {
+      "id": "reservation-outside-the-window",
+      "job": "job-outside-the-window",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1796889600,
+      "input": 5994,
+      "output": 1024
+    },
+    {
+      "id": "reservation-old",
+      "job": "job-old-reservation",
+      "provider": "acme-free",
+      "model": "small-model",
+      "at": 1796889700,
+      "input": 5994,
+      "output": 1024
+    }
+  ]
+}

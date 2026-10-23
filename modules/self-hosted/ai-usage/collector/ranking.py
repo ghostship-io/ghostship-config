@@ -52,10 +52,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 try:  # pragma: no cover - the collector always ships metrics.py
-    from metrics import label_value
+    from metrics import ExactLabel, label_value
 except ImportError:  # pragma: no cover - standalone use
     def label_value(value: object) -> str:
         return str(value)
+
+    class ExactLabel(str):  # pragma: no cover - standalone use
+        """A label value that is published exactly as it is."""
 
 try:  # pragma: no cover - the collector always ships catalog.py
     from catalog import PROVIDER_ALIASES
@@ -118,6 +121,10 @@ class QuotaWindow:
     # without reading is visible and it does not gate: an unknown reading is
     # not evidence that an account is exhausted.
     gating: bool = True
+    # The inference behind an inferred window: the window it was measured
+    # from, the budget, the unit, the scope, the weights, the episode count
+    # and the state. It is empty for every window a provider reported.
+    inference: Any = None
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -179,6 +186,22 @@ class RankedModel:
     # then carries its own window and the paid allowance of the account
     # does not gate it.
     unlimited: bool = False
+    # Where the capacity of the route comes from: a reading the provider
+    # reported, an inference from its limit failures, a statement the
+    # provider publishes, or nothing at all.
+    capacity_basis: str = ""
+    # The inference behind the capacity, when the capacity is inferred: the
+    # window, the budget, the unit, the scope, the weights, the episode
+    # count and the state.
+    capacity_inference: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
+# The four bases a capacity can have. They are never mixed: a reader sees
+# which one a number came from.
+BASIS_REPORTED = "reported"
+BASIS_INFERRED = "inferred"
+BASIS_PUBLISHED = "published"
+BASIS_UNKNOWN = "unknown"
 
 
 # The tiers, in the order the dashboard reads them.
@@ -193,6 +216,9 @@ REASON_ROUTE_PARKED = "the route is parked by its own source"
 REASON_CAPACITY_SPENT = "an allowance of the account is spent"
 REASON_CAPACITY_UNKNOWN = "the headroom of the account is unknown"
 REASON_NOT_OFFERED = "the route is not offered by the instance"
+# A route whose model the provider retired. The published reason is the
+# code, so a reader matches it against the state file and the snapshot.
+REASON_MODEL_RETIRED = "model_retired"
 
 # Lineage priors. A model starts from the prior of its lineage, which is
 # matched on the catalog family first and on the model id second.
@@ -882,6 +908,110 @@ def _load_state(path: str | os.PathLike[str]) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def load_state(path: str | os.PathLike[str] | None) -> dict[str, Any]:
+    """The ranking state file, read without a path being a path.
+
+    The collector reads the state before the ranking writes it, and it
+    reads the retired routes out of it: a retirement outlives the window
+    of the failure that reported it.
+    """
+    if not path:
+        return {}
+    return _load_state(path)
+
+
+def retired_from_state(state: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """The retired routes the state file remembers, by the id of the route.
+
+    A retired route is remembered with the provider that serves it, the
+    model and the moment the retirement was first seen. A state file
+    without such a record knows of no retired route.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for entry in (state or {}).values():
+        if not isinstance(entry, Mapping):
+            continue
+        record = entry.get("retired")
+        if not isinstance(record, Mapping):
+            continue
+        route = str(record.get("route") or "")
+        if route:
+            found[route] = dict(record)
+    return found
+
+
+def _retired_for(
+    retired: Mapping[str, Mapping[str, Any]] | None,
+    provider: str,
+    model: str,
+    account: str,
+) -> Mapping[str, Any] | None:
+    """The retirement of one route, when the route is retired.
+
+    A route is named by the provider that serves it and the model, and the
+    provider is the account the route is charged to. The record of the
+    route the collector wrote is found by that name, and the account is
+    the second name a record may carry.
+    """
+    if not retired:
+        return None
+    found = retired.get(f"{provider}/{model}")
+    if found is not None:
+        return found
+    for record in retired.values():
+        if str(record.get("model") or "") != str(model or ""):
+            continue
+        if str(record.get("provider") or "") in (
+            str(provider or ""),
+            str(account or ""),
+        ):
+            return record
+    return None
+
+
+def _with_retired(
+    state: dict[str, Any],
+    retired: Mapping[str, Mapping[str, Any]] | None,
+    now: float,
+) -> dict[str, Any]:
+    """The state with the retired routes recorded, and the stale ones removed.
+
+    The state file is the collector's own memory: a route that was retired
+    stays retired after the failure that reported it has left the window,
+    and a route the provider serves again loses its record.
+    """
+    updated = dict(state)
+    for key, entry in list(updated.items()):
+        if not isinstance(entry, Mapping):
+            continue
+        record = entry.get("retired")
+        if not isinstance(record, Mapping):
+            continue
+        route = str(record.get("route") or "")
+        if route and route in (retired or {}):
+            continue
+        fresh = dict(entry)
+        fresh.pop("retired", None)
+        updated[key] = fresh
+    for record in (retired or {}).values():
+        provider = str(record.get("provider") or "")
+        model = str(record.get("model") or "")
+        if not provider or not model:
+            continue
+        key = _state_key(provider, model)
+        entry = dict(updated.get(key) or {})
+        if not entry:
+            entry = {
+                "first_seen": float(record.get("first_seen") or now),
+                "evaluations": 0,
+                "last_evaluated": float(now),
+                "stale": True,
+            }
+        entry["retired"] = dict(record)
+        updated[key] = entry
+    return updated
+
+
 def _update_state(state: dict[str, Any], present: set[str], now: float) -> dict[str, Any]:
     """Record the evaluation of every model we know about."""
     updated: dict[str, Any] = {}
@@ -1064,6 +1194,13 @@ class _Candidate:
     unlimited: bool = False
     # Why the model is not usable right now, or an empty string when it is.
     availability_reason: str = ""
+    # The observed failure of this route, when there is one. It belongs to
+    # this model alone: a failure of another model is not its failure.
+    failure: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # Where the capacity of the route comes from, and the inference behind it
+    # when the capacity was inferred.
+    capacity_basis: str = ""
+    capacity_inference: dict[str, Any] = dataclasses.field(default_factory=dict)
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
 
@@ -1275,6 +1412,48 @@ def _is_unlimited_window(window: Any) -> bool:
     return str(quota_id or "") == "free-unlimited"
 
 
+def _is_inferred_window(window: Any) -> bool:
+    """True when a window was inferred from the limit failures of a route."""
+    inference = getattr(window, "inference", None)
+    if inference is None and isinstance(window, Mapping):
+        inference = window.get("inference")
+    if inference:
+        return True
+    quota_id = getattr(window, "quota_id", None)
+    if quota_id is None and isinstance(window, Mapping):
+        quota_id = window.get("quota_id")
+    return str(quota_id or "").startswith("inferred:")
+
+
+def _capacity_basis(windows: Iterable[Any]) -> str:
+    """Where the capacity of a route comes from.
+
+    A window the provider reported is a reading, a window the provider
+    publishes is a statement, and a window that was inferred from the limit
+    failures of the route is an inference. A route with no window at all
+    has an unknown capacity: it is never published as a number.
+    """
+    applied = list(windows or ())
+    if any(_is_inferred_window(window) for window in applied):
+        return BASIS_INFERRED
+    if any(_is_unlimited_window(window) for window in applied):
+        return BASIS_PUBLISHED
+    if applied:
+        return BASIS_REPORTED
+    return BASIS_UNKNOWN
+
+
+def _inference_detail(windows: Iterable[Any]) -> dict[str, Any]:
+    """The inference behind the capacity of a route, or an empty record."""
+    for window in windows or ():
+        inference = getattr(window, "inference", None)
+        if inference is None and isinstance(window, Mapping):
+            inference = window.get("inference")
+        if isinstance(inference, Mapping) and inference:
+            return dict(inference)
+    return {}
+
+
 def _window_applies(window: Any, model: str) -> bool:
     """True when a window applies to the model."""
     applies = getattr(window, "applies_to", None)
@@ -1376,6 +1555,7 @@ def rank_models(
     free_route_accounts: Iterable[str] | None = None,
     frontier_workhorses: Iterable[str] | None = None,
     observed_failures: Iterable[Mapping[str, Any]] | None = None,
+    retired_routes: Mapping[str, Mapping[str, Any]] | None = None,
     now: float = 0.0,
     state_path: str | os.PathLike[str] | None = None,
 ) -> list[RankedModel]:
@@ -1403,11 +1583,17 @@ def rank_models(
     to one model. A model under a failed scope is not available, and it
     stays visible: it is reported with the reason and the moment it was
     observed.
+
+    `retired_routes` are the routes whose model the provider retired. A
+    retired route is not available and holds no tier, whatever window it
+    has, and the state file keeps the retirement for the runs after the
+    failure that reported it has left the window.
     """
     workhorses = tuple(
         str(name) for name in (frontier_workhorses or FRONTIER_WORKHORSES)
     )
     failures = _observed_failures(observed_failures)
+    retirements = dict(retired_routes or {})
     inventory: set[tuple[str, str]] = set()
     for record in models or ():
         pair = _record_pair(record)
@@ -1507,6 +1693,18 @@ def rank_models(
             or ""
         )
         failure = _failure_for(failures, account, native_instance, model)
+        # A route whose model the provider retired. The retirement is about
+        # that one route, whatever window it has: a route that is published
+        # as unlimited is still gone when the model behind it is retired.
+        retirement = _retired_for(retirements, provider, model, account)
+        if retirement is not None:
+            failure = {
+                "scope": "model",
+                "target": str(retirement.get("route") or model),
+                "reason": REASON_MODEL_RETIRED,
+                "label": REASON_MODEL_RETIRED,
+                "observed_at": float(retirement.get("first_seen") or 0.0),
+            }
         # The windows that constrain the route. A window a source publishes
         # without reading stays visible, but it does not gate: an unknown
         # reading is not evidence that an account is exhausted.
@@ -1514,8 +1712,9 @@ def rank_models(
             window for window in windows if getattr(window, "gating", True) is not False
         ]
         if failure is not None:
-            # The T3 Code state says this route is broken right now. The
-            # model is not usable, and it stays visible with the reason.
+            # The T3 Code state says this route is broken right now, or the
+            # provider retired the model behind it. The model is not usable,
+            # and it stays visible with the reason.
             available = False
             availability_reason = str(failure.get("label") or "") or REASON_ROUTE_FAILED
         elif external_state is False:
@@ -1633,6 +1832,9 @@ def rank_models(
                 applied_windows=list(windows),
                 unlimited=any(_is_unlimited_window(window) for window in model_windows),
                 availability_reason=availability_reason,
+                failure=dict(failure or {}),
+                capacity_basis=_capacity_basis(windows),
+                capacity_inference=_inference_detail(windows),
             )
         )
 
@@ -1720,9 +1922,11 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
             continue
@@ -1755,9 +1959,11 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
         if not tier_entries:
@@ -1787,9 +1993,11 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
         entries.extend(tier_entries)
@@ -1830,13 +2038,123 @@ def rank_models(
         state = _update_state(
             _load_state(state_path), {_state_key(p, m) for p, m in universe}, now
         )
+        # The retirements are kept in the same state file: a retired route
+        # stays retired after the failure that reported it has left the
+        # window, and a route the provider serves again loses its record.
+        state = _with_retired(state, retirements, now)
         _save_state(state_path, state)
 
     return ranked
 
 
+# The fields a source may use for the name of a model. The first field with a
+# value is the label of the model.
+MODEL_NAME_FIELDS = ("name", "label", "displayName", "display_name", "title")
+
+
+def _first_label(entry: Mapping[str, Any]) -> str:
+    """The label one source entry carries, or an empty string."""
+    for field in MODEL_NAME_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _t3_code_label(
+    provider: str,
+    model: str,
+    native_models: Mapping[str, Any] | None,
+    catalog: Any,
+) -> str:
+    """The label T3 Code's model catalog gives one model, or an empty string.
+
+    Two sources publish it: the T3 Code instance, which names the models it
+    offers, and the model catalog that instance reads, which carries the
+    provider's own display name. A label that only repeats the model id is
+    no label: the name is looked for elsewhere.
+    """
+    entry = None
+    if isinstance(native_models, Mapping):
+        entry = native_models.get((provider, model))
+        if not isinstance(entry, Mapping):
+            entry = native_models.get((str(provider), str(model)))
+    if isinstance(entry, Mapping):
+        label = _first_label(entry)
+        known = {str(model or "")}
+        model_id = entry.get("modelId")
+        if isinstance(model_id, str) and model_id.strip():
+            known.add(model_id.strip())
+        if label and label not in known:
+            return label
+    if catalog is not None:
+        getter = getattr(catalog, "model_entry", None)
+        found = getter(provider, model) if callable(getter) else None
+        if isinstance(found, Mapping):
+            label = _first_label(found)
+            if label and label != str(model or ""):
+                return label
+    return ""
+
+
+def _aa_display_name(provider: str, model: str, aa_cache: Any) -> str:
+    """The Artificial Analysis record's name, without its reasoning condition.
+
+    The record is the one the exact identity binding proves for this model,
+    the same record the quality score comes from. The condition the feed
+    measured it under is not part of the model's name: "Claude Sonnet 5.5
+    (Max, Default Fallback)" is the model "Claude Sonnet 5.5".
+    """
+    if aa_bind is None or not isinstance(aa_cache, Mapping):
+        return ""
+    if str(aa_cache.get("status") or "") != "ok":
+        return ""
+    binding = aa_bind.resolve(
+        aa_cache.get("records") or (), provider, model, mode="reference"
+    )
+    if str(binding.get("state") or "") != "measured":
+        return ""
+    record = binding.get("record")
+    if not isinstance(record, Mapping):
+        return ""
+    raw = record.get("model")
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    base, _variant = aa_bind.variant_of(raw)
+    return base.strip()
+
+
+def model_display_name(
+    provider: str,
+    model: str,
+    *,
+    native_models: Mapping[str, Any] | None = None,
+    aa_cache: Any = None,
+    catalog: Any = None,
+) -> str:
+    """The human name of one model. It is never empty.
+
+    The first name that exists wins: the label T3 Code's model catalog gives
+    the model, else the Artificial Analysis record's name without its
+    reasoning condition, else the raw model id. The raw id is the last
+    resort, so every row of the dashboard says something.
+    """
+    name = _t3_code_label(provider, model, native_models, catalog)
+    if name:
+        return name
+    name = _aa_display_name(provider, model, aa_cache)
+    if name:
+        return name
+    return str(model or "")
+
+
 def rank_samples(
-    ranked: list[RankedModel], *, now: float
+    ranked: list[RankedModel],
+    *,
+    now: float,
+    native_models: Mapping[str, Any] | None = None,
+    aa_cache: Mapping[str, Any] | None = None,
+    catalog: Any = None,
 ) -> list[tuple[str, dict[str, str], float]]:
     """Render the ranking as Prometheus samples.
 
@@ -1895,6 +2213,46 @@ def rank_samples(
                         float(entry.expires_in_seconds),
                     )
                 )
+            # Where the capacity of this route comes from: a reading the
+            # provider reported, an inference from the limit failures of the
+            # route, a statement the provider publishes, or nothing at all.
+            # The inference behind it is published with it, so a reader
+            # knows how much record stands behind the number.
+            inference = entry.capacity_inference or {}
+            basis = entry.capacity_basis or BASIS_UNKNOWN
+            samples.append(
+                (
+                    "ghostship_ai_model_capacity_basis",
+                    {
+                        **labels,
+                        "basis": label_value(basis),
+                        "state": label_value(str(inference.get("state") or "")),
+                        "window": label_value(str(inference.get("window") or "")),
+                        "scope": label_value(str(inference.get("scope") or "")),
+                        "unit": label_value(str(inference.get("unit") or "")),
+                        "weights": label_value(str(inference.get("weights_basis") or "")),
+                    },
+                    1.0,
+                )
+            )
+            budget = inference.get("budget")
+            if isinstance(budget, (int, float)) and not isinstance(budget, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_capacity_budget",
+                        {**labels, "unit": label_value(str(inference.get("unit") or ""))},
+                        float(budget),
+                    )
+                )
+            if basis == BASIS_INFERRED:
+                episodes = inference.get("episodes")
+                samples.append(
+                    (
+                        "ghostship_ai_model_capacity_episodes",
+                        dict(labels),
+                        float(episodes) if isinstance(episodes, (int, float)) and not isinstance(episodes, bool) else 0.0,
+                    )
+                )
             samples.append(
                 (
                     "ghostship_ai_model_evaluated_timestamp_seconds",
@@ -1918,6 +2276,30 @@ def rank_samples(
                         1.0,
                     )
                 )
+            # The human name of the model, so a row of the dashboard can say
+            # what the model is. One series per candidate, and the name is
+            # never empty: the raw id is the last resort. The name is
+            # published exactly: it is a name, and the exposition format
+            # escapes it the way the format requires.
+            samples.append(
+                (
+                    "ghostship_ai_model_info",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "name": ExactLabel(
+                            model_display_name(
+                                entry.provider,
+                                entry.model,
+                                native_models=native_models,
+                                aa_cache=aa_cache,
+                                catalog=catalog,
+                            )
+                        ),
+                    },
+                    1.0,
+                )
+            )
         # The rank of every model, including the ones that hold no tier: a
         # model that is not usable stays visible with its rank.
         samples.append(

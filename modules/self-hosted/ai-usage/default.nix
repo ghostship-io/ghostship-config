@@ -7,7 +7,7 @@
 # already exists - T3 Code's own read-only RPC surface, the provider APIs T3
 # Code does not read, the free inference pool, and the public model catalog.
 # The contract, every metric name and label, is in README.md.
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, ... } @ args:
 let
   cfg = config.ghostship.aiUsage;
   # The container home the provider credentials, the model catalog and the
@@ -44,6 +44,15 @@ let
     cp ${./collector}/*.py $out/collector/
   '';
   python = pkgs.python3.withPackages (ps: [ ps.websockets ]);
+  # The owner's runtime policy, which carries the static worker table that
+  # governs while routing is off. It is a plain source tree from its own
+  # flake input. An evaluation that does not carry the flake's inputs (a
+  # standalone module test) reads no policy, and the collector reports the
+  # table as unreadable rather than inventing one.
+  policy = (args.inputs or { }).ghostship-agent-policy or null;
+  policyArg = lib.optionalString (policy != null) (
+    " --runtime-policy ${policy}/config/agents/runtime-policy.json"
+  );
   # The owner's switch for the routing snapshot. The collector publishes it
   # as it is and never acts on it itself: a consumer reads the switch and
   # decides. Routing stays off until the owner turns it on, so a consumer
@@ -69,7 +78,7 @@ in
       wants = [ "network-online.target" "podman.socket" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}";
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.

@@ -71,7 +71,7 @@
       "enabled": true,
       "free_only": true,
       "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
-      "base_url": "https://api.cloudflare.com/client/v4/accounts/the owner's local area/ai/v1",
+      "base_url": "https://api.cloudflare.com/client/v4/accounts/@GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID@/ai/v1",
       "data_policy_approved": true,
       "allowed_workloads": [
         "development",

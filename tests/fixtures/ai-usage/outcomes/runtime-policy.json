@@ -1,0 +1,33 @@
+{
+  "model_trust": {
+    "entries": [
+      {
+        "model": "beam",
+        "level": "untrusted",
+        "task_types": [
+          "implementation"
+        ],
+        "reason": "the owner does not trust the model for implementation",
+        "evidence": "the review of 2026-10-22"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "level": "excluded",
+        "task_types": [
+          "implementation"
+        ],
+        "reason": "the owner's policy excludes the model for implementation",
+        "evidence": "the policy review of 2026-10-20"
+      },
+      {
+        "model": "minimax-m3.1-flash",
+        "level": "backup",
+        "task_types": [
+          "*"
+        ],
+        "reason": "the model is the backup of every task type",
+        "evidence": "the policy of 2026-10-19"
+      }
+    ]
+  }
+}

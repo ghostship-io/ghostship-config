@@ -18,34 +18,38 @@ let
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
     "ghostship-io/ghostship-config" = {
-      project_id = "the owner's local area";
+      project_id = "@GHOSTSHIP_T3_PROJECT_CONFIG@";
       required_checks = [ "check" "browser" ];
     };
-    "ghostship-io/ghostship-agent".project_id = "the owner's local area";
-    "ghostship-io/ghostship-3dprinting".project_id = "the owner's local area";
-    "ghostship-io/ghostship-roms".project_id = "the owner's local area";
-    "ghostship-io/ghostship-xplus4".project_id = "the owner's local area";
-    "ghostship-io/ghostship-newsletter".project_id = "the owner's local area";
-    "ghostship-io/ghostship-orca".project_id = "the owner's local area";
+    "ghostship-io/ghostship-agent".project_id = "@GHOSTSHIP_T3_PROJECT_AGENT@";
+    "ghostship-io/ghostship-3dprinting".project_id = "@GHOSTSHIP_T3_PROJECT_3DPRINTING@";
+    "ghostship-io/ghostship-roms".project_id = "@GHOSTSHIP_T3_PROJECT_ROMS@";
+    "ghostship-io/ghostship-xplus4".project_id = "@GHOSTSHIP_T3_PROJECT_XPLUS4@";
+    "ghostship-io/ghostship-newsletter".project_id = "@GHOSTSHIP_T3_PROJECT_NEWSLETTER@";
+    "ghostship-io/ghostship-orca".project_id = "@GHOSTSHIP_T3_PROJECT_ORCA@";
   };
   # The previous owner and the two renamed repositories, so that existing
   # issue owners, queued deliveries, CI issue mappings and pull request links
   # survive the transfer. The alias targets are the canonical repositories
   # above; the coordinator resolves a legacy name to its canonical one and
-  # keeps the pre-transfer identity for commands it has already sent.
+  # keeps the pre-transfer identity for commands it has already sent. The
+  # previous owner is supplied by the deployment outside this repository.
   repositoryAliases = {
-    "ghostship-io/ghostship-config" = "ghostship-io/ghostship-config";
-    "ghostship-io/ghostship-agent" = "ghostship-io/ghostship-agent";
-    "ghostship-io/ghostship-3dprinting" = "ghostship-io/ghostship-3dprinting";
-    "ghostship-io/ghostship-roms" = "ghostship-io/ghostship-roms";
-    "ghostship-io/ghostship-xplus4" = "ghostship-io/ghostship-xplus4";
-    "ghostship-io/ghostship-newsletter" = "ghostship-io/ghostship-newsletter";
-    "ghostship-io/ghostship-orca" = "ghostship-io/ghostship-orca";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/nixos-config" = "ghostship-io/ghostship-config";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-agent" = "ghostship-io/ghostship-agent";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-3dprinting" = "ghostship-io/ghostship-3dprinting";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-roms" = "ghostship-io/ghostship-roms";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-xplus4" = "ghostship-io/ghostship-xplus4";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-newsletter" = "ghostship-io/ghostship-newsletter";
+    "@GHOSTSHIP_GITHUB_ACCOUNT@/orca-advanced-calibration" = "ghostship-io/ghostship-orca";
   };
-  coordinatorConfig = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
-    allowed_user_ids = [ a local store id ];
+  renderOwnerConfig = pkgs.writeShellScriptBin "ghostship-render-owner-config" ''
+    exec ${pkgs.python3}/bin/python3 ${./render-owner-config.py} "$@"
+  '';
+  coordinatorConfigTemplate = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
+    allowed_user_ids = [ "@GHOSTSHIP_GITHUB_USER_ID@" ];
     ntfy_url = "http://ntfy:8080";
-    t3_environment_id = "the owner's local area";
+    t3_environment_id = "@GHOSTSHIP_T3_ENVIRONMENT_ID@";
     # The chief reviewer leads launched threads; the backup reviewer stands in
     # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
     # remains delegated under the canonical engineering/routing policy.
@@ -205,10 +209,9 @@ in
       pull = "never";
       user = "62030:62032";
       cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
-              # The receiver serves the canonical repositories and, while the
-              # transfer lasts, the names they had before it.
+              # The receiver serves the canonical repositories.
               "--repositories" (lib.concatStringsSep ","
-                (builtins.attrNames repositories ++ builtins.attrNames repositoryAliases)) ];
+                (builtins.attrNames repositories)) ];
       volumes = [
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-hooks.path}:/run/secrets/hooks.env:ro"
@@ -273,7 +276,7 @@ in
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${root}/state:/state:rw,noexec,nosuid,nodev"
         "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
-        "${coordinatorConfig}:/etc/ghostship-github/config.json:ro"
+        "${root}/config.json:/etc/ghostship-github/config.json:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"
@@ -286,8 +289,10 @@ in
       after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
       requires = [ "init-ghostship-net.service" ];
       wants = [ "ghostship-github-t3-token.service" ];
+      serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       preStart = lib.mkBefore ''
         ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-github-coordinator
+        ${renderOwnerConfig}/bin/ghostship-render-owner-config ${coordinatorConfigTemplate} ${root}/config.json 644
       '';
     };
   };

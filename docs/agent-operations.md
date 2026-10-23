@@ -144,7 +144,7 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `wslpath -w /home/nixos/...` returns a `\\wsl.localhost\NixOS\...` UNC path
   for WSL-native files rather than a `C:\...` path.
 - Docker Desktop stores its WSL disk at
-  `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
+  `C:\Users\owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
 - WSL FHS shim changes can require a full WSL distro restart after a
@@ -583,3 +583,15 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   it is missing.
 - `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
   host integration. Remove it after Codex finishes integrating the host.
+
+### Private runtime identity settings
+
+`/etc/ghostship/owner-identity.env` supplies `GHOSTSHIP_GITHUB_USER_ID`
+(a positive integer), `GHOSTSHIP_T3_ENVIRONMENT_ID`,
+`GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID`, and `GHOSTSHIP_T3_PROJECT_` settings for
+`CONFIG`, `AGENT`, `3DPRINTING`, `ROMS`, `XPLUS4`, `NEWSLETTER`, and `ORCA`.
+Keep the file root-owned with mode 0600; populate these settings before
+activating the coordinator or inference bridge. The canonical owner-config
+renderer refuses a missing setting and preserves the numeric GitHub ID type.
+The inference bridge renders its provider template before handing the
+mode-0600 file to the container account. Values never belong in this tree.

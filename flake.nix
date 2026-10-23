@@ -5,7 +5,16 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/2318134ec169c1b8fbaf994b7beec3b3152123c5";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/3f108af0618b1d5cd0aac285d5afd9784ef5de7a";
+
+    # The owner's runtime policy, read by the AI usage collector for the
+    # static worker table that governs while routing is off. It is a plain
+    # source tree, not a flake, and it has its own pin: the T3 Code input
+    # above is built and must not move with it.
+    ghostship-agent-policy = {
+      url = "github:ghostship-io/ghostship-agent/5381c0156b441aa3e6ce039e7e8e3768bcac68a8";
+      flake = false;
+    };
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -116,6 +125,10 @@
               coreutils
               actionlint
               apparmor-parser
+              # The AppArmor profile check parses the policies the host
+              # loads, which include <tunables/global> and the
+              # abstractions from this package.
+              apparmor-profiles
               shellcheck
               gitleaks
               vector
@@ -132,6 +145,9 @@
               iproute2
               bubblewrap
             ];
+            # The AppArmor profile check parses the policies the host loads
+            # with the include tree the host resolves them against.
+            APPARMOR_INCLUDE_DIR = "${pkgs.apparmor-profiles}/etc/apparmor.d";
           };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [

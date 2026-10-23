@@ -246,6 +246,41 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                 1.0,
             )
         )
+        # The pool's own probe of the route. It says whether the route
+        # answered its last check, the class of the answer, the model it
+        # checked and the moment of the check. A probe the pool did not run
+        # carries no moment and is not a reading of the route.
+        probe = state.get("probe")
+        if isinstance(probe, dict):
+            probe_state = probe.get("state")
+            probe_model = probe.get("model")
+            if (
+                isinstance(probe_state, str)
+                and probe_state
+                and isinstance(probe_model, str)
+                and probe_model
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_probe",
+                        {
+                            "provider": str(provider),
+                            "model": probe_model,
+                            "state": probe_state,
+                            "category": str(probe.get("category") or ""),
+                        },
+                        1.0,
+                    )
+                )
+                checked = probe.get("at")
+                if isinstance(checked, (int, float)) and not isinstance(checked, bool):
+                    samples.append(
+                        _pool_sample(
+                            "ghostship_ai_pool_probe_timestamp_seconds",
+                            {"provider": str(provider), "model": probe_model},
+                            float(checked),
+                        )
+                    )
     for row in status.get("health") or []:
         if not isinstance(row, dict):
             continue
@@ -359,22 +394,38 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                         )
                     )
                     break
+    # The recent jobs are counted by their label set. A metric series is a
+    # name with a label set, and two jobs that share a provider, a worker, a
+    # client and a status are the same series: publishing one sample per
+    # job published that series twice, the writer dropped the repeat, and
+    # the published number was one where it was two. The series is the
+    # count of those jobs, published once.
+    recent_jobs: dict[tuple[str, str, str, str], int] = {}
     for job in status.get("jobs") or []:
         if not isinstance(job, dict):
             continue
         provider = str(job.get("provider") or "")
         if not provider:
             continue
+        key = (
+            provider,
+            str(job.get("worker") or "unknown"),
+            str(job.get("client") or "default"),
+            str(job.get("status") or "unknown"),
+        )
+        recent_jobs[key] = recent_jobs.get(key, 0) + 1
+    for key in sorted(recent_jobs):
+        provider, worker, client, job_status = key
         samples.append(
             _pool_sample(
                 "ghostship_ai_pool_recent_jobs",
                 {
                     "provider": provider,
-                    "worker": str(job.get("worker") or "unknown"),
-                    "client": str(job.get("client") or "default"),
-                    "status": str(job.get("status") or "unknown"),
+                    "worker": worker,
+                    "client": client,
+                    "status": job_status,
                 },
-                1.0,
+                float(recent_jobs[key]),
             )
         )
     updated = status.get("catalog_updated_at")
@@ -432,6 +483,19 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                     1.0 if available else 0.0,
                 )
             )
+            # The pool's own reason a candidate is unavailable. The pool
+            # names the policy that parks the account or the route, and the
+            # snapshot repeats that reason instead of guessing one. A
+            # candidate that is offered carries none.
+            unavailable_reason = candidate.get("unavailable_reason")
+            if isinstance(unavailable_reason, str) and unavailable_reason:
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_model_unavailable_reason",
+                        {**labels, "reason": unavailable_reason},
+                        1.0,
+                    )
+                )
             samples.append(
                 _pool_sample(
                     "ghostship_ai_pool_model_selected",

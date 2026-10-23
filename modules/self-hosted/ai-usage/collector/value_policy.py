@@ -20,6 +20,15 @@ The cost transform is swappable. The default is the reciprocal
 ``1 / (1 + cost)``, which needs no cohort. The other two need the cohort of
 the models it is compared with, and they publish their bounds, so a reader
 can see what the numbers were relative to.
+
+The outcome value is the third family: the quality the ranking is valued by
+is an outcome-weighted quality ``p``, not the raw intelligence index. The
+prior ``p0`` places the measured intelligence inside its own tier, ``p``
+shrinks that prior toward the outcomes that were actually measured, and the
+value combines ``p`` with the efficiency ``E`` under the same weights. The
+trust of a route then scales the value, and a free route may lead while it
+is close enough to the best available one. The maths lives here, so the ranking
+only calls it: no second scorer.
 """
 
 from __future__ import annotations
@@ -65,6 +74,53 @@ COST_TRANSFORMS: dict[str, str] = {
 # The transform the collector uses. A change here changes every value, and
 # the transform in force is published with the snapshot and the metrics.
 DEFAULT_COST_TRANSFORM = COST_TRANSFORM_INVERSE
+
+# The strength of the prior, in outcomes: k measured outcomes move the prior
+# by k / (k + n) of the distance toward the measured outcome rate.
+OUTCOME_PRIOR_STRENGTH = 10
+
+# The prior of a tier: where the measured intelligence sits between the
+# lowest and the highest intelligence of the models it is compared with.
+OUTCOME_PRIOR_FLOOR = 0.5
+OUTCOME_PRIOR_CEILING = 0.9
+OUTCOME_PRIOR_SPAN = OUTCOME_PRIOR_CEILING - OUTCOME_PRIOR_FLOOR
+
+# A free route leads while its quality is within this margin of the best
+# available model: it need not be the best, it is close enough to cost nothing.
+FREE_ROUTE_MARGIN = 0.10
+
+# The basis of the display score: which inputs built the number. The score is
+# one number per model, so the basis names the measurements that were there
+# and the prior that stood in for the ones that were not.
+QUALITY_BASIS_AA_OUTCOMES = "AA + outcomes"
+QUALITY_BASIS_AA_ONLY = "AA only"
+QUALITY_BASIS_OUTCOMES_DEFAULT = "outcomes + default prior"
+QUALITY_BASIS_DEFAULT = "default prior"
+
+# The factor the value of an untrusted route is multiplied by.
+UNTRUSTED_VALUE_FACTOR = 0.5
+
+# The trust levels of a route, in rank order: a lower rank is more trusted.
+TRUST_LEVELS: tuple[str, ...] = ("trusted", "backup", "untrusted", "excluded")
+
+# The bands of the pace state, in points of the Paced Availability: a route
+# more than this many points ahead of the line is ahead, and one more than
+# this many points behind it is behind; beyond the far line it is far behind.
+PACE_AHEAD_POINTS = 5.0
+PACE_BEHIND_POINTS = -5.0
+PACE_FAR_BEHIND_POINTS = -20.0
+
+# The states a route's pace takes, from ahead of the line to unknown. A
+# spent route has nothing left whatever its line, and a route with no window
+# has no pace at all.
+PACE_STATES: tuple[str, ...] = (
+    "ahead",
+    "on_pace",
+    "behind",
+    "far_behind",
+    "spent",
+    "unknown",
+)
 
 
 def _finite(value: Any) -> float | None:
@@ -175,6 +231,174 @@ def combine(
     return total, []
 
 
+def outcome_prior(intelligence: Any, i_min: Any, i_max: Any) -> float:
+    """The prior p0 of a model's quality: its intelligence inside its tier.
+
+    The tier is the cohort the model is compared with, so the same index
+    reads high in a weak tier and low in a strong one. A missing index has
+    no position in the tier and gets the middle of the range; a tier of one
+    model has no spread to read, so it gets the ceiling rather than a
+    division by zero. The result is clamped to the range.
+    """
+    index = _finite(intelligence)
+    if index is None:
+        return OUTCOME_PRIOR_FLOOR
+    lowest = _finite(i_min)
+    highest = _finite(i_max)
+    if lowest is None or highest is None:
+        return OUTCOME_PRIOR_FLOOR
+    if highest <= lowest:
+        return OUTCOME_PRIOR_CEILING
+    prior = OUTCOME_PRIOR_FLOOR + OUTCOME_PRIOR_SPAN * (index - lowest) / (highest - lowest)
+    return max(OUTCOME_PRIOR_FLOOR, min(OUTCOME_PRIOR_CEILING, prior))
+
+
+def _outcome_count(value: Any, name: str) -> int:
+    number = _finite(value)
+    if number is None or number != int(number):
+        raise ValueError(f"{name} must be a whole outcome count, not {value!r}")
+    return int(number)
+
+
+def outcome_quality(
+    p0: Any, n: Any, s: Any, k: Any = OUTCOME_PRIOR_STRENGTH
+) -> float:
+    """The quality p: the prior shrunk toward the measured outcomes.
+
+    ``p = (k * p0 + s) / (k + n)``, where ``s`` of ``n`` outcomes succeeded
+    and ``k`` outcomes of prior strength stand behind p0. A count that
+    cannot exist is a caller error, not an unknown: it raises rather than
+    producing a quality that was never measured.
+    """
+    prior = _finite(p0)
+    if prior is None:
+        raise ValueError(f"the prior must be a number, not {p0!r}")
+    outcomes = _outcome_count(n, "n")
+    successes = _outcome_count(s, "s")
+    if outcomes < 0 or successes < 0 or successes > outcomes:
+        raise ValueError(
+            f"an outcome count must satisfy 0 <= s <= n, not s={successes} and n={outcomes}"
+        )
+    strength = _finite(k)
+    if strength is None or strength <= 0.0:
+        raise ValueError(f"the prior strength must be a positive number, not {k!r}")
+    return (strength * prior + successes) / (strength + outcomes)
+
+
+def quality_score(
+    p0: Any, n: Any, s: Any, k: Any = OUTCOME_PRIOR_STRENGTH
+) -> int:
+    """The display score of a model: its outcome quality as an integer 0..100.
+
+    The score is the same quality the ranking is valued by, rounded to an
+    integer so every page reads one comparable number::
+
+        score = round(100 * (k * p0 + s) / (k + n))
+
+    The prior p0 and the counts n and s are the global ones: the intelligence
+    of the model inside the range of every ranked model, not of its tier, and
+    the rounds of every task type. The score is therefore one number per
+    model, and it never depends on the tier it is read in. A count that
+    cannot exist raises, exactly as it does in ``outcome_quality``.
+    """
+    return int(round(100.0 * outcome_quality(p0, n, s, k)))
+
+
+
+def outcome_value(quality: Any, efficiency: Any) -> float | None:
+    """The value of a model: the outcome-weighted quality and the efficiency.
+
+    The quality takes the intelligence slot of the policy's weights, so the
+    published value and this one cannot drift apart. A missing component
+    leaves the value unknown, exactly as the measured value does.
+    """
+    p = _finite(quality)
+    e = _finite(efficiency)
+    if p is None or e is None:
+        return None
+    value, _missing = combine(
+        {"intelligence": p, "cost_per_task": e}, VALUE_WEIGHTS
+    )
+    return value
+
+
+def trust_rank(level: Any) -> int:
+    """The rank of a trust level: trusted 0, backup 1, untrusted 2, excluded 3.
+
+    An absent or unknown level ranks as trusted: the policy grants no
+    penalty to a route nobody has judged.
+    """
+    name = level if isinstance(level, str) else None
+    if name is None:
+        return TRUST_LEVELS.index("trusted")
+    try:
+        return TRUST_LEVELS.index(name)
+    except ValueError:
+        return TRUST_LEVELS.index("trusted")
+
+
+def trust_adjusted_value(value: Any, level: Any) -> float | None:
+    """The value of a route under its trust level.
+
+    An untrusted route keeps half of its value; every other level, and an
+    unknown one, leaves it alone. A missing value stays missing.
+    """
+    number = _finite(value)
+    if number is None:
+        return None
+    if trust_rank(level) == TRUST_LEVELS.index("untrusted"):
+        return number * UNTRUSTED_VALUE_FACTOR
+    return number
+
+
+def free_route_leads(quality: Any, best_quality: Any) -> bool:
+    """Whether a free route leads against the best available quality.
+
+    A free route leads while it is no more than the margin behind the best
+    available model of its trust level: it costs nothing, so being close is
+    enough. A missing quality on either side cannot lead.
+    """
+    p = _finite(quality)
+    best = _finite(best_quality)
+    if p is None or best is None:
+        return False
+    return best - p <= FREE_ROUTE_MARGIN
+
+
+def pace_state(left_ratio: Any, expected_left_ratio: Any) -> str:
+    """The pace state of one window: where the share left sits on its line.
+
+    ``delta`` is the Paced Availability of the window in points, the share
+    left minus the expected share left, rounded to six decimals so that the
+    noise of the subtraction does not move a route across a band:
+    ``100 * (0.50 - 0.55)`` is ``-5.000000000000004`` and reads ``-5``.
+
+    A window with nothing left is spent, whatever its line: it cannot be
+    used again before it resets. A window with no reading, or a reading with
+    no line to compare it with, has no delta and is unknown: it is never
+    read as on the pace. Every other window is ahead when the delta is more
+    than five points, on the pace when it is between five points behind and
+    five ahead, behind when it is between twenty points behind and five
+    behind, and far behind when it is more than twenty points behind.
+    """
+    left = _finite(left_ratio)
+    if left is None:
+        return "unknown"
+    if left <= 0.0:
+        return "spent"
+    expected_left = _finite(expected_left_ratio)
+    if expected_left is None:
+        return "unknown"
+    delta = round(100.0 * (left - expected_left), 6)
+    if delta > PACE_AHEAD_POINTS:
+        return "ahead"
+    if delta >= PACE_BEHIND_POINTS:
+        return "on_pace"
+    if delta >= PACE_FAR_BEHIND_POINTS:
+        return "behind"
+    return "far_behind"
+
+
 def policy_document(transform: str = DEFAULT_COST_TRANSFORM) -> dict[str, Any]:
     """The published policy: the weights, the transform and the transforms."""
     name = str(transform or DEFAULT_COST_TRANSFORM)
@@ -213,6 +437,38 @@ def policy_document(transform: str = DEFAULT_COST_TRANSFORM) -> dict[str, Any]:
         },
         "cost_transforms": dict(COST_TRANSFORMS),
         "cost_transform_in_force": name,
+        "outcome": {
+            "prior": (
+                "p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min); 0.5 when I "
+                "is missing, 0.9 when the tier holds one model, clamped to "
+                "[0.5, 0.9]"
+            ),
+            "quality": "p = (k * p0 + s) / (k + n)",
+            "value": "value = 0.70 * p + 0.30 * E",
+            "components": {
+                "p0": "the measured intelligence inside the tier's range",
+                "p": "the prior shrunk toward s of n measured outcomes",
+                "E": "the efficiency of the measured cost per task",
+            },
+            "prior_strength": OUTCOME_PRIOR_STRENGTH,
+            "prior_range": [OUTCOME_PRIOR_FLOOR, OUTCOME_PRIOR_CEILING],
+            "free_route_margin": FREE_ROUTE_MARGIN,
+            "untrusted_value_factor": UNTRUSTED_VALUE_FACTOR,
+            "requires": (
+                "a quality and an efficiency; a missing one leaves the value "
+                "unknown, and 0 <= s <= n is required"
+            ),
+        },
+        "trust": {
+            "levels": list(TRUST_LEVELS),
+            "order": {level: rank for rank, level in enumerate(TRUST_LEVELS)},
+            "unknown": "an absent or unknown level ranks as trusted",
+            "value": (
+                "an untrusted route keeps untrusted_value_factor of its "
+                "value; every other level leaves it unchanged"
+            ),
+            "untrusted_value_factor": UNTRUSTED_VALUE_FACTOR,
+        },
         "renormalized": False,
         "basis": (
             "both measurements are required and nothing is renormalized: a "

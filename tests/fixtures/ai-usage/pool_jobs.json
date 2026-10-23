@@ -1,0 +1,268 @@
+{
+  "_comment": "Synthetic job receipts of the free inference pool. No live row is copied: every identifier, model and token count here is invented. The epoch seconds are absolute and the test reads them at NOW = 1800000000, so the rows are inside the 35 day window unless a row says otherwise.",
+  "now": 1800000000,
+  "jobs": [
+    {
+      "id": "job-success",
+      "status": "success",
+      "created_at": 1799996000,
+      "updated_at": 1799996400,
+      "result": {
+        "provider": "acme-free",
+        "model": "small-model",
+        "text": "done",
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 200,
+            "dispatch_count": 1,
+            "category": "success"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-quota",
+      "status": "failed",
+      "created_at": 1799995800,
+      "updated_at": 1799996200,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 429,
+            "dispatch_count": 1,
+            "category": "quota_exhausted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-daily",
+      "status": "failed",
+      "created_at": 1799995600,
+      "updated_at": 1799996000,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 429,
+            "dispatch_count": 1,
+            "category": "free_daily_exhausted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-rate-limited",
+      "status": "failed",
+      "created_at": 1799995400,
+      "updated_at": 1799995800,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 429,
+            "dispatch_count": 1,
+            "category": "rate_limited"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-upstream-error",
+      "status": "failed",
+      "created_at": 1799995200,
+      "updated_at": 1799995600,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 502,
+            "dispatch_count": 1,
+            "category": "upstream_error"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-model-unavailable",
+      "status": "failed",
+      "created_at": 1799995000,
+      "updated_at": 1799995400,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 404,
+            "dispatch_count": 1,
+            "category": "model_unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-context-limit",
+      "status": "failed",
+      "created_at": 1799994800,
+      "updated_at": 1799995200,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": null,
+            "dispatch_count": 0,
+            "category": "context_limit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-credentials",
+      "status": "failed",
+      "created_at": 1799994600,
+      "updated_at": 1799995000,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 401,
+            "dispatch_count": 1,
+            "category": "credentials_or_access"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-unexpected-tool",
+      "status": "failed",
+      "created_at": 1799994400,
+      "updated_at": 1799994800,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": null,
+            "dispatch_count": 1,
+            "category": "unexpected_tool"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-two-attempts",
+      "status": "success",
+      "created_at": 1799994000,
+      "updated_at": 1799994600,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 502,
+            "dispatch_count": 1,
+            "category": "upstream_error"
+          },
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 200,
+            "dispatch_count": 1,
+            "category": "success"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-three-failures",
+      "status": "failed",
+      "created_at": 1799993000,
+      "updated_at": 1799994400,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 502,
+            "dispatch_count": 1,
+            "category": "upstream_error"
+          },
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 429,
+            "dispatch_count": 1,
+            "category": "rate_limited"
+          },
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 429,
+            "dispatch_count": 1,
+            "category": "quota_exhausted"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-without-reservation",
+      "status": "failed",
+      "created_at": 1799994600,
+      "updated_at": 1799995100,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": null,
+            "dispatch_count": 0,
+            "category": "context_limit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-outside-the-window",
+      "status": "success",
+      "created_at": 1796889600,
+      "updated_at": 1796889600,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 200,
+            "dispatch_count": 1,
+            "category": "success"
+          }
+        ]
+      }
+    },
+    {
+      "id": "job-old-reservation",
+      "status": "success",
+      "created_at": 1799994000,
+      "updated_at": 1799994900,
+      "result": {
+        "attempts": [
+          {
+            "provider": "acme-free",
+            "model": "small-model",
+            "http_status": 200,
+            "dispatch_count": 1,
+            "category": "success"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -26,6 +26,9 @@ jobs:
         env:
           GITHUB_META_TOKEN: ${{ github.token }}
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          # A lock written before the organisation move still names the
+          # previous account; the deployment supplies that name.
+          GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
         run: python3 scripts/ci-private-inputs.py
       - name: Refresh public inputs (private revisions are explicit pins)
         run: python3 -c 'import json, subprocess; subprocess.run(["nix", "flake", "update", *[k for k in json.load(open("flake.lock"))["nodes"]["root"]["inputs"] if not k.startswith("ghostship-private-")]], check=True)'
