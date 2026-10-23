@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.182] - 2026-10-23
+
+- Preserve active T3 sessions when host configuration changes update Podman helpers.
+
+PR #348.
+
 ## [3.17.181] - 2026-10-23
 
 - Restore reported subscription limits and picker updates through the managed T3 bearer.
