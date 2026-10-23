@@ -98,10 +98,6 @@ let
 in
 
 {
-  system.build.sharedNetworkIPAMRegression = import ../../packages/podman-network/regression.nix {
-    inherit pkgs;
-  };
-
   assertions = import ./shared-network-policy.nix {
     inherit lib;
     containers = config.virtualisation.oci-containers.containers;
