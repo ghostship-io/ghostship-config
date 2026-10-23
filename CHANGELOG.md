@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.140] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `3f108af0` (agent 0.43.55). It adds the read-only `containers resources` host operation for CPU, memory against the declared limit, PIDs and host headroom, with 1 h/24 h peaks and a `stale` outcome when the container snapshot stops writing or a container restarted after it; the broker needs no new pipeline and no `metrics` section because it reads the counters the SIEM already collects. The bump also carries #152 (deploy slot), #157 (routing and worker policy), #139 (session handoff) and #155 (brief lesson), and #158, which retires the deployment freezes so that an owner deploy request is what deploys - the reason this pin goes out now.
+
 ## [3.17.139] - 2026-10-23
 
 - ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
