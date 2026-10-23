@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.159] - 2026-10-23
+
+- Keep routine AppArmor learning status and scheduled collector journal output bounded while preserving all evidence gates.
+
+PR #322.
+
 ## [3.17.158] - 2026-10-23
 
 - Keep Zen models outside T3 Code and reserve its OpenCode routes for the Go OAuth subscription.
