@@ -116,6 +116,14 @@ TIER_TASK_TYPES = {
     "3d": "cad-execution",
 }
 
+# The provider reservations of the runtime policy name a T3 Code provider
+# instance; the collector names the same provider by its account. A route of
+# a reserved provider is not a worker of the tiers outside its workload: it
+# follows every unreserved route of its trust group, and it says why.
+RESERVATION_PROVIDERS = {"claudeAgent": "claude", "codex": "codex", "grok": "grok"}
+RESERVATION_TIERS = {"review-roles": ("frontier",), "3d": ("3d",)}
+RESERVATION_IN_FORCE = ("active", "interim")
+
 # The visible label of a window whose state the provider publishes rather
 # than reports. The OpenCode Go documentation lists the free routes as
 # unlimited "for a limited time", so the label says that it is a promotion
@@ -2474,14 +2482,21 @@ def _winners(
             enough to the best route of its trust level leads it.
             """
             trust = value_policy.trust_rank(_trust_level(row, tier))
+            # A route of a provider reserved for another workload is not a
+            # worker of this tier: it joins the backup group and follows
+            # every unreserved route of it. An untrusted route stays last.
+            reserved = 1 if _reserved_for(row, tier) else 0
+            if reserved and trust < value_policy.trust_rank("backup"):
+                trust = value_policy.trust_rank("backup")
             if tier == "free":
                 # The free tier keeps the order it had: the band, the
                 # headroom and the last use.
-                return (trust, _free_key(row))
+                return (trust, reserved, _free_key(row))
             if tier == "bulk":
                 published = _published_value_for(row, tier)
                 return (
                     trust,
+                    reserved,
                     _reserve_key(row),
                     _free_leads(row),
                     -(published if published is not None else 0.0),
@@ -2491,6 +2506,7 @@ def _winners(
                 )
             return (
                 trust,
+                reserved,
                 _reserve_key(row),
                 _pace_key(row),
                 row["provider"],
@@ -2535,6 +2551,9 @@ def _winners(
                 "trust_reason": str(trust.get("reason") or ""),
                 "trust_source": str(trust.get("source") or "default"),
                 "trust_task_type": str(trust.get("task_type") or ""),
+                # The workload the provider is reserved for, when this tier
+                # is outside it: the route is shown, and it is not a worker.
+                "reserved_for": _reserved_for(row, tier),
                 # The outcome the published value was built from.
                 "outcome": {
                     "p0": outcome.get("p0"),
@@ -2852,6 +2871,23 @@ class _Trust:
         self._counts: dict[tuple[str, str], dict[str, Any]] | None = None
         self._levels: dict[tuple[str, str], dict[str, Any]] = {}
         self._identities: dict[tuple[str, str], str] = {}
+        self.reservations: dict[str, str] = {}
+        policy = self.policy if isinstance(self.policy, Mapping) else {}
+        for entry in policy.get("provider_reservations") or ():
+            if not isinstance(entry, Mapping):
+                continue
+            if str(entry.get("status") or "") not in RESERVATION_IN_FORCE:
+                continue
+            provider = RESERVATION_PROVIDERS.get(str(entry.get("provider") or ""))
+            if provider:
+                self.reservations[provider] = str(entry.get("workload") or "")
+
+    def reserved_for(self, provider: str, tier: str) -> str:
+        """The workload a provider is reserved for, outside that workload's tiers."""
+        workload = self.reservations.get(str(provider or ""), "")
+        if not workload or tier in RESERVATION_TIERS.get(workload, ()):
+            return ""
+        return workload
 
     def identity(self, provider: str, model: str) -> str:
         """The identity of a route: the model it serves."""
@@ -2919,6 +2955,11 @@ def _outcome_record(row: Mapping[str, Any], tier: str) -> dict[str, Any]:
     return dict(record) if isinstance(record, Mapping) else {}
 
 
+def _reserved_for(row: Mapping[str, Any], tier: str) -> str:
+    """The workload the provider of a row is reserved for, in this tier."""
+    return str((row.get("reservation") or {}).get(tier) or "")
+
+
 def _published_value_for(row: Mapping[str, Any], tier: str) -> float | None:
     """The published value of a row for a tier: its value under its trust."""
     value = _outcome_record(row, tier).get("published")
@@ -2971,6 +3012,10 @@ def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
     for row in candidates:
         row["trust"] = {}
         row["outcome"] = {}
+        row["reservation"] = {
+            tier: trust.reserved_for(str(row.get("provider") or ""), tier)
+            for tier in TIER_NAMES
+        }
     # The trust of every row, for every tier it is a member of. The trust
     # of a tier decides whether the row may hold it at all: an excluded
     # level never holds a tier.

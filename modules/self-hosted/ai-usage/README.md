@@ -889,6 +889,9 @@ The order of a tier is then:
 
 * the trust of the route: a trusted route leads, a backup route follows, and
   an untrusted route comes last with the reason it holds;
+* a provider reserved for another workload (`provider_reservations`) joins
+  the backup group outside that workload's tier and follows every unreserved
+  route of it; its winner names the workload in `reserved_for`;
 * the 3D reserve, for the tiers a reserved model is held away from;
 * the bulk tier reads the published value, and a free route leads it while
   its quality is within `0.10` of the best available route of its own
