@@ -208,7 +208,38 @@ def common_ancestor(config: dict, source: dict, running: str) -> tuple[str | Non
     return None, f"cannot compare the running revision with {config['remote']}: {detail}"
 
 
-def notify(config: dict, dedupe: str, title: str, message: str) -> bool:
+def ntfy_endpoint(config: dict) -> tuple[str | None, str | None]:
+    """The ntfy address from the read-only container snapshot.
+
+    The service has no access to the Podman API, and a hardened unit must not
+    open the container storage just to find the container. The root snapshot
+    job publishes the address every 30 seconds; a missing, stale or incomplete
+    snapshot is an explicit error, never a healthy result.
+    """
+    path = Path(config["snapshot"])
+    try:
+        age = time.time() - path.stat().st_mtime
+    except OSError as exception:
+        return None, f"the notification snapshot {path} is unavailable: {exception}"
+    maximum = float(config.get("snapshot_max_age", 300))
+    if age > maximum:
+        return None, f"the notification snapshot {path} is {int(age)}s old (maximum {int(maximum)}s)"
+    try:
+        snapshot = json.loads(path.read_text())
+    except (OSError, ValueError) as exception:
+        return None, f"the notification snapshot {path} cannot be read: {exception}"
+    container = config.get("ntfy_container", "ntfy")
+    network = config.get("ntfy_network", "ghostship_net")
+    entry = snapshot.get(container) or {}
+    address = (entry.get("networks") or {}).get(network)
+    if not address:
+        return None, (
+            f"the notification snapshot has no address for {container} on {network}"
+        )
+    return f"http://{address}:{int(config.get('ntfy_port', 8080))}", None
+
+
+def notify(config: dict, endpoint: str, dedupe: str, title: str, message: str) -> bool:
     """Publish one security notification without asking for an incident thread."""
     command = [
         config["notify"],
@@ -227,9 +258,23 @@ def notify(config: dict, dedupe: str, title: str, message: str) -> bool:
         message,
     ]
     try:
-        return subprocess.run(command, check=False, timeout=60).returncode == 0
+        return subprocess.run(
+            command,
+            check=False,
+            timeout=60,
+            env={**os.environ, "GHOSTSHIP_NOTIFY_URL": endpoint},
+        ).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
+
+
+def deliver(config: dict, dedupe: str, title: str, message: str) -> bool:
+    """Resolve the endpoint from the snapshot, then publish."""
+    endpoint, problem = ntfy_endpoint(config)
+    if problem is not None:
+        error(problem)
+        return False
+    return notify(config, endpoint, dedupe, title, message)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -264,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
             "differ. A reboot would revert to the profile's generation. Set the "
             "system profile before switching, and verify that the two match."
         )
-        if notify(config, DEDUPE_GENERATION, f"Configuration generation drift on {host}", message):
+        if deliver(config, DEDUPE_GENERATION, f"Configuration generation drift on {host}", message):
             note(f"generation drift reported ({running_system} != {profile})")
         else:
             error("the generation drift notification could not be delivered")
@@ -335,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{int(threshold)}s. Nothing was built, switched or activated; update the "
         "host through change control."
     )
-    if notify(config, DEDUPE_REVISION, f"Configuration revision drift on {host}", message):
+    if deliver(config, DEDUPE_REVISION, f"Configuration revision drift on {host}", message):
         note(f"revision drift reported ({running} is behind {main} for {int(age)}s)")
     else:
         error("the revision drift notification could not be delivered")

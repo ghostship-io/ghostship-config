@@ -30,6 +30,14 @@ let
       branch = "main";
       running_system = "/run/current-system";
       profile = "/nix/var/nix/profiles/system";
+      # The ntfy address comes from the root snapshot job's read-only metadata,
+      # never from the Podman API: a hardened unit must not open the container
+      # storage, and nothing here may create containers.
+      snapshot = "/run/ghostship-podman/containers.json";
+      snapshot_max_age = 300;
+      ntfy_container = "ntfy";
+      ntfy_network = "ghostship_net";
+      ntfy_port = 8080;
       # A drift must last longer than one day before it is reported.
       threshold = 86400;
     }
@@ -49,8 +57,8 @@ in
 
     systemd.services.ghostship-configuration-drift = {
       description = "Report a running configuration that drifts from main";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+      after = [ "network-online.target" "ghostship-podman-snapshot.service" ];
+      wants = [ "network-online.target" "ghostship-podman-snapshot.service" ];
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${pkgs.python3}/bin/python3 ${./configuration-drift.py} --config ${settings}";
@@ -79,6 +87,7 @@ in
         ReadOnlyPaths = [
           "/run/current-system"
           "/nix/var/nix/profiles/system"
+          "/run/ghostship-podman"
         ];
         Environment = [ "GHOSTSHIP_NOTIFY_STATE=${stateDir}/notify" ];
       };

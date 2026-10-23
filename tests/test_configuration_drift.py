@@ -6,11 +6,14 @@ running system, and pin the notification, the state retention, the explicit
 failures and the guard that no build or switch command is ever run.
 """
 import json
+import http.server
 import os
 import shlex
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -66,6 +69,25 @@ class ConfigurationDriftTests(unittest.TestCase):
         notify.chmod(0o700)
         self.notify = notify
 
+        # The real host notifier, driven through the same command line the
+        # service uses, with only its URL, secrets and state sandboxed.
+        self.real_notify_source = ROOT / "modules/self-hosted/ghostship-notify.py"
+        self.secrets = self.root / "notify-secrets.env"
+        self.secrets.write_text("NTFY_PUBLISH_PASSWORD=test-publisher\n")
+        self.notify_state = self.root / "notify-state"
+        self.real_notify = self.root / "real-notify"
+        self.real_notify.write_text(
+            "#!/bin/sh\n"
+            f"exec {shlex.quote(sys.executable)} "
+            f"{shlex.quote(str(self.real_notify_source))} \"$@\"\n"
+        )
+        self.real_notify.chmod(0o700)
+        self.snapshot = self.root / "containers.json"
+        self.snapshot.write_text(json.dumps({
+            "ntfy": {"networks": {"ghostship_net": "127.0.0.1"}},
+        }))
+        self.notify_port = 1
+
         self.shim = self.root / "shim"
         self.shim.mkdir()
         self.guard = self.root / "commands.log"
@@ -87,6 +109,11 @@ class ConfigurationDriftTests(unittest.TestCase):
             "branch": "main",
             "running_system": str(self.running),
             "profile": str(self.profile),
+            "snapshot": str(self.snapshot),
+            "snapshot_max_age": 300,
+            "ntfy_container": "ntfy",
+            "ntfy_network": "ghostship_net",
+            "ntfy_port": self.notify_port,
             "threshold": THRESHOLD,
         }
         self.write_config()
@@ -123,6 +150,14 @@ class ConfigurationDriftTests(unittest.TestCase):
         environment = {**os.environ}
         environment["PATH"] = str(self.shim) + os.pathsep + environment.get("PATH", "")
         environment["HOME"] = str(self.home)
+        # The endpoint must come from the snapshot through the command, never
+        # from the harness environment.
+        environment.pop("GHOSTSHIP_NOTIFY_URL", None)
+        environment.update({
+            "GHOSTSHIP_NOTIFY_STATE": str(self.notify_state),
+            "GHOSTSHIP_NOTIFY_SECRETS": str(self.secrets),
+            "GHOSTSHIP_NOTIFY_INCIDENTS": "",
+        })
         if now is not None:
             environment["GHOSTSHIP_CONFIGURATION_DRIFT_NOW"] = str(now)
         return subprocess.run(
@@ -147,6 +182,28 @@ class ConfigurationDriftTests(unittest.TestCase):
 
     def assert_quiet_success(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def serve_notifications(self, status=200):
+        """A local ntfy stand-in, so the real notifier is driven off the host."""
+        requests = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                requests.append(json.loads(body))
+                self.send_response(self.server.status)
+                self.end_headers()
+
+            def log_message(self, *arguments):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        server.status = status
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return requests, server
 
     # -- the revision threshold ------------------------------------------
 
@@ -310,6 +367,62 @@ class ConfigurationDriftTests(unittest.TestCase):
         self.fail_flag.unlink()
         self.assert_quiet_success(self.run_check(now=START + THRESHOLD + 2))
         self.assertEqual(len(self.sent()), 2)
+
+    def test_the_real_notifier_accepts_the_security_alert(self):
+        self.config["notify"] = str(self.real_notify)
+        requests, server = self.serve_notifications(200)
+        self.config["ntfy_port"] = server.server_port
+        self.write_config()
+        self.commit("second")
+        self.assert_quiet_success(self.run_check(now=START))
+        self.assert_quiet_success(self.run_check(now=START + THRESHOLD + 1))
+
+        self.assertEqual(len(requests), 1)
+        payload = requests[0]
+        self.assertEqual(payload["topic"], "security")
+        self.assertEqual(payload["priority"], 4)
+        self.assertEqual(payload["tags"][:2], ["configuration", "firing"])
+        self.assertIn("Configuration revision drift", payload["title"])
+        self.assertIn("has been behind main", payload["message"])
+        # The real notifier records its dedupe state in the sandboxed directory.
+        self.assertTrue(any(self.notify_state.glob("*.json")))
+
+    def test_the_real_notifier_failure_is_nonzero_and_retries(self):
+        self.config["notify"] = str(self.real_notify)
+        requests, server = self.serve_notifications(500)
+        self.config["ntfy_port"] = server.server_port
+        self.write_config()
+        self.commit("second")
+        self.assert_quiet_success(self.run_check(now=START))
+        result = self.run_check(now=START + THRESHOLD + 1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(self.state()["first_observed_behind"], START)
+
+        server.status = 200
+        self.assert_quiet_success(self.run_check(now=START + THRESHOLD + 2))
+        self.assertEqual(len(requests), 2)
+
+    def test_a_missing_notification_snapshot_is_an_error(self):
+        self.commit("second")
+        self.assert_quiet_success(self.run_check(now=START))
+        self.snapshot.unlink()
+        result = self.run_check(now=START + THRESHOLD + 1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("snapshot", result.stderr)
+        self.assertEqual(self.sent(), [])
+        self.assertEqual(self.state()["first_observed_behind"], START)
+
+    def test_a_stale_notification_snapshot_is_an_error(self):
+        self.commit("second")
+        self.assert_quiet_success(self.run_check(now=START))
+        old = time.time() - 400
+        os.utime(self.snapshot, (old, old))
+        result = self.run_check(now=START + THRESHOLD + 1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("snapshot", result.stderr)
+        self.assertIn("old", result.stderr)
+        self.assertEqual(self.sent(), [])
 
     # -- the read-only guard ---------------------------------------------
 

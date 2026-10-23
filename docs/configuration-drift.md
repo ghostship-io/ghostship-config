@@ -58,6 +58,15 @@ Both alerts go through `config.ghostship.notify.package` on the `security`
 topic at priority 4, with a stable dedupe key per kind. No `--incident` flag is
 passed: the check reports, and a human decides whether to act.
 
+The ntfy address is read from the root-owned, world-readable container snapshot
+at `/run/ghostship-podman/containers.json`, the same source the SIEM alert
+bridge uses. The check takes the `ntfy` address on `ghostship_net` and port
+8080, rejects a snapshot older than 300 seconds, and passes the resulting URL
+to the notifier as `GHOSTSHIP_NOTIFY_URL`. It never calls the Podman API: a
+hardened unit must not open the container storage, and nothing here may create
+containers. A missing, stale or incomplete snapshot is an explicit nonzero
+error, so the next run retries instead of silently losing the alert.
+
 ## State and confinement
 
 The service's only writable host path is
@@ -70,7 +79,8 @@ The service's only writable host path is
 
 The host links and the system profile are read-only. The unit runs with
 `ProtectSystem=strict`, `ProtectHome=true`, a private `/tmp`, no capabilities
-and no new privileges. The source is the same public HTTPS repository as
+and no new privileges. It starts after the container snapshot job and reads
+that snapshot read-only. The source is the same public HTTPS repository as
 `modules/common/automation.nix`, so no new credential is needed.
 
 ## Responding to an alert
