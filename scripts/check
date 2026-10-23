@@ -43,6 +43,9 @@ python3 -m unittest discover -s tests -p test_freeze_status.py
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
 
+printf 'Checking the deploy slot\n'
+python3 -m unittest discover -s tests -p test_deploy_slot.py
+
 printf 'Checking the agent pin against a regression\n'
 python3 scripts/check-agent-pin.py
 python3 -m unittest discover -s tests -p test_agent_pin_guard.py
@@ -106,6 +109,8 @@ python3 -m unittest discover -s tests -p test_ai_usage_inference.py
 python3 -m unittest discover -s tests -p test_ai_usage_inference_wiring.py
 python3 -m unittest discover -s tests -p test_ai_usage_inferred_publication.py
 python3 -m unittest discover -s tests -p test_ai_usage_outcomes.py
+python3 -m unittest discover -s tests -p test_ai_usage_pace_state.py
+python3 -m unittest discover -s tests -p test_ai_usage_trust_order.py
 python3 -m unittest discover -s tests -p test_ai_usage_free_selection.py
 python3 -m unittest discover -s tests -p test_ai_usage_not_offered_reason.py
 python3 -m unittest discover -s tests -p test_ai_usage_pool_unavailable_reason.py
