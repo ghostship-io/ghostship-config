@@ -68,11 +68,16 @@ RUN python3 -m venv /opt/ghostship-agent-desktop/venv \
  && chown -R 3000:3000 /opt/ghostship-agent-desktop
 
 # The desktop keeps audio hardware (PulseAudio) so the browser exposes the
-# audio devices a real desktop has, but drops cron and the nested Docker
-# daemon it does not use.
+# audio devices a real desktop has, but drops unused schedulers and engines.
+RUN dpkg-query -W -f='${binary:Package}\n' \
+    | awk '/^(docker.io|docker-ce|docker-ce-cli|docker-ce-rootless-extras|moby-engine|moby-cli|docker-buildx-plugin|docker-compose-plugin|docker-compose)(:.*)?$/ {print}' \
+    | xargs -r apt-get purge -y \
+ && rm -rf /var/lib/apt/lists/*
+RUN ! command -v docker && ! command -v dockerd
 RUN rm -f \
       /etc/s6-overlay/s6-rc.d/user/contents.d/svc-cron \
-      /etc/s6-overlay/s6-rc.d/user/contents.d/svc-docker
+      /etc/s6-overlay/s6-rc.d/user/contents.d/svc-docker \
+ && rm -rf /etc/s6-overlay/s6-rc.d/svc-docker
 
 # Google Chrome is the default browser. The baseimage's bundled Chromium
 # stays installed because the desktop shares its runtime dependencies, but

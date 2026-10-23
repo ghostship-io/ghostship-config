@@ -626,7 +626,7 @@ work must use the coordinated window and the same bounded-build and
   `init-ghostship-net.service` and, for `podman-t3code`,
   `mnt-share.mount`. Their restart does not restart `podman.service`.
 - `podman-t3code.service` additionally requires
-  `t3code-docker.socket`/`t3code-docker-ports.socket` when hardened, and keeps
+  `t3code-podman.socket`/`t3code-podman-ports.socket` when hardened, and keeps
   `restartIfChanged = false`, so the switch does not touch it.
 - `t3code-deploy-when-idle.service` orders after `podman.service`; the timer
   is `Persistent = true`, so a missed run during the switch fires afterwards.

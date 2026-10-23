@@ -5,37 +5,52 @@
   ...
 }:
 let
-  cfg = config.ghostship.t3codeDocker;
-  user = "t3code-docker";
+  cfg = config.ghostship.t3codePodman;
+  user = "t3code-podman";
   uid = toString cfg.uid;
-  state = "/var/lib/t3code-docker";
-  root = "/run/t3code-docker-rootfs";
+  state = "/var/lib/t3code-podman";
+  root = "/run/t3code-podman-rootfs";
   runtime = "/run/user/${uid}";
   workspace = config.ghostship.agentHost.workspacePath;
   worktrees = "/srv/apps/t3code/home/.t3/worktrees";
-  dockerConfig = (pkgs.formats.json { }).generate "t3code-docker.json" {
-    hosts = [ "unix://${runtime}/docker.sock" ];
-    data-root = "${state}/data";
-    exec-root = "${runtime}/exec";
-    storage-driver = "fuse-overlayfs";
-    exec-opts = [ "native.cgroupdriver=systemd" ];
-    dns = cfg.dns;
-    live-restore = false;
-    labels = [ "ghostship.t3code-docker=candidate" ];
-    pidfile = "${runtime}/docker.pid";
-    log-driver = "local";
-    log-opts = {
-      max-size = "10m";
-      max-file = "3";
+  graphRoot = "${state}/${if cfg.candidate then "candidate" else "storage"}";
+  containersConfig = (pkgs.formats.toml { }).generate "t3code-podman.conf" {
+    containers = {
+      dns_servers = cfg.dns;
+      log_driver = "k8s-file";
+      log_size_max = 10485760;
     };
-    default-address-pools = [
-      {
-        base = "172.28.0.0/16";
-        size = 24;
-      }
-    ];
+    engine = {
+      cgroup_manager = "systemd";
+      conmon_path = [ "${pkgs.conmon}/bin/conmon" ];
+      events_logger = "file";
+      runtime = "crun";
+      runtimes.crun = [ "${pkgs.crun}/bin/crun" ];
+      helper_binaries_dir = [
+        "${pkgs.netavark}/bin"
+        "${pkgs.aardvark-dns}/bin"
+      ];
+    };
+    network = {
+      network_backend = "netavark";
+      default_rootless_network_cmd = "slirp4netns";
+      default_subnet = "172.28.0.0/16";
+    };
   };
-  busConfig = pkgs.writeText "t3code-docker-bus.conf" ''
+  storageConfig = (pkgs.formats.toml { }).generate "t3code-podman-storage.conf" {
+    storage = {
+      driver = "overlay";
+      runroot = "${runtime}/containers";
+      graphroot = graphRoot;
+      rootless_storage_path = graphRoot;
+      options.overlay.mount_program = "${pkgs.fuse-overlayfs}/bin/fuse-overlayfs";
+    };
+  };
+  registriesConfig = pkgs.writeText "t3code-podman-registries.conf" ''
+    unqualified-search-registries = ["docker.io"]
+    short-name-mode = "enforcing"
+  '';
+  busConfig = pkgs.writeText "t3code-podman-bus.conf" ''
     <busconfig>
       <type>session</type>
       <listen>unix:path=${runtime}/bus</listen>
@@ -49,15 +64,15 @@ let
     </busconfig>
   '';
   # A separate unit path prevents this manager from starting ordinary host user
-  # services. It has a real session bus for Docker's systemd cgroup driver.
-  units = pkgs.runCommand "t3code-docker-user-units" { } ''
+  # services. It has a real session bus for Podman's systemd cgroup driver.
+  units = pkgs.runCommand "t3code-podman-user-units" { } ''
     mkdir -p $out
     cp ${pkgs.systemd}/example/systemd/user/{basic.target,sockets.target,paths.target,timers.target,shutdown.target,exit.target,systemd-exit.service,app.slice,session.slice,background.slice} $out/
     cat > $out/default.target <<'EOF'
     [Unit]
-    Description=Dedicated T3 Docker manager
+    Description=Dedicated T3 Podman manager
     Requires=basic.target
-    Wants=dbus.socket docker.service
+    Wants=dbus.socket podman.service
     After=basic.target
     EOF
     cat > $out/dbus.socket <<'EOF'
@@ -74,21 +89,25 @@ let
     StandardError=inherit
     ExecStart=${pkgs.dbus}/bin/dbus-daemon --nofork --nopidfile --systemd-activation --address=systemd: --config-file=${busConfig}
     EOF
-    cat > $out/docker.service <<'EOF'
+    cat > $out/podman.service <<'EOF'
     [Unit]
     Requires=dbus.socket
     After=dbus.socket
     [Service]
-    Type=notify
+    Type=exec
+    ExecStartPre=${pkgs.coreutils}/bin/mkdir -p ${runtime}/podman
     StandardOutput=inherit
     StandardError=inherit
     Environment=PATH=/run/wrappers/bin:${
       lib.makeBinPath [
         pkgs.bash
-        # runc DetectUID shells out to busctl for rootless systemd cgroups.
+        # Dedicated manager and runtime share the private session bus.
         pkgs.systemd
-        pkgs.docker
-        pkgs.rootlesskit
+        pkgs.podman
+        pkgs.crun
+        pkgs.conmon
+        pkgs.netavark
+        pkgs.aardvark-dns
         pkgs.slirp4netns
         pkgs.fuse-overlayfs
         pkgs.iproute2
@@ -100,9 +119,10 @@ let
         pkgs.getent
       ]
     }
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_NET=slirp4netns
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=builtin
-    ExecStart=${pkgs.docker}/bin/dockerd-rootless --config-file=${dockerConfig}
+    Environment=CONTAINERS_CONF=${containersConfig}
+    Environment=CONTAINERS_STORAGE_CONF=${storageConfig}
+    Environment=CONTAINERS_REGISTRIES_CONF=${registriesConfig}
+    ExecStart=${pkgs.podman}/bin/podman system service --time=0 unix://${runtime}/podman/podman.sock
     Delegate=yes
     NotifyAccess=all
     KillMode=mixed
@@ -116,17 +136,17 @@ let
   # relay authorizes the upstream peer with SO_PEERCRED before it forwards a
   # single byte. Both scripts share one private libexec directory because the
   # relay reuses the shared forwarding helpers.
-  apiRelay = pkgs.runCommand "t3code-docker-api-relay"
-    { nativeBuildInputs = [ pkgs.makeWrapper ]; }
-    ''
-      mkdir -p $out/libexec $out/bin
-      install -m 0555 ${../../packages/t3code/docker-sandbox/api-relay.py} $out/libexec/api-relay.py
-      install -m 0555 ${../../packages/t3code/docker-sandbox/ports.py} $out/libexec/ports.py
-      makeWrapper ${pkgs.python3}/bin/python $out/bin/t3code-docker-api-relay \
-        --add-flags "$out/libexec/api-relay.py"
-    '';
+  apiRelay =
+    pkgs.runCommand "t3code-podman-api-relay" { nativeBuildInputs = [ pkgs.makeWrapper ]; }
+      ''
+        mkdir -p $out/libexec $out/bin
+        install -m 0555 ${../../packages/t3code/dev-engine/api-relay.py} $out/libexec/api-relay.py
+        install -m 0555 ${../../packages/t3code/dev-engine/ports.py} $out/libexec/ports.py
+        makeWrapper ${pkgs.python3}/bin/python $out/bin/t3code-podman-api-relay \
+          --add-flags "$out/libexec/api-relay.py"
+      '';
   runtimePaths = [
-    pkgs.docker
+    pkgs.podman
     pkgs.systemd
     pkgs.dbus
     pkgs.shadow
@@ -138,11 +158,16 @@ let
     pkgs.gnused
     pkgs.iproute2
     pkgs.iptables
-    pkgs.rootlesskit
+    pkgs.crun
+    pkgs.conmon
+    pkgs.netavark
+    pkgs.aardvark-dns
     pkgs.slirp4netns
     pkgs.fuse-overlayfs
     units
-    dockerConfig
+    containersConfig
+    storageConfig
+    registriesConfig
     pkgs.cacert
   ];
   closure = pkgs.closureInfo { rootPaths = runtimePaths; };
@@ -150,7 +175,7 @@ let
   # Preserve subordinate IDs for explicitly granted project ACLs as well as
   # mapping container-root writes back to the T3 workspace owner.
   sharedIdmap = "b:0:0:1 b:3000:${uid}:1 b:${toString cfg.subIdStart}:${toString cfg.subIdStart}:65536";
-  spec = pkgs.writeText "t3code-docker-rootfs.json" (
+  spec = pkgs.writeText "t3code-podman-rootfs.json" (
     builtins.toJSON {
       closure = "${closure}/store-paths";
       mounts = [
@@ -181,8 +206,11 @@ let
         "/dev/net/tun"
       ];
       files = {
+        "/etc/containers/policy.json" = builtins.toJSON {
+          default = [ { type = "insecureAcceptAnything"; } ];
+        };
         "/etc/passwd" =
-          "root:x:0:0:root:/root:/bin/false\n${user}:x:${uid}:${uid}:Docker:${state}/home:/bin/sh\n";
+          "root:x:0:0:root:/root:/bin/false\n${user}:x:${uid}:${uid}:Podman:${state}/home:/bin/sh\n";
         "/etc/group" = "root:x:0:\n${user}:x:${uid}:\n";
         "/etc/subuid" = "${user}:${toString cfg.subIdStart}:65536\n";
         "/etc/subgid" = "${user}:${toString cfg.subIdStart}:65536\n";
@@ -202,32 +230,38 @@ let
       ];
     }
   );
-  rootfs = pkgs.writeShellScript "t3code-docker-rootfs" ''
+  rootfs = pkgs.writeShellScript "t3code-podman-rootfs" ''
     export PATH=${
       lib.makeBinPath [
         pkgs.util-linux
         pkgs.coreutils
       ]
     }
-    exec ${pkgs.python3}/bin/python ${../../packages/t3code/docker-sandbox/rootfs.py} "$1" ${root} ${spec}
+    if [ "$1" = start ]; then
+      ${pkgs.nix}/bin/nix copy --no-check-sigs --to 'local?root=/srv/apps/t3code/nix-root' ${cfg.runtimePackage}
+      ${pkgs.nix}/bin/nix-store --store 'local?root=/srv/apps/t3code/nix-root' \
+        --add-root /srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-${builtins.baseNameOf cfg.runtimePackage} \
+        --realise ${cfg.runtimePackage} >/dev/null
+    fi
+    exec ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} "$1" ${root} ${spec}
   '';
   # Host-owned namespace + host-side filter: neither a privileged container nor
   # a different slirp/pasta driver can remove this boundary. IPv6 is disabled,
   # avoiding IPv4-mapped/NAT64/private IPv6 bypasses in this IPv4-only candidate.
-  networkRules = pkgs.writeText "t3code-docker-network.nft" ''
-    table inet t3code_docker {
+  networkRules = pkgs.writeText "t3code-podman-network.nft" ''
+    table inet t3code_podman {
       chain input {
         type filter hook input priority -150; policy accept;
-        iifname "t3d-host" drop
+        iifname "t3p-host" drop
       }
       chain forward {
         type filter hook forward priority -150; policy accept;
-        iifname "t3d-host" meta nfproto ipv6 drop
-        iifname "t3d-host" fib daddr type local drop
-        iifname "t3d-host" ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/3 } drop
-        iifname "t3d-host" oifname != "${cfg.egressInterface}" drop
-        oifname "t3d-host" ct state established,related accept
-        oifname "t3d-host" drop
+        iifname "t3p-host" meta nfproto ipv6 drop
+        iifname "t3p-host" fib daddr type local drop
+        iifname "t3p-host" ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/3 } drop
+        iifname "t3p-host" oifname != "${cfg.egressInterface}" drop
+        oifname "t3p-host" ct state established,related accept
+        oifname "t3p-host" drop
       }
       chain nat {
         type nat hook postrouting priority srcnat; policy accept;
@@ -235,7 +269,7 @@ let
       }
     }
   '';
-  networkStart = pkgs.writeShellScript "t3code-docker-network-start" ''
+  networkStart = pkgs.writeShellScript "t3code-podman-network-start" ''
     set -eu
     export PATH=${
       lib.makeBinPath [
@@ -244,45 +278,45 @@ let
       ]
     }
     # Never adopt or delete an unexpected preexisting namespace/interface/table.
-    if ip netns list | ${pkgs.gnugrep}/bin/grep -q '^t3code-docker\b'; then
-      echo 'Refusing to adopt an existing t3code-docker namespace' >&2; exit 1
+    if ip netns list | ${pkgs.gnugrep}/bin/grep -q '^t3code-podman\b'; then
+      echo 'Refusing to adopt an existing t3code-podman namespace' >&2; exit 1
     fi
-    if ip link show t3d-host >/dev/null 2>&1; then
-      echo 'Refusing to adopt an existing t3d-host interface' >&2; exit 1
+    if ip link show t3p-host >/dev/null 2>&1; then
+      echo 'Refusing to adopt an existing t3p-host interface' >&2; exit 1
     fi
-    if nft list table inet t3code_docker >/dev/null 2>&1; then
-      echo 'Refusing to adopt an existing t3code_docker table' >&2; exit 1
+    if nft list table inet t3code_podman >/dev/null 2>&1; then
+      echo 'Refusing to adopt an existing t3code_podman table' >&2; exit 1
     fi
     # From this point failures clean up only resources created by this unit.
     trap '${networkStop}' EXIT
     nft -f ${networkRules}
-    ip netns add t3code-docker
-    ip link add t3d-host type veth peer name t3d-peer
-    ip link set t3d-peer netns t3code-docker
-    ip addr add 192.0.2.1/30 dev t3d-host
-    ip link set t3d-host up
-    ip -n t3code-docker addr add 192.0.2.2/30 dev t3d-peer
-    ip -n t3code-docker link set t3d-peer up
-    ip -n t3code-docker link set lo up
-    ip -n t3code-docker route add default via 192.0.2.1
-    ip netns exec t3code-docker ${pkgs.procps}/bin/sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
+    ip netns add t3code-podman
+    ip link add t3p-host type veth peer name t3p-peer
+    ip link set t3p-peer netns t3code-podman
+    ip addr add 192.0.2.1/30 dev t3p-host
+    ip link set t3p-host up
+    ip -n t3code-podman addr add 192.0.2.2/30 dev t3p-peer
+    ip -n t3code-podman link set t3p-peer up
+    ip -n t3code-podman link set lo up
+    ip -n t3code-podman route add default via 192.0.2.1
+    ip netns exec t3code-podman ${pkgs.procps}/bin/sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
     trap - EXIT
   '';
-  networkStop = pkgs.writeShellScript "t3code-docker-network-stop" ''
+  networkStop = pkgs.writeShellScript "t3code-podman-network-stop" ''
     export PATH=${
       lib.makeBinPath [
         pkgs.iproute2
         pkgs.nftables
       ]
     }
-    ip link del t3d-host 2>/dev/null || true
-    ip netns del t3code-docker 2>/dev/null || true
-    nft delete table inet t3code_docker 2>/dev/null || true
+    ip link del t3p-host 2>/dev/null || true
+    ip netns del t3code-podman 2>/dev/null || true
+    nft delete table inet t3code_podman 2>/dev/null || true
   '';
 in
 {
-  options.ghostship.t3codeDocker = {
-    enable = lib.mkEnableOption "staged host rootless T3 Docker (requires candidate acceptance before enabling)";
+  options.ghostship.t3codePodman = {
+    enable = lib.mkEnableOption "dedicated host rootless T3 Podman development engine";
     uid = lib.mkOption {
       type = lib.types.ints.between 1001 65534;
       default = 62040;
@@ -323,40 +357,47 @@ in
     bridgePackage = lib.mkOption {
       type = lib.types.package;
       readOnly = true;
-      default = pkgs.writeShellScriptBin "t3code-docker-bridge" ''
-        exec ${pkgs.python3}/bin/python ${../../packages/t3code/docker-sandbox/ports.py} "$@"
+      default = pkgs.writeShellScriptBin "t3code-podman-bridge" ''
+        exec ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/ports.py} "$@"
       '';
-      description = "Run t3code-docker-bridge bridge inside T3; bind /run/t3code-docker/ports.sock there as /var/run/t3code-docker-ports.sock. Discovers high TCP published ports and listens only on T3 localhost.";
+      description = "Run t3code-podman-bridge bridge inside T3; bind /run/t3code-podman/ports.sock there as /var/run/t3code-podman-ports.sock. Discovers high TCP published ports and listens only on T3 localhost.";
+    };
+    candidate = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Disposable candidate storage, never production storage; required by the acceptance harness.";
     };
     runtimePackage = lib.mkOption {
       type = lib.types.package;
       readOnly = true;
-      default = pkgs.linkFarm "t3code-docker-runtime" (
+      default = pkgs.linkFarm "t3code-podman-runtime" (
         lib.imap0 (i: path: {
           name = toString i;
           inherit path;
         }) runtimePaths
       );
-      description = "Include in T3 image closure before enabling: seeds engine dependencies into the private inner Nix store, never the entire host store.";
+      description = "Finite engine closure seeded before the manager starts, never a host store mount.";
     };
   };
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-        system.build.t3codeDockerCandidate = pkgs.writeText "t3code-docker-candidate.json" (
+        system.build.t3codePodmanCandidate = pkgs.writeText "t3code-podman-candidate.json" (
           builtins.toJSON {
             inherit user state runtime;
+            candidate = cfg.candidate;
+            inherit graphRoot;
             uid = cfg.uid;
             subIdStart = cfg.subIdStart;
             runtimePackage = toString cfg.runtimePackage;
             units = lib.genAttrs [
-              "t3code-docker-network.service"
-              "t3code-docker-rootfs.service"
-              "t3code-docker.socket"
-              "t3code-docker.service"
-              "t3code-docker-ports.socket"
-              "t3code-docker-ports.service"
+              "t3code-podman-network.service"
+              "t3code-podman-rootfs.service"
+              "t3code-podman.socket"
+              "t3code-podman.service"
+              "t3code-podman-ports.socket"
+              "t3code-podman-ports.service"
             ] (name: config.systemd.units.${name}.text);
             manager = config.systemd.units."user@${uid}.service".text;
           }
@@ -364,33 +405,33 @@ in
         assertions = [
           {
             assertion = cfg.uid != 3000;
-            message = "T3 Docker must not reuse the apps UID/GID.";
+            message = "T3 Podman must not reuse the apps UID/GID.";
           }
           {
             assertion = cfg.egressInterface != "";
-            message = "T3 Docker needs an explicit public egressInterface.";
+            message = "T3 Podman needs an explicit public egressInterface.";
           }
           {
             assertion =
               config.boot.kernelParams
               == builtins.filter (p: p != "systemd.unified_cgroup_hierarchy=0") config.boot.kernelParams;
-            message = "T3 Docker requires cgroup v2.";
+            message = "T3 Podman requires cgroup v2.";
           }
           {
             assertion = !(config.networking.firewall.filterForward or false);
-            message = "T3 Docker candidate requires integration with the host forward firewall before filterForward can be enabled.";
+            message = "T3 Podman candidate requires integration with the host forward firewall before filterForward can be enabled.";
           }
           {
             assertion = lib.all (u: u.name == user || u.uid != cfg.uid) (
               builtins.attrValues config.users.users
             );
-            message = "T3 Docker UID collides with an existing account.";
+            message = "T3 Podman UID collides with an existing account.";
           }
           {
             assertion = lib.all (g: g.name == user || g.gid != cfg.uid) (
               builtins.attrValues config.users.groups
             );
-            message = "T3 Docker GID collides with an existing group.";
+            message = "T3 Podman GID collides with an existing group.";
           }
           {
             assertion = lib.all (
@@ -400,7 +441,7 @@ in
                 r: r.startUid + r.count <= cfg.subIdStart || r.startUid >= cfg.subIdStart + 65536
               ) u.subUidRanges
             ) (builtins.attrValues config.users.users);
-            message = "T3 Docker subordinate UID range overlaps another account.";
+            message = "T3 Podman subordinate UID range overlaps another account.";
           }
           {
             assertion = lib.all (
@@ -410,9 +451,10 @@ in
                 r: r.startGid + r.count <= cfg.subIdStart || r.startGid >= cfg.subIdStart + 65536
               ) u.subGidRanges
             ) (builtins.attrValues config.users.users);
-            message = "T3 Docker subordinate GID range overlaps another account.";
+            message = "T3 Podman subordinate GID range overlaps another account.";
           }
         ];
+        ghostship.security.socket_mount_allow = [ "/run/t3code-podman/podman.sock" ];
         users.groups.${user}.gid = cfg.uid;
         users.users.${user} = {
           isSystemUser = true;
@@ -444,10 +486,10 @@ in
         systemd.tmpfiles.rules = [
           "d ${state} 0700 ${user} ${user} -"
           "d ${state}/home 0700 ${user} ${user} -"
-          "d /run/t3code-docker 0750 root apps -"
+          "d /run/t3code-podman 0750 root apps -"
         ];
-        systemd.services.t3code-docker-network = {
-          description = "Host-controlled T3 Docker network boundary";
+        systemd.services.t3code-podman-network = {
+          description = "Host-controlled T3 Podman network boundary";
           before = [ "user@${uid}.service" ];
           serviceConfig = {
             Type = "oneshot";
@@ -456,8 +498,8 @@ in
             ExecStop = networkStop;
           };
         };
-        systemd.services.t3code-docker-rootfs = {
-          description = "Minimal filesystem for the dedicated rootless Docker manager";
+        systemd.services.t3code-podman-rootfs = {
+          description = "Minimal filesystem for the dedicated rootless Podman manager";
           requires = [ "user-runtime-dir@${uid}.service" ];
           after = [ "user-runtime-dir@${uid}.service" ];
           before = [ "user@${uid}.service" ];
@@ -468,20 +510,20 @@ in
             ExecStop = "${rootfs} stop";
           };
         };
-        # A genuine user manager (not unsupported system-wide dockerd User=).
+        # A genuine user manager (not unsupported system-wide rootful engine User=).
         systemd.services."user@${uid}" = {
           overrideStrategy = "asDropin";
           requires = [
-            "t3code-docker-network.service"
-            "t3code-docker-rootfs.service"
+            "t3code-podman-network.service"
+            "t3code-podman-rootfs.service"
           ];
           after = [
-            "t3code-docker-network.service"
-            "t3code-docker-rootfs.service"
+            "t3code-podman-network.service"
+            "t3code-podman-rootfs.service"
           ];
           bindsTo = [
-            "t3code-docker-network.service"
-            "t3code-docker-rootfs.service"
+            "t3code-podman-network.service"
+            "t3code-podman-rootfs.service"
           ];
           environment = {
             SYSTEMD_UNIT_PATH = "${units}";
@@ -492,11 +534,9 @@ in
           };
           serviceConfig = {
             RootDirectory = root;
-            NetworkNamespacePath = "/run/netns/t3code-docker";
-            # busctl/runc need /proc/1/cgroup to detect the owning user manager.
-            # hidepid makes OwnerUID disappear and selects a rootful cgroup bus.
-            # The dedicated host UID still cannot follow root-owned proc roots
-            # or read other users' environments; process metadata stays visible.
+            NetworkNamespacePath = "/run/netns/t3code-podman";
+            # Keep proc visibility unchanged until crun/user-manager acceptance
+            # proves a narrower setting; no host system bus is projected.
             ProtectProc = "default";
             Delegate = "cpu cpuset io memory pids";
             MemoryMax = cfg.memoryMax;
@@ -506,16 +546,16 @@ in
         };
         # API relay grants only the apps group access, without making the dedicated
         # daemon a member of apps or exposing its private runtime directory.
-        systemd.sockets.t3code-docker = {
+        systemd.sockets.t3code-podman = {
           wantedBy = [ "sockets.target" ];
           socketConfig = {
-            ListenStream = "/run/t3code-docker/docker.sock";
+            ListenStream = "/run/t3code-podman/podman.sock";
             SocketMode = "0660";
             SocketUser = "root";
             SocketGroup = "apps";
           };
         };
-        systemd.services.t3code-docker = {
+        systemd.services.t3code-podman = {
           requires = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
           serviceConfig = {
@@ -524,7 +564,7 @@ in
             # upstream peer proved to be the engine UID. A redirected engine
             # path therefore fails closed instead of reaching a root-only
             # host socket with the relay's own privileges.
-            ExecStart = "${apiRelay}/bin/t3code-docker-api-relay --upstream ${runtime}/docker.sock --engine-uid ${uid}";
+            ExecStart = "${apiRelay}/bin/t3code-podman-api-relay --upstream ${runtime}/podman/podman.sock --engine-uid ${uid}";
             # A different UID avoids exposing a host-rooted /proc/PID/root to the
             # engine through a relay process with the engine's own UID.
             User = "root";
@@ -546,22 +586,22 @@ in
             RestartSec = 5;
           };
         };
-        systemd.sockets.t3code-docker-ports = {
+        systemd.sockets.t3code-podman-ports = {
           wantedBy = [ "sockets.target" ];
           socketConfig = {
-            ListenStream = "/run/t3code-docker/ports.sock";
+            ListenStream = "/run/t3code-podman/ports.sock";
             SocketMode = "0660";
             SocketUser = "root";
             SocketGroup = "apps";
           };
         };
-        systemd.services.t3code-docker-ports = {
+        systemd.services.t3code-podman-ports = {
           requires = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
           serviceConfig = {
-            ExecStart = "${cfg.bridgePackage}/bin/t3code-docker-bridge gateway";
+            ExecStart = "${cfg.bridgePackage}/bin/t3code-podman-bridge gateway";
             DynamicUser = true;
-            NetworkNamespacePath = "/run/netns/t3code-docker";
+            NetworkNamespacePath = "/run/netns/t3code-podman";
             NoNewPrivileges = true;
             ProtectSystem = "strict";
             ProtectHome = true;

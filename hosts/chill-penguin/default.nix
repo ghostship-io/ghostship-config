@@ -43,7 +43,7 @@ in
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;
   # The staged development engine may reach public IPv4 only through this NIC.
-  ghostship.t3codeDocker.egressInterface = "end0";
+  ghostship.t3codePodman.egressInterface = "end0";
 
   # T3 Code image changes are applied by t3code-deploy-when-idle, never by the switch.
   myOptions.autoUpgrade = {

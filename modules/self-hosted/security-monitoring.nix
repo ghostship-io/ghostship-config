@@ -129,7 +129,7 @@ in
     privileged_allow = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "t3code" ];
-      description = "Containers allowed to run privileged. T3 is the tracked exception until its Docker split (issue 102).";
+      description = "Containers allowed to run privileged. T3 is the tracked exception until its outer runtime hardening (issue 102).";
     };
     cap_add_allow = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);

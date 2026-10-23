@@ -12,7 +12,6 @@ let
   t3codeHome = "/srv/apps/t3code/home";
   hardened = config.ghostship.t3code.hardening.enable;
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
-  t3codeDocker = "/srv/apps/t3code/docker";
   t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -21,7 +20,7 @@ let
   # The rootless engine manager must stay in its user-<UID>.slice because Moby
   # resolves the delegated cgroup controllers through that path. The outer T3
   # container joins the same slice so one pair of limits bounds both.
-  engineSlice = "user-${toString config.ghostship.t3codeDocker.uid}.slice";
+  engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
   # Tool maintenance, the idle restart, the server monitor, and the host image
@@ -34,7 +33,7 @@ let
       systemd
       dbus
       pam
-      docker
+      podman
       cloudflared
       sudo
       git
@@ -86,9 +85,10 @@ let
       cacert
       openssl
     ])
-    ++ lib.optionals hardened [
+    ++ [
       pkgs.acl
-      config.ghostship.t3codeDocker.bridgePackage
+      config.ghostship.t3codePodman.bridgePackage
+      pkgs.podman-compose
     ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
@@ -139,7 +139,8 @@ let
       fi
     fi
     export PATH=${t3codePath}:$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:/bin:/usr/bin:$PATH
-    export DOCKER_HOST=unix:///var/run/docker.sock
+    export CONTAINER_HOST=unix:///var/run/podman/podman.sock
+    export PODMAN_COMPOSE_PROVIDER=${pkgs.podman-compose}/bin/podman-compose
     export XDG_RUNTIME_DIR=/run/user/3000
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
@@ -1902,7 +1903,6 @@ let
       "$HOME/.config/systemd/user" \
       /workspace \
       /mnt/share \
-      /var/lib/docker \
       /var/run \
       /tmp \
       /run/user/3000
@@ -1991,38 +1991,13 @@ let
 
   '';
 
-  t3codeDockerdRun = pkgs.writeShellScriptBin "t3code-dockerd-run" ''
+  t3codeEngineReady = pkgs.writeShellScriptBin "t3code-engine-ready" ''
     set -eu
-
     ${t3codeRuntimeEnv}
-
-    ${
-      if hardened then
-        ''
-          # Keep the dependency unit alive while the separate engine is reachable.
-          # Failure restarts this readiness check; it never starts a rootful daemon.
-            until docker info >/dev/null 2>&1; do
-              sleep 2
-            done
-            systemd-notify --ready
-          while docker info >/dev/null 2>&1; do
-            sleep 15
-          done
-          exit 1
-        ''
-      else
-        ''
-          rm -f /var/run/docker.pid
-          exec dockerd \
-          --host=unix:///var/run/docker.sock \
-          --group=t3code \
-          --data-root=/var/lib/docker \
-          --storage-driver=vfs \
-          --iptables=false \
-          --ip-masq=false \
-          --bridge=none
-        ''
-    }
+    until podman info >/dev/null 2>&1; do sleep 2; done
+    systemd-notify --ready
+    while podman info >/dev/null 2>&1; do sleep 15; done
+    exit 1
   '';
 
   t3codeEntrypoint = pkgs.writeShellScriptBin "t3code-systemd-entrypoint" ''
@@ -2033,16 +2008,16 @@ let
 
   t3codeImageContents =
     t3codePackages
-    ++ lib.optional hardened (
-      pkgs.writeTextDir "share/t3code-docker-runtime" (
-        toString config.ghostship.t3codeDocker.runtimePackage
+    ++ lib.singleton (
+      pkgs.writeTextDir "share/t3code-podman-runtime" (
+        toString config.ghostship.t3codePodman.runtimePackage
       )
     )
     ++ [
       antigravityAcp
       t3codeEntrypoint
       t3codeContainerSetup
-      t3codeDockerdRun
+      t3codeEngineReady
       t3codeDaemonRun
       t3codeAccessProxy
       t3codeProjectBootstrap
@@ -2075,7 +2050,7 @@ let
     contents = t3codeImageContents;
     extraCommands = ''
       mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/t3code
-      mkdir -p mnt/share run/user var/empty var/lib/docker var/log/journal var/run
+      mkdir -p mnt/share run/user var/empty var/log/journal var/run
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
@@ -2164,19 +2139,19 @@ let
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF
-      ${lib.optionalString hardened ''
+      ${lib.optionalString true ''
           mkdir -p etc/systemd/user/default.target.wants
-          cat > etc/systemd/user/t3code-docker-bridge.service <<'BRIDGE'
+          cat > etc/systemd/user/t3code-podman-bridge.service <<'BRIDGE'
         [Unit]
-        Description=Localhost access to isolated development Docker ports
+        Description=Localhost access to isolated development Podman ports
         [Service]
-        ExecStart=${config.ghostship.t3codeDocker.bridgePackage}/bin/t3code-docker-bridge bridge
+        ExecStart=${config.ghostship.t3codePodman.bridgePackage}/bin/t3code-podman-bridge bridge
         Restart=always
         RestartSec=2
         [Install]
         WantedBy=default.target
         BRIDGE
-          ln -s ../t3code-docker-bridge.service etc/systemd/user/default.target.wants/t3code-docker-bridge.service
+          ln -s ../t3code-podman-bridge.service etc/systemd/user/default.target.wants/t3code-podman-bridge.service
       ''}
       ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/system/t3code-container-setup.service <<'EOF'
@@ -2275,9 +2250,9 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/dockerd.service <<'EOF'
+      cat > etc/systemd/system/t3code-engine-ready.service <<'EOF'
       [Unit]
-      Description=T3 Code Docker ${if hardened then "engine readiness" else "daemon"}
+      Description=T3 Code rootless Podman readiness
       DefaultDependencies=no
       After=t3code-container-setup.service
       Requires=t3code-container-setup.service
@@ -2285,9 +2260,9 @@ let
       Before=shutdown.target
 
       [Service]
-      Type=${if hardened then "notify" else "simple"}
-      ${lib.optionalString hardened "NotifyAccess=all"}
-      ExecStart=${t3codeDockerdRun}/bin/t3code-dockerd-run
+      Type=notify
+      NotifyAccess=all
+      ExecStart=${t3codeEngineReady}/bin/t3code-podmand-run
       Restart=always
       RestartSec=5
       TimeoutStopSec=30s
@@ -2301,8 +2276,8 @@ let
       [Unit]
       Description=Run T3 Code bootstrap hooks
       DefaultDependencies=no
-      After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
-      Requires=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
+      After=t3code-container-setup.service nix-daemon.socket user@3000.service t3code-engine-ready.service
+      Requires=t3code-container-setup.service nix-daemon.socket user@3000.service t3code-engine-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -2330,8 +2305,8 @@ let
       [Unit]
       Description=T3 Code server and web UI
       DefaultDependencies=no
-      After=t3code-container-setup.service user@3000.service dockerd.service t3code-bootstrap.service
-      Requires=t3code-container-setup.service user@3000.service dockerd.service t3code-bootstrap.service
+      After=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
+      Requires=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -2630,20 +2605,16 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer
-      After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer
+      After=t3code-container-setup.service nix-daemon.socket user@3000.service t3code-engine-ready.service
       AllowIsolate=yes
       EOF
-      rm -f etc/systemd/system/docker.service \
-        etc/systemd/system/docker.socket \
-        etc/systemd/system/multi-user.target.wants/docker.service \
-        etc/systemd/system/sockets.target.wants/docker.socket
       ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../t3code-container-setup.service etc/systemd/system/multi-user.target.wants/t3code-container-setup.service
       ln -s ../nix-daemon.socket etc/systemd/system/multi-user.target.wants/nix-daemon.socket
       ln -s ../nix-daemon.service etc/systemd/system/multi-user.target.wants/nix-daemon.service
       ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
-      ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
+      ln -s ../t3code-engine-ready.service etc/systemd/system/multi-user.target.wants/t3code-engine-ready.service
       ln -s ../t3code-bootstrap.service etc/systemd/system/multi-user.target.wants/t3code-bootstrap.service
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
       ln -s ../t3code-access-proxy.service etc/systemd/system/multi-user.target.wants/t3code-access-proxy.service
@@ -2666,7 +2637,8 @@ let
       Env = [
         "HOME=/home/t3code"
         "USER=t3code"
-        "DOCKER_HOST=unix:///var/run/docker.sock"
+        "CONTAINER_HOST=unix:///var/run/podman/podman.sock"
+        "PODMAN_COMPOSE_PROVIDER=${pkgs.podman-compose}/bin/podman-compose"
         "XDG_RUNTIME_DIR=/run/user/3000"
         "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus"
         "XDG_CONFIG_HOME=/home/t3code/.config"
@@ -2839,14 +2811,12 @@ in
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
+      "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw"
+      "/run/t3code-podman/ports.sock:/var/run/t3code-podman-ports.sock:rw"
     ]
     ++ (
       if hardened then
-        [
-          "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw"
-          "/run/t3code-docker/ports.sock:/var/run/t3code-docker-ports.sock:rw"
-        ]
-        ++ lib.mapAttrsToList (
+        lib.mapAttrsToList (
           path: readOnly:
           "${config.ghostship.agentHost.sharedPath}/${path}:/mnt/share/${path}:${
             if readOnly then "ro" else "rw"
@@ -2854,18 +2824,18 @@ in
         ) config.ghostship.t3code.hardening.sharedMounts
       else
         [
-          "${t3codeDocker}:/var/lib/docker:rw"
           "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
         ]
     );
     environmentFiles = [ t3codeSecrets ];
   };
 
+  ghostship.t3codePodman.enable = true;
+
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
     "d /var/lib/t3code-restarts 0700 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
-    "d ${t3codeDocker} 0755 root root -"
     "d ${t3codeTmp} 1777 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
@@ -2876,17 +2846,17 @@ in
   systemd.services.podman-t3code = {
     restartIfChanged = false;
     stopIfChanged = false;
-    requires = lib.optionals hardened [
-      "t3code-docker.socket"
-      "t3code-docker-ports.socket"
+    requires = [
+      "t3code-podman.socket"
+      "t3code-podman-ports.socket"
     ];
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
     ]
-    ++ lib.optionals hardened [
-      "t3code-docker.socket"
-      "t3code-docker-ports.socket"
+    ++ [
+      "t3code-podman.socket"
+      "t3code-podman-ports.socket"
     ];
     wants = [
       "init-ghostship-net.service"
@@ -2897,7 +2867,6 @@ in
       set -eu
 
       install -d -m0755 -o root -g root /srv/apps/t3code
-      install -d -m0755 -o root -g root ${t3codeDocker}
       install -d -m1777 -o root -g root ${t3codeTmp}
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}
       install -d -m0755 -o root -g root ${t3codeNixRoot}

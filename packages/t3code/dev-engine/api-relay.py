@@ -1,8 +1,8 @@
-"""Relay the rootless Docker engine API over a peer-authorized Unix socket.
+"""Relay the rootless Podman engine API over a peer-authorized Unix socket.
 
 The engine API socket lives in the runtime directory that the untrusted
 rootless container may write, so the path itself proves nothing: the container
-can replace `docker.sock` with a symlink to any host socket, including the
+can replace `podman.sock` with a symlink to any host socket, including the
 root-only Podman or Nix daemon sockets. A relay that forwards to whatever the
 path resolves to lends its own root privileges to those host services as a
 confused deputy.
@@ -39,7 +39,7 @@ CONNECT_TIMEOUT = 5
 def load_ports():
     """Load the shared forwarding helpers that are packaged beside this file."""
     path = Path(__file__).with_name("ports.py")
-    spec = importlib.util.spec_from_file_location("docker_ports", path)
+    spec = importlib.util.spec_from_file_location("podman_ports", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load {path}")
     module = importlib.util.module_from_spec(spec)
