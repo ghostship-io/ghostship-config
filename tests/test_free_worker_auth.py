@@ -106,6 +106,19 @@ class AuthCutoverTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['input'], secret_input)
         self.assertNotIn('synthetic-access', json.dumps(run.call_args.args[0]))
 
+    def test_free_auth_inventory_can_detect_a_credential_for_a_hidden_integration(self):
+        target = auth.Target('/podman', 'ghostship-worker', '1234:1234', '/home/worker')
+        paid = record('paid', True)
+        paid['integrationID'] = 'opencode-go'
+        rows = [record('zen', True), paid]
+        def exported(command):
+            if command == ['auth', 'export']:
+                return json.dumps(rows)
+            raise auth.MigrationError('native_auth_command_failed')  # unknown integration
+        with patch.object(target, 'native', side_effect=exported):
+            self.assertEqual(target.records('opencode-go'), [paid])
+            self.assertEqual(target.records(), [rows[0]])
+
     def test_an_auth_error_is_not_misreported_as_exhausted_allowance(self):
         with self.assertRaisesRegex(auth.MigrationError, 'requires_sign_in'):
             auth.quota_or_answer('API key has expired; monthly quota state unavailable')
