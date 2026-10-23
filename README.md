@@ -145,6 +145,10 @@ notes.
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
+- These launchers are interactive develop-host tools. Free workers run outside
+  T3 Code on the separate `ghostship-worker` runtime with a caller-selected
+  sandbox profile and public-sensitivity work only; see
+  [the operating notes](docs/agent-operations.md#workflow-and-shared-defaults).
 
 ## Shared Skills
 
@@ -309,11 +313,28 @@ separately from this repo's NixOS develop-host profiles.
 
 Run system-changing commands from a root shell or direct root SSH session.
 
-Build the current host:
+Build and activate a reviewed change on the target host, with `HOST`, `HOLDER`
+and `PURPOSE` naming the target and this deploy. The deploy slot serializes host
+changes, and activation records the system generation:
 
 ```fish
-nixos-rebuild build --flake .#(hostname)
+scripts/deploy-slot acquire --holder "$HOLDER" --purpose "$PURPOSE"
+nixos-rebuild build -L --flake ".#$HOST"
+./result/bin/switch-to-configuration dry-activate
+scripts/activate-host --toplevel ./result --holder "$HOLDER"
+# Verify live service health and the intended change before releasing.
+scripts/activate-host --verify-only --holder "$HOLDER"
 ```
+
+A build that reads local firmware, such as the server's `/boot/asahi`, adds
+`--impure`. `scripts/deploy-slot status` shows the current holder; a stale slot
+is taken over only with `--force --reason`. If the pull, build or `dry-activate`
+fails, release the slot with `scripts/deploy-slot release --holder "$HOLDER"`.
+Once activation has started, keep the slot held through reconciliation and live
+verification; the `--verify-only` run checks that the running system and the
+system profile name the same generation and releases the slot. See
+[the deployment procedure](docs/agent-operations.md#remote-access-and-deployment)
+for the full sequence and continuity checks.
 
 Enter the repo shell with direnv or Nix:
 
@@ -348,12 +369,6 @@ Linux architectures' development shells and all four host system derivations. It
 build or activate host systems. Stage new Nix files before evaluation so the
 flake can see them. CI runs once per PR update and main push, cancels superseded
 runs, and avoids full fleet builds to conserve runner time.
-
-Apply the built generation:
-
-```fish
-./result/bin/switch-to-configuration switch
-```
 
 Build a different host without switching:
 

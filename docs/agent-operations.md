@@ -29,11 +29,19 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   branch continues, review and resolve or explicitly reject Codex comments,
   resolve failing CI and merge conflicts, then mark the PR ready/non-WIP before
   handoff when it is ready for the user to merge. Leave PR merges to the user.
+- One feature thread owns a feature end to end: it plans, briefs workers,
+  reviews, deploys and validates the result, and coordinates directly with the
+  threads whose work it touches. The GitHub event router routes GitHub events to
+  threads.
+- Workers implement bounded briefs, and the current policy in
+  `ghostship-agent/config/agents/routing-policy.md` owns model choices, so this
+  repository does not pin model routes. Free workers run outside T3 Code on
+  the separate `ghostship-worker` runtime with a caller-selected sandbox
+  profile and accept only public-sensitivity work. The interactive `codex`,
+  `gemini`, and `opencode` launchers described below are the develop-host
+  tools.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
-- The old repo-managed shared skill inventory is retired; do not restore
-  `home/config/skills/{codex-queue,github-pr-workflow,nix,python,skill-creator,ssh,wsl2}`
-  inventory unless the skill model is explicitly revisited.
 - Develop hosts rely on the installed global `skills` CLI and linked local
   Ghostship workflow skills under `home/config/skills/ghostship-*`.
 - The global `skills` CLI uses
@@ -159,21 +167,39 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 - For prompt-driven remote work, start the command in detached tmux and drive it
   with `capture-pane` plus `send-keys`. Do not use blocking top-level SSH TTY
   sessions for agent workflows.
-- If a remote deployment reaches a built system path but activation fails,
-  apply the generation directly with
-  `/nix/store/<system>/bin/switch-to-configuration switch`.
+- If a remote deployment reaches a built system path but activation fails, keep
+  the deploy slot held, fix the failure and rerun `scripts/activate-host`
+  against that toplevel; it records the generation and requires the slot.
 - This repo deploys through Git on the host. Do not ask the user to validate
   host-side changes until the required repo edits are committed and available to
   the host checkout.
-- Preferred `chill-penguin` deploy flow:
-  local `git push origin main`;
-  remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
-  remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `scripts/activate-host --toplevel ./result`.
-  `scripts/activate-host` sets the system profile before the switch and
-  verifies that `/run/current-system` and the system profile name the same
-  generation. A bare `switch-to-configuration switch` does not record the
-  system generation, and a reboot then reverts to the profile's generation.
+- Deployment is explicit and gated. Check `scripts/deploy-slot status`, then run
+  this in the host checkout as root after the reviewed commit is on
+  `origin/main`, with `HOST`, `HOLDER` and `PURPOSE` naming the target and this
+  deploy:
+
+  ```bash
+  scripts/deploy-slot acquire --holder "$HOLDER" --purpose "$PURPOSE"
+  git pull --ff-only origin main
+  nixos-rebuild build -L --impure --flake ".#$HOST"
+  ./result/bin/switch-to-configuration dry-activate
+  scripts/activate-host --toplevel ./result --holder "$HOLDER"
+  # Verify live service health and the intended change before releasing.
+  scripts/activate-host --verify-only --holder "$HOLDER"
+  ```
+
+  Acquire the slot before pulling so two sessions cannot build the same
+  checkout at once. A stale slot is taken over only with `--force --reason`.
+  `scripts/activate-host` sets the system profile before the switch, keeps the
+  slot held while the deploy's checks run, and compares `/run/current-system`
+  with the system profile. If the pull, build or dry-activate fails before
+  activation, release with `scripts/deploy-slot release --holder "$HOLDER"`.
+  Once activation has been attempted, keep the slot held through reconciliation
+  and live verification; `--verify-only --holder "$HOLDER"` performs the
+  comparison and releases it, and release explicitly only when abandoning the
+  deploy.
+- An owner request to deploy or restart is carried out promptly; the owner's
+  deploy or activate instruction is the approval for the restart it needs.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

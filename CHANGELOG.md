@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.137] - 2026-10-23
+
+- Refresh engineering and runtime guidance for feature ownership, isolated workers and gated host deployment.
+
 ## [3.17.136] - 2026-10-23
 
 - Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.

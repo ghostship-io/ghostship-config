@@ -87,9 +87,14 @@ Use **Settings > Providers** for model-account sign-in:
   confirmation. Antigravity IDE/CLI login does not authenticate this ACP agent.
 
 All three instances are enabled on the first launch. Later user settings are
-preserved. Shared GitHub, OpenCode, OpenRouter, and Bitwarden environment fields
-come from the existing encrypted secret catalog through the dedicated `t3code`
-projection. The Google account and Codex login remain user-owned.
+preserved. Shared GitHub, OpenCode, and Bitwarden environment fields come from
+the existing encrypted secret catalog through the dedicated `t3code`
+projection. The OpenRouter key is projected for the free-inference pool. The
+Google account and Codex login remain user-owned.
+
+Free workers run outside this container on the separate `ghostship-worker`
+runtime with a caller-selected sandbox profile and accept only
+public-sensitivity work.
 
 The image defines the `nobody`/`nogroup` (uid/gid 65534) account. Google's ACP
 harness drops to this unprivileged account for sandboxed tool work; when it
@@ -151,10 +156,10 @@ access token rotates or the selected account changes. Remove it when T3 can
 read the native OAuth credential directly. Verify all three Go windows and
 their reset times against the same account's usage response.
 
-OpenRouter and Ollama model discovery does not provide native Limits entries.
-T3 0.1.1 has no quota reader for either, and its configurable CLIProxyAPI usage
-hub reader accepts only Codex and Claude accounts. A working provider usage API
-alone cannot add those accounts to the native panel through settings.
+Ollama model discovery does not provide native Limits entries. T3 0.1.1 has no
+quota reader for it, and its configurable CLIProxyAPI usage hub reader accepts
+only Codex and Claude accounts. A working provider usage API alone cannot add
+those accounts to the native panel through settings.
 
 ## OpenCode 2 upgrades
 
@@ -325,15 +330,28 @@ only the session leaving the running state settles the turn. No conversation rec
 
 ## Maintenance
 
-`system.autoUpgrade` deploys GitHub `main` nightly (04:00 UTC plus up to 45
-minutes, with `--impure` for Asahi firmware; missed runs catch up after boot).
-It waits for a running backup and alerts through `ghostship-failure@` on
-failure; the next run retries an interrupted switch. To deploy manually, run
-`nixos-rebuild switch --impure --flake .#chill-penguin -L` on the host after
-pulling the committed configuration. This updates the system profile and boot
-entry as well as the running system. Running a built system's
-`switch-to-configuration switch` directly does not advance the system profile;
-reboot can therefore return to a generation without T3 Code.
+A deployment is explicit and gated. From a host root shell, with `HOST`,
+`HOLDER` and `PURPOSE` naming the target and this deploy:
+
+```bash
+scripts/deploy-slot acquire --holder "$HOLDER" --purpose "$PURPOSE"
+git pull --ff-only origin main
+nixos-rebuild build -L --impure --flake ".#$HOST"
+./result/bin/switch-to-configuration dry-activate
+scripts/activate-host --toplevel ./result --holder "$HOLDER"
+# Verify live service health and the intended change before releasing.
+scripts/activate-host --verify-only --holder "$HOLDER"
+```
+
+`scripts/activate-host` sets the system profile before the switch, so the
+activation records the generation and a reboot returns to the deployed
+generation. It keeps the slot held through the deploy's checks;
+`--verify-only --holder "$HOLDER"` verifies the generation and releases it. If
+the pull, build or `dry-activate` fails before activation, release with
+`scripts/deploy-slot release --holder "$HOLDER"`; once activation has started,
+keep the slot held through reconciliation and live verification. See
+[fleet operations](fleet-operations.md#updates-and-staged-rollout) for the full
+sequence with continuity checks.
 
 The four-hour tool timer resolves the current registry version online before it
 updates T3, Codex, and Claude, then verifies the installed package manifest
