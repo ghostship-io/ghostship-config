@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.185] - 2026-10-23
+
+- Put canonical orchestrator/worker model selection before provider capacity.
+- Show effort, Quality, pool order, limiting windows and explicit custom resets.
+- Apply weekly/monthly pace colours and remove the old category tables and repeated evidence sections.
+
+PR #351.
+
 ## [3.17.184] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 1f7edec3; the lock's narHash is the `nix flake prefetch` hash of that revision.
