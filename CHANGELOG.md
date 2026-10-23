@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.124] - 2026-10-23
+## [3.17.125] - 2026-10-23
 
 - ai-usage: a route more than twenty points behind the pace of its binding window goes to the back of the pool. The collector now publishes one pace state per route and per account window, and the Providers page reads it for amber (behind) and red (far_behind, spent) instead of drawing its own band. The state is the band of the Paced Availability of the most constraining window in points, the share left minus the expected share left, rounded to six decimals so that only the noise of the subtraction is removed (`100 * (0.50 - 0.55)` is `-5`): more than five points ahead is `ahead`, between five points behind and five ahead is `on_pace`, between twenty points behind and five behind is `behind`, more than twenty points behind is `far_behind`, a window with nothing left is `spent` whatever its line, and a route with no window or no line to compare it with is `unknown`. The order of every tier gains one element right after the trust group: a `far_behind` route follows every route of its trust group that is not, whatever the value of those routes. An untrusted route stays last, and a route that is merely behind keeps its place in the value order. The candidate row and the winner carry the state as `pace_state`, and every account window publishes `ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`, with the labels of the remaining-ratio series plus the state.
+
+## [3.17.124] - 2026-10-23
+
+- ai-usage: the Free group of Model selection lists only the providers that hold an eligible free model. A provider whose `ghostship_ai_free_provider_selection_info` reads basis `none` is not a row any more, and the "no eligible free model" sentence is gone with it: live on generation 412 the eight providers Cohere, Mistral, OpenCode Zen, Orcarouter, Poolside, Requesty, Vercel and Zai stopped taking a row, and they come back by themselves once `routing.json` gives them a free-tier winner. The filter is the panel's own; the collector keeps publishing those rows, which the capacity cards' "Free models" line and the other readers of the free selection still read. Rows that are learning their window and rows with a published, reported or inferred share stay as they were. The panel is 30 grid rows, measured in Playwright in Inter with the five static rows, the Free divider and sixteen free rows: 1049 px at 358 px and 820 px at 1568 px, so the body of 1084 px holds both without an inner scroll, 264 px stay empty at 1568 px, and the panels below move up by the 10 rows it shrank. The review fixture holds the live set of nineteen free providers, eleven with a model and eight without.
 
 ## [3.17.123] - 2026-10-23
 
