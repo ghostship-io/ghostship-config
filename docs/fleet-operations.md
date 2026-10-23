@@ -523,55 +523,6 @@ interrupts the backup process, inspect `podman ps` for paused RomM/Grimmory
 containers and unpause them; their declarative health settings are restored by
 the next normal unit start. Signal/error traps handle ordinary failures.
 
-## Merge freeze
-
-A freeze stops merges into a repository's main branch while something that
-must not race a merge runs, such as a history rewrite. Branch pushes stay
-allowed. The freeze is set and cleared with the agent CLI, never by message:
-
-```bash
-agent freeze set --repos ghostship-config,ghostship-agent --reason "history rewrite" --until 2h
-agent freeze status --repos all
-agent freeze clear --repos ghostship-config,ghostship-agent
-```
-
-`set` writes the repository's Actions variable `GHOSTSHIP_FREEZE` (reason,
-until, who set it) and marks every open pull request's head with a failing
-`ghostship/freeze` status. `agent pr land` refuses a frozen repository before
-it clones anything, and again right before it merges. A freeze ends at its
-`--until` time for the tools; `clear` also re-marks the heads it failed, so run
-it when the work is done.
-
-On a public repository, main requires the `ghostship/freeze` status, with
-administrators included, so a merge outside `agent pr land` is refused too:
-`gh pr merge`, `--admin`, the merge API and the web button. The `Merge freeze`
-workflow (`.github/workflows/freeze.yml`) marks each new pull request head
-from the variable through `scripts/freeze-status`. It runs as
-`pull_request_target`, so the workflow and the script come from main and a pull
-request cannot mark itself unfrozen. GitHub offers branch protection on private
-repositories only on a paid plan, so a private repository is protected by
-`agent pr land` alone.
-
-The required status applies to every push to main, so a history rewrite's
-force-push needs its new tip marked first: push the rewritten main to a
-staging branch, mark that commit, then force-push main (force-pushes are
-allowed) and delete the staging branch:
-
-```bash
-git push origin "$NEW_MAIN:refs/heads/rewrite-staging"
-gh api "repos/ghostship-io/ghostship-config/statuses/$NEW_MAIN" -f state=success \
-  -f context=ghostship/freeze -f description="history rewrite tip"
-git push --force origin "$NEW_MAIN:main"
-git push origin --delete rewrite-staging
-```
-
-The protection itself is applied once per repository by the owner's word:
-
-```bash
-printf '%s' '{"required_status_checks":{"strict":false,"contexts":["ghostship/freeze"]},"enforce_admins":true,"required_pull_request_reviews":null,"restrictions":null,"allow_force_pushes":true,"allow_deletions":false}' | \
-  gh api --method PUT repos/ghostship-io/ghostship-config/branches/main/protection --input -
-```
-
 ## Security review decisions
 
 The 2026-10-10 security review retained these operator-approved trust choices:
