@@ -786,17 +786,15 @@ def free_model_samples(
 # never blocks a route.
 MAX_COOLDOWN_SECONDS = 366 * 24 * 3600.0
 
-# The providers whose zero-price listing is a free route of its own. The
-# OpenRouter free models and the Go subscription's free models cost nothing
-# by construction, so they are dedicated free routes and they may hold the
-# free tier.
-FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
+# OpenCode Zen and OpenRouter publish dedicated zero-price routes. Go is
+# a paid subscription, even when its catalog also lists zero-price models.
+FREE_ROUTE_PROVIDERS = ("opencode", "openrouter")
 
 # The providers whose zero-price listing is a promotional route of a paid
 # account. It costs nothing right now, it is not a free route of its own,
 # and it competes in bulk. A model that is in both sets is a promotional
 # route: the promotional zero price is checked first.
-PROMO_PROVIDERS = ("opencode", "ollama")
+PROMO_PROVIDERS = ("ollama",)
 
 
 def _published_unlimited_routes(

@@ -155,25 +155,30 @@ def choose(candidate: Mapping[str, Any], preferred: list[dict]) -> dict | None:
 
 def annotate(quality: dict, selection: Mapping[str, Any]) -> None:
     """Publish active membership and one ranked representative per model."""
-    active, preferred, selected = set(), {}, set()
+    active, preferred, selected, billing = set(), {}, set(), {}
     for category in ('worker','orchestrator'):
         for row in selection.get(category) or []:
             key = (row['provider'],row['model'])
+            billing[key] = row.get('billing') or 'unknown'
             evidence = row.get('quality_evidence')
             if evidence is not None:
                 preferred.setdefault(key,evidence)
-            if (row['available'] and row['selection_eligible'] and row['picker_eligible']
-                    and row['trust_level'] not in ('excluded','untrusted')
-                    and row.get('billing') not in ('free','promotion')):
+            if (row['available'] and row['selection_eligible']
+                    and (row['picker_eligible'] or row.get('billing') in ('free','promotion'))
+                    and row['trust_level'] not in ('excluded','untrusted')):
                 active.add(key)
             chosen = ((selection.get('providers') or {}).get(row['provider']) or {}).get('selected') or {}
             if row.get('native') is not None and row['native'] == chosen.get(category):
+                selected.add(key)
+            if category == 'worker' and row['key'] == (selection.get('free_selected') or {}).get(row['provider']):
                 selected.add(key)
     groups = defaultdict(list)
     for row in quality.get('rows') or []:
         groups[(row['provider'],row['model'])].append(row)
     models = []
     for key, rows in groups.items():
+        for row in rows:
+            row['billing'] = billing.get(key, 'unknown')
         usable = [row for row in rows if row['selectable']] or rows
         measured = [row for row in usable if row['n']]
         qualified = [row for row in measured if row['n'] >= MIN_OUTCOMES]
@@ -205,7 +210,7 @@ def samples(quality: Mapping[str, Any]) -> list:
     values = []
     for row in quality.get("rows") or []:
         labels = {key: ExactLabel(str(row.get(key) or "")) for key in
-                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state")}
+                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state", "billing")}
         labels.update(source=ExactLabel(" + ".join(row["sources"]) or "none"),
                       evidence_state=str(quality.get("state") or "no_evidence"))
         values.append(("ghostship_ai_quality_info", labels, 1.0))
