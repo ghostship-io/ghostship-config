@@ -106,12 +106,12 @@ need the relevant project's JavaScript dependencies and any site credentials.
 `scripts/check` runs the fast unit set, workflow and shell lint, fixture checks,
 patch whitespace checks and the redacted Gitleaks source scan. Unit modules
 fail above ten seconds, with measured 20s/15s budgets for the providers-page
-and OpenCode reader fixtures; the unit command has a 110s hard limit. PRs and
+and OpenCode reader fixtures; the unit command has a 110s hard limit. PRs run once;
 main pushes do not repeat the PR gate.
 
 `scripts/check-integration` retains tracked Nix parsing, policy rendering,
 ci/default/browser shell evaluation for both Linux architectures and every
-host's full system derivation. Nightly/manual CI also builds host-evaluation,
+host's full system derivation. Manual main CI also builds host-evaluation,
 config-tests and config-package, retaining full regression and host assertion
 coverage. Stage new Nix files before evaluation. Integration and browser jobs
 run manually on main; superseded PR runs are cancelled.

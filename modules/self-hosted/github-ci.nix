@@ -44,7 +44,7 @@ in
     serviceOverrides = {
       CacheDirectory = "github-ci-${repo}";
       CacheDirectoryMode = "0700";
-      CPUQuota = "200%";
+      CPUQuota = if repo == "ghostship-3dprinting" then "400%" else "200%";
       MemoryMax = "8G";
       TasksMax = 1024;
     };
