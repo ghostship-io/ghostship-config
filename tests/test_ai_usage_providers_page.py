@@ -37,7 +37,7 @@ FIXTURE = ROOT / "tests/fixtures/ai-usage/providers-review.prom"
 FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on.prom"
 
 # The sections of the page, in the order the owner approved.
-SECTIONS = ("Provider capacity", "Bulk", "Free", "Frontier", "3D", "Providers")
+SECTIONS = ("Provider capacity", "Model selection", "Bulk", "Free", "Frontier", "3D")
 TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
 
 # The account window gauges of the collector, and the field of a row each of
@@ -443,7 +443,7 @@ class ProvidersPageTests(unittest.TestCase):
         node = shutil.which("node")
         if node is None:
             self.fail("node is needed to run the helper")
-        for title in ("Bulk", "Free", "Frontier", "3D", "Providers"):
+        for title in ("Bulk", "Free", "Frontier", "3D"):
             panel = section(self.page, title)
             content = panel["options"]["content"]
             self.assertNotIn('{{date resetsAt', content, title)
@@ -643,7 +643,12 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertIn("{{#if name}}{{name}}{{else}}{{model}}{{/if}}", content, title)
 
     def test_the_routing_chip_reads_the_collector_s_gauge(self):
-        """The chip is the collector's routing state, not a fixed text."""
+        """The chip is the collector's routing state, not a fixed text.
+
+        The selection table carries the static table either way: its own
+        chip says so and reads the same gauge in its own query, and the
+        table below it does not change with the routing.
+        """
         header = section(self.page, "")
         joined = expressions(header)
         self.assertIn("ghostship_ai_routing_enabled", joined)
@@ -659,7 +664,7 @@ class ProvidersPageTests(unittest.TestCase):
     def test_no_hard_coded_routing_text_sits_outside_the_chip(self):
         """Only the chip of the header says the routing is off."""
         for panel, _ in panels(self.page):
-            if panel.get("id") == 200:
+            if panel.get("id") in (200, 206):
                 continue
             self.assertNotIn("Routing OFF", json.dumps(panel), panel.get("title"))
             self.assertNotIn("Routing ON", json.dumps(panel), panel.get("title"))
@@ -704,7 +709,7 @@ class ProvidersPageTests(unittest.TestCase):
                 f'^{code}$' in page or f'"{code}"' in page or "join (split" in page,
                 f"{code} would reach the page as it is",
             )
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             content = section(self.page, title)["options"]["content"]
             self.assertNotIn("no_window", content, title)
 
@@ -730,7 +735,7 @@ class ProvidersPageTests(unittest.TestCase):
         The header of the basis column went away while the cells stayed, so
         the columns of the table no longer lined up.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             head, row = table_columns(section(self.page, title)["options"]["content"])
             self.assertEqual(len(head), len(row), title)
             for index, (header, cell) in enumerate(zip(head, row)):
@@ -746,7 +751,7 @@ class ProvidersPageTests(unittest.TestCase):
         Without it the spent route keeps the place the collector gave it, and
         it stands above the routes that can run.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             panel = section(self.page, title)
             order = target_by_field(panel, "order")["expr"]
             spent = target_by_field(panel, "out")["expr"]
@@ -767,7 +772,7 @@ class ProvidersPageTests(unittest.TestCase):
         The name of the model and its tag shared one line that the narrow
         screen cut, so the tag became an empty grey box.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in list(TIERS) + ["Model selection"]:
             panel = section(self.page, title)
             styles = panel["options"].get("styles") or ""
             rules = css_rules(media_body(styles))
@@ -788,7 +793,7 @@ class ProvidersPageTests(unittest.TestCase):
         A row that wraps is a row the panel cuts, and the rows a rule
         sinks to the bottom are the last ones of the table.
         """
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             panel = section(self.page, title)
             styles = panel["options"].get("styles") or ""
             rules = css_rules(media_body(styles))
@@ -804,13 +809,13 @@ class ProvidersPageTests(unittest.TestCase):
 
     def test_the_capacity_text_carries_its_whole_text(self):
         """The capacity text of a narrow screen is cut with an ellipsis: the title holds it all."""
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             content = section(self.page, title)["options"]["content"]
             self.assertIn('class="unk" title="', content, title)
 
     def test_every_provider_is_read_by_its_name(self):
         """A provider is read by the name the mockup gives it."""
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             expression = provider_name_target(section(self.page, title))["expr"]
             for identifier, name in PROVIDER_NAMES.items():
                 self.assertIn(f'"^{identifier}$"', expression, f"{title} {identifier}")
@@ -1323,7 +1328,7 @@ class ModelSelectionTests(unittest.TestCase):
         capacity = section(self.page, "Provider capacity")
         cards = run_panel_helper(
             capacity,
-            "const rows = []\n"
+            "const rows = "
             + json.dumps(["ollama", "codex", "opencode-go"])
             + ".map((account) => ({ account: account, kind: 'session', quota_id: 'q', label: 'Session', evidence: 'provider_reported', field: 'left', value: 1 }));\n"
             + "console.log(JSON.stringify(helpers.capacityCards(rows, 0)));",
@@ -1342,13 +1347,80 @@ class ModelSelectionTests(unittest.TestCase):
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
-        rows = {(row["row"], row["field"]): row["value"] for row in self.rows}
+        rows = {
+            (row["row"], row["field"]): row["value"]
+            for row in self.rows
+            if "row" in row
+        }
         self.assertAlmostEqual(rows[("1", "left")], 0.4129)
         self.assertAlmostEqual(rows[("1", "pace")], -0.033)
         self.assertAlmostEqual(rows[("3", "left")], 0.99)
         self.assertAlmostEqual(rows[("3", "pace")], 0.012)
         self.assertAlmostEqual(rows[("4", "left")], 1.0)
         self.assertNotIn(("4", "pace"), rows)
+
+
+@unittest.skipUnless(
+    os.environ.get("GHOSTSHIP_TEST_VMETRICS") or shutil.which("victoria-metrics"),
+    "Set GHOSTSHIP_TEST_VMETRICS or put victoria-metrics on the path",
+)
+class ModelSelectionStoreTests(unittest.TestCase):
+    """The static route query, executed against the store the page reads."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+        cls.store = VictoriaMetricsFixture()
+        if not cls.store.start():
+            raise unittest.SkipTest("VictoriaMetrics did not start")
+        cls.store.import_fixture(FIXTURE)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.store.stop()
+
+    def test_the_query_returns_the_live_route_table(self):
+        """The panel's own query is the five live routes and the routing gauge."""
+        panel = section(self.page, "Model selection")
+        target = find_target(panel, "ghostship_ai_static_route_info")
+        rows = self.store.wait_for(target["expr"].replace("$provider", ".*"))
+        by_field = {}
+        for row in rows:
+            by_field.setdefault(row["metric"].get("field"), []).append(row)
+        self.assertEqual(set(by_field), {"info", "left", "pace", "reset", "routing"})
+        info = {row["metric"]["row"]: row["metric"] for row in by_field["info"]}
+        self.assertEqual(sorted(info), ["1", "2", "3", "4", "5"])
+        self.assertEqual(
+            (info["1"]["role"], info["1"]["provider"], info["1"]["model"]),
+            ("Bulk 1", "ollama", "minimax-m3.1-flash"),
+        )
+        self.assertEqual(info["1"]["display_name"], "MiniMax-M3.1-Flash")
+        self.assertEqual(
+            info["1"]["used_for"], "Narrow implementation (1st), Research (2nd)"
+        )
+        self.assertEqual(info["4"]["display_name"], "Beam Free")
+        self.assertEqual([float(row["value"][1]) for row in by_field["routing"]], [0.0])
+        # Beam Free publishes no pace series at all.
+        self.assertEqual(
+            [row["metric"]["row"] for row in by_field["pace"]], ["1", "2", "3", "5"]
+        )
+        expression = (
+            "const rows = "
+            + json.dumps(
+                [{**row["metric"], "value": float(row["value"][1])} for row in rows]
+            )
+            + ";\n"
+            + "const now = "
+            + json.dumps(CAPACITY_NOW)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.selectionRows(rows, now)));"
+        )
+        left = {
+            row["model"]: row["left"] for row in run_panel_helper(panel, expression)
+        }
+        self.assertEqual(left["minimax-m3.1-flash"], "41% \u00b7 \u25cf on pace")
+        self.assertEqual(left["gpt-6.1-sol"], "99% \u00b7 \u25cf on pace")
+        self.assertEqual(left["beam-free"], "100%")
 
 
 class VictoriaMetricsFixture:
@@ -1524,36 +1596,6 @@ class WorkedCasesTests(unittest.TestCase):
                     continue
                 self.assertLess(order[model], order[other], f"{model} before {other}")
 
-    def test_a_spent_provider_comes_after_every_provider_that_can_run(self):
-        """The spent account of a provider stands below the accounts that can run."""
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        spent = self.rows(panel, target_by_field(panel, "out"), "provider")
-        exhausted = [provider for provider, flag in spent.items() if flag]
-        self.assertTrue(exhausted, "the fixture has a spent account")
-        for provider in exhausted:
-            for other, flag in spent.items():
-                if flag:
-                    continue
-                self.assertLess(order[provider], order[other], f"{provider} before {other}")
-
-    def test_an_unknown_provider_comes_after_every_provider_with_a_reading(self):
-        """A provider with no capacity reading stands below every provider with one.
-
-        The fixture's google publishes an entitlement reset and no capacity
-        window and no coverage series; it still reads "Limits unknown", and
-        it must still sort below the providers that have a reading.
-        """
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        has_cap = self.rows(panel, target_by_field(panel, "hasCap"), "provider")
-        unknown = [p for p in order if not has_cap.get(p)]
-        self.assertIn("google", unknown)
-        for provider in unknown:
-            for other, flag in has_cap.items():
-                if flag:
-                    self.assertLess(order[provider], order[other], f"{provider} before {other}")
-
     def test_a_tier_lists_its_winners_and_the_routes_that_are_out(self):
         """Bulk and Free list the ranked winners and the spent routes, nothing else.
 
@@ -1604,8 +1646,6 @@ class WorkedCasesTests(unittest.TestCase):
         expected = {
             "Free": {"nvidia": "NVIDIA", "deepseek": "DeepSeek", "google": "Google",
                      "opencode-go": "OpenCode Go", "fireworks": None},
-            "Providers": {"claude": "Claude", "nvidia": "NVIDIA", "google": "Google",
-                          "openrouter": "OpenRouter", "fireworks": None},
         }
         for title, names in expected.items():
             panel = section(self.page, title)
@@ -1618,7 +1658,7 @@ class WorkedCasesTests(unittest.TestCase):
             for provider, name in names.items():
                 self.assertEqual(found.get(provider), name, f"{title} {provider}")
         # The page reads the name where it shows the provider.
-        for title in list(TIERS) + ["Providers"]:
+        for title in TIERS:
             content = section(self.page, title)["options"]["content"]
             self.assertIn(
                 "{{#if providerName}}{{providerName}}{{else}}{{provider}}{{/if}}",
@@ -1669,15 +1709,6 @@ class WorkedCasesTests(unittest.TestCase):
         bands = {row["metric"]["model"]: row["metric"].get("qualityBand") for row in rows}
         self.assertEqual(bands.get("minimax_minimax-m3.1-flash"), "true")
         self.assertEqual(bands.get("glm-5.3-flash"), "true")
-
-    def test_the_providers_are_sorted_by_paced_availability_with_the_spent_last(self):
-        """The lowest window decides, and a spent or unknown account comes last."""
-        panel = section(self.page, "Providers")
-        order = self.rows(panel, target_by_field(panel, "order"), "provider")
-        self.assertGreater(order["claude"], order["antigravity"])
-        self.assertGreater(order["antigravity"], order["codex"])
-        self.assertLess(order["ollama"], order["codex"])
-        self.assertLess(order["cursor"], order["ollama"])
 
     def test_the_routing_gauge_reads_one_when_the_collector_publishes_it(self):
         """The chip reads Routing ON when the gauge is one."""
