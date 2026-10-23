@@ -113,6 +113,9 @@ class SourceClosureTests(unittest.TestCase):
         self.assertIn('/worker-home/.local/state/ghostship/orchestrator:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev', data['volumes'])
         self.assertEqual(data['environment']['GHOSTSHIP_ORCHESTRATOR_FILE'],
                          '/run/ghostship-orchestrator/pointer.env')
+        self.assertFalse(any('handoffs' in value for value in data['volumes']))
+        self.assertNotIn('coordination-list.md', (ROOT/'modules/self-hosted/github-engineering.nix').read_text())
+        self.assertNotIn('orchestrator_thread_file', (ROOT/'modules/self-hosted/github-engineering.nix').read_text())
         self.assertFalse(any('pointer.env:' in value or '/.config/ghostship:' in value for value in data['volumes']))
         self.assertFalse(any('/.t3/userdata' in value or ('/.config/gh:' in value or '/.config/gh/' in value) for value in data['volumes']))
 
