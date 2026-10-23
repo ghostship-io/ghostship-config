@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.235] - 2026-10-23
+
+- Restore model picks by compacting published routing JSON within the reader budget.
+
+PR #401.
+
 ## [3.17.234] - 2026-10-23
 
 - Track scoped primary usage-limit reset announcements with quotes, post/reset times and honest confidence.
