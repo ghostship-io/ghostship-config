@@ -1540,6 +1540,13 @@ Provider role restrictions are declared only in runtime policy's
 and publishes explicit native role exclusions, so the reconciler can remove
 previously managed worker favorites even when another source is unavailable.
 Orchestrator review authority remains independent of worker eligibility.
+The policy's `worker_builds` restricts Claude workers to the declared Sonnet
+route. Its `worker_pool_guards` admits worker use only with a current shared
+weekly reading above both the time-proportional pace line and the configured
+review reserve. Missing/stale weekly evidence keeps the worker listed but
+reserved; Opus review availability is unchanged. Host build preferences augment
+these declarations and cannot erase or replace them. Selection, favorites,
+defaults and CLI/MCP picks consume this same guarded worker availability.
 Unused pools are declared in the same policy's `excluded_pools`; their
 model candidates are omitted. Their account windows remain visible as grey
 "not used" rows with reported remaining/reset values, without pace or binding
