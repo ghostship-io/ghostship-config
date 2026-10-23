@@ -1,9 +1,5 @@
 # Changelog
 
-## [3.17.144] - 2026-10-23
-
-- Read coordinator account, environment and repository project identifiers and the provider account identifier from private runtime settings. Reuse the existing owner-config renderer, preserve JSON types and fail on missing values; keep source import and revision guards unchanged.
-
 ## [3.17.143] - 2026-10-23
 
 - ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, a non-finite parsed duration or reset epoch, an integer too large for a float, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, except that the observation's limit now keeps its reported `scope="model"` and a diagnostic value too large to render is skipped instead of crashing the run. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
