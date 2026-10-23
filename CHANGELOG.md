@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.189] - 2026-10-23
+
+- Restore normal GitHub coordinator startup on activation and boot.
+
+PR #327.
+
 ## [3.17.188] - 2026-10-23
 
 - Keep T3 container identity independent of agent and tooling releases.
