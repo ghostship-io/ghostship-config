@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.227] - 2026-10-23
+
+- Stop selecting exhausted Antigravity models by reading provider quota notices from completed T3 runs and retaining their reset deadlines.
+
+PR #393.
+
 ## [3.17.226] - 2026-10-23
 
 - Monitor primary reset announcements hourly, with eight-hour wall backoff and one blocked notice per episode.
