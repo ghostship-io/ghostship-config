@@ -483,7 +483,7 @@ class ExhaustedTests(WiringTestCase):
     def test_the_window_states_the_spent_allowance(self):
         windows = self.windows(self.inferred, self.routes)
         window = windows["openrouter"][0]
-        self.assertEqual(window.quota_id, "inferred:exhausted")
+        self.assertEqual(window.quota_id, "inferred:5h")
         self.assertEqual(window.used_ratio, 1.0)
         self.assertEqual(window.reset_epoch, at(18, 5))
 
@@ -718,6 +718,69 @@ class RenderedFileTests(WiringTestCase):
         samples, _ranked = self.rank(inferred, routes)
         text = main.render(inferred.results, samples, NOW, 1.0, {})
         self.assertIn("ghostship_ai_collection_duplicate_series 0", text)
+
+
+class InferredQuotaIdTests(unittest.TestCase):
+    """The quota id of an inferred route names the window, not the state."""
+
+    def setUp(self):
+        self.inference = load("ai_usage_quota_inference", "inference.py")
+
+    def event(self, when, outcome="success", usage=None):
+        return {
+            "provider": "acme",
+            "model": "m",
+            "at": DAY0 + when,
+            "outcome": outcome,
+            "usage": usage,
+            "window_hint": None,
+        }
+
+    def capacity(self, events, now):
+        return self.inference.infer_capacity(events, now)[("acme", "m")]
+
+    def test_a_spent_route_names_its_learned_window(self):
+        events = [
+            self.event(0.0, usage=100.0),
+            self.event(600.0, outcome="limit"),
+            self.event(3600.0, usage=0.0),
+            self.event(3700.0, usage=100.0),
+            self.event(3800.0, outcome="limit"),
+        ]
+        capacity = self.capacity(events, DAY0 + 5500.0)
+        self.assertEqual(capacity.state, "exhausted")
+        self.assertEqual(usage().quota_id_for(capacity), "inferred:1h")
+
+    def test_a_rolled_window_names_its_learned_window(self):
+        events = [
+            self.event(0.0, usage=100.0),
+            self.event(600.0, outcome="limit"),
+            self.event(3600.0, usage=0.0),
+            self.event(3700.0, usage=100.0),
+            self.event(3800.0, outcome="limit"),
+        ]
+        capacity = self.capacity(events, DAY0 + 7900.0)
+        self.assertEqual(capacity.state, "in_window")
+        self.assertEqual(usage().quota_id_for(capacity), "inferred:1h")
+
+    def test_a_refusal_without_a_learned_window_names_the_state(self):
+        events = [
+            self.event(0.0, usage=100.0),
+            self.event(600.0, outcome="limit"),
+        ]
+        capacity = self.capacity(events, DAY0 + 5000.0)
+        self.assertEqual(capacity.state, "exhausted")
+        self.assertIsNone(capacity.reset_at)
+        self.assertEqual(usage().quota_id_for(capacity), "inferred:exhausted")
+
+    def test_a_route_never_refused_keeps_the_no_failure_id(self):
+        events = [
+            self.event(0.0, usage=100.0),
+            self.event(60.0, usage=100.0),
+        ]
+        capacity = self.capacity(events, DAY0 + 120.0)
+        self.assertEqual(capacity.state, "no_failure")
+        self.assertEqual(usage().quota_id_for(capacity), "inferred:no-limit-seen")
 
 
 if __name__ == "__main__":
