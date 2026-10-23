@@ -208,6 +208,14 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertFalse(chosen['hasQuota'])
         self.assertIn('data-quality-controls',self.panels[250]['options']['content'])
 
+    def test_empty_announcements_are_labelled_without_inventing_reset_records(self):
+        panel=self.panels[202]
+        query=panel['targets'][0]['expr']
+        self.assertIn('absent(ghostship_ai_announced_reset_info)',query)
+        self.assertIn('No reset announcement events yet',query)
+        self.assertIn('max by (source_url, confidence, label, scope, reset_at)',query)
+        self.assertNotIn('reset_at",',query.split('or label_replace',1)[1])
+
     def test_quality_hook_builds_controls_after_grafana_sanitization(self):
         subprocess.run(['node',str(ROOT/'tests/fixtures/ai-usage/quality-hook-dom.cjs'),str(PAGE)],check=True)
         self.assertNotIn('<input',self.panels[250]['options']['content'])
