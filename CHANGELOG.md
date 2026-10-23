@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.208] - 2026-10-23
+
+Render unused Fable and Antigravity third-party limits grey while preserving usage truth and excluding their model routes from selection. Keep optional announcement-cache failures from aborting usage collection.
+
+PR #375.
+
 ## [3.17.207] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 7f180d26; the lock's narHash is the `nix flake prefetch` hash of that revision.
