@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.171] - 2026-10-23
+
+- Pin the agent release with T3 selector parity and pyLoad query dispatch fixes.
+- Align newsletter incident consumer fixtures with bounded worker wake routing.
+
+PR #334.
+
 ## [3.17.170] - 2026-10-23
 
 - Repair stale Seerr integration profiles after initial setup and keep managed credentials current.
