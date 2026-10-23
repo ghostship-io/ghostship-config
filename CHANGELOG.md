@@ -1,9 +1,5 @@
 # Changelog
 
-## [3.17.237] - 2026-10-23
-
-- Remove the coordinator notes mount and ACL setup after switching routing to the canonical orchestrator pointer.
-
 ## [3.17.236] - 2026-10-23
 
 - Seed and project the dedicated canonical orchestrator pointer into the coordinator read-only.
