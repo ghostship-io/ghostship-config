@@ -1,8 +1,16 @@
 # Changelog
 
-## [3.17.135] - 2026-10-23
+## [3.17.137] - 2026-10-23
 
 - ai-usage: `agent worker route` inside the T3 Code container can read the routing snapshot. The collector's MCP projection lives at `/run/ghostship-integrations/model-routing.json`, which the container does not mount, so the command reported "the ranking snapshot is missing". The path unit `ghostship-ai-usage-t3-projection.path` now watches that file (`PathChanged`) and activates the oneshot `ghostship-ai-usage-t3-projection.service` whenever the collector publishes, by rename. The oneshot seeds a small writer into the container's own store, creates `/run/ghostship-model-routing` as root (`-m0755 -o3000 -g3000`), and runs the writer as the container user through `podman exec -i --user 3000:3000 t3code`; the writer replaces `/run/ghostship-model-routing/model-routing.json` at mode 0644 by `mv -fT` from a `.new` file. Consumers read it read-only. The unit is `requisite` and `after` `podman-t3code.service`, so a stopped container fails the copy instead of being started: the container is never started, stopped or recreated, and its volumes and environment are unchanged.
+
+## [3.17.136] - 2026-10-23
+
+- Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.
+
+## [3.17.135] - 2026-10-23
+
+- t3: OpenRouter leaves T3 Code (owner request: "we should remove openrouter from t3"). The trimmed OpenCode catalog no longer carries the `openrouter` provider at all, so T3's model list and configuration stop offering it, and a pinned default or small model cannot keep an OpenRouter model in the list. A configured `enabled_providers` loses `openrouter`, `provider.openrouter` is removed, and a `model` or `small_model` naming it is repointed to `ollama-cloud/deepseek-v4.1-flash` and `ollama-cloud/minimax-m3.1-flash`. The config is rewritten only when something changes, atomically and mode 0600; a missing config or one that is not JSON is left untouched with one log line and a zero exit. The free-inference pool is unchanged: it reads the untrimmed models.dev cache and keeps its OpenRouter credential.
 
 ## [3.17.134] - 2026-10-23
 
