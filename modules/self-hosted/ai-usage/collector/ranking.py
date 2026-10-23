@@ -51,6 +51,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+import pools
+
 try:  # pragma: no cover - the collector always ships metrics.py
     from metrics import ExactLabel, label_value
 except ImportError:  # pragma: no cover - standalone use
@@ -1651,6 +1653,8 @@ def rank_models(
 
     candidates: list[_Candidate] = []
     for provider, model in sorted(universe):
+        if not pools.usable_route(provider, model):
+            continue
         account = account_for(provider, model)
         observed_free_route = False
         # Every applicable limit gates the model: the shared account windows

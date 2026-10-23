@@ -185,6 +185,23 @@ class ProviderCapacityTests(unittest.TestCase):
         rows=[{**common,'field':'left','value':left},{**common,'field':'pace_state','state':state,'value':1},*extra]
         return helper(self.panel,'capacityCards',rows)[0]['windows'][0]
 
+    def test_unused_limits_are_grey_with_real_usage_and_no_tick(self):
+        common={'account':'claude','kind':'weekly','quota_id':'seven_day_fable',
+                'label':'Weekly Fable','not_used':'true'}
+        rows=[{**common,'field':'left','value':.25},
+              {**common,'field':'expected','value':.8},
+              {**common,'field':'resetAt','value':1767272400}]
+        window=helper(self.panel,'capacityCards',rows)[0]['windows'][0]
+        self.assertTrue(window['notUsed'])
+        self.assertEqual(window['fillClass'],'not_used')
+        self.assertEqual(window['paceClass'],'not_used')
+        self.assertFalse(window['hasTick'])
+        self.assertEqual(window['width'],'25')
+        self.assertIn('Not used',window['sub'])
+        self.assertIn('reset',window['sub'])
+        self.assertIn('.fill.not_used',self.panel['options']['styles'])
+        self.assertIn('not_used',self.panel['targets'][0]['expr'])
+
     def test_short_windows_never_have_pace_ticks_or_green_amber(self):
         for kind in ('session','hourly','daily','minute','inferred'):
             for state in ('ahead','behind','far_behind'):

@@ -35,6 +35,7 @@ import outcomes as outcomes_module  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
 import published as published_module  # noqa: E402
+import pools  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
@@ -1741,6 +1742,9 @@ def build_snapshot(
             quota_block["entitlements"] = quota_module.entitlements(
                 measured_windows or [], now
             )
+            for entry in quota_block['entitlements']:
+                if pools.not_used_window(str(entry.get('provider') or ''), entry):
+                    entry['not_used'] = True
     if isinstance(snapshot, dict):
         policy = (outcomes or {}).get("policy") or {}
         orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
@@ -2160,16 +2164,28 @@ def render(
     runtime_policy: str | None = None,
 ) -> str:
     writer = MetricWriter()
+
+    def add(name, labels, value):
+        provider = str(labels.get('provider') or labels.get('account') or '')
+        if pools.not_used_window(provider, labels):
+            usage = name.startswith(('ghostship_ai_quota_', 'ghostship_ai_account_window_'))
+            if not usage or ('pace' in name and not name.endswith('_pace_state')) or 'expected_' in name:
+                return
+            labels = {**labels, 'not_used': 'true'}
+            if name.endswith('_pace_state'):
+                labels['state'] = 'not_used'
+        writer.add(name, labels, value)
+
     for name, help_text in METRIC_HELP.items():
         writer.declare(name, "gauge", help_text)
     for result in results:
         provider = result.source
-        writer.add(
+        add(
             "ghostship_ai_source_success",
             {"source": result.source, "provider": provider},
             1.0 if result.ok else 0.0,
         )
-        writer.add(
+        add(
             "ghostship_ai_source_status",
             {
                 "source": result.source,
@@ -2180,47 +2196,47 @@ def render(
             1.0,
         )
         if result.observed_at is not None:
-            writer.add(
+            add(
                 "ghostship_ai_source_observed_timestamp_seconds",
                 {"source": result.source, "provider": provider},
                 result.observed_at,
             )
-        writer.add(
+        add(
             "ghostship_ai_source_duration_seconds",
             {"source": result.source, "provider": provider},
             result.duration_s,
         )
         if result.ok:
-            writer.add(
+            add(
                 "ghostship_ai_source_last_success_timestamp_seconds",
                 {"source": result.source, "provider": provider},
                 now,
             )
     for provider, source in COVERAGE:
-        writer.add(
+        add(
             "ghostship_ai_provider_coverage",
             {"provider": provider, "source": source},
             1.0,
         )
     for result in results:
         for name, labels, value in result.metrics:
-            writer.add(name, labels, value)
+            add(name, labels, value)
     for name, labels, value in extra:
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in model_selection.samples((snapshot or {}).get("model_selection") or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in snapshot_module.account_window_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in trust_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The name the collector already publishes for a model, so a static row
     # says what the model is. The row falls back to the model id.
     display_names: dict[tuple[str, str], str] = {}
@@ -2235,32 +2251,32 @@ def render(
     for name, labels, value in static_routes_module.samples(
         runtime_policy, snapshot or {}, display_names
     ):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The free selection of every free provider, and the free models it
     # holds, read from the same snapshot.
     for name, labels, value in free_selection_module.samples(
         snapshot or {}, display_names
     ):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The availability of every account: whether it can serve right now, why
     # not when it cannot, and where its limit comes from.
     for name, labels, value in account_availability_module.samples(snapshot or {}, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The place every card takes on the Providers page. The page draws the
     # cards in this order, and the order is the owner's.
     for name, labels, value in card_order_module.samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
         measured.extend(result.windows)
     for name, labels, value in quota_module.quota_pace_samples(measured, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in quota_module.entitlement_samples(measured, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in quota_module.entitlement_display_samples(measured, now):
-        writer.add(name, labels, value)
-    writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
-    writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
+        add(name, labels, value)
+    add("ghostship_ai_collection_timestamp_seconds", {}, now)
+    add("ghostship_ai_collection_duration_seconds", {}, duration)
     # A series is published once. A repeat is dropped and counted, and the
     # count is published, so a duplicate never passes unnoticed. The run
     # names every series it dropped, so the emitter that published a series
@@ -2274,12 +2290,12 @@ def render(
     unnamed = len(writer.dropped) - MAX_NAMED_DUPLICATE_SERIES
     if unnamed > 0:
         log(f"and {unnamed} more")
-    writer.add(
+    add(
         "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
     )
     # The owner's routing switch, published as it is. The gauge carries no
     # label: the switch is one switch for the whole snapshot.
-    writer.add(
+    add(
         "ghostship_ai_routing_enabled",
         {},
         1.0 if ((snapshot or {}).get("routing") or {}).get("enabled") else 0.0,

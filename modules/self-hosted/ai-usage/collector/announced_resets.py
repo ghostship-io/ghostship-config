@@ -26,11 +26,13 @@ GLOBAL_CODEX = re.compile(
 def load(path=PATH):
     try:
         value = json.loads(Path(path).read_text())
-        if value.get("schema") != 1 or not isinstance(value.get("announcements"), list):
+        if not isinstance(value, dict) or value.get("schema") != 1 or not isinstance(value.get("announcements"), list):
             raise ValueError("invalid announcement cache")
         return value
     except FileNotFoundError:
         return {"schema": 1, "status": "not_checked", "announcements": []}
+    except (OSError, ValueError):
+        return {"schema": 1, "status": "unavailable", "announcements": []}
 
 
 def parse(post):
