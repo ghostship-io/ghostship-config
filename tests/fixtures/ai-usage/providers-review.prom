@@ -17,6 +17,11 @@
 ghostship_ai_collection_duration_seconds 1
 ghostship_ai_collection_timestamp_seconds 1790000000
 
+# The runtime policy that carries the static worker routes was read. The
+# selection table counts only the series of the newest scrape, and this
+# gauge marks it: it is published on every collection, one or zero.
+ghostship_ai_static_route_policy_ok 1
+
 # The routing is off: the owner has not approved it.
 ghostship_ai_routing_enabled 0
 
