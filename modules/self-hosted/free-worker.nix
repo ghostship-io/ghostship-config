@@ -217,6 +217,10 @@ in
         "--cap-drop=ALL"
         "--security-opt=no-new-privileges"
         "--security-opt=seccomp=unconfined"
+        # Locked outer proc submounts prevent an unprivileged nested proc mount.
+        # The outer PID namespace remains private; each round creates its own
+        # proc and Landlock grants it read-only access, with no added capability.
+        "--security-opt=unmask=/proc/*"
         "--pids-limit=256"
         "--memory=8g"
         "--cpus=2"
