@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.138] - 2026-10-23
+## [3.17.139] - 2026-10-23
 
 - ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
+
+## [3.17.138] - 2026-10-23
+
+- Allow the intentional SIEM URL credential fixture through the shared secret scan with a detector, value digest and path fingerprint in `.ghostship-secrets-ignore`. The exemption preserves the fixture and assertions, permits only this finding, and leaves privacy and commit identity checks active.
 
 ## [3.17.137] - 2026-10-23
 
