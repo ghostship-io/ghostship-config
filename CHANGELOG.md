@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.199] - 2026-10-23
+
+- Honor exact configured worker builds and select Ollama's dated DeepSeek Flash 1017 build without mixing alias evidence.
+
+PR #363.
+
 ## [3.17.198] - 2026-10-23
 
 - Add independent bounded T3 recovery advice and guarded remedies.
