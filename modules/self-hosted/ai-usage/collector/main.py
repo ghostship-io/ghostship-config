@@ -1722,7 +1722,10 @@ def build_snapshot(
     if isinstance(snapshot, dict):
         policy = (outcomes or {}).get("policy") or {}
         orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
-        snapshot["model_selection"] = model_selection.build(snapshot, orchestrators)
+        # An unreadable policy/identity source cannot authorize picker writes.
+        # Publish no selection, so every settings consumer refuses the document.
+        if outcomes is None or model_selection.policy_ready(outcomes):
+            snapshot["model_selection"] = model_selection.build(snapshot, orchestrators, evidence=outcomes)
     return snapshot
 
 

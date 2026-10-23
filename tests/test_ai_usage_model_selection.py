@@ -64,6 +64,29 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual([row['model'] for row in value['worker']], ['ordinary', 'backup', 'excluded'])
         self.assertFalse(value['worker'][-1]['available'])
 
+    def test_new_untiered_route_still_obeys_identity_exclusion(self):
+        row = candidate('example', 'excluded-route')
+        row['trust'] = {}
+        evidence = {'identities': {'models': {'excluded-model': {'routes': ['example/excluded-route']}}},
+                    'policy': {'model_trust': {'entries': [
+                        {'model': 'excluded-model', 'level': 'excluded', 'task_types': ['*']}]}}}
+        result = selection.build({'candidates': [row]}, [], evidence=evidence)
+        self.assertEqual(result['worker'][0]['trust_level'], 'excluded')
+        self.assertFalse(result['worker'][0]['available'])
+        self.assertIsNone(result['default_worker'])
+
+    def test_policy_missing_an_excluded_identity_cannot_publish_selection(self):
+        import main
+        evidence = {'policy': {'roles': {'orchestrator': [{'instance_id': 'one', 'model': 'a'}]},
+                              'model_selection': {'categories': list(selection.CATEGORIES)},
+                              'model_trust': {'entries': [{'model': 'excluded-model', 'level': 'excluded'}]}},
+                    'identities': [{'id': 'other'}]}
+        self.assertFalse(selection.policy_ready(evidence))
+        snapshot = main.build_snapshot([], [], {}, 1000, outcomes=evidence)
+        self.assertNotIn('model_selection', snapshot)
+        evidence['identities'].append({'id': 'excluded-model'})
+        self.assertTrue(selection.policy_ready(evidence))
+
     def test_freshness_and_partial_state_reach_consumers(self):
         value = selection.build({'generated_at': '2026-10-23T12:00:00Z', 'partial': True}, [])
         self.assertEqual(value['generated_at'], '2026-10-23T12:00:00Z')
