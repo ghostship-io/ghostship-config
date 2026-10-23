@@ -109,14 +109,31 @@ Two details are easy to get wrong and are worth stating:
   container never becomes an egress exemption, and a flow that was opened
   before the policy was loaded stays denied unless the edge is approved.
 
+When ingress filtering is enabled, replies to currently approved public-egress
+ports are also admitted. They must be tracked replies whose original source is
+the container, whose original destination is public, and whose original
+service port remains approved. Unsolicited inbound traffic gets no exemption.
+
+The load-time metadata gate requires exactly one network with driver `bridge`
+and the declared subnet. A missing driver, macvlan, ipvlan or mixed metadata is
+refused. Lifecycle requirements use the OCI container's effective `serviceName`
+in both directions, including custom unit names.
+
 ## Admission is fail-closed
 
 The oci-containers module builds the `podman run` argv from native fields
 (`privileged`, `capabilities`, `networks`) *and* from `extraOptions`. Admission
-therefore reads that argv, not a parallel list, the way Podman's pflag reads
-it: `--flag=value` and `--flag value` are the same flag, `--net` is an alias of
-`--network`, and capability names are case-insensitive with an optional
-`CAP_` prefix. A policy is refused when:
+therefore reads those generated flags. For `extraOptions`, it accepts only
+allowlisted long options in the unambiguous `--flag=value` form. Split values,
+short options, bare switches and unknown options are refused. This deliberately
+narrows compatibility instead of partially copying Podman's parser: a label
+value such as `--label=--cap-drop=ALL` stays a label and cannot impersonate a
+capability drop. Runtime/context overrides are outside the allowlist even when
+Podman accepts them after `run`. The shared list lives in
+`container-isolation/allowed-extra-options.json`; both Nix admission and the
+ruleset generator enforce it. Native OCI capability/network fields remain
+supported. `--net=...` is an alias of `--network=...`, and capability names are
+case-insensitive with an optional `CAP_` prefix. A policy is refused when:
 
 - the container is privileged, in any spelling (`container.privileged`,
   `--privileged`, `--privileged=true`);

@@ -80,6 +80,27 @@ ALLOWED_CAPABILITIES = tuple(
         (Path(__file__).resolve().with_name("allowed-capabilities.json")).read_text()
     )["allowedCapabilities"]
 )
+ALLOWED_EXTRA_FLAGS = frozenset(
+    json.loads(Path(__file__).with_name("allowed-extra-options.json").read_text())[
+        "allowedExtraFlags"
+    ]
+)
+
+
+def canonical_extra_options(options) -> bool:
+    if not isinstance(options, list):
+        return False
+    for option in options:
+        match = (
+            re.fullmatch(r"--([a-z][a-z0-9-]*)=(.*)", option)
+            if isinstance(option, str)
+            else None
+        )
+        if match is None or match[1] not in ALLOWED_EXTRA_FLAGS:
+            return False
+    return True
+
+
 # Destinations that are never reachable through a public egress edge.
 PRIVATE_IPV4 = (
     "0.0.0.0/8",
@@ -127,7 +148,7 @@ def _is_port(value) -> bool:
 def normalize_capability(value: str) -> str:
     """Podman's capability spelling: case-insensitive, optional CAP_ prefix."""
     upper = str(value).strip().upper()
-    return upper[len("CAP_"):] if upper.startswith("CAP_") else upper
+    return upper[len("CAP_") :] if upper.startswith("CAP_") else upper
 
 
 def _is_host_namespace(value) -> bool:
@@ -149,7 +170,9 @@ def _namespace_problems(namespaces) -> list:
     """Refuse a container that shares a host namespace or runs in a pod."""
     problems: list = []
     if not isinstance(namespaces, dict):
-        return ["namespaces must be an object with the namespace flags of the container"]
+        return [
+            "namespaces must be an object with the namespace flags of the container"
+        ]
     for flag in HOST_NAMESPACE_FLAGS:
         values = namespaces.get(flag) or []
         if not isinstance(values, list):
@@ -182,7 +205,9 @@ def _check_text(problems: list, value, field: str) -> None:
         problems.append(f"{field} must be a non-empty string")
         return
     if not _text_is_clean(value):
-        problems.append(f"{field} must not contain URLs or IP addresses (public repository)")
+        problems.append(
+            f"{field} must not contain URLs or IP addresses (public repository)"
+        )
 
 
 def validate_container(policy_name: str, policy: dict) -> list:
@@ -209,7 +234,9 @@ def validate_container(policy_name: str, policy: dict) -> list:
     if not _is_ipv4(address):
         problems.append("address must be an IPv4 address")
     elif str(address).endswith(".0") or str(address).endswith(".255"):
-        problems.append("address must be a host address, not a network or broadcast address")
+        problems.append(
+            "address must be a host address, not a network or broadcast address"
+        )
 
     mac = policy.get("mac")
     if not isinstance(mac, str) or not MAC_PATTERN.match(mac.lower()):
@@ -234,7 +261,11 @@ def validate_container(policy_name: str, policy: dict) -> list:
     if network is not None:
         if _is_ipv4(address) and ipaddress.ip_address(str(address)) not in network:
             problems.append(f"address {address} is outside {subnet}")
-        if dns and _is_ipv4(dns_server) and ipaddress.ip_address(str(dns_server)) not in network:
+        if (
+            dns
+            and _is_ipv4(dns_server)
+            and ipaddress.ip_address(str(dns_server)) not in network
+        ):
             problems.append(f"dnsServer {dns_server} is outside {subnet}")
     if dns:
         if not _is_ipv4(dns_server):
@@ -278,7 +309,9 @@ def validate_container(policy_name: str, policy: dict) -> list:
         if not _is_ipv4(edge.get("address")):
             problems.append(f"edges[{index}].address must be an IPv4 address")
         if edge.get("protocol") not in PROTOCOLS:
-            problems.append(f"edges[{index}].protocol must be one of {', '.join(PROTOCOLS)}")
+            problems.append(
+                f"edges[{index}].protocol must be one of {', '.join(PROTOCOLS)}"
+            )
         if not _is_port(edge.get("port")):
             problems.append(f"edges[{index}].port must be a port")
         if "purpose" in edge:
@@ -301,7 +334,9 @@ def validate_container(policy_name: str, policy: dict) -> list:
         if not isinstance(item.get("peer"), str) or not item.get("peer").strip():
             problems.append(f"observed[{index}].peer must name the peer")
         if item.get("protocol") not in PROTOCOLS:
-            problems.append(f"observed[{index}].protocol must be one of {', '.join(PROTOCOLS)}")
+            problems.append(
+                f"observed[{index}].protocol must be one of {', '.join(PROTOCOLS)}"
+            )
         if not _is_port(item.get("port")):
             problems.append(f"observed[{index}].port must be a port")
         if "category" in item:
@@ -316,11 +351,13 @@ def validate_container(policy_name: str, policy: dict) -> list:
                 problems.append(f"ingress.ports[{index}] must be an object")
                 continue
             if entry.get("protocol") not in PROTOCOLS:
-                problems.append(f"ingress.ports[{index}].protocol must be one of {', '.join(PROTOCOLS)}")
+                problems.append(
+                    f"ingress.ports[{index}].protocol must be one of {', '.join(PROTOCOLS)}"
+                )
             if not _is_port(entry.get("port")):
                 problems.append(f"ingress.ports[{index}].port must be a port")
 
-    podman = policy.get("podman") or { }
+    podman = policy.get("podman") or {}
     if not isinstance(podman, dict):
         problems.append("podman must be an object")
     else:
@@ -328,6 +365,10 @@ def validate_container(policy_name: str, policy: dict) -> list:
             problems.append(
                 f"podman user {podman.get('user')} is a rootless unit, and the rules live "
                 "in the rootful host network namespace"
+            )
+        if not canonical_extra_options(podman.get("extraOptions", [])):
+            problems.append(
+                "extraOptions must use canonical allowed --flag=value options; split, unknown and runtime-context options are refused"
             )
         if podman.get("preRun"):
             problems.append(
@@ -377,7 +418,9 @@ def admit(policies: dict) -> None:
             problems.append(f"{name}: {problem}")
         table = table_name(name)
         if len(table) > MAX_TABLE_NAME:
-            problems.append(f"{name}: table name {table} is longer than {MAX_TABLE_NAME} characters")
+            problems.append(
+                f"{name}: table name {table} is longer than {MAX_TABLE_NAME} characters"
+            )
     if problems:
         raise PolicyError("; ".join(problems))
 
@@ -416,6 +459,29 @@ def _edge_lines(prefix: str, edge: dict, scoped: bool) -> list:
     ]
 
 
+def _public_reply_lines(
+    prefix: str, address: str, egress: dict, private_set: bool
+) -> list:
+    """Only replies to currently approved public-egress tuples may return.
+
+    Check both packet and original tuple, plus reply direction, so unsolicited
+    inbound requests and replies for a revoked port never gain an exemption.
+    The bridge family uses literal ranges; sets belong to their own table.
+    """
+    if not egress.get("enabled"):
+        return []
+    private = "@private_ipv4" if private_set else "{ " + ", ".join(PRIVATE_IPV4) + " }"
+    return [
+        f"{prefix} ip daddr {address} ip saddr != {private} "
+        f"meta l4proto {protocol} {_port_match(protocol, 'sport', port)} "
+        f"ct state established,related ct direction reply "
+        f"ct original ip saddr {address} ct original ip daddr != {private} "
+        f"ct original proto-dst {int(port)} accept"
+        for protocol in egress.get("protocols") or []
+        for port in egress.get("ports") or []
+    ]
+
+
 def render_container(policy_name: str, policy: dict) -> str:
     """Render the nftables ruleset of one container policy."""
     table = table_name(policy_name)
@@ -431,11 +497,17 @@ def render_container(policy_name: str, policy: dict) -> str:
     ingress = policy.get("ingress") or {}
 
     lines: list = []
-    lines.append(f"# Generated by modules/self-hosted/container-isolation/generate-policy.py.")
+    lines.append(
+        f"# Generated by modules/self-hosted/container-isolation/generate-policy.py."
+    )
     lines.append(f"# Policy: {policy_name}")
     lines.append(f"# Container: {policy.get('container')}")
-    lines.append(f"# Identity: network {policy.get('network')}, address {address}, mac {mac}")
-    lines.append(f"# Approved edges: {len(edges)}. Observed, never approved: {len(observed)}.")
+    lines.append(
+        f"# Identity: network {policy.get('network')}, address {address}, mac {mac}"
+    )
+    lines.append(
+        f"# Approved edges: {len(edges)}. Observed, never approved: {len(observed)}."
+    )
     lines.append("#")
     lines.append("# The destroy and create below are one nft transaction: a reload")
     lines.append("# replaces the policy atomically and never leaves the container")
@@ -455,7 +527,9 @@ def render_container(policy_name: str, policy: dict) -> str:
     lines.append("    chain forward {")
     lines.append("        type filter hook forward priority -10; policy accept;")
     for edge in edges:
-        lines.append(f"        # Approved edge to {edge['peer']} ({edge['protocol']}/{edge['port']}).")
+        lines.append(
+            f"        # Approved edge to {edge['peer']} ({edge['protocol']}/{edge['port']})."
+        )
         lines.extend(
             "        " + line
             for line in _edge_lines(f"ip saddr {address}", edge, scoped=True)
@@ -487,11 +561,16 @@ def render_container(policy_name: str, policy: dict) -> str:
                 f"{_port_match(entry['protocol'], 'sport', entry['port'])} "
                 f"ct state established,related ct direction reply accept"
             )
-    lines.append("        # Private and LAN destinations are denied, approved edges aside.")
+    lines.append(
+        "        # Private and LAN destinations are denied, approved edges aside."
+    )
     lines.append(f"        ip saddr {address} ip daddr @private_ipv4 drop")
     lines.append("        # Everything else this container sends is denied.")
     lines.append(f"        ip saddr {address} drop")
     if ingress.get("enabled"):
+        lines.extend(
+            "        " + line for line in _public_reply_lines("", address, egress, True)
+        )
         for edge in edges:
             lines.append(
                 f"        # Ingress: the reply to the approved edge to {edge['peer']}."
@@ -542,7 +621,9 @@ def render_container(policy_name: str, policy: dict) -> str:
                 f"{_port_match(entry['protocol'], 'sport', entry['port'])} "
                 f"ct state established,related ct direction reply accept"
             )
-    lines.append("        # Everything else this container sends to the host is denied.")
+    lines.append(
+        "        # Everything else this container sends to the host is denied."
+    )
     lines.append(f"        ip saddr {address} drop")
     lines.append("    }")
     lines.append("}")
@@ -556,9 +637,13 @@ def render_container(policy_name: str, policy: dict) -> str:
     lines.append(f"table bridge {table} {{")
     lines.append("    chain prerouting {")
     lines.append("        type filter hook prerouting priority -10; policy accept;")
-    lines.append("        # Identity: a frame that claims the container's address from another MAC is dropped.")
+    lines.append(
+        "        # Identity: a frame that claims the container's address from another MAC is dropped."
+    )
     lines.append(f"        ip saddr {address} ether saddr != {mac} drop")
-    lines.append("        # Identity: the container's MAC may only claim the container's address.")
+    lines.append(
+        "        # Identity: the container's MAC may only claim the container's address."
+    )
     lines.append(f"        ether saddr {mac} ip saddr != {address} drop")
     if policy.get("ipv6", "deny") == "deny":
         lines.append("        # IPv6 is denied for this container.")
@@ -567,7 +652,9 @@ def render_container(policy_name: str, policy: dict) -> str:
     lines.append("    chain forward {")
     lines.append("        type filter hook forward priority -10; policy accept;")
     for edge in edges:
-        lines.append(f"        # Approved edge to {edge['peer']} ({edge['protocol']}/{edge['port']}).")
+        lines.append(
+            f"        # Approved edge to {edge['peer']} ({edge['protocol']}/{edge['port']})."
+        )
         lines.extend(
             "        " + line
             for line in _edge_lines(
@@ -584,11 +671,21 @@ def render_container(policy_name: str, policy: dict) -> str:
                 f"{_port_match(entry['protocol'], 'sport', entry['port'])} "
                 f"ct state established,related ct direction reply accept"
             )
-    lines.append("        # Everything else this container sends on the bridge is denied.")
+    lines.append(
+        "        # Everything else this container sends on the bridge is denied."
+    )
     lines.append(f"        ether saddr {mac} ip saddr {address} drop")
     if ingress.get("enabled"):
+        lines.extend(
+            "        " + line
+            for line in _public_reply_lines(
+                f"ether daddr {mac}", address, egress, False
+            )
+        )
         for edge in edges:
-            lines.append(f"        # Ingress: the reply to the approved edge to {edge['peer']}.")
+            lines.append(
+                f"        # Ingress: the reply to the approved edge to {edge['peer']}."
+            )
             lines.append(
                 f"        ether daddr {mac} ip saddr {edge['address']} "
                 f"ip daddr {address} meta l4proto {edge['protocol']} "
@@ -648,7 +745,7 @@ def manifest(policies: dict) -> dict:
         containers[name] = {
             "container": policy.get("container"),
             "network": policy.get("network"),
-                "address": policy.get("address"),
+            "address": policy.get("address"),
             "mac": policy.get("mac"),
             "dnsServer": policy.get("dnsServer"),
             "dns": bool(policy.get("dns", True)),

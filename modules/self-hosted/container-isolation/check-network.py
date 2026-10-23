@@ -30,23 +30,32 @@ def parse_metadata(document) -> dict:
     entries = document if isinstance(document, list) else [document]
     subnets = []
     interfaces = []
+    drivers = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        for subnet in entry.get("subnets") or [ ]:
+        drivers.append(entry.get("driver"))
+        for subnet in entry.get("subnets") or []:
             value = subnet.get("subnet") if isinstance(subnet, dict) else subnet
             if value:
                 subnets.append(str(value))
         interface = entry.get("network_interface")
         if interface:
             interfaces.append(str(interface))
-    return {"subnets": subnets, "interfaces": interfaces}
+    return {
+        "subnets": subnets,
+        "interfaces": interfaces,
+        "drivers": drivers,
+        "entries": len(entries),
+    }
 
 
 def carries(metadata: dict, subnet: str) -> bool:
     """True when the network's metadata names exactly this subnet."""
+    if metadata.get("entries") != 1 or metadata.get("drivers") != ["bridge"]:
+        return False
     expected = ipaddress.ip_network(subnet, strict=False)
-    for value in metadata.get("subnets") or [ ]:
+    for value in metadata.get("subnets") or []:
         try:
             if ipaddress.ip_network(value, strict=False) == expected:
                 return True
@@ -85,7 +94,7 @@ def main(argv=None) -> int:
     if not carries(metadata, args.subnet):
         print(
             f"network {args.network} carries {', '.join(metadata['subnets']) or 'no subnet'}, "
-            f"not {args.subnet}",
+            f"not a single supported bridge network with subnet {args.subnet}",
             file=sys.stderr,
         )
         return 1
