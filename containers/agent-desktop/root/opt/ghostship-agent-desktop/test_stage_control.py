@@ -15,7 +15,7 @@ loader.exec_module(stage_control)
 
 def stage():
     s = stage_control.Stage.__new__(stage_control.Stage)
-    s.pairs, s.anchor_titles = {}, {}
+    s.pairs, s.target_windows, s.identity = {}, {}, "agent"
     return s
 
 
@@ -32,9 +32,9 @@ RUN_B = "b" * 32
 
 
 def sway_window(con, run):
-    """A sway window showing a run's home tab (its anchor URL is the title)."""
+    """A sway window showing a real work tab with a distinct title."""
     return {"id": con, "pid": 100 + con, "rect": {"x": 0, "y": 0, "width": 1600, "height": 900},
-            "name": f"about:blank#ghostship-window-{run}.99 - Google Chrome"}
+            "name": f"Work {run} - Google Chrome"}
 
 
 def sway_tree():
@@ -73,15 +73,10 @@ class PairTest(unittest.TestCase):
         groups[100] = [tab("Shop")]
         self.assertEqual(s.pair(nodes, groups), {5: 100, 6: 101})
 
-    def test_home_tab_title_pairs_a_run_window_even_among_identical_titles(self):
-        """Catches a run window whose working tab title collides with another window's."""
+    def test_identical_titles_without_an_anchor_stay_unpaired(self):
         s = stage()
-        s.anchor_titles = {6: "a" * 32}
-        nodes = [node(5, "Shop"), node(6, "Shop"), node(7, "Shop")]
-        anchor = tab("about:blank", "about:blank#ghostship-window-" + "a" * 32 + ".99")
-        groups = {100: [tab("Shop")], 101: [anchor, tab("Shop")], 102: [tab("Shop")]}
-        self.assertEqual(s.pair(nodes, groups), {6: 101})
-        self.assertEqual(s.run_of(groups[101]), "a" * 32)
+        self.assertEqual(s.pair([node(5, "Shop"), node(6, "Shop")],
+                                {100: [tab("Shop")], 101: [tab("Shop")]}), {})
 
 
 class RestartTest(unittest.TestCase):
@@ -93,22 +88,10 @@ class RestartTest(unittest.TestCase):
         s.windows, s.outputs, s.base_output = {}, [], None
         s.refresh_screens = lambda: None
         s.setup()
-        self.assertEqual(s.anchor_titles, {5: RUN_A, 6: RUN_B})
-        groups = {100: [tab("about:blank", f"about:blank#ghostship-window-{RUN_A}.99")],
-                  101: [tab("about:blank", f"about:blank#ghostship-window-{RUN_B}.99")]}
+        groups = {100: [tab(f"Work {RUN_A}")],
+                  101: [tab(f"Work {RUN_B}")]}
         self.assertEqual(s.pair(s.tree_windows(), groups), {5: 100, 6: 101})
 
-    def test_windows_without_an_anchor_title_are_left_alone(self):
-        """Catches a title that only looks like an anchor being read as a run id."""
-        tree = sway_tree()
-        tree["nodes"][1]["nodes"][0]["nodes"][0]["name"] = "Shop - Google Chrome"
-        s = stage()
-        s.ipc = FakeIpc(tree=tree, outputs=stage_outputs())
-        s.devices = FakeDevices()
-        s.windows, s.outputs, s.base_output = {}, [], None
-        s.refresh_screens = lambda: None
-        s.setup()
-        self.assertEqual(s.anchor_titles, {6: RUN_B})
 
 
 class AgentInputTest(unittest.TestCase):

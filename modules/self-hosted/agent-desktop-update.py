@@ -37,6 +37,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -91,7 +92,6 @@ AUTHOR = "ghostship-agent-desktop-update"
 # GitHub token for this process only; it is never written to state.json.
 TOKEN: str | None = None
 AUTHOR_EMAIL = "ghostship-agent-desktop-update@users.noreply.github.com"
-ANCHOR_RE = re.compile(r"about:blank#ghostship-window-([A-Za-z0-9_-]{1,64})(?:\.(\d{1,12}))?")
 # Chrome's own wording when a profile was written by a newer or incompatible
 # build; any of these in a canary's log fails profile compatibility.
 PROFILE_ERRORS = re.compile(
@@ -277,21 +277,12 @@ def describe(current: dict, updates: dict) -> str:
     return "; ".join(parts)
 
 
-def drain_blockers(registry: set[str], pauses: set[str], anchors: list[str], now: float) -> list[str]:
-    """Reasons not to restart production yet.
-
-    An agent run is active while its registry entry exists and its window
-    anchor lease has not expired; a pause marker means a person took over a
-    run in the viewer.
-    """
+def drain_blockers(registry: dict[str, float | None], pauses: set[str], now: float) -> list[str]:
+    """Wait for live recorded leases and human pauses; malformed records block conservatively."""
     blockers = [f"paused run {marker}" for marker in sorted(pauses)]
-    for url in anchors:
-        match = ANCHOR_RE.fullmatch(url)
-        if not match or match.group(1) not in registry:
-            continue
-        expires = match.group(2)
-        if expires is None or int(expires) > now:
-            blockers.append(f"active agent run {match.group(1)}")
+    for marker, expires in sorted(registry.items()):
+        if type(expires) not in (int, float) or not math.isfinite(expires) or expires > now:
+            blockers.append(f"active agent run {marker}")
     return blockers
 
 
@@ -819,15 +810,6 @@ class Desktop:
         match = re.search(r"v(\d+\.\d+\.\d+)", blade or "")
         return {"chrome": chrome, "bladebro": match.group(1) if match else ""}
 
-    def anchors(self) -> list[str]:
-        urls = []
-        for port in PORTS.values():
-            result = self.exec("curl", "-fsS", "--max-time", "3", f"http://127.0.0.1:{port}/json/list", timeout=30)
-            if result.returncode == 0:
-                with contextlib.suppress(ValueError):
-                    urls += [t.get("url", "") for t in json.loads(result.stdout)]
-        return urls
-
 
 def check_versions(desktop: Desktop, versions: dict) -> None:
     seen = desktop.versions()
@@ -1033,9 +1015,14 @@ def drain(notifier: Notifier, wait: float = DRAIN_SECONDS) -> None:
     deadline = time.time() + wait
     while True:
         runs = PRODUCTION_DATA / "runs"
-        registry = {p.stem for p in runs.glob("*.json")} if runs.is_dir() else set()
+        registry = {}
+        for path in runs.glob("*.json") if runs.is_dir() else []:
+            try:
+                registry[path.stem] = json.loads(path.read_text()).get("expires_at")
+            except (OSError, ValueError, AttributeError):
+                registry[path.stem] = None
         pauses = {p.name[:-6] for p in runs.glob("*.pause")} if runs.is_dir() else set()
-        blockers = drain_blockers(registry, pauses, production.anchors(), time.time())
+        blockers = drain_blockers(registry, pauses, time.time())
         if not blockers:
             return
         if time.time() >= deadline:

@@ -4,14 +4,10 @@
 Usage: chrome-lease-reaper <agent|personal|port>
 Environment: CHROME_LEASE_SLACK_SECONDS (default 120)
 
-Each leased window has a home tab at
-``about:blank#ghostship-window-<32 hex>.<expires>``; the leasing runtime slides
-``expires`` (Unix seconds) while the lease is in use. Once ``expires`` plus the
-slack has passed, this closes every page in that window and every page those
-pages opened (popups), the anchor last. Legacy anchors without an expiry, user
-windows and unexpired leases are never touched. A target that vanishes
-mid-pass is skipped; the next pass retries. Logs one line per reaped window
-without URLs or titles. The chrome-idle service runs it every check.
+Each lease is an atomically renewed public run record. Only a record whose
+bound target still belongs to the recorded window authorizes closure. Expired
+records never grant authority over a reused numeric window id. Unknown windows
+are untouched. The chrome-idle service runs this each check.
 
 Stdlib only: the desktop's system python3 has no extra packages.
 """
@@ -20,7 +16,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import socket
 import sys
 import time
@@ -28,66 +23,32 @@ import urllib.error
 import urllib.request
 
 PORTS = {"agent": 9222, "personal": 9223}
-ANCHOR = re.compile(r"^about:blank#ghostship-window-[0-9a-f]{32}(?:\.([0-9]{9,11}))?$")
-LEASE = re.compile(r"^about:blank#ghostship-window-[0-9a-f]{32}\.([0-9]{9,11})$")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
+from desktop_leases import records, bound_records
+RUNS_DIR = os.environ.get("CHROME_RUNS_DIR", "/config/agent-desktop/runs")
 
 
-def expires_at(url: str) -> int | None:
-    """Return the lease expiry of a new-format anchor URL, else None."""
-    match = LEASE.match(url or "")
-    return int(match.group(1)) if match else None
-
-
-def expired_anchors(pages: list[dict], now: float, slack: int) -> list[str]:
-    """Target ids of new-format anchors whose lease ended more than ``slack`` ago."""
-    out = []
-    for page in pages:
-        expires = expires_at(page.get("url", ""))
-        if expires is not None and expires + slack < now:
-            out.append(page["targetId"])
-    return out
-
-
-def plan(pages: list[dict], windows: dict[str, int], now: float, slack: int) -> list[tuple[int, list[str]]]:
-    """Decide which page targets to close.
-
-    ``pages`` are page TargetInfos (targetId, url, openerId); ``windows`` maps
-    targetId to its Chrome window id (pages whose window is unknown are
-    absent). Returns (window id, target ids to close, anchor last) per reaped
-    window. Popups opened, directly or transitively, by a reaped page are
-    included unless their window holds an anchor that is not being reaped.
-    """
-    by_id = {page["targetId"]: page for page in pages}
-    reaped_anchors = [t for t in expired_anchors(pages, now, slack) if t in windows]
-    reaped_windows = {windows[t] for t in reaped_anchors}
-    # Windows that hold any anchor other than an expired one are protected.
-    protected = {windows[p["targetId"]] for p in pages
-                 if ANCHOR.match(p.get("url", "")) and p["targetId"] in windows
-                 and p["targetId"] not in reaped_anchors}
-    # A window with both a live and an expired anchor is left alone.
-    reaped_windows -= protected
-    claimed: set[str] = set()
+def plan(pages, windows, rows, now, slack):
+    rows = bound_records(rows, windows)
+    protected = {r["chrome_window_id"] for r in rows if r["expires_at"] + slack >= now}
+    expired = {r["chrome_window_id"] for r in rows if r["expires_at"] + slack < now} - protected
     result = []
-    for anchor in reaped_anchors:
-        window = windows[anchor]
-        if window not in reaped_windows or anchor in claimed:
-            continue
-        members = {t for t, w in windows.items() if w == window and t in by_id}
-        # Add popups the window's pages opened, transitively.
-        frontier = set(members)
-        while frontier:
-            children = {p["targetId"] for p in pages
-                        if p.get("openerId") in frontier and p["targetId"] not in members
-                        and windows.get(p["targetId"]) not in protected
-                        and not ANCHOR.match(p.get("url", ""))}
-            members |= children
-            frontier = children
-        members -= claimed
+    claimed = set()
+    for window in sorted(expired):
+        members = {p["targetId"] for p in pages if windows.get(p["targetId"]) == window}
+        # Only include separate popup windows made entirely of descendants.
+        descendants = set(members)
+        while True:
+            children = {p["targetId"] for p in pages if p.get("openerId") in descendants}
+            if children <= descendants:
+                break
+            descendants |= children
+        for popup_window in {windows.get(t) for t in descendants} - protected - {None}:
+            group = {p["targetId"] for p in pages if windows.get(p["targetId"]) == popup_window}
+            if group <= descendants:
+                members |= group
+        result.append((window, sorted(members - claimed)))
         claimed |= members
-        others = sorted(t for t in members if t != anchor and not ANCHOR.match(by_id[t].get("url", "")))
-        # Expired anchors sharing the window close with it, this anchor last.
-        anchors = sorted(t for t in members if t != anchor and t not in others)
-        result.append((window, others + anchors + [anchor]))
     return result
 
 
@@ -171,7 +132,8 @@ def reap(name: str, port: int, slack: int) -> int:
         pages = [t for t in browser.call("Target.getTargets").get("targetInfos", [])
                  if t.get("type") == "page"]
         now = time.time()
-        if not expired_anchors(pages, now, slack):
+        rows = records(RUNS_DIR, name)
+        if not any(row["expires_at"] + slack < now for row in rows):
             return 0
         windows = {}
         for page in pages:
@@ -182,8 +144,19 @@ def reap(name: str, port: int, slack: int) -> int:
                 pass  # Closed mid-pass or not in a window; next pass retries.
     finally:
         browser.close()
-    for window, targets in plan(pages, windows, now, slack):
+    for window, targets in plan(pages, windows, records(RUNS_DIR, name), time.time(), slack):
         closed = sum(close_target(port, target) for target in targets)
+        if closed == len(targets):
+            for row in rows:
+                if row["chrome_window_id"] != window or row["expires_at"] + slack >= now:
+                    continue
+                current = next((r for r in records(RUNS_DIR, name) if r["run_id"] == row["run_id"]), None)
+                if current == row:
+                    for suffix in (".json", ".pause"):
+                        try:
+                            os.unlink(os.path.join(RUNS_DIR, row["run_id"] + suffix))
+                        except OSError:
+                            pass
         print(f"[chrome-lease-reaper] {name}: closed expired lease window {window} ({closed} tabs)", flush=True)
     return 0
 

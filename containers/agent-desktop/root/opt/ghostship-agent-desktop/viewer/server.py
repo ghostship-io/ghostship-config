@@ -3,15 +3,11 @@
 
 Serves a mobile-first UI under /agents/ on 127.0.0.1:7090 (behind the
 container's nginx and Cloudflare Access). Each identity's Chrome is reached
-over its loopback DevTools port; a run is the Chrome window whose home tab
-is an ``about:blank#ghostship-window-<marker>.<expires>`` anchor, plus the
-tabs in that window and the popups its pages open. Every other window stays
-invisible.
+over its loopback DevTools port. Public run records identify a Chrome window
+only while their recorded work target still belongs to that window. Tabs and
+popups of those windows are visible; other windows remain invisible.
 
-The viewer only uses Target.*, Browser.getWindowForTarget, Page.* (enable,
-screencast, navigation, dialogs) and Input.*. It never enables the Runtime
-domain; the single Runtime.evaluate it sends goes to a freshly created
-about:blank anchor (a human-owned run) to open that window's first tab.
+The viewer uses Target.*, Browser.getWindowForTarget, Page.* and Input.*.
 
 Pause protocol (shared with the desktop input gate) lives in the runs dir:
 ``<marker>.pause`` plus ``paused/<targetId>`` for every page of the run.
@@ -40,6 +36,8 @@ import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
+from desktop_leases import records, bound_records
 from cdp_ws import Cdp, CdpError
 
 BIND = "127.0.0.1"
@@ -50,7 +48,6 @@ IDENTITIES = ("agent", "personal")
 
 RUN_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 TARGET_ID_RE = re.compile(r"[A-Za-z0-9]{1,64}")
-ANCHOR_RE = re.compile(r"about:blank#ghostship-window-([A-Za-z0-9_-]{1,64})(?:\.(\d{1,12}))?")
 
 STATIC = {"": ("index.html", "text/html; charset=utf-8"),
           "index.html": ("index.html", "text/html; charset=utf-8"),
@@ -614,22 +611,19 @@ class Browser:
                     self.windows.pop(tid, None)
 
     def runs(self) -> list[dict]:
-        """Anchored runs with their member page targets (anchor first, then by first sight)."""
+        """Bound recorded runs with their work tabs, ordered by first sight."""
         if not self.alive():
             return []
         runs: dict[str, dict] = {}
         by_window: dict[int, str] = {}
-        for tid, info in sorted(self.targets.items(), key=lambda item: self.seen.get(item[0], 0)):
-            match = ANCHOR_RE.fullmatch(info.get("url", ""))
-            if not match or match.group(1) in runs:
+        for row in bound_records(records(self.app.runs_dir, self.identity), self.windows):
+            run_id, tid = row["run_id"], row["target_id"]
+            if tid not in self.targets:
                 continue
-            run_id, expires = match.group(1), match.group(2)
-            runs[run_id] = {"run_id": run_id, "identity": self.identity, "anchor": tid,
-                            "expires_at": int(expires) if expires else None, "members": [tid]}
-            window = self.windows.get(tid)
-            if window is not None and window not in by_window:
-                by_window[window] = run_id
-        owner: dict[str, str] = {run["anchor"]: run_id for run_id, run in runs.items()}
+            runs[run_id] = {"run_id": run_id, "identity": self.identity, "binding": tid,
+                            "expires_at": row["expires_at"], "members": [tid]}
+            by_window[row["chrome_window_id"]] = run_id
+        owner: dict[str, str] = {run["binding"]: run_id for run_id, run in runs.items()}
         for tid in self.targets:
             run_id = by_window.get(self.windows.get(tid))
             if run_id and tid not in owner:
@@ -649,7 +643,7 @@ class Browser:
                 break
         for tid in sorted(owner, key=lambda t: self.seen.get(t, 0)):
             run = runs[owner[tid]]
-            if tid != run["anchor"]:
+            if tid != run["binding"]:
                 run["members"].append(tid)
         return list(runs.values())
 
@@ -834,7 +828,7 @@ class AppHost:
         await self.refresh()
 
     def runs(self) -> list[dict]:
-        return [{"run_id": s["session_id"], "identity": "app", "kind": "app", "anchor": None,
+        return [{"run_id": s["session_id"], "identity": "app", "kind": "app", "binding": None,
                  "members": [s["session_id"]], "expires_at": None, "app": s.get("app"), "name": s.get("name"),
                  "title": s.get("title") or "", "opened_at": s.get("opened_at")}
                 for s in self.sessions if s.get("session_id") in self.targets]
@@ -851,7 +845,7 @@ class StageHost:
     """An identity's browser stage (stage-control): each Chrome window on its own output.
 
     Window views are named "w<sway id>"; a run's windows are the ones holding
-    its home tab or any of its tabs.
+    any of its work tabs.
     """
 
     def __init__(self, identity: str, path: str):
@@ -1256,7 +1250,7 @@ class App:
             info = browser.targets.get(tid, {})
             url = info.get("url", "")
             tab = {"target_id": tid, "title": _str(info.get("title"), 200) or "", "origin": origin_of(url),
-                   "is_anchor": tid == run["anchor"], "opener": info.get("openerId") in run["members"]}
+                   "is_anchor": False, "opener": info.get("openerId") in run["members"]}
             if detail:
                 tab["url"] = url[:2048]
             tabs.append(tab)
@@ -1282,7 +1276,7 @@ class App:
                         last_frame = max(last_frame, caster.frame_at)
         return {"run_id": run["run_id"], "identity": run["identity"], "label": registry.get("label"), "view": view,
                 "owner": registry.get("owner"), "opened_at": registry.get("opened_at"),
-                "seen_at": browser.first_seen.get(run["anchor"]), "expires_at": run["expires_at"],
+                "seen_at": browser.first_seen.get(run["binding"]), "expires_at": run["expires_at"],
                 "registered": bool(registry), "tabs": tabs, "paused": is_paused(self.runs_dir, run["run_id"]),
                 "state": state, "last_frame_at": last_frame or None, "primary_target": primary}
 
@@ -1445,7 +1439,7 @@ class App:
         return {"run_id": session.get("session_id"), "app": name, "existing": bool(reply.get("existing"))}
 
     async def close_run(self, browser: Browser, run: dict) -> dict:
-        """Close a session's window: pause it, let an in-flight agent call finish, close its tabs (home last).
+        """Close a session's window: pause it, let an in-flight agent call finish, close its work tabs.
 
         An agent whose window is closed gets "window closed" on its next call.
         """
@@ -1461,8 +1455,8 @@ class App:
             self.pause(run)
         except HttpError:
             pass
-        anchor = run["anchor"]
-        for tid in [t for t in run["members"] if t != anchor] + [anchor]:
+        binding = run["binding"]
+        for tid in [t for t in run["members"] if t != binding] + [binding]:
             try:
                 await browser.cdp.send("Target.closeTarget", {"targetId": tid}, timeout=10)
             except CdpError:
@@ -1486,11 +1480,12 @@ class App:
         cdp = browser.cdp
         run_id = secrets.token_hex(16)
         now = int(time.time())
-        anchor_url = f"about:blank#ghostship-window-{run_id}.{now + HUMAN_RUN_SECONDS}"
-        anchor = (await cdp.send("Target.createTarget", {"url": anchor_url, "newWindow": True, "background": True},
-                                 timeout=15))["targetId"]
+        binding = (await cdp.send("Target.createTarget", {"url": "chrome://newtab/", "newWindow": True,
+                                                       "background": True}, timeout=15))["targetId"]
+        window = (await cdp.send("Browser.getWindowForTarget", {"targetId": binding}))["windowId"]
         os.makedirs(self.runs_dir, mode=0o700, exist_ok=True)
-        record = {"schema": 1, "run_id": run_id, "identity": identity, "label": "Human session",
+        record = {"schema": 2, "run_id": run_id, "identity": identity, "label": "Human session",
+                  "target_id": binding, "chrome_window_id": window, "expires_at": now + HUMAN_RUN_SECONDS,
                   "opened_at": now, "owner": {"harness": "human", "model": None, "t3_thread_id": None,
                                               "t3_thread_title": None}}
         tmp = os.path.join(self.runs_dir, f".{run_id}.json.tmp")
@@ -1498,29 +1493,6 @@ class App:
         with os.fdopen(fd, "w") as handle:
             json.dump(record, handle)
         os.replace(tmp, os.path.join(self.runs_dir, f"{run_id}.json"))
-        # The stage pairs a window with its run by the home tab's title, so let
-        # it see the window before the working tab takes the title over (two
-        # runs on the same site would otherwise look alike).
-        stage = self.stages.get(identity)
-        if stage and os.path.exists(stage.path):
-            deadline = time.monotonic() + 3
-            while time.monotonic() < deadline:
-                await stage.refresh()
-                if any(w.get("run_id") == run_id for w in stage.windows):
-                    break
-                await asyncio.sleep(0.1)
-        # Open the working tab from the anchor itself so Chrome puts it in this
-        # window without focusing anything. The anchor is our own about:blank page.
-        session = (await cdp.send("Target.attachToTarget", {"targetId": anchor, "flatten": True}))["sessionId"]
-        try:
-            await cdp.send("Runtime.evaluate", {"expression": "void window.open('about:blank', '_blank')",
-                                                "userGesture": True}, session, timeout=10)
-        finally:
-            try:
-                await cdp.send("Target.detachFromTarget", {"sessionId": session}, timeout=5)
-            except Exception:
-                pass
-        await asyncio.sleep(0.3)
         await browser.resync()
         return {"run_id": run_id, "identity": identity}
 
@@ -1740,10 +1712,6 @@ class App:
         if client.target not in self.views(run):
             raise ValueError("tab closed")
         hover = kind == "pointer" and msg.get("kind") == "move" and not msg.get("buttons")
-        if client.target == run["anchor"]:
-            if hover:
-                return
-            raise ValueError("the home tab is read-only")
         registry = read_registry(self.runs_dir, run["run_id"]) or {}
         human = (registry.get("owner") or {}).get("harness") == "human"
         if not human:
