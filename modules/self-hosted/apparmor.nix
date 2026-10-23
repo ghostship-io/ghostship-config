@@ -192,7 +192,7 @@ in
         after = [ "apparmor.service" ] ++ map (app: "podman-${app.container}.service") profiled;
         serviceConfig = {
           Type = "oneshot";
-          ExecStart = lib.getExe review;
+          ExecStart = "${lib.getExe review} --brief";
           StateDirectory = "ghostship-apparmor-review";
           StateDirectoryMode = "0700";
           UMask = "0077";
