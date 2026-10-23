@@ -51,6 +51,19 @@ def page(name):
 class PublicPullTests(unittest.TestCase):
     """The pull reads the public pages and builds the cache contract."""
 
+    def test_daily_refresh_does_not_reuse_collector_36_hour_grace(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            cache=Path(directory)/'cache.json'
+            with patch.object(aa,'load_cache',return_value={'status':'ok','age_seconds':29*3600}), \
+                 patch.object(aa_pull,'pull',return_value={'status':'blocked'}) as pull:
+                aa_pull.refresh(cache,now=NOW)
+                pull.assert_called_once()
+            with patch.object(aa,'load_cache',return_value={'status':'ok','age_seconds':23*3600}), \
+                 patch.object(aa_pull,'pull') as pull:
+                self.assertFalse(aa_pull.refresh(cache,now=NOW)['changed'])
+                pull.assert_not_called()
+
     def test_the_leaderboard_gives_the_scored_models(self):
         rows = aa_pull.parse_leaderboard(page("models_leaderboards.html"))
         self.assertTrue(rows)

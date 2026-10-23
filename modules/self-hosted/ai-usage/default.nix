@@ -92,7 +92,8 @@ in
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.
-        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ]
+        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock"
+          "GHOSTSHIP_MODEL_EVIDENCE_PATH=${t3Home}/.local/state/ghostship/model-evidence.jsonl" ]
           ++ lib.optional (policy != null) "PYTHONPATH=${policy}/tools/python";
         # The T3 usage summary pages over 30 days and the free pool catalog is
         # paged; a few minutes is the honest bound.

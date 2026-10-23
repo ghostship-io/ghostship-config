@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
 import model_selection  # noqa: E402
+import model_quality  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
@@ -519,6 +520,7 @@ METRIC_HELP = {
 # The picker, discovery and dashboards share this exact selection projection.
 for field, description in {
     'info': 'Canonical model selection and availability, with native effort and quota pool.',
+    'selected': 'One for the selected native model per provider and role.',
     'position': 'Preferred model position across providers in its category.',
     'default': 'One for the canonical native default worker, zero for other selections.',
     'provider_position': 'Preferred model position within its provider and category.',
@@ -531,6 +533,9 @@ for field, description in {
     'reset_timestamp_seconds': 'Effective limiting-window reset; reset_source identifies custom resets.',
 }.items():
     METRIC_HELP['ghostship_ai_picker_model_' + field] = description
+
+for field in ('info', *model_quality.FIELDS):
+    METRIC_HELP['ghostship_ai_quality_' + field] = 'Canonical AA and verified observed model quality: ' + field + '.'
 
 GAUGE_METRICS = tuple(METRIC_HELP)
 
@@ -1675,6 +1680,9 @@ def build_snapshot(
     promo_models: set[tuple[str, str]] | None = None,
     outcomes: Mapping[str, Any] | None = None,
     routing_enabled: bool = False,
+    model_evidence: list[dict] | None = None,
+    model_evidence_state: str = 'no_evidence',
+    quality_prior_cache: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1739,6 +1747,8 @@ def build_snapshot(
                 measured_windows or [], now
             )
     if isinstance(snapshot, dict):
+        snapshot['model_quality'] = model_quality.build(snapshot.get('candidates') or [],
+            model_evidence or [], now, model_evidence_state, quality_prior_cache)
         policy = (outcomes or {}).get("policy") or {}
         orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
         # An unreadable policy/identity source cannot authorize picker writes.
@@ -2201,6 +2211,8 @@ def render(
             writer.add(name, labels, value)
     for name, labels, value in extra:
         writer.add(name, labels, value)
+    for name, labels, value in model_quality.samples((snapshot or {}).get('model_quality') or {}):
+        writer.add(name, labels, value)
     for name, labels, value in model_selection.samples((snapshot or {}).get("model_selection") or {}):
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
@@ -2444,6 +2456,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.model_selection_preferences:
         outcomes['policy'].setdefault('model_selection', {})['worker_builds'] = worker_builds
+    measured_evidence, evidence_state = model_quality.read_evidence(now)
     snapshot = build_snapshot(
         results,
         context.get("ranked") or [],
@@ -2458,6 +2471,9 @@ def main(argv: list[str] | None = None) -> int:
         aa_3d_cache=aa_3d_cache,
         outcomes=outcomes,
         routing_enabled=routing_enabled,
+        model_evidence=measured_evidence,
+        model_evidence_state=evidence_state,
+        quality_prior_cache=aa.load_cache(args.aa_cache,now,allow_stale=True),
     )
     text = render(
         results,
