@@ -50,8 +50,10 @@ def reconcile_instance(api, name, desired, profiles, roots):
                 )
             updated[id_key] = replacements[0]["id"]
     if updated != current:
-        api("POST", path + "/test", updated)
-        api("PUT", f"{path}/{current['id']}", updated)
+        # The released schema marks id readOnly; only the URL carries it.
+        body = {key: value for key, value in updated.items() if key != "id"}
+        api("POST", path + "/test", body)
+        api("PUT", f"{path}/{current['id']}", body)
         saved = next(
             (item for item in api("GET", path) if item["id"] == current["id"]), {}
         )

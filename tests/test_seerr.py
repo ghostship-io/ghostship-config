@@ -41,6 +41,11 @@ class SeerrTests(unittest.TestCase):
         def api(method, path, data=None):
             calls.append((method, path, data))
             if method == "PUT":
+                # Released Seerr validates id as readOnly in request bodies.
+                if "id" in data:
+                    raise requests.HTTPError(
+                        "read-only property id", response=response({}, 400)
+                    )
                 settings.update(data)
             return [dict(settings)] if method == "GET" else dict(settings)
 
