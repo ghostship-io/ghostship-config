@@ -11,6 +11,9 @@ UID/GID range, real user manager, private root filesystem and host-owned network
 namespace. The engine uses crun, fuse-overlayfs and systemd cgroup delegation.
 A finite closure is copied into T3's private Nix store before its manager starts;
 the host store and host Nix daemon socket are not mounted into the engine.
+The manager has the NixOS re-exec alias inside its private filesystem, pointing
+only at the seeded systemd closure, so a host switch can re-execute it. API and
+port relays follow the manager's lifetime; a dead manager must not leave an apparently live gateway behind.
 
 The engine has its own memory, CPU and task ceilings. With outer hardening on,
 the engine manager and T3 container share the bounded parent slice defined in
