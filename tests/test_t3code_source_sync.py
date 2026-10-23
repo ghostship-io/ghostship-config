@@ -80,6 +80,17 @@ class SourceSync(unittest.TestCase):
         self.assertEqual((self.home / 'owners').read_text(), 'new:--skills-only\n' * 2)
         self.assertEqual(self.anchor.resolve(), self.managed)
 
+    def test_monotonic_resolver_wins_over_an_older_host_installer(self):
+        canonical = self.home/'.local/bin/t3code-shared-agents'
+        canonical.parent.mkdir(parents=True)
+        canonical.write_text('#!/bin/sh\nprintf resolver >> "$HOME/owners"\n')
+        canonical.chmod(0o755)
+        (self.anchor.parent/'release.json').write_text('{}')
+        self.anchor.unlink()
+        self.anchor.symlink_to(self.fallback)
+        self.sync(hook='bootstrap.d')
+        self.assertEqual((self.home/'owners').read_text(), 'resolver')
+
     def test_dirty_and_off_main_repositories_stay_unchanged(self):
         before = {name: self.git('-C', str(repo), 'rev-parse', 'HEAD')
                   for name, repo in self.repos.items()}
