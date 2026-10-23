@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.174] - 2026-10-23
+
+- Fix Seerr profile reconciliation against the released instance-update API.
+
+PR #340.
+
 ## [3.17.173] - 2026-10-23
 
 - Read coordinator routing from the live runtime coordination list and reject a missing list at startup.
