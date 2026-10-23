@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.109] - 2026-10-23
+## [3.17.110] - 2026-10-23
 
 - ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
+## [3.17.109] - 2026-10-23
+
+- The Providers page shows the owner's static model selection under the capacity cards: one row per route of the runtime policy in the collector's row order, with the role, the model and its blue bulk tag, the provider with the icon of its capacity card, the work the route is used for, and the share that is left with the Paced Availability beside it. A spent route reads zero, spent, and how long until it resets; a route the routing snapshot does not carry says no reading and never zero; a route with no pace series keeps its share alone. The chip reads the routing gauge and says that the static table is shown for reference while the routing is on. The old Providers table goes, since the cards above it replace it.
 
 ## [3.17.108] - 2026-10-23
 
