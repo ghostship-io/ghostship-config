@@ -695,7 +695,9 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             )
         ]
     try:
-        with T3Client(base_url, token, timeout=20) as client:
+        # Historical usage scans can exceed twenty seconds on the live server.
+        # Keep the transport default (sixty seconds), bounded per request.
+        with T3Client(base_url, token, timeout=60) as client:
             return t3source.collect(client, now, catalog=catalog, context=context)
     except (T3Error, OSError) as error:
         return [

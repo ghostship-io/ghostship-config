@@ -32,12 +32,76 @@
       }
     },
     {
+      "id": 201,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 4
+      },
+      "description": "Canonical picker selection; one model per card, preferred order supplied by the collector.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (source, status, reason, field) (label_replace((ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"} and (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"}) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"})))), \"field\", \"info\", \"\", \"\") or label_replace(ghostship_ai_collection_timestamp_seconds, \"field\", \"collected\", \"\", \"\"))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "value"
+            },
+            "indexByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div class=\"source-health\" aria-label=\"Collector source health\">{{#each (sourceHealth data (variable \"__to\"))}}<span class=\"source {{this.state}}\"><strong>{{this.name}}</strong> \u00b7 {{this.text}}</span>{{/each}}</div>",
+        "defaultContent": "<div class=\"source-health error\">Collector readings missing \u00b7 check collector service</div>",
+        "editor": {
+          "format": "none",
+          "language": "handlebars"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "contentPartials": [],
+        "helpers": "context.handlebars.registerHelper('sourceHealth', function(rows, now) {\n  const number = Number(now) / 1000;\n  const collected = (rows || []).find(row => row.field === 'collected');\n  const stamp = collected ? Number(collected.value) : NaN;\n  const stale = !Number.isFinite(stamp) || !Number.isFinite(number) || number - stamp > 600;\n  const result = [{name:'Collector', state:stale ? 'error' : 'ok',\n    text:!Number.isFinite(stamp) ? 'missing collection timestamp' : stale ? 'stale \u00b7 last collection over 10m ago' : 'current'}];\n  const names = {t3:'T3 providers',t3_usage:'T3 usage','opencode-go':'OpenCode Go'};\n  for (const [source, name] of Object.entries(names)) {\n    const info = (rows || []).find(row => row.source === source && row.field === 'info');\n    const missing = !info || stale;\n    result.push({name, state:missing || info.status !== 'ok' ? 'error' : 'ok',\n      text:missing ? 'missing or stale reading' : info.status === 'ok' ? 'current' : 'unavailable \u00b7 ' + (info.reason || info.status)});\n  }\n  return result;\n});\n",
+        "renderMode": "allRows",
+        "status": "",
+        "styles": ".source-health{display:flex;flex-wrap:wrap;gap:8px 18px;font:12px Inter,system-ui,sans-serif;overflow-wrap:anywhere}.source-health .source{min-width:0}.source-health .ok{color:#9da7b3}.source-health .error{color:#d9534f}",
+        "wrap": false
+      }
+    },
+    {
       "id": 230,
       "type": "text",
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 2,
+        "y": 6,
         "w": 24,
         "h": 2
       },
@@ -56,7 +120,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 8,
         "w": 6,
         "h": 13
       },
@@ -68,7 +132,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (category, provider, model, display_name, state, picker_eligible, trust, pool, pool_label, billing, reason, window, quota_id, pace_state, reset_source, effort, quality_basis, field) (\nlabel_replace(label_match(label_join((ghostship_ai_picker_model_info{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_info{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"info\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_provider_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_provider_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"provider_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pool_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pool_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"pool_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"quality\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_rounds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_rounds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"quality_rounds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_accepted{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_accepted{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"quality_accepted\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_remaining_ratio{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_remaining_ratio{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"remaining_ratio\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pace_delta{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pace_delta{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_reset_timestamp_seconds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_reset_timestamp_seconds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"reset_timestamp_seconds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_default{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_default{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${orchestrator_model:regex}\"), \"field\", \"default\", \"\", \"\")\n)",
+          "expr": "max by (category, provider, model, display_name, state, picker_eligible, trust, pool, pool_label, billing, reason, window, quota_id, pace_state, reset_source, effort, quality_basis, field) (\nlabel_replace(label_match(label_join((ghostship_ai_picker_model_info{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_info{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"info\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_provider_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_provider_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"provider_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pool_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pool_position{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"pool_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"quality\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_rounds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_rounds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"quality_rounds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_accepted{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_accepted{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"quality_accepted\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_remaining_ratio{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_remaining_ratio{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"remaining_ratio\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pace_delta{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pace_delta{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_reset_timestamp_seconds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_reset_timestamp_seconds{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"reset_timestamp_seconds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_default{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_default{category=\"orchestrator\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${orchestrator_model:regex}`), \"field\", \"default\", \"\", \"\")\n)",
           "instant": true,
           "range": false,
           "format": "table"
@@ -119,7 +183,7 @@
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 21,
         "w": 24,
         "h": 2
       },
@@ -138,7 +202,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 23,
         "w": 6,
         "h": 13
       },
@@ -150,7 +214,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (category, provider, model, display_name, state, picker_eligible, trust, pool, pool_label, billing, reason, window, quota_id, pace_state, reset_source, effort, quality_basis, field) (\nlabel_replace(label_match(label_join((ghostship_ai_picker_model_info{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_info{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"info\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_provider_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_provider_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"provider_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pool_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pool_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"pool_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"quality\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_rounds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_rounds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"quality_rounds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_accepted{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_accepted{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"quality_accepted\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_remaining_ratio{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_remaining_ratio{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"remaining_ratio\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pace_delta{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pace_delta{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_reset_timestamp_seconds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_reset_timestamp_seconds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"reset_timestamp_seconds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_default{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_default{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", \"${worker_model:regex}\"), \"field\", \"default\", \"\", \"\")\n)",
+          "expr": "max by (category, provider, model, display_name, state, picker_eligible, trust, pool, pool_label, billing, reason, window, quota_id, pace_state, reset_source, effort, quality_basis, field) (\nlabel_replace(label_match(label_join((ghostship_ai_picker_model_info{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_info{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"info\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_provider_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_provider_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"provider_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pool_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pool_position{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"pool_position\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"quality\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_rounds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_rounds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"quality_rounds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_quality_accepted{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_quality_accepted{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"quality_accepted\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_remaining_ratio{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_remaining_ratio{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"remaining_ratio\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_pace_delta{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_pace_delta{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"pace_delta\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_reset_timestamp_seconds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_reset_timestamp_seconds{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"reset_timestamp_seconds\", \"\", \"\")\n or label_replace(label_match(label_join((ghostship_ai_picker_model_default{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"} and (timestamp(ghostship_ai_picker_model_default{category=\"worker\",picker_eligible=\"true\",provider=~\"$provider\",provider!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"selection_key\", \"|\", \"provider\", \"model\"), \"selection_key\", `${worker_model:regex}`), \"field\", \"default\", \"\", \"\")\n)",
           "instant": true,
           "range": false,
           "format": "table"
@@ -201,7 +265,7 @@
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 36,
         "w": 24,
         "h": 2
       },
@@ -220,7 +284,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 38,
         "w": 6,
         "h": 14
       },
@@ -284,7 +348,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 52,
         "w": 24,
         "h": 1
       },
@@ -299,14 +363,14 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 49,
+            "y": 53,
             "w": 24,
             "h": 8
           },
           "targets": [
             {
               "refId": "A",
-              "expr": "ghostship_ai_source_status",
+              "expr": "ghostship_ai_source_status and (timestamp(ghostship_ai_source_status) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status)))",
               "instant": true,
               "format": "table",
               "datasource": {
@@ -333,7 +397,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 57,
+            "y": 61,
             "w": 24,
             "h": 8
           },
@@ -367,7 +431,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 65,
+            "y": 69,
             "w": 24,
             "h": 8
           },
@@ -401,7 +465,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 73,
+            "y": 77,
             "w": 24,
             "h": 8
           },
@@ -529,10 +593,10 @@
           "uid": "victoriametrics"
         },
         "query": {
-          "query": "query_result(sort((ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} or (ghostship_ai_account_card_order{account!=\"openrouter\"} and on(account) ghostship_ai_account_window_missing)) and (timestamp((ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} or (ghostship_ai_account_card_order{account!=\"openrouter\"} and on(account) ghostship_ai_account_window_missing))) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+          "query": "query_result(sort(ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
           "refId": "StandardVariableQuery"
         },
-        "definition": "query_result(sort((ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} or (ghostship_ai_account_card_order{account!=\"openrouter\"} and on(account) ghostship_ai_account_window_missing)) and (timestamp((ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} or (ghostship_ai_account_card_order{account!=\"openrouter\"} and on(account) ghostship_ai_account_window_missing))) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
+        "definition": "query_result(sort(ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"} and (timestamp(ghostship_ai_account_card_order{scope=\"t3\",account!=\"openrouter\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
         "regex": "/account=\"([^\"]+)\"/",
         "sort": 0,
         "refresh": 2,

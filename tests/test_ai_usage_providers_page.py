@@ -1,5 +1,6 @@
 """Picker-derived model panes and capacity cards follow the owner's design."""
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -69,6 +70,46 @@ class ProvidersPageTests(unittest.TestCase):
         query=variables['capacity_account']['query']['query']
         self.assertIn('scope="t3"',query)
         self.assertIn('account!="openrouter"',query)
+
+    def test_repeated_model_regex_survives_query_string_parsing(self):
+        # Grafana :regex emits one slash before punctuation. Quoted MetricsQL
+        # strings consume escapes; raw literals must preserve the exact pattern.
+        selected = r'ollama\|deepseek-v4\.1-flash:1017'
+        for panel_id, category in ((231, 'orchestrator'), (233, 'worker')):
+            query = self.panels[panel_id]['targets'][0]['expr']
+            query = query.replace('${' + category + '_model:regex}', selected)
+            for literal in re.findall(r'"selection_key",\s*(`[^`]*`|"[^"\n]*")', query):
+                if literal == '"|"':
+                    continue
+                decoded = literal[1:-1] if literal.startswith('`') else json.loads(literal)
+                self.assertEqual(decoded, selected)
+                self.assertIsNotNone(re.fullmatch(decoded, 'ollama|deepseek-v4.1-flash:1017'))
+                self.assertIsNone(re.fullmatch(decoded, 'ollama|deepseek-v4X1-flash:1017'))
+
+    def test_capacity_freshness_timestamps_selectors_without_implicit_subqueries(self):
+        query = next(v for v in self.page['templating']['list']
+                     if v['name'] == 'capacity_account')['definition']
+        # timestamp(composite-expression) is an implicit MetricsQL subquery;
+        # Grafana's five-minute step moves it outside the ninety-second guard.
+        self.assertNotRegex(query, r'timestamp\(\(')
+        self.assertIn('timestamp(ghostship_ai_account_card_order{', query)
+
+    def test_source_failures_and_stale_collection_are_visible_above_models(self):
+        panel = self.panels[201]
+        now = 1767268800000
+        rows = [{'field':'collected','value':now / 1000},
+                {'source':'t3_usage','field':'info','status':'error','reason':'timeout'},
+                {'source':'opencode-go','field':'info','status':'error','reason':'http_forbidden'},
+                {'source':'t3','field':'info','status':'ok'}]
+        status = helper(panel, 'sourceHealth', rows, now)
+        by_name = {row['name']:row for row in status}
+        self.assertEqual(by_name['T3 usage']['text'], 'unavailable · timeout')
+        self.assertEqual(by_name['OpenCode Go']['text'], 'unavailable · http_forbidden')
+        self.assertEqual(by_name['T3 providers']['text'], 'current')
+        self.assertTrue(all(row['state']=='error' for row in helper(panel,'sourceHealth',rows,now+601000)))
+        self.assertEqual(helper(panel,'sourceHealth',[],now)[0]['text'],'missing collection timestamp')
+        self.assertLess(self.page['panels'].index(panel), self.page['panels'].index(self.panels[231]))
+        self.assertIn('Collector readings missing',panel['options']['defaultContent'])
 
     def test_text_only_model_details_come_from_real_canonical_samples(self):
         panel=self.panels[233]
