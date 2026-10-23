@@ -202,7 +202,10 @@ def applicable_windows(snapshot: Mapping[str, Any], source: Mapping[str, Any]) -
                      if window.get('reset_at') else None)
         except ValueError:
             continue
-        if (now - quota.STALE_AFTER_SECONDS <= checked <= now + quota.FUTURE_TOLERANCE_SECONDS
+        timed_denial = (window.get('basis') == 'provider_limit_message'
+                        and window.get('remaining_ratio') == 0 and reset is not None and reset > now)
+        if ((timed_denial or now - quota.STALE_AFTER_SECONDS <= checked)
+                and checked <= now + quota.FUTURE_TOLERANCE_SECONDS
                 and (reset is None or reset > now) and window not in windows):
             windows.append(window)
     return windows
