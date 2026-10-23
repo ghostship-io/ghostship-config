@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.165] - 2026-10-23
+
+- Keep the public HTTPS hostname out of the container's internal DNS identity.
+
+PR #331.
+
 ## [3.17.164] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 5b865b94; the lock's narHash is the `nix flake prefetch` hash of that revision.
