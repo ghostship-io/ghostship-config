@@ -14,8 +14,10 @@ class CIRunnerTests(unittest.TestCase):
           module = import %s {
             config.ghostship.selfHostedSecrets.projections.ghostship-ci-registration.path = "/fixture/registration.env";
             lib.genAttrs = names: f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) names);
-            pkgs = builtins.listToAttrs (map (name: { inherit name; value = "/fixture/" + name; })
-              [ "coreutils" "curl" "jq" "openssh" "python3" "unzip" "xz" ]);
+            pkgs = (builtins.listToAttrs (map (name: { inherit name; value = "/fixture/" + name; })
+              [ "coreutils" "curl" "jq" "openssh" "python3" "unzip" "xz" ])) // {
+                writeShellScript = name: text: text;
+              };
           };
           in module''' % (ROOT / 'modules/self-hosted/github-ci.nix')
         cls.module = json.loads(subprocess.check_output(
@@ -28,6 +30,10 @@ class CIRunnerTests(unittest.TestCase):
             self.assertEqual(runner['url'], 'https://github.com/ghostship-io/' + repo)
             self.assertTrue(runner['ephemeral'])
             self.assertEqual(runner['extraLabels'], ['ghostship-fast'])
+            hook = runner['extraEnvironment']['ACTIONS_RUNNER_HOOK_JOB_STARTED']
+            self.assertIn('python3 -I -S', hook)
+            self.assertIn('github-ci-guard.py', hook)
+            self.assertIn('ghostship-io/' + repo, hook)
             self.assertNotIn('user', runner)  # upstream DynamicUser, never root
             self.assertEqual(runner['serviceOverrides']['CacheDirectoryMode'], '0700')
             self.assertEqual(runner['serviceOverrides']['CPUQuota'], '400%' if repo == 'ghostship-3dprinting' else '200%')
