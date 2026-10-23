@@ -61,10 +61,8 @@ RECOVERY_ROUNDS = 3
 COUNTED_VERDICTS = ("accepted", "reworked", "rejected")
 ACCEPTED_VERDICT = "accepted"
 
-# The causes that are the lead's, not the model's: a round the brief or the
-# chief reviewer caused says nothing about the model, so it is counted by
-# neither n nor s, exactly like a round of the environment.
-LEAD_CAUSES = ("brief", "chief")
+# These explicit causes say nothing about the model's quality.
+NON_MODEL_CAUSES = ("environment", "brief", "chief")
 
 # The ledger's table and its columns. An older ledger has no verdict
 # source, so the columns that are read are the ones the ledger carries.
@@ -87,6 +85,7 @@ BACKFILL_FIELDS = (
     "task_type",
     "started_at",
     "verdict",
+    "cause",
     "fabrication",
     "ref",
     "summary",
@@ -422,8 +421,8 @@ def _backfill_round(row: Mapping[str, Any]) -> dict[str, Any]:
         "task_type": str(row.get("task_type") or ""),
         "verdict": str(row.get("verdict") or "").strip().lower(),
         "verdict_source": "backfill",
-        # The backfill records no cause: its summary is never read as one.
-        "cause": "",
+        # Only a structured cause counts; never infer it from the summary.
+        "cause": str(row.get("cause") or ""),
         "fabrication": row.get("fabrication"),
         "started_at": row.get("started_at"),
         "ref": reference,
@@ -475,6 +474,8 @@ def _merged_rounds(
                 continue
             if "verdict" in row:
                 target["verdict"] = record["verdict"]
+            if "cause" in row:
+                target["cause"] = record["cause"]
             if "fabrication" in row:
                 target["fabrication"] = record["fabrication"]
                 target["fabrication_ref"] = record["fabrication_ref"]
@@ -509,8 +510,8 @@ def outcome_counts(
         key = (identity, round_["task_type"])
         entry = counts.setdefault(key, {"n": 0, "s": 0, "fabrications": []})
         verdict = round_["verdict"]
-        lead_caused = str(round_.get("cause") or "").strip().lower() in LEAD_CAUSES
-        if verdict in COUNTED_VERDICTS and not lead_caused:
+        non_model_caused = str(round_.get("cause") or "").strip().lower() in NON_MODEL_CAUSES
+        if verdict in COUNTED_VERDICTS and not non_model_caused:
             entry["n"] += 1
             if verdict == ACCEPTED_VERDICT:
                 entry["s"] += 1
