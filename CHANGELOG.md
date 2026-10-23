@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.186] - 2026-10-23
+
+- Keep models usable until quota is exhausted and recover them from newer reported quota.
+- Isolate T3 RPC replies and enforce a total read deadline.
+
+PR #352.
+
 ## [3.17.185] - 2026-10-23
 
 - Put canonical orchestrator/worker model selection before provider capacity.
