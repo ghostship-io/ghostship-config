@@ -21,9 +21,11 @@ in
   hooks = source [ "lib/github-integration.nix" "tools/python/ghostship_github/ingress.py" ];
   integrations = source ([ "lib/private-integrations.nix" "lib/python-wyze.nix"
     "tools/lib/ghostship-mcp-wrapper.sh" "config/google-web-services.json"
-    "config/agents/runtime-policy.json" "config/agents/model-identities.json" ]
+    "config/agents/runtime-policy.json" "config/agents/model-identities.json"
+    "config/sandbox-profiles" ]
     ++ map (name: "tools/python/ghostship_${name}") [
       "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep"
       "hostops" "services" "health" "t3"
+      "sessions" "delegation" "deploy" "github" "worker" "workflows"
     ]);
 }
