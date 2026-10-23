@@ -390,6 +390,40 @@
             "defaults": {},
             "overrides": []
           }
+        },
+        {
+          "id": 244,
+          "type": "table",
+          "title": "Provider quota source",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 73,
+            "w": 24,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "ghostship_ai_quota_used_ratio{provider!=\"openrouter\"}",
+              "instant": true,
+              "format": "table",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          }
         }
       ]
     }
