@@ -182,7 +182,9 @@ def migrate(source, free, manifest_path, plan):
     if manifest.get('phase') != 'complete':
         # The native login must prove itself through the real bounded worker
         # before the source login is removed. A stable key makes retries safe.
-        raw = free.call(['agent', 'free-inference', 'run', '--profile', 'research', '--sensitivity', 'public',
+        # Code is published independently of the stable image, whose /bin
+        # intentionally contains no agent launcher. Use its atomic runtime link.
+        raw = free.call(['/run/ghostship-runtime/current/bin/agent', 'free-inference', 'run', '--profile', 'research', '--sensitivity', 'public',
                          '--provider', 'opencode', '--request-key', plan['probe_key'],
                          '--prompt', PUBLIC_TASK], timeout=240, allow_failure=True)
         try:
