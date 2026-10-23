@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.161] - 2026-10-23
+
+- Complete rootless workload helpers and runtime cleanup, preserving useful acceptance diagnostics.
+- Run the saved IPAM cursor regression on the native check platform.
+
+PR #321.
+
 ## [3.17.160] - 2026-10-23
 
 - Route daily security investigations through the bounded, redacted SIEM command.
