@@ -151,6 +151,92 @@ ATTEMPTS_TABLE = "orchestration_v2_projection_run_attempts"
 RUNS_TABLE = "orchestration_v2_projection_runs"
 SESSIONS_TABLE = "projection_thread_sessions"
 RUNTIME_TABLE = "provider_session_runtime"
+MESSAGES_TABLE = "orchestration_v2_projection_messages"
+
+# This adapter reports quota denial as an entire assistant response, with a
+# completed run. Match only that provider's exact notice, never arbitrary prose
+# mentioning a quota or a user quoting it. Relative resets use message creation
+# time, so polling never moves the deadline forward.
+_LIMIT_NOTICE = re.compile(
+    r"\s*Usage Limit Reached\s+You have reached your current quota for this period\.\s*"
+    r"Your limit will reset in (?P<delay>\d+ (?:days?|hours?|minutes?|seconds?)"
+    r"(?:,?\s+(?:and\s+)?\d+ (?:days?|hours?|minutes?|seconds?))*)\.\s*",
+    re.I,
+)
+_RESET_PART = re.compile(r"(\d+) (days?|hours?|minutes?|seconds?)", re.I)
+LIMIT_MAX_SECONDS = 31 * 86400.0
+
+
+def read_limit_windows(path: str | Path, now: float) -> list[dict[str, Any]]:
+    """Provider-originated spent windows, scoped to the run's selected model.
+
+    A timed denial remains evidence until its reset, even beyond the ordinary
+    30-minute quota freshness bound or 24-hour failure lookback. No raw response,
+    prompt, thread id or credential leaves this reader. A sibling's successful
+    run cannot clear it; the provider can have different resets for each model.
+    """
+    from datetime import datetime, timezone
+
+    cutoff = datetime.fromtimestamp(now - LIMIT_MAX_SECONDS, timezone.utc).isoformat()
+    try:
+        connection = _connect(path)
+    except RuntimeStateError:
+        return []
+    try:
+        if not all(_has_table(connection, table) for table in (MESSAGES_TABLE, RUNS_TABLE)):
+            return []
+        rows = connection.execute(
+            f"SELECT m.created_at, m.payload_json, r.payload_json FROM {MESSAGES_TABLE} m "
+            f"JOIN {RUNS_TABLE} r ON m.run_id=r.run_id "
+            "WHERE r.provider_instance_id='antigravity' AND m.role='assistant' "
+            "AND m.streaming=0 AND datetime(m.created_at)>=datetime(?) "
+            "AND m.payload_json LIKE '%Usage Limit Reached%' "
+            "ORDER BY datetime(m.created_at) DESC LIMIT ?", (cutoff, MAX_ROWS),
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        connection.close()
+    windows: dict[str, dict[str, Any]] = {}
+    units = {'day': 86400, 'hour': 3600, 'minute': 60, 'second': 1}
+    for created, payload, run_payload in rows:
+        observed = _iso_epoch(created)
+        if observed is None or observed > now:
+            continue
+        try:
+            message, run = json.loads(payload), json.loads(run_payload)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(message, Mapping) or not isinstance(run, Mapping):
+            continue
+        selection = run.get('modelSelection')
+        if not isinstance(selection, Mapping) or selection.get('instanceId') != 'antigravity':
+            continue
+        model = selection.get('model')
+        if not isinstance(model, str) or not model.startswith('gemini-'):
+            continue
+        match = _LIMIT_NOTICE.fullmatch(str(message.get('text') or ''))
+        if match is None:
+            continue
+        parts = _RESET_PART.findall(match['delay'])
+        if len({unit.lower().rstrip('s') for _, unit in parts}) != len(parts):
+            continue
+        delay = sum(int(count) * units[unit.lower().rstrip('s')] for count, unit in parts)
+        reset = observed + delay
+        if not 0 < delay <= LIMIT_MAX_SECONDS or reset <= now:
+            continue
+        window = {
+            'provider': 'antigravity', 'account': 'default', 'model': model,
+            'appliesTo': [model], 'kind': 'quota', 'quotaId': 'runtime-limit:' + model,
+            'usedRatio': 1.0, 'resetEpoch': reset, 'durationSeconds': None,
+            'observedAtEpoch': observed, 'source': 't3_runtime',
+            'basis': 'provider_limit_message', 'resetSource': 'provider_message',
+        }
+        # Multiple notices may round the relative time differently. Keep the
+        # latest reported deadline; never shorten a still-active lockout.
+        if model not in windows or reset > windows[model]['resetEpoch']:
+            windows[model] = window
+    return [windows[key] for key in sorted(windows)]
 
 # The model prefix of the OpenCode instance names the account it serves.
 _INSTANCE_ACCOUNTS = {
