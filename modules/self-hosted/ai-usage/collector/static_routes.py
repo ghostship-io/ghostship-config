@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import t3source
-from metrics import ExactLabel, Sample
+from metrics import ExactLabel, Sample, label_value
 from util import iso_to_epoch
 
 # The order the roles are read in. It is the order of the page and the order
@@ -232,6 +232,23 @@ def _number(value: Any) -> float | None:
     return float(value)
 
 
+def _display_name(
+    names: Mapping[tuple[str, str], str], provider: str, model: str
+) -> str:
+    """The name the collector published for a model.
+
+    The name is published with the model id the exposition format allows,
+    and the id a provider gave is not always one of them: a slash and an
+    at sign are not. The name is therefore looked up by the id of the
+    route first, and by the published form of that id after it. The
+    provider is part of the key, so the name of another provider's model
+    is never used. A model without a published name falls back to its own
+    id.
+    """
+    found = names.get((provider, model)) or names.get((provider, label_value(model)))
+    return str(found or model)
+
+
 def samples(
     policy_path: str | None,
     snapshot: Mapping[str, Any] | None,
@@ -242,7 +259,11 @@ def samples(
     A row's capacity is read from the candidate of the same route: the share
     left, the Paced Availability, and the reset of the binding window. A
     route the snapshot does not carry keeps its info row and has no capacity
-    series: an unknown capacity is never published as zero.
+    series: an unknown capacity is never published as zero. The display name
+    of a row is the name the collector already published for the model, and
+    the row falls back to the model id. The name is found by the id of the
+    route, and by the form of that id the exposition format allows, since a
+    name is published under the latter.
     """
     document = load(policy_path)
     if document is None:
@@ -262,7 +283,9 @@ def samples(
                     "role": ExactLabel(row["role"]),
                     "provider": row["provider"],
                     "model": row["model"],
-                    "display_name": ExactLabel(str(names.get(key) or row["model"])),
+                    "display_name": ExactLabel(
+                        _display_name(names, row["provider"], row["model"])
+                    ),
                     "used_for": ExactLabel(row["used_for"]),
                 },
                 1.0,

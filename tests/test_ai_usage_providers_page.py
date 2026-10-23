@@ -69,9 +69,12 @@ CAPACITY_ROW_HEIGHT = 37
 
 # The content of the model selection panel, measured in Playwright the same
 # way with the headroom the panel is sized for: the five static rows, the
-# Free divider, and twenty free providers. The live set holds sixteen.
-SELECTION_PHONE_HEIGHT = 883
-SELECTION_DESKTOP_HEIGHT = 861
+# Free divider, and twenty-four free providers. The live set holds sixteen.
+# The content is measured inside the panel body, which is the grid height
+# less the panel's title bar of 26 px.
+SELECTION_PHONE_HEIGHT = 1440
+SELECTION_DESKTOP_HEIGHT = 1096
+SELECTION_PANEL_HEADER = 26
 
 # The moment the fixture was read. The resets of the fixture are counted
 # from it, so the worked cases are the rows of that moment.
@@ -1668,8 +1671,25 @@ class ModelSelectionTests(unittest.TestCase):
         for metric in SELECTION_METRICS:
             self.assertIn(metric, expression, metric)
         self.assertIn("ghostship_ai_routing_enabled", expression)
-        # The same freshness guard as the rest of the page.
-        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+        # A row counts only if it is from the newest scrape.
+        self.assertIn("ghostship_ai_static_route_policy_ok", expression)
+        self.assertIn(") - 15", expression)
+
+    def test_every_selection_series_reads_only_the_newest_scrape(self):
+        """No series of the table is read from an older scrape than the newest.
+
+        The guard was 90 s wide while a scrape is 30 s, so after a policy
+        edit the rows of the policy before it stayed on the table for about
+        two minutes. The policy gauge is published on every collection, so
+        its newest timestamp is the newest scrape.
+        """
+        expression = expressions(self.panel)
+        guard = "scalar(max(timestamp(ghostship_ai_static_route_policy_ok))) - 15"
+        self.assertNotIn("ghostship_ai_collection_duration_seconds", expression)
+        self.assertEqual(expression.count(guard), 10)
+        for metric in SELECTION_METRICS:
+            self.assertIn(f"timestamp({metric}", expression, metric)
+        self.assertIn("timestamp(ghostship_ai_routing_enabled)", expression)
 
     def test_the_columns_are_role_model_provider_used_for_and_left(self):
         """The table reads in the owner's columns, and Left comes last."""
@@ -1852,22 +1872,87 @@ class ModelSelectionTests(unittest.TestCase):
                     f"{provider} {key}",
                 )
 
-    def test_the_panel_is_tall_enough_for_its_rows(self):
-        """The panel holds every row of the live table at either width.
+    def test_a_phone_row_names_its_provider_in_the_model_cell(self):
+        """Under 520 px the hidden Provider column's name moves under the model.
 
-        Measured in Playwright with the panel's own styles, the production
-        font (Inter) and the headroom of twenty free providers: the content is
-        883 px tall at 390 px and 861 px at 1600 px, and a grid row of the
-        dashboard is 37 px. The live set holds sixteen free providers, so the
-        height keeps room for four more.
+        A free row with no model held only the letter icon on a phone, and the
+        owner could not tell which provider it was. The name is hidden at the
+        wide width, where the Provider column carries it.
         """
-        self.assertEqual(self.panel["gridPos"]["h"] * 37, 888)
-        self.assertGreaterEqual(
-            self.panel["gridPos"]["h"] * 37, SELECTION_PHONE_HEIGHT
+        content = self.panel["options"]["content"]
+        self.assertEqual(
+            content.count('<span class="mp">{{providerName}}</span>'),
+            2,
+            "the static row and the free row carry the provider name in the model cell",
         )
-        self.assertGreaterEqual(
-            self.panel["gridPos"]["h"] * 37, SELECTION_DESKTOP_HEIGHT
+        self.assertIn('<td class="hide-sm">{{providerName}}</td>', content)
+        styles = self.panel["options"].get("styles") or ""
+        base = styles[: styles.find("@media")]
+        self.assertIn("display: none", dict(css_rules(base))[".routes .mp"])
+        self.assertIn(
+            "display: block", dict(css_rules(media_body(styles)))[".routes .mp"]
         )
+        row = self.free_row(provider="cohere")
+        self.assertEqual(row["providerName"], "Cohere")
+        self.assertEqual(row["model"], "")
+        self.assertEqual(row["displayName"], "")
+        self.assertEqual(row["left"], "no eligible free model")
+
+    def test_a_model_name_is_one_line_and_carries_its_id(self):
+        """A model name ends in an ellipsis on one line, the full id in its title.
+
+        On a phone a long raw id wrapped through the Left cell. The name is
+        one line in its own cell now, and the title holds the whole id.
+        """
+        content = self.panel["options"]["content"]
+        self.assertEqual(content.count('class="mn" title="{{model}}"'), 2)
+        styles = self.panel["options"].get("styles") or ""
+        base = dict(css_rules(styles[: styles.find("@media")]))
+        self.assertIn("white-space: nowrap", base[".routes .mn"])
+        self.assertIn("text-overflow: ellipsis", base[".routes .mn"])
+        self.assertIn("min-width: 0", base[".routes .mid"])
+        self.assertIn("min-width: 0", base[".routes .mrow"])
+        media = dict(css_rules(media_body(styles)))
+        for declaration in (
+            "white-space: nowrap",
+            "overflow: hidden",
+            "text-overflow: ellipsis",
+        ):
+            self.assertIn(declaration, media[".routes .mn"])
+        # A row that carries only the raw id reads it as its name.
+        rows = [
+            {
+                "provider": "kilo",
+                "field": "free_info",
+                "model": "nvidia/nemotron-3.5-super-vl:free",
+                "display_name": "",
+                "basis": "learning",
+                "value": 1,
+            }
+        ]
+        row = self.free_row(rows, provider="kilo")
+        self.assertEqual(row["displayName"], "nvidia/nemotron-3.5-super-vl:free")
+
+    def test_the_panel_is_tall_enough_for_its_rows(self):
+        """The panel holds every row at either width, with no inner scroll.
+
+        Measured in Playwright with the panel's own helpers and styles, the
+        production font (Inter) and the headroom of twenty-four free
+        providers: the content is 1440 px tall at 358 px and 1096 px at
+        1568 px. A grid row of the dashboard is 37 px, and the panel's title
+        bar takes 26 px of it, so the body is the height less 26. The live
+        set holds sixteen free providers, so the height keeps room for eight
+        more.
+        """
+        rows = math.ceil(
+            (max(SELECTION_PHONE_HEIGHT, SELECTION_DESKTOP_HEIGHT) + SELECTION_PANEL_HEADER)
+            / 37
+        )
+        self.assertEqual(rows, 40)
+        self.assertEqual(self.panel["gridPos"]["h"], rows)
+        body = self.panel["gridPos"]["h"] * 37 - SELECTION_PANEL_HEADER
+        self.assertGreaterEqual(body, SELECTION_PHONE_HEIGHT)
+        self.assertGreaterEqual(body, SELECTION_DESKTOP_HEIGHT)
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
@@ -1894,7 +1979,7 @@ class ModelSelectionTests(unittest.TestCase):
         expression = expressions(self.panel)
         for metric in FREE_SELECTION_METRICS:
             self.assertIn(metric, expression, metric)
-        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+        self.assertIn("ghostship_ai_static_route_policy_ok", expression)
         for metric in (
             "ghostship_ai_model_winner_position",
             "ghostship_ai_account_window_",
@@ -2213,6 +2298,52 @@ class ModelSelectionStoreTests(unittest.TestCase):
             [(row[0], row[4]) for row in FREE_ROWS],
         )
 
+    def test_a_route_from_an_older_scrape_is_not_shown(self):
+        """After a policy edit the table keeps only the newest scrape's rows.
+
+        The row below is 60 s older than the newest scrape: it was still on
+        the table while the guard was 90 s wide, although a scrape is 30 s.
+        """
+        store = VictoriaMetricsFixture()
+        self.addCleanup(store.stop)
+        if not store.start():
+            self.skipTest("VictoriaMetrics did not start")
+        panel = section(self.page, "Model selection")
+        target = find_target(panel, "ghostship_ai_static_route_info")
+        moment = int(time.time())
+        lines = [
+            f"ghostship_ai_static_route_policy_ok 1 {moment * 1000}",
+            f"ghostship_ai_collection_duration_seconds 1 {moment * 1000}",
+            f"ghostship_ai_routing_enabled 0 {moment * 1000}",
+        ]
+        for model, seconds_ago in (("newest", 0), ("one-scrape-older", 60)):
+            stamp = (moment - seconds_ago) * 1000
+            lines.append(
+                f'ghostship_ai_static_route_info{{row="{model}",role="Bulk 1",'
+                f'provider="ollama",model="{model}",display_name="{model}",'
+                f'used_for="Narrow implementation (1st)"}} 1 {stamp}'
+            )
+            lines.append(
+                f'ghostship_ai_static_route_remaining_ratio{{row="{model}"}} 0.5 {stamp}'
+            )
+        store.import_text("\n".join(lines) + "\n")
+        expression = target["expr"].replace("$provider", ".*")
+        deadline = time.time() + 30
+        while True:
+            result = store.query(expression)
+            models = {
+                row["metric"].get("model")
+                for row in result
+                if row["metric"].get("field") == "info"
+            }
+            if "newest" in models:
+                break
+            if time.time() > deadline:
+                self.fail("the store never answered the newest row")
+            time.sleep(0.2)
+        self.assertIn("newest", models)
+        self.assertNotIn("one-scrape-older", models)
+
 
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
@@ -2263,9 +2394,12 @@ class VictoriaMetricsFixture:
             shutil.rmtree(self.directory, ignore_errors=True)
 
     def import_fixture(self, path):
+        self.import_text(path.read_text(encoding="utf-8"))
+
+    def import_text(self, text):
         request = urllib.request.Request(
             self.url + "/api/v1/import/prometheus",
-            data=path.read_bytes(),
+            data=text.encode("utf-8"),
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=10):

@@ -29,6 +29,7 @@ if str(COLLECTOR) not in sys.path:
 
 import main as main_module  # noqa: E402
 import static_routes  # noqa: E402
+from metrics import ExactLabel  # noqa: E402
 
 NOW = 1_800_000_000.0
 # The reset of the codex route, as the snapshot publishes it.
@@ -168,6 +169,94 @@ def info_rows(samples):
     }
 
 
+# The table of a route whose model id carries a slash. The name of the
+# model is published with the model label the exposition format allows, so
+# the id of the series is not the id of the route.
+NAME_POLICY = {
+    "schema_version": 1,
+    "worker_routes": {
+        "entries": [
+            {
+                "task_type": "implementation",
+                "scope": "narrow",
+                "routes": [
+                    {"instance_id": "groq", "model": "qwen/qwen3.8-27b"},
+                    {"instance_id": "kilo", "model": "nvidia/nemotron-3.5-super-vl:free"},
+                ],
+            }
+        ]
+    },
+}
+
+# The names the collector publishes for those models.
+PUBLISHED_NAMES = [
+    (
+        "ghostship_ai_model_info",
+        {
+            "provider": "groq",
+            "model": "qwen_qwen3.8-27b",
+            "name": ExactLabel("Qwen3.8 27B"),
+        },
+        1.0,
+    ),
+]
+
+
+def published_names(samples):
+    """The display names, built the way the collector builds them.
+
+    The collector reads the name of every model from the series it
+    publishes for the model, and keys it by the provider and the model
+    label of that series.
+    """
+    names = {}
+    for name, labels, _value in samples:
+        if name != "ghostship_ai_model_info":
+            continue
+        provider = str(labels.get("provider") or "")
+        model = str(labels.get("model") or "")
+        text = str(labels.get("name") or "")
+        if provider and model and text:
+            names[(provider, model)] = text
+    return names
+
+
+class StaticRouteDisplayNameTests(unittest.TestCase):
+    """The name of the model a static route names.
+
+    The name is published with the model label the exposition format
+    allows, and the id of a route is the id the provider gave. A route
+    whose model id carries a slash carries the name the collector
+    published for that model.
+    """
+
+    def samples(self, names=None):
+        return static_routes.samples(
+            write_policy(self, document=NAME_POLICY),
+            {},
+            published_names(PUBLISHED_NAMES) if names is None else names,
+        )
+
+    def test_a_route_whose_model_id_has_a_slash_carries_its_published_name(self):
+        rows = info_rows(self.samples())
+        self.assertEqual(rows["1"]["display_name"], "Qwen3.8 27B")
+
+    def test_a_route_without_a_published_name_falls_back_to_its_raw_id(self):
+        """Kilo's route names a model that is published nowhere."""
+        rows = info_rows(self.samples())
+        self.assertEqual(
+            rows["2"]["display_name"], "nvidia/nemotron-3.5-super-vl:free"
+        )
+
+    def test_the_other_labels_of_the_row_are_unchanged(self):
+        """The name is the only label the fix touches."""
+        rows = info_rows(self.samples())
+        self.assertEqual(rows["1"]["provider"], "groq")
+        self.assertEqual(rows["1"]["model"], "qwen/qwen3.8-27b")
+        self.assertEqual(rows["1"]["role"], "Bulk 1")
+        self.assertEqual(rows["1"]["used_for"], "Narrow implementation (1st)")
+
+
 class StaticRouteTableTests(unittest.TestCase):
     def test_the_table_is_one_row_per_model_in_display_order(self):
         """The page's five rows: bulk 1, bulk 2, large, and the two deploys."""
@@ -302,6 +391,34 @@ class StaticRouteTableTests(unittest.TestCase):
 
 
 class StaticRouteWiringTests(unittest.TestCase):
+    def test_the_collector_renders_the_published_name_of_a_route(self):
+        """The name is read from the series the collector publishes."""
+        from metrics import SourceResult
+
+        path = write_policy(self, document=NAME_POLICY)
+        result = SourceResult(
+            source="t3",
+            status="ok",
+            metrics=list(PUBLISHED_NAMES),
+        )
+        text = main_module.render(
+            [result], [], NOW, 0.0, {}, runtime_policy=path
+        )
+        rows = [
+            line
+            for line in text.splitlines()
+            if line.startswith("ghostship_ai_static_route_info{")
+        ]
+        self.assertEqual(len(rows), 2)
+        by_provider = {
+            re.search(r'provider="([^"]+)"', line).group(1): line for line in rows
+        }
+        self.assertIn('display_name="Qwen3.8 27B"', by_provider["groq"])
+        self.assertIn('model="qwen_qwen3.8-27b"', by_provider["groq"])
+        self.assertIn(
+            'display_name="nvidia/nemotron-3.5-super-vl:free"', by_provider["kilo"]
+        )
+
     def test_the_collector_renders_the_table(self):
         path = write_policy(self)
         text = main_module.render(
