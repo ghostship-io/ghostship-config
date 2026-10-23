@@ -981,6 +981,11 @@ The order of a tier is then:
 
 * the trust of the route: a trusted route leads, a backup route follows, and
   an untrusted route comes last with the reason it holds;
+* a route more than twenty points behind the line of its binding window
+  (`far_behind`) follows every route of its trust group that is not, whatever
+  the value of those routes: it goes to the back of the pool. An untrusted
+  route stays last, and a route that is merely behind keeps its place in the
+  value order;
 * a provider reserved for another workload (`provider_reservations`) joins
   the backup group outside that workload's tier and follows every unreserved
   route of it; its winner names the workload in `reserved_for`;
@@ -991,6 +996,20 @@ The order of a tier is then:
   the trust of the model;
 * the pace of the account window, and a route with no window has no pace: it
   waits behind every route that has one.
+
+The pace state of a route is the band its Paced Availability falls in, the
+share left minus the expected share left of the most constraining window, in
+points, rounded to six decimals so that only the noise of the subtraction is
+removed (`100 * (0.50 - 0.55)` is `-5`). A window with nothing left is
+`spent` whatever its line; more than five points ahead of the line is
+`ahead`; between five points behind and five ahead is `on_pace`; between
+twenty points behind and five behind is `behind`; more than twenty points
+behind is `far_behind`; and a route with no window, or no line to compare it
+with, is `unknown`. The collector publishes the state as `pace_state` in the
+`capacity` of every candidate row, as `pace_state` of every winner, and as
+`ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`
+for every window of an account, so the Providers page colours amber and red
+by the collector's band instead of drawing its own.
 
 The published value of a route is the outcome-weighted value: the measured
 intelligence placed inside the range of the tier it competes in
