@@ -157,6 +157,30 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertTrue(empty['evidenceMissing'])
         self.assertLess(self.page['panels'].index(self.panels[210]),self.page['panels'].index(panel))
 
+    def test_quality_collapses_efforts_and_only_offers_comparison_when_observations_differ(self):
+        import model_quality
+        from test_ai_usage_model_quality import candidate,rounds,NOW
+        active=candidate()
+        spent=candidate('spent')
+        spent['capacity']['remaining_ratio']=0
+        records=rounds(n=5)+rounds(effort='high',n=5)
+        for different in (False,True):
+            if different:records[-1]['wall_seconds']=300
+            result=model_quality.build([active,spent],records,NOW)
+            selection=model_selection.build({'candidates':[active,spent]},[])
+            model_quality.annotate(result,selection)
+            rows=[{**labels,'field':name.removeprefix('ghostship_ai_quality_'),'value':value}
+                  for name,labels,value in model_quality.samples(result)]
+            models=helper(self.panels[250],'qualityModels',rows)
+            self.assertEqual(len(models),2)
+            chosen=next(model for model in models if model['model']=='model')
+            self.assertTrue(chosen['active'])
+            self.assertEqual(chosen['compare'],different)
+            self.assertFalse(next(model for model in models if model['model']=='spent')['active'])
+            self.assertFalse(chosen['hasFindings'])
+            self.assertFalse(chosen['hasQuota'])
+        self.assertIn('data-quality-all',self.panels[250]['options']['content'])
+
     def test_pi_is_absent_from_dashboard_queries(self):
         for variable in self.page['templating']['list']:
             query=variable.get('definition','')

@@ -1755,6 +1755,7 @@ def build_snapshot(
         # Publish no selection, so every settings consumer refuses the document.
         if outcomes is None or model_selection.policy_ready(outcomes):
             snapshot["model_selection"] = model_selection.build(snapshot, orchestrators, evidence=outcomes)
+        model_quality.annotate(snapshot['model_quality'],snapshot.get('model_selection') or {})
         # The table already publishes every effort row once. Duplicating all
         # rows on candidates can push the shared snapshot beyond reader bounds.
         for candidate in snapshot.get('candidates') or []:
