@@ -25,8 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
 import aa_3d  # noqa: E402
+import account_availability as account_availability_module  # noqa: E402
+import card_order as card_order_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
+import free_selection as free_selection_module  # noqa: E402
+import outcomes as outcomes_module  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
 import published as published_module  # noqa: E402
@@ -35,9 +39,15 @@ import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
+import static_routes as static_routes_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
+import usage_inference  # noqa: E402
 from metrics import MetricWriter, Sample, SourceResult  # noqa: E402
+# The scope of a quota window lives with the other window rules now, in the
+# quota module. Both names are imported here, so the collector keeps one
+# place that knows the scope of a window.
+from quota import WINDOW_SCOPES, _window_scope  # noqa: E402,F401
 from t3client import T3Client, T3Error  # noqa: E402
 from util import now as wall_clock  # noqa: E402
 
@@ -48,6 +58,12 @@ SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
+# The OpenCode request records, inside the T3 Code home. The reader opens the
+# database read only, and the unit's read only paths cover the home.
+OPENCODE_DB_FILE = f"{T3_HOME}/{usage_inference.OPENCODE_DB_RELATIVE}"
+# The reader's own cache of the OpenCode events, in the collector's state
+# directory. The state directory is writable and nothing else is.
+EVENTS_CACHE_FILE = usage_inference.EVENTS_CACHE_PATH
 # The T3 Code state, read only. It carries the observed failures of the
 # routes: a child that could not start, a provider that reported its
 # allowance spent, a model that was refused.
@@ -91,6 +107,18 @@ AA_3D_CACHE_PATH = "/var/lib/ghostship-ai-usage/aa-3d.json"
 
 # The durable facts of the models, written by the daily procedure.
 FACTS_PATH = "/var/lib/ghostship-ai-usage/facts.json"
+
+# The model identities: which routes serve one model. The file sits beside
+# the runtime policy, and the collector reads it when it is there.
+MODEL_IDENTITIES_FILE = "model-identities.json"
+
+# The delegation ledger and its backfill. The ledger is a SQLite database
+# with the rounds that were observed, and the backfill carries the rounds
+# the ledger does not have. The collector opens the ledger read only and
+# never writes it.
+DELEGATION_DIR = f"{T3_HOME}/.local/state/ghostship-agent/delegation"
+DELEGATION_LEDGER_FILE = f"{DELEGATION_DIR}/ledger.sqlite3"
+DELEGATION_BACKFILL_FILE = f"{DELEGATION_DIR}/backfill.json"
 
 # Every account the dashboard covers, and where its readings come from.
 # A provider without a reader still gets a row, so nothing disappears.
@@ -156,6 +184,17 @@ METRIC_HELP = {
     "ghostship_ai_free_model_observed_timestamp_seconds": "When the free model list was read.",
     "ghostship_ai_pool_model_info": "One for a model the free pool may use.",
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
+    "ghostship_ai_pool_model_unavailable_reason": (
+        "The pool's own reason a model is unavailable, with the account's or "
+        "the owner's rule it names."
+    ),
+    "ghostship_ai_pool_probe": (
+        "One for the free pool's own probe of a route, with the state and "
+        "category of the answer, the provider and the model it checked."
+    ),
+    "ghostship_ai_pool_probe_timestamp_seconds": (
+        "When the free pool checked a route."
+    ),
     "ghostship_ai_pool_model_selected": "Whether a pool model is the selected one.",
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
     "ghostship_ai_pool_route_last_used_timestamp_seconds": (
@@ -187,7 +226,9 @@ METRIC_HELP = {
     "ghostship_ai_pool_health_events": "Successes and failures recorded for a pool model.",
     "ghostship_ai_pool_latency_seconds": "Observed latency of a pool model.",
     "ghostship_ai_pool_concurrency": "Current and allowed concurrency of a pool provider.",
-    "ghostship_ai_pool_recent_jobs": "One for a recent job in the free pool.",
+    "ghostship_ai_pool_recent_jobs": (
+        "The count of recent jobs in the free pool with these labels."
+    ),
     "ghostship_ai_pool_quota_amount": "A quota amount observed in provider response headers.",
     "ghostship_ai_pool_quota_reset_seconds": "When an observed quota resets.",
     "ghostship_ai_pool_quota_observed_timestamp_seconds": "When an observed quota was seen.",
@@ -203,7 +244,23 @@ METRIC_HELP = {
     ),
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
+    "ghostship_ai_model_trust_info": (
+        "The trust of a model for a task type, with the level it holds and "
+        "the reason it holds it."
+    ),
+    "ghostship_ai_model_outcome": (
+        "The measured outcome of a model for a task type: the prior p0, the "
+        "prior strength k, the observed rounds n and s, and the quality p."
+    ),
     "ghostship_ai_model_quality": "The quality score of a model.",
+    "ghostship_ai_model_quality_score": (
+        "The display quality score of a model: one integer 0..100 per model, "
+        "comparable across every tier, with the basis it was built from."
+    ),
+    "ghostship_ai_model_quality_rounds": (
+        "The observed rounds behind a model's display quality score, summed "
+        "over every task type: n the rounds and s the accepted ones."
+    ),
     "ghostship_ai_model_available": (
         "Whether a model can be used right now, with the reason it cannot."
     ),
@@ -214,7 +271,24 @@ METRIC_HELP = {
         "One for a model whose headroom is unknown, with the reason it is unknown."
     ),
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
+    "ghostship_ai_model_capacity_basis": (
+        "Where the capacity of a model comes from: a reading the provider "
+        "reported, an inference from the limit failures of the route, a "
+        "statement the provider publishes, or nothing at all."
+    ),
+    "ghostship_ai_model_capacity_budget": (
+        "The budget an inferred capacity was measured against, in the unit "
+        "it was measured in."
+    ),
+    "ghostship_ai_model_capacity_episodes": (
+        "The limit episodes an inferred capacity was measured from."
+    ),
+    "ghostship_ai_inference_unmatched_events": (
+        "The recorded events whose route is not in the collector's "
+        "inventory. They are counted and never guessed."
+    ),
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
+    "ghostship_ai_model_info": "One for a candidate model, with the human name of the model.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
     # The two series below are no longer emitted: the 3D prior and its blended
@@ -326,6 +400,54 @@ METRIC_HELP = {
     "ghostship_ai_provider_capacity_windows": (
         "The account windows of a provider, split into known and unknown."
     ),
+    "ghostship_ai_account_window_remaining_ratio": (
+        "The share of an account window that is left. One series per window "
+        "of an account, and the label says which window it is."
+    ),
+    "ghostship_ai_account_window_expected_remaining_ratio": (
+        "The share of an account window that an even spend would have left "
+        "by now; the line of the bar."
+    ),
+    "ghostship_ai_account_window_pace_state": (
+        "The band of an account window against its own even-spend line, in "
+        "the state label: ahead, on_pace, behind, far_behind, spent or "
+        "unknown. One series per window, with the labels of "
+        "ghostship_ai_account_window_remaining_ratio plus the state."
+    ),
+    "ghostship_ai_account_window_reset_timestamp_seconds": (
+        "When an account window resets."
+    ),
+    "ghostship_ai_account_window_check_timestamp_seconds": (
+        "When an account window was checked: the moment the provider "
+        "reported it, in seconds. It is the moment of the reading the row "
+        "is drawn from, so the age of a card is the age of its reading. A "
+        "reading without a check time publishes none."
+    ),
+    "ghostship_ai_account_window_rolling": (
+        "One for an account window that rolls: a window shorter than five "
+        "minutes with no reset."
+    ),
+    "ghostship_ai_account_window_order": (
+        "The place a window takes in the card of its account: 1 is the "
+        "session window, and a monthly window comes after a weekly one."
+    ),
+    "ghostship_ai_account_window_learning": (
+        "One for an account that publishes no window of its own yet."
+    ),
+    "ghostship_ai_account_availability": (
+        "Whether an account can serve right now, with the reason it cannot "
+        "when it cannot, and the basis of its limit: learning, unpublished or "
+        "published."
+    ),
+    "ghostship_ai_account_availability_check_timestamp_seconds": (
+        "When the availability of an account was observed: the newest "
+        "observation of the routes that were counted."
+    ),
+    "ghostship_ai_account_card_order": (
+        "The place the card of an account takes on the Providers page: 1 is "
+        "the first card, and the places hold no gap. Scope is t3 when any "
+        "candidate is mapped to the live T3 catalog, otherwise free."
+    ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
     "ghostship_ai_collection_duplicate_series": (
@@ -335,6 +457,58 @@ METRIC_HELP = {
     "ghostship_ai_routing_enabled": (
         "One when the owner's routing switch is on. The collector publishes "
         "the switch and never acts on it itself."
+    ),
+    "ghostship_ai_static_route_info": (
+        "One for every model of the owner's static worker table, with the "
+        "role the table gives it and every entry that names it."
+    ),
+    "ghostship_ai_static_route_remaining_ratio": (
+        "The share left of a static route's capacity, read from the routing "
+        "snapshot's candidate of that route."
+    ),
+    "ghostship_ai_static_route_paced_availability": (
+        "The Paced Availability of a static route: the pace delta of the "
+        "capacity of its candidate."
+    ),
+    "ghostship_ai_static_route_pace_state": (
+        "The band of a static route against the line of its capacity, in the "
+        "state label: ahead, on_pace, behind, far_behind, spent or unknown. "
+        "One series per row, with the row label plus the state. The line is "
+        "the share left minus the route's Paced Availability, and the band "
+        "is the value policy's."
+    ),
+    "ghostship_ai_static_route_reset_timestamp_seconds": (
+        "When the capacity window that binds a static route resets."
+    ),
+    "ghostship_ai_static_route_policy_ok": (
+        "One when the runtime policy that carries the static worker routes "
+        "was read, zero when it is missing or unreadable."
+    ),
+    "ghostship_ai_free_provider_selection_info": (
+        "One for every free provider, with the model it selected for the "
+        "free tier and the basis of that selection."
+    ),
+    "ghostship_ai_free_provider_selection_remaining_ratio": (
+        "The share left of the capacity of the free selection of a provider."
+    ),
+    "ghostship_ai_free_provider_selection_paced_availability": (
+        "The Paced Availability of the free selection of a provider: the "
+        "pace delta of the capacity of the route it selected."
+    ),
+    "ghostship_ai_free_provider_selection_pace_state": (
+        "The band of a free provider's selection against the line of its "
+        "capacity, in the state label: ahead, on_pace, behind, far_behind, "
+        "spent or unknown. One series per free provider, with the provider "
+        "label plus the state. The line is the share left minus the "
+        "selection's Paced Availability, and the band is the value policy's."
+    ),
+    "ghostship_ai_free_provider_selection_reset_timestamp_seconds": (
+        "When the capacity window that binds the free selection of a "
+        "provider resets."
+    ),
+    "ghostship_ai_provider_free_models": (
+        "The free models of a provider, split into the ones that are "
+        "available and the ones that are not."
     ),
 }
 
@@ -577,21 +751,6 @@ def free_model_samples(
     return samples
 
 
-# The providers that report a window per model family. A window that names a
-# family only applies to the models of that family; every other window
-# applies to the whole account.
-WINDOW_SCOPES = (
-    ("3p-", ("claude", "gpt")),
-    ("gemini-", ("gemini",)),
-    ("fable", ("fable",)),
-    ("sonnet", ("sonnet",)),
-    ("opus", ("opus",)),
-    ("haiku", ("haiku",)),
-    ("sol", ("sol",)),
-    ("astra", ("astra",)),
-)
-
-
 # A cooldown further out than this cannot be true. A millisecond timestamp
 # read as seconds lands tens of thousands of years out, and a value like
 # that is a broken reading, not a park. It is reported as an issue and it
@@ -609,15 +768,6 @@ FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
 # and it competes in bulk. A model that is in both sets is a promotional
 # route: the promotional zero price is checked first.
 PROMO_PROVIDERS = ("opencode", "ollama")
-
-
-def _window_scope(quota_id: str) -> tuple[str, ...]:
-    """The model families a quota window applies to."""
-    text = str(quota_id or "").lower()
-    for marker, families in WINDOW_SCOPES:
-        if marker in text:
-            return families
-    return ()
 
 
 def _published_unlimited_routes(
@@ -646,6 +796,85 @@ def _published_unlimited_routes(
             continue
         routes.append((str(provider), str(model)))
     return routes
+
+
+def _measured_window_keys(
+    measured_windows: Iterable[Mapping[str, Any]],
+) -> set[str]:
+    """The keys the provider-reported windows occupy.
+
+    A window the provider reports for the whole account is keyed by the
+    provider, and the one it reports for a single model by the route. An
+    inferred window is filed beside them, never over them.
+    """
+    keys: set[str] = set()
+    for measured in measured_windows or ():
+        provider = str(measured.get("provider") or "")
+        if not provider:
+            continue
+        model = str(measured.get("model") or "*")
+        keys.add(provider if model == "*" else f"{provider}/{model}")
+    return keys
+
+
+def inferred_windows(
+    context: Mapping[str, Any],
+    occupied: Iterable[str],
+    moment: float,
+) -> list[dict[str, Any]]:
+    """The windows the limit failures of the routes imply, in filing order.
+
+    The capacity of a route is its own learned window, not its provider's
+    silence. A route that was never refused files a "no limit seen" window
+    under the provider key; while a refused route of the same provider
+    exists, that quiet window is not the provider's capacity and it never
+    takes the provider key: the learned window of the refused route is.
+
+    A reported or a published window is never replaced. The keys those
+    windows already occupy are given, and an inferred window is skipped when
+    the account, the route, or the key itself holds one. The account's
+    capacity is the same for every one of its routes, so it is filed once.
+
+    Each entry carries the key it is filed under, the route it came from,
+    the model families it applies to, and the window itself. The ranking
+    reads the key and the window; the snapshot publishes the account record,
+    which keeps the route's model as the scope of a model-scoped limit.
+    """
+    capacities = context.get("inferred_capacity") or {}
+    taken = set(occupied)
+    refused = {
+        str(capacity.get("provider") or "")
+        for capacity in capacities.values()
+        if str(capacity.get("state") or "") != usage_inference.STATE_NO_FAILURE
+    }
+    filed: list[dict[str, Any]] = []
+    keys: set[str] = set()
+    for route, capacity in sorted(capacities.items()):
+        provider, model = str(route[0]), str(route[1])
+        state = str(capacity.get("state") or "")
+        if state == usage_inference.STATE_NO_FAILURE and provider in refused:
+            # A route that was never refused stands behind no budget at
+            # all, and it never stands in for a refused route of its
+            # provider.
+            continue
+        key = usage_inference.key_for(capacity)
+        if key in taken or provider in taken or f"{provider}/{model}" in taken:
+            continue
+        if key in keys:
+            continue
+        keys.add(key)
+        filed.append(
+            {
+                "key": key,
+                "provider": provider,
+                "model": model,
+                "applies_to": (
+                    (model,) if str(capacity.get("scope") or "") == "model" else ()
+                ),
+                "window": usage_inference.window_for(capacity, moment),
+            }
+        )
+    return filed
 
 
 def provider_limit_samples(
@@ -888,8 +1117,13 @@ def ranking_inputs(
     # window of its own, so it has a stated state instead of no state, and
     # the paid allowance of the account does not gate it. The documentation
     # lists those routes as unlimited "for a limited time", so the basis of
-    # the window is a promotion and the end of it is unknown.
-    for provider, model in _published_unlimited_routes(catalog, inventory):
+    # the window is a promotion and the end of it is unknown. A free route
+    # reaches the collector on two paths, the instance inventory and the
+    # catalog's free list, and it is the same route on both: the published
+    # listing does not depend on whether the instance offers it today.
+    for provider, model in _published_unlimited_routes(
+        catalog, set(inventory) | free
+    ):
         windows.setdefault(f"{provider}/{model}", []).append(
             ranking_module.QuotaWindow(
                 kind="unlimited",
@@ -902,6 +1136,15 @@ def ranking_inputs(
                 basis=published_module.GO_FREE_BASIS,
             )
         )
+    # The capacity the limit failures of a route imply. A route that
+    # reports its usage keeps its reported window: an inference never
+    # overrides a reported reading, and a route whose account already has a
+    # window keeps that one as well. The window is keyed by the route when
+    # the limit is the model's own, and by the provider when the limit
+    # belongs to the account. A route that was never refused never stands in
+    # for a refused route of its provider.
+    for inferred in inferred_windows(context, windows, moment):
+        windows.setdefault(inferred["key"], []).append(inferred["window"])
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
@@ -909,6 +1152,8 @@ def ranking_inputs(
     pool_limits: dict[tuple[str, str, str, str], float] = {}
     pool_cooldowns: dict[tuple[str, str], float] = {}
     pool_last_used: dict[tuple[str, str], float] = {}
+    pool_probes: dict[tuple[str, str], dict[str, Any]] = {}
+    pool_unavailable_reasons: dict[tuple[str, str], str] = {}
     for name, labels, value in _iter_samples(results):
         pool_provider = str(labels.get("provider") or "")
         pool_model = str(labels.get("model") or "")
@@ -939,6 +1184,24 @@ def ranking_inputs(
             # When the pool last sent a job to the route. The least recently
             # used route breaks the tie inside the quality band.
             pool_last_used[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_probe":
+            # The pool's own probe of the route: its state and the class of
+            # the answer. The moment comes with its own series.
+            entry = pool_probes.setdefault(
+                (pool_provider, pool_model), {}
+            )
+            entry["state"] = str(labels.get("state") or "")
+            entry["category"] = str(labels.get("category") or "")
+        elif name == "ghostship_ai_pool_probe_timestamp_seconds":
+            pool_probes.setdefault((pool_provider, pool_model), {})["at"] = float(
+                value
+            )
+        elif name == "ghostship_ai_pool_model_unavailable_reason":
+            # The pool's own reason a candidate is unavailable. The snapshot
+            # repeats it for a parked route instead of guessing one.
+            pool_unavailable_reasons[(pool_provider, pool_model)] = str(
+                labels.get("reason") or ""
+            )
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -993,6 +1256,16 @@ def ranking_inputs(
                 "basis": value[1],
             }
         )
+    for (pool_provider, pool_model), probe in sorted(pool_probes.items()):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["probe"] = dict(probe)
+    for (pool_provider, pool_model), reason in sorted(
+        pool_unavailable_reasons.items()
+    ):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["unavailable_reason"] = reason
     for key, entry in pool_evidence.items():
         # A provider-wide cooldown belongs to every route of that provider.
         cooldown = pool_cooldowns.get(key)
@@ -1004,6 +1277,10 @@ def ranking_inputs(
         # quality band of the free tier, and it is absent when the pool has
         # no reading for the route.
         entry["last_used"] = pool_last_used.get(key)
+        # The pool's own probe of the route, and its reason for parking a
+        # candidate. Both are absent when the pool published neither.
+        entry["probe"] = pool_probes.get(key)
+        entry["unavailable_reason"] = pool_unavailable_reasons.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -1017,6 +1294,113 @@ def ranking_inputs(
         "pool_issues": pool_issues,
         "pool_limits": pool_limits,
     }
+
+
+def merge_record_retirements(
+    retired: Mapping[str, Mapping[str, Any]],
+    record_retirements: Mapping[str, Mapping[str, Any]],
+    record_last_success: Mapping[str, float],
+) -> dict[str, dict[str, Any]]:
+    """Add the retirements the OpenCode request record shows.
+
+    Some retirements reach the collector only through the request record,
+    not through T3 Code's run history. They join the same record, keyed by
+    "provider/model": a route keeps the earliest moment it was first seen
+    retired, and a success the request record shows after that moment
+    clears it, as a successful run does.
+    """
+    merged = {str(route): dict(record) for route, record in (retired or {}).items()}
+    for route, record in (record_retirements or {}).items():
+        previous = merged.get(route)
+        entry = dict(record)
+        if previous is not None:
+            earlier = float(previous.get("first_seen") or 0.0)
+            if earlier and earlier < float(entry.get("first_seen") or 0.0):
+                entry["first_seen"] = earlier
+        merged[route] = entry
+    for route in list(merged):
+        succeeded = (record_last_success or {}).get(route)
+        if succeeded is None:
+            continue
+        if float(succeeded) > float(merged[route].get("first_seen") or 0.0):
+            merged.pop(route, None)
+    return merged
+
+
+def retired_routes(
+    persisted: Mapping[str, Mapping[str, Any]] | None,
+    failures: Iterable[Mapping[str, Any]] | None,
+    successes: Mapping[str, float] | None,
+) -> dict[str, dict[str, Any]]:
+    """The routes that are retired, and the moment each was first seen.
+
+    A provider that retired a model does not serve it again, so the
+    retirement is not a failure of an hour: it is kept in the collector's
+    own state file and outlives the window of the failure that reported it.
+    A later successful run of the route clears it: the provider serves the
+    model again, and the route is usable once more.
+
+    A retirement is scoped to one route. The other models of the same
+    provider are not touched by it.
+    """
+    found: dict[str, dict[str, Any]] = {
+        str(route): dict(record) for route, record in (persisted or {}).items()
+    }
+    for failure in failures or ():
+        if (
+            str(failure.get("reason") or "")
+            != runtime_state_module.REASON_MODEL_RETIRED
+        ):
+            continue
+        route = str(failure.get("route") or failure.get("target") or "")
+        if not route:
+            continue
+        record = {
+            "provider": str(failure.get("provider") or ""),
+            "model": str(failure.get("model") or ""),
+            "route": route,
+            "first_seen": float(failure.get("observed_at") or 0.0),
+            "reason": runtime_state_module.REASON_MODEL_RETIRED,
+        }
+        previous = found.get(route)
+        if previous is not None:
+            # The retirement started when it was first seen, and a later
+            # report of it does not make it younger.
+            first_seen = float(previous.get("first_seen") or 0.0)
+            if first_seen and (
+                not record["first_seen"] or first_seen < record["first_seen"]
+            ):
+                record["first_seen"] = first_seen
+        found[route] = record
+    # A later successful run of the route clears the retirement.
+    for route in list(found):
+        succeeded = (successes or {}).get(route)
+        if succeeded is None:
+            continue
+        if float(succeeded) > float(found[route].get("first_seen") or 0.0):
+            found.pop(route, None)
+    return found
+
+
+def _success_window(
+    now: float, retired: Mapping[str, Mapping[str, Any]] | None
+) -> float:
+    """How far back a successful run is read to clear a retirement.
+
+    A successful run that is older than the window of a failure still
+    clears a retirement when it is newer than the retirement itself, so
+    the window of the successes reaches back to the first retirement the
+    collector remembers.
+    """
+    window = float(runtime_state_module.MAX_AGE_SECONDS)
+    first_seen = [
+        float(record.get("first_seen") or 0.0)
+        for record in (retired or {}).values()
+        if record.get("first_seen")
+    ]
+    if not first_seen:
+        return window
+    return max(window, float(now) - min(first_seen))
 
 
 def ranking_samples(
@@ -1131,9 +1515,25 @@ def ranking_samples(
     # The observed failures of the routes, read from the T3 Code state. A
     # route that is known to be broken does not win a tier, and it stays
     # visible with the reason and the moment it was observed.
-    observed_failures = runtime_state_module.read_failures(t3_state, now)
-    if "observed_failures" in inspect.signature(ranking_module.rank_models).parameters:
-        rank_kwargs["observed_failures"] = observed_failures
+    #
+    # The routes whose model a provider retired are kept in the collector's
+    # own state file: the retirement outlives the window of the failure
+    # that reported it.
+    persisted = ranking_module.retired_from_state(
+        ranking_module.load_state(state_path)
+    )
+    observations = runtime_state_module.read_observations(
+        t3_state, now, success_age_seconds=_success_window(now, persisted)
+    )
+    observed_failures = observations["failures"]
+    retired = retired_routes(persisted, observed_failures, observations["successes"])
+    retired = merge_record_retirements(
+        retired,
+        context.get("inferred_retirements") or {},
+        context.get("inferred_last_success") or {},
+    )
+    if "retired_routes" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["retired_routes"] = retired
     for failure in observed_failures:
         samples.append(
             (
@@ -1162,7 +1562,15 @@ def ranking_samples(
     context["observed_failures"] = observed_failures
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
-    samples.extend(ranking_module.rank_samples(ranked, now=now))
+    samples.extend(
+        ranking_module.rank_samples(
+            ranked,
+            now=now,
+            native_models=context.get("native_models") or {},
+            aa_cache=aa_cache,
+            catalog=catalog,
+        )
+    )
     return samples, ranked
 
 
@@ -1184,6 +1592,52 @@ def read_facts(facts_path: str | None) -> dict[str, Any]:
     return facts if isinstance(facts, dict) else {}
 
 
+def model_identities_path(explicit: str | None, runtime_policy: str | None) -> str:
+    """The model identities file: the one named, or the one beside the policy.
+
+    The runtime policy and the model identities ship together in the
+    owner's policy tree, so the default is the identities file in the
+    directory of the runtime policy. With neither, there is no file.
+    """
+    if explicit:
+        return str(explicit)
+    if runtime_policy:
+        return str(Path(runtime_policy).parent / MODEL_IDENTITIES_FILE)
+    return ""
+
+
+def read_outcomes(
+    *,
+    identities_path: str | None = None,
+    runtime_policy: str | None = None,
+    ledger: str | None = None,
+    backfill: str | None = None,
+) -> dict[str, Any]:
+    """The trust of the models and the rounds that were observed.
+
+    Four files are read, and none of them is written: the model
+    identities, the runtime policy that carries the owner's trust, the
+    delegation ledger, and its backfill.
+
+    Every reading is total. A file that is missing, unreadable or empty is
+    an empty history, and a model that nothing speaks about is trusted.
+    """
+    policy: dict[str, Any] = {}
+    if runtime_policy:
+        try:
+            document = json.loads(Path(runtime_policy).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            document = None
+        if isinstance(document, dict):
+            policy = document
+    return {
+        "identities": outcomes_module.load_identities(identities_path),
+        "policy": policy,
+        "rounds": outcomes_module.read_ledger(ledger),
+        "backfill": outcomes_module.load_backfill(backfill),
+    }
+
+
 def build_snapshot(
     results: list[SourceResult],
     ranked: list[Any],
@@ -1196,6 +1650,7 @@ def build_snapshot(
     aa_3d_cache: dict[str, Any] | None = None,
     free_models: set[tuple[str, str]] | None = None,
     promo_models: set[tuple[str, str]] | None = None,
+    outcomes: Mapping[str, Any] | None = None,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
@@ -1238,7 +1693,20 @@ def build_snapshot(
         free_models=free_models or set(),
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
+        # The probe of every route the OpenCode record shows. The snapshot
+        # takes the newer of it and the pool's own probe.
+        t3_probes=context.get("t3_probes") or {},
         inventory=context.get("ranking_inventory") or [],
+        # The learned windows of the routes whose limit failures measured
+        # them. The account section publishes them beside the reported
+        # readings, never over one, and a refused route keeps its record
+        # even while it has no ranked row.
+        inferred_windows=inferred_windows(
+            context, _measured_window_keys(measured_windows or []), now
+        ),
+        # The trust of the models and the rounds they were measured on.
+        # Without them every model is trusted and no round was observed.
+        outcomes=outcomes,
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
@@ -1260,6 +1728,8 @@ def collect(
     pool_ledger: str | None = POOL_LEDGER_FILE,
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
+    events_cache: str = EVENTS_CACHE_FILE,
+    opencode_db: str = OPENCODE_DB_FILE,
     window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
     t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
@@ -1299,6 +1769,25 @@ def collect(
     }
     offered = context.get("offered_models") or []
     extra.extend(free_model_samples(catalog, offered, pool_models, moment))
+    # The request records of the routes, and the capacity they imply. The
+    # two records are read at the same time and each of them caps itself, so
+    # the pair never holds the collector up. A record that cannot be read
+    # contributes no events: the routes it would have fed keep the basis
+    # they had.
+    routes = _known_routes(offered, pool_models, extra)
+    inferred = usage_inference.read_and_infer(
+        moment,
+        opencode_db=opencode_db,
+        events_cache=events_cache,
+        pool_ledger=pool_ledger,
+        routes=routes,
+    )
+    results.extend(inferred.results)
+    context["inferred_capacity"] = inferred.capacities
+    context["inferred_retirements"] = dict(inferred.retirements)
+    context["inferred_last_success"] = dict(inferred.last_success)
+    context["t3_probes"] = dict(inferred.probes)
+    context["inference_unmatched"] = dict(inferred.unmatched)
     ranking_metrics, ranked = ranking_samples(
         results,
         catalog,
@@ -1308,10 +1797,31 @@ def collect(
         state_path=state_path,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
+        t3_state=t3_state,
     )
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
     return results, extra, context
+
+
+def _known_routes(
+    offered: Iterable[tuple[str, str]],
+    pool_models: Iterable[tuple[str, str]],
+    samples: Iterable[Sample],
+) -> set[tuple[str, str]]:
+    """The routes the collector knows.
+
+    The inventory of the instance, the routes of the free pool and the free
+    list of the catalog. An event of a route that is not in this set cannot
+    be placed on a route, and it is counted and published as unmatched: a
+    reading never invents a route.
+    """
+    routes = {(str(provider), str(model)) for provider, model in offered or ()}
+    routes |= {(str(provider), str(model)) for provider, model in pool_models or ()}
+    for name, labels, _value in samples or ():
+        if name == "ghostship_ai_free_model":
+            routes.add((str(labels.get("provider") or ""), str(labels.get("model") or "")))
+    return routes
 
 
 def _iter_samples(results: Iterable[SourceResult]):
@@ -1381,6 +1891,89 @@ def feed_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
                 1.0,
             )
         )
+    return samples
+
+
+def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
+    """The trust of every model, and the outcomes it was measured on.
+
+    The trust is published per tier, because the trust of a model is read
+    for the task type of the tier it holds. The reason is published with
+    it, so a reader sees why a route is held back instead of only that it
+    is. The outcome is published as its own fields, so the prior, the
+    observed rounds and the quality can be read apart.
+    """
+    samples: list[Sample] = []
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        for tier, record in (row.get("trust") or {}).items():
+            if not isinstance(record, Mapping):
+                continue
+            samples.append(
+                (
+                    "ghostship_ai_model_trust_info",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "tier": str(tier),
+                        "task_type": str(record.get("task_type") or ""),
+                        "level": str(record.get("level") or "trusted"),
+                        "source": str(record.get("source") or "default"),
+                        "reason": str(record.get("reason") or ""),
+                    },
+                    1.0,
+                )
+            )
+        for tier, record in (row.get("outcome") or {}).items():
+            if not isinstance(record, Mapping):
+                continue
+            for field in ("p0", "k", "n", "s", "p"):
+                value = record.get(field)
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    continue
+                samples.append(
+                    (
+                        "ghostship_ai_model_outcome",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "tier": str(tier),
+                            "task_type": str(record.get("task_type") or ""),
+                            "field": field,
+                        },
+                        float(value),
+                    )
+                )
+        # The display score is one number per model, so neither series
+        # carries a tier: every page reads the same score of the same model.
+        score = row.get("quality_score")
+        if isinstance(score, (int, float)) and not isinstance(score, bool):
+            samples.append(
+                (
+                    "ghostship_ai_model_quality_score",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "basis": str(row.get("quality_basis") or ""),
+                    },
+                    float(score),
+                )
+            )
+        for field in ("n", "s"):
+            value = row.get(f"quality_{field}")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_quality_rounds",
+                        {"provider": provider, "model": model, "field": field},
+                        float(value),
+                    )
+                )
     return samples
 
 
@@ -1526,6 +2119,7 @@ def render(
     now: float,
     duration: float,
     snapshot: dict[str, Any] | None = None,
+    runtime_policy: str | None = None,
 ) -> str:
     writer = MetricWriter()
     for name, help_text in METRIC_HELP.items():
@@ -1579,9 +2173,42 @@ def render(
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
         writer.add(name, labels, value)
+    for name, labels, value in snapshot_module.account_window_samples(snapshot or {}):
+        writer.add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
+    for name, labels, value in trust_samples(snapshot or {}):
+        writer.add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    # The name the collector already publishes for a model, so a static row
+    # says what the model is. The row falls back to the model id.
+    display_names: dict[tuple[str, str], str] = {}
+    for name, labels, _value in list(_iter_samples(results)) + list(extra):
+        if name != "ghostship_ai_model_info":
+            continue
+        provider = str(labels.get("provider") or "")
+        model = str(labels.get("model") or "")
+        text = str(labels.get("name") or "")
+        if provider and model and text:
+            display_names[(provider, model)] = text
+    for name, labels, value in static_routes_module.samples(
+        runtime_policy, snapshot or {}, display_names
+    ):
+        writer.add(name, labels, value)
+    # The free selection of every free provider, and the free models it
+    # holds, read from the same snapshot.
+    for name, labels, value in free_selection_module.samples(
+        snapshot or {}, display_names
+    ):
+        writer.add(name, labels, value)
+    # The availability of every account: whether it can serve right now, why
+    # not when it cannot, and where its limit comes from.
+    for name, labels, value in account_availability_module.samples(snapshot or {}, now):
+        writer.add(name, labels, value)
+    # The place every card takes on the Providers page. The page draws the
+    # cards in this order, and the order is the owner's.
+    for name, labels, value in card_order_module.samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -1652,6 +2279,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--events-cache",
+        default=EVENTS_CACHE_FILE,
+        help=(
+            "Where the reader of the OpenCode request records keeps its own "
+            "cache of the events it read."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -1698,6 +2333,40 @@ def main(argv: list[str] | None = None) -> int:
             "consumers and never acts on it itself."
         ),
     )
+    parser.add_argument(
+        "--runtime-policy",
+        default="",
+        help=(
+            "The runtime policy that carries the owner's static worker "
+            "routes. A missing or unreadable file publishes no static rows "
+            "and says so; the rest of the collection is unaffected."
+        ),
+    )
+    parser.add_argument(
+        "--model-identities",
+        default="",
+        help=(
+            "The model identities: which routes serve one model. The "
+            "default is the model-identities.json beside the runtime "
+            "policy. A missing file is no identity at all."
+        ),
+    )
+    parser.add_argument(
+        "--delegation-ledger",
+        default=DELEGATION_LEDGER_FILE,
+        help=(
+            "The delegation ledger: the rounds that were observed. It is "
+            "opened read only, and a missing ledger is an empty history."
+        ),
+    )
+    parser.add_argument(
+        "--delegation-backfill",
+        default=DELEGATION_BACKFILL_FILE,
+        help=(
+            "The rounds the ledger does not carry, and the rounds whose "
+            "verdict it corrects. A missing file is no round at all."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -1710,6 +2379,7 @@ def main(argv: list[str] | None = None) -> int:
         now,
         state_path=args.state,
         window_state_path=args.window_state,
+        events_cache=args.events_cache,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
     )
@@ -1718,6 +2388,16 @@ def main(argv: list[str] | None = None) -> int:
     for result in results:
         measured.extend(result.windows)
     catalog = catalog_module.Catalog.load(args.aa_catalog)
+    outcomes = read_outcomes(
+        # The model identities sit beside the runtime policy, unless the
+        # caller names another file.
+        identities_path=model_identities_path(
+            args.model_identities, args.runtime_policy
+        ),
+        runtime_policy=args.runtime_policy,
+        ledger=args.delegation_ledger,
+        backfill=args.delegation_backfill,
+    )
     snapshot = build_snapshot(
         results,
         context.get("ranked") or [],
@@ -1730,9 +2410,17 @@ def main(argv: list[str] | None = None) -> int:
         free_models=context.get("free_models") or set(),
         promo_models=context.get("promo_models") or set(),
         aa_3d_cache=aa_3d_cache,
+        outcomes=outcomes,
         routing_enabled=routing_enabled,
     )
-    text = render(results, extra, now, duration, snapshot)
+    text = render(
+        results,
+        extra,
+        now,
+        duration,
+        snapshot,
+        runtime_policy=args.runtime_policy,
+    )
     if args.stdout:
         sys.stdout.write(text)
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")

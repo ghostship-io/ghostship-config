@@ -993,18 +993,23 @@ class DesignContractTests(unittest.TestCase):
         """Defect: the tier column recomputes the order, so a route the collector holds back (a 3D reserve) is listed above the routes ahead of it."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
         by_id = panels_by_id(page)
-        for pid, tier in ((40, 'frontier'), (41, 'bulk'), (42, 'free'), (43, '3d')):
-            order = by_id[pid]['targets'][0]['expr']
+        for pid, tier in ((201, 'bulk'), (202, 'free'), (203, 'frontier'), (204, '3d')):
+            panel = by_id[pid]
+            order = next(t['expr'] for t in panel['targets'] if '1000 -' in t['expr'])
             self.assertIn('ghostship_ai_model_winner_position', order, pid)
             self.assertIn(f'tier="{tier}"', order, pid)
             self.assertNotIn('ghostship_ai_model_paced_availability', order, pid)
             self.assertNotIn('pace_delta_ratio', order, pid)
             self.assertIn(self.TOLERANCE, order, pid)
-            # The panel still sorts on that key, descending.
-            sorts = [t for t in by_id[pid]['transformations'] if t['id'] == 'sortBy']
+            # The panel still sorts on that key, descending. Frontier's two
+            # rows are the owner's roles, not a ranking, and read Chief then
+            # Backup as the concept shows; the order key is still the
+            # collector's, and nothing re-ranks it.
+            sorts = [t for t in panel['transformations'] if t['id'] == 'sortBy']
             self.assertEqual(len(sorts), 1, pid)
+            expected = 'role' if tier == 'frontier' else 'order'
             self.assertEqual(sorts[0]['options']['sort'],
-                             [{'field': 'order key', 'desc': True}], pid)
+                             [{'field': expected, 'desc': True}], pid)
 
     def test_paced_availability_label_percent_left_and_freshness_tolerance(self):
         """Defect: ordering labelled as something other than Paced Availability, remaining shown as used, or snapshot equality drops live entitlement/fact series."""
@@ -1013,59 +1018,34 @@ class DesignContractTests(unittest.TestCase):
         self.assertNotIn(self.EQUALITY, blob)
         self.assertIn(self.TOLERANCE, blob)
         by_id = panels_by_id(page)
-        for pid, title in (
-                (40, 'Frontier · % left · Paced Availability'),
-                (41, 'Bulk · % left · Paced Availability'),
-                (42, 'Free · % left · Paced Availability'),
-                (43, '3D · % left · Paced Availability')):
-            self.assertEqual(by_id[pid]['title'], title)
-            self.assertIn('Paced Availability', by_id[pid]['description'])
-        meter = by_id[44]
-        names = []
-        for override in meter['fieldConfig']['overrides']:
-            for prop in override['properties']:
-                if prop['id'] == 'displayName':
-                    names.append(prop['value'])
-        self.assertIn('% left', names)
-        self.assertIn('Paced Availability', names)
+        for pid in (201, 202, 203, 204):
+            self.assertIn('Paced Availability', by_id[pid]['description'], pid)
+            # The share left and the share expected are read as percentages.
+            overrides = json.dumps(by_id[pid]['fieldConfig'])
+            self.assertIn('percentunit', overrides, pid)
         self.assertEqual(by_id[49]['title'], 'Paced Availability / resets in')
         why = [p for p in page['panels'] if p.get('type') == 'row'
                and str(p.get('title', '')).startswith('Why this order')]
         self.assertGreaterEqual(len(why), 5)
         self.assertTrue(all(p.get('collapsed') for p in why))
-        joined_40 = ' '.join(t['expr'] for t in by_id[40]['targets'])
-        self.assertIn('Chief (Claude Opus 5.5)', joined_40)
-        self.assertIn('Backup (Codex GPT-6.1-Sol)', joined_40)
+        joined = ' '.join(t['expr'] for t in by_id[203]['targets'])
+        self.assertIn('Chief', joined)
+        self.assertIn('Backup', joined)
 
     def test_allowance_left_bands_unknown_copy_and_no_table_in_top_band(self):
         """Defect: remaining bars use the wrong cutoffs, unknown windows fake a 0, or a table sits in the first screen."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
         by_id = panels_by_id(page)
-        for pid in (40, 41, 42, 43, 44, 50):
-            defaults = by_id[pid]['fieldConfig']['defaults']
-            # The bands are value mappings so that the unknown state keeps
-            # the panel's grey base colour instead of a red critical.
-            self.assertEqual(defaults['color'],
-                             {'mode': 'fixed', 'fixedColor': '#B8BFCC'}, pid)
-            ranges = [(m['options']['from'], m['options']['to'],
-                       m['options']['result']['color'])
-                      for m in defaults['mappings'] if m['type'] == 'range']
-            # In a tier column a route with 0% left is spent, not critical:
-            # it is grey with its reason. On a provider meter 0% left is
-            # critical, because the provider itself is spent.
-            low = 0.0001 if pid in (40, 41, 42, 43) else 0
-            self.assertEqual(ranges, [(low, 0.1, '#d03b3b'),
-                                       (0.1, 0.3, '#fab219'),
-                                       (0.3, 1, '#0ca30c')], pid)
-            unknown = [m for m in defaults['mappings'] if m['type'] == 'value']
-            self.assertEqual(unknown[0]['options']['-1']['text'], 'Limits unknown', pid)
-            self.assertEqual(unknown[0]['options']['-1']['color'], '#B8BFCC', pid)
-        self.assertEqual(by_id[40]['fieldConfig']['defaults']['noValue'],
-                         'No eligible measured model')
-        mapping = by_id[44]['fieldConfig']['defaults']['mappings'][0]['options']['-1']
-        self.assertEqual(mapping['text'], 'Limits unknown')
-        self.assertEqual(by_id[44]['repeat'], 'provider')
-        self.assertEqual(by_id[50]['repeat'], 'provider')
+        for pid in (201, 202, 203, 204):
+            content = by_id[pid]['options']['content']
+            # The bands of a bar are the owner's: normal, warning, destructive.
+            self.assertIn('warning', content, pid)
+            self.assertIn('destructive', content, pid)
+            # An unknown allowance says so; it never shows a zero, and it is
+            # never a red bar.
+            self.assertIn('Limits unknown', content, pid)
+            self.assertIn('{{#if hasCap}}', content, pid)
+            self.assertIn('{{#if hasPace}}', content, pid)
         self.assertEqual(by_id[46]['repeat'], 'allowance')
         self.assertTrue(by_id[46]['collapsed'])
         self.assertEqual(by_id[31]['title'], 'Facts and their coverage')
@@ -1080,27 +1060,25 @@ class DesignContractTests(unittest.TestCase):
         """Defect: a raw model id is shown where a person would say a name, the owner's roles are missing, or a reserved route is not marked."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
         by_id = panels_by_id(page)
-        frontier = ' '.join(t['expr'] for t in by_id[40]['targets'])
-        self.assertIn('Chief (Claude Opus 5.5)', frontier)
-        self.assertIn('Backup (Codex GPT-6.1-Sol)', frontier)
-        self.assertIn('Claude Opus 5.5', frontier)
-        self.assertIn('GPT-6.1-Sol', frontier)
-        # The display name joins the provider and the model of the row.
-        self.assertEqual(by_id[40]['fieldConfig']['defaults']['displayName'],
-                         '${__field.labels.provider} · ${__field.name}')
+        frontier = ' '.join(t['expr'] for t in by_id[203]['targets'])
+        self.assertIn('Chief', frontier)
+        self.assertIn('Backup', frontier)
+        self.assertIn('claude-opus-5-5', frontier)
+        self.assertIn('gpt-6[.]1-sol', frontier)
+        for pid in (201, 202, 203, 204):
+            # The display name joins the provider and the model of the row.
+            self.assertIn('{{#if name}}{{name}}{{else}}{{model}}{{/if}}',
+                          by_id[pid]['options']['content'], pid)
         # The 3D reserve is a label of the tier rows, joined on the raw id.
-        bulk = ' '.join(t['expr'] for t in by_id[41]['targets'])
+        bulk = ' '.join(t['expr'] for t in by_id[201]['targets'])
         self.assertIn('ghostship_ai_model_reserved', bulk)
-        # The provider card shows the allowance and the Paced Availability.
-        names = []
-        for override in by_id[44]['fieldConfig']['overrides']:
-            for prop in override['properties']:
-                if prop['id'] == 'displayName':
-                    names.append(prop['value'])
-        self.assertEqual(names, ['% left', 'Paced Availability'])
-        pace = by_id[44]['targets'][1]['expr']
-        self.assertIn('ghostship_ai_provider_paced_availability', pace)
-        self.assertIn('100 *', pace)
+        self.assertIn('3D reserve', by_id[201]['options']['content'])
+        # The pace of a route is the collector's own number.
+        self.assertIn('ghostship_ai_model_paced_availability', bulk)
+        # The static selection table reads the owner's route table.
+        selection = ' '.join(t['expr'] for t in by_id[206]['targets'])
+        self.assertIn('ghostship_ai_static_route_info', selection)
+        self.assertIn('ghostship_ai_routing_enabled', selection)
 
 
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_VLOGS') and os.environ.get('GHOSTSHIP_TEST_VMETRICS'),
@@ -1159,15 +1137,10 @@ class NativeStoreTests(unittest.TestCase):
         self.assertAlmostEqual(query(by_id[49]['targets'][1]), 100*(2/7-.05))
         self.assertEqual(query(by_id[49]['targets'][2]), 0,
                          'The shared exhausted weekly blocks the 95%-remaining sublimit')
-        expr = by_id[44]['targets'][0]['expr'].replace('$provider', '.*')
-        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
-            providers = json.load(response)['data']['result']
-        self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
-                         {'claude': 0, 'cursor': -1},
-                         'Exhausted and unknown providers must remain distinct')
-        # The tier column lists every ranked route of the tier: the
+        # The tier section lists every ranked route of the tier: the
         # available ones first, the spent or unknown ones below them.
-        expr = by_id[41]['targets'][0]['expr'].replace('$provider', '.*')
+        order_target = next(t for t in by_id[201]['targets'] if '1000 -' in t['expr'])
+        expr = order_target['expr'].replace('$provider', '.*')
         with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
             result = json.load(response)['data']['result']
         keys = {r['metric']['model']: float(r['value'][1]) for r in result}
@@ -1175,7 +1148,9 @@ class NativeStoreTests(unittest.TestCase):
                          'Every ranked route of the tier is listed, and an old one is not')
         self.assertGreater(keys['current'], keys['other-provider'],
                            'An available route sorts above a spent one')
-        expr = by_id[41]['targets'][1]['expr'].replace('$provider', '.*')
+        left_target = next(t for t in by_id[201]['targets']
+                           if 'ghostship_ai_model_capacity_remaining' in t['expr'])
+        expr = left_target['expr'].replace('$provider', '.*')
         with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
             result = json.load(response)['data']['result']
         self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result},
@@ -1344,24 +1319,28 @@ class NativeStoreTests(unittest.TestCase):
             with urllib.request.urlopen(url, timeout=5) as response:
                 return json.load(response)['data']['result']
 
-        def column(target_index):
-            expr = by_id[41]['targets'][target_index]['expr'].replace('$provider', '.*')
+        def column(target):
+            expr = target['expr'].replace('$provider', '.*')
             return query(expr)
 
-        order = column(0)
-        left = column(1)
+        order = column(next(t for t in by_id[201]['targets'] if '1000 -' in t['expr']))
+        left = column(next(t for t in by_id[201]['targets']
+                           if 'ghostship_ai_model_capacity_remaining' in t['expr']))
         models = {row['metric']['model'] for row in left}
-        self.assertEqual(models, {'Claude Haiku 5.5', 'Grok 4.6 · session limit'},
-                         'An exhausted route stays visible in its tier, with its reason')
-        exhausted = [row for row in left if row['metric']['model'].startswith('Grok 4.6')]
+        self.assertEqual(models, {'claude-haiku-5-5', 'grok-4.6'},
+                         'An exhausted route stays visible in its tier')
+        exhausted = [row for row in left if row['metric']['model'] == 'grok-4.6']
         self.assertEqual(len(exhausted), 1)
         self.assertAlmostEqual(float(exhausted[0]['value'][1]), 0.0,
                                msg='An exhausted route shows 0% left')
-        self.assertEqual(exhausted[0]['metric'].get('why'), 'session limit',
+        why = next(t for t in by_id[201]['targets'] if 'ghostship_ai_model_available' in t['expr'])
+        reasons = {row['metric']['model']: row['metric'].get('why')
+                   for row in query(why['expr'].replace('$provider', '.*'))}
+        self.assertEqual(reasons.get('grok-4.6'), 'an allowance of the account is spent',
                          'An exhausted route carries the reason it is spent')
         keys = {row['metric']['model']: float(row['value'][1]) for row in order}
-        self.assertIn('Grok 4.6 · session limit', keys)
-        self.assertLess(keys['Grok 4.6 · session limit'], keys['Claude Haiku 5.5'],
+        self.assertIn('grok-4.6', keys)
+        self.assertLess(keys['grok-4.6'], keys['claude-haiku-5-5'],
                         'The exhausted route sorts below every available route')
 
     def server(self, binary, directory):
@@ -1531,16 +1510,16 @@ class NativeStoreTests(unittest.TestCase):
         self.assertIn('Routing off or disabled providers', titles)
         exception = titles['Providers with no fresh reading']
         self.assertTrue(all('unless on(source)' in t['expr'] for t in exception['targets']))
-        # Graphics (tier bars, then provider cards) sit above collapsed evidence.
-        self.assertLess(by_id[40]['gridPos']['y'], by_id[44]['gridPos']['y'])
-        self.assertLess(by_id[44]['gridPos']['y'], by_id[46]['gridPos']['y'])
+        # The sections of the page sit above the collapsed evidence.
+        self.assertLess(by_id[201]['gridPos']['y'], by_id[46]['gridPos']['y'])
+        self.assertLess(by_id[206]['gridPos']['y'], by_id[46]['gridPos']['y'])
         self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
                         titles['Quota windows']['gridPos']['y'])
-        frontier = by_id[40]
+        frontier = by_id[203]
         joined = ' '.join(t['expr'] for t in frontier['targets'])
-        self.assertIn('Chief (Claude Opus 5.5)', joined)
-        self.assertIn('Backup (Codex GPT-6.1-Sol)', joined)
-        self.assertIn('Paced Availability', frontier['title'])
+        self.assertIn('Chief', joined)
+        self.assertIn('Backup', joined)
+        self.assertIn('Paced Availability', frontier['description'])
 
     def test_host_grid_reports_twenty_cores_in_numeric_order_with_a_hot_core(self):
         now = int(time.time())

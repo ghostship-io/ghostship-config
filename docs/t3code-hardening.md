@@ -371,3 +371,9 @@ above, so a low published port is refused. The bridge discovers only ports
 published on all interfaces or on loopback, so a port published to one specific
 address is not forwarded through the T3 bridge. These are limits of the current
 implementation, not configuration choices.
+
+The hardened outer container requires every extra option to carry its value in
+the same `--flag=value` token. This prevents a bare option such as `--label`
+from consuming the canonical cgroup-parent or PID-limit option as its value
+while the resource assertions mistakenly count it as active. The legacy path
+is unchanged. Actual Nix-module regressions cover both hidden resource flags.

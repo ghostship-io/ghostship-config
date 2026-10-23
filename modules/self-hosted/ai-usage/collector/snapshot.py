@@ -49,6 +49,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,8 +58,19 @@ from typing import Any, Iterable, Mapping
 import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
+import outcomes as outcomes_module
 import quota as quota_module
+import ranking as ranking_module
+import usage_inference
 import value_policy
+
+try:  # pragma: no cover - the collector always ships metrics.py
+    from metrics import ExactLabel, MAX_LABEL_LENGTH
+except ImportError:  # pragma: no cover - standalone use
+    class ExactLabel(str):  # pragma: no cover - standalone use
+        """A label value that is published exactly as it is."""
+
+    MAX_LABEL_LENGTH = 120
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -76,12 +88,94 @@ QUOTA_AVAILABLE = "available"
 QUOTA_EXHAUSTED = "exhausted"
 QUOTA_UNKNOWN = "unknown"
 
+# Why a route the instance does not offer is unusable. The ranking decides
+# that the route is not offered; the catalog says whether the model behind
+# it is deprecated, and the reason names both facts. A route without a
+# catalog status keeps the bare fact, and a reader never sees an unavailable
+# route with an empty reason.
+NOT_OFFERED_REASON = "not offered by the T3 instance"
+NOT_OFFERED_DEPRECATED_REASON = (
+    "not offered by the T3 instance (deprecated in the catalog)"
+)
+
+# Why a route the free pool parked is unusable. The pool marks a route
+# unavailable for a future cooldown, or when the account's policy does not
+# let it serve development work, and it publishes no reason of its own. The
+# snapshot names the two cases: a route whose cooldown has not run out yet
+# says when it cools down, and a route without one says that the pool does
+# not offer it. A reader never sees a parked route with an empty reason.
+POOL_COOLDOWN_REASON = "cooling down in the free pool until {cooldown}"
+POOL_NOT_OFFERED_REASON = (
+    "the free pool does not offer the route for development work"
+)
+
+# The pool's own reason a candidate is parked. The pool names the rule that
+# holds the route out of the pool, and the snapshot repeats it instead of
+# guessing one. A "cooldown" is the one reason that also carries a moment.
+POOL_PARKED_REASONS = {
+    "hosting_restricted": (
+        "the owner's hosting rule keeps this route to research work"
+    ),
+    "account_policy": (
+        "the account's data policy or workloads do not allow development work"
+    ),
+    "suspended": "the account is suspended",
+}
+POOL_PARKED_COOLDOWN = "cooldown"
+
+# Whether a route answered its last live probe. A reading older than two
+# days is not a probe any more: the route may have changed in the meantime.
+PROBE_WORKS = "works"
+PROBE_FAILS = "fails"
+PROBE_UNPROBED = "unprobed"
+PROBE_MAX_AGE_SECONDS = 172800
+PROBE_SOURCE_POOL = "pool_probe"
+PROBE_SOURCE_T3 = "t3_probe"
+
+# The class of a failed free-pool probe. The pool names the category of its
+# answer, and the snapshot maps it to the one word a consumer ranks on.
+POOL_PROBE_QUOTA_CATEGORIES = frozenset(
+    {"rate_limited", "quota_exhausted", "free_daily_exhausted"}
+)
+POOL_PROBE_CLASSES = {
+    "credentials_or_access": "auth",
+    "model_unavailable": "model_not_found",
+    "no_verified_free_route": "catalog_mismatch",
+    "awaiting_approval": "policy_parked",
+    "timeout": "timeout",
+}
+# The pool marks a route quota_or_cooldown when it sent nothing at all: no
+# route answered, so the mark is not a probe and never answers for one.
+POOL_PROBE_NOTHING_SENT = "quota_or_cooldown"
+PROBE_CLASS_UPSTREAM_ERROR = "upstream_error"
+PROBE_CLASS_SUCCESS = "success"
+PROBE_CLASS_QUOTA = "quota"
+
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
 
 # The tiers the snapshot reports, in the order the dashboard reads them.
 TIER_NAMES = ("frontier", "bulk", "free", "3d")
+
+# The task type of every tier. The trust of a model is read for the task
+# type of the tier it holds, and the outcomes of a model are the rounds of
+# that task type: the work of the frontier, the bulk and the free tiers is
+# implementation work, and the work of the 3D tier is CAD execution.
+TIER_TASK_TYPES = {
+    "frontier": "implementation",
+    "bulk": "implementation",
+    "free": "implementation",
+    "3d": "cad-execution",
+}
+
+# The provider reservations of the runtime policy name a T3 Code provider
+# instance; the collector names the same provider by its account. A route of
+# a reserved provider is not a worker of the tiers outside its workload: it
+# follows every unreserved route of its trust group, and it says why.
+RESERVATION_PROVIDERS = {"claudeAgent": "claude", "codex": "codex", "grok": "grok"}
+RESERVATION_TIERS = {"review-roles": ("frontier",), "3d": ("3d",)}
+RESERVATION_IN_FORCE = ("active", "interim")
 
 # The visible label of a window whose state the provider publishes rather
 # than reports. The OpenCode Go documentation lists the free routes as
@@ -108,6 +202,29 @@ def _iso(epoch: float | None) -> str | None:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _epoch(value: Any) -> float | None:
+    """A moment in epoch seconds, from an epoch or an ISO-8601 string.
+
+    The pool publishes its checks as epoch seconds and the OpenCode record
+    as epoch seconds; a status surface that writes an ISO moment is read
+    too. A value that is not a moment is not a reading.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if number != number or number in (float("inf"), float("-inf")):
+            return None
+        return number
+    if isinstance(value, str) and value:
+        text = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            return datetime.fromisoformat(text).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def _key(provider: str, model: str) -> str:
     return f"{provider}:{model}"
 
@@ -132,6 +249,9 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     observed = _get("observed_at", "observedAtEpoch")
     basis = str(_get("basis", default="") or "")
     ends = _finite(_get("ends_at", "endsAt"))
+    # The provider's own status of the window, when it publishes one. A
+    # window it does not state a status for carries no status key.
+    status = _get("status")
 
     used_value = _finite(used)
     known = used_value is not None and 0.0 <= used_value <= 1.0
@@ -173,6 +293,43 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     }
     if applies:
         record["applies_to"] = [str(token) for token in applies]
+    if isinstance(status, str) and status:
+        record["status"] = status
+    return record
+
+
+def _inferred_window_record(
+    window: Any, now: float, applies_to: Iterable[str] = ()
+) -> dict[str, Any]:
+    """One inferred window, as the account section publishes it.
+
+    The numbers are the inference's own: a limit failure measured the
+    window, the budget and the episode, and the evidence says so. An
+    inferred window is never published as a reading the provider reported,
+    and it never replaces one. A limit that belongs to a model keeps that
+    model as its scope, so a reader sees which family it constrains.
+    """
+    record = _window_record(window, now)
+    inference = getattr(window, "inference", None)
+    if inference is None and isinstance(window, Mapping):
+        inference = window.get("inference")
+    inference = dict(inference) if isinstance(inference, Mapping) else {}
+    record["kind"] = "inferred"
+    record["evidence"] = "inferred"
+    record["inference"] = {
+        "window": inference.get("window"),
+        "budget": inference.get("budget"),
+        "unit": inference.get("unit") or None,
+        "scope": inference.get("scope") or None,
+        "weights": dict(inference.get("weights") or {}),
+        "weights_basis": inference.get("weights_basis") or None,
+        "episodes": inference.get("episodes"),
+        "state": inference.get("state") or None,
+        "rolling": bool(inference.get("rolling")),
+    }
+    scope = [str(token) for token in applies_to or ()]
+    if scope:
+        record["applies_to"] = scope
     return record
 
 
@@ -627,6 +784,170 @@ def _intelligence_record(
     }
 
 
+def _not_offered_reason(catalog: Any, provider: str, model: str) -> str:
+    """Why a route the instance does not offer is unusable, in words.
+
+    The ranking decides that the route is not offered. The catalog is the
+    only source that says whether the model behind the route is deprecated,
+    so the reason names the retirement when it is published and stays at the
+    bare fact when it is not.
+    """
+    entry = None
+    if catalog is not None:
+        getter = getattr(catalog, "model_entry", None)
+        if callable(getter):
+            try:
+                entry = getter(provider, model)
+            except Exception:  # pragma: no cover - a catalog without the model
+                entry = None
+    status = ""
+    if isinstance(entry, Mapping):
+        status = str(entry.get("status") or "")
+    if status.strip().lower() == "deprecated":
+        return NOT_OFFERED_DEPRECATED_REASON
+    return NOT_OFFERED_REASON
+
+
+def _pool_parked_reason(
+    evidence: Mapping[str, Any] | None, now: float
+) -> str:
+    """Why a route the free pool parked is unusable, in words.
+
+    The pool names the rule that holds the route out of the pool, and that
+    reason is repeated. A "cooldown" names the moment the cooldown ends. A
+    candidate without a reason keeps the two cases the snapshot can read
+    from the cooldown alone: a cooldown that has not run out names its end,
+    and a route without one is not offered for development work.
+    """
+    cooldown = None
+    reason = ""
+    if isinstance(evidence, Mapping):
+        value = evidence.get("cooldown_until")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            cooldown = float(value)
+        reason = str(evidence.get("unavailable_reason") or "")
+    if reason in POOL_PARKED_REASONS:
+        return POOL_PARKED_REASONS[reason]
+    if reason == POOL_PARKED_COOLDOWN:
+        if cooldown is not None and cooldown > now:
+            moment = _iso(cooldown)
+            if moment:
+                return POOL_COOLDOWN_REASON.format(cooldown=moment)
+        return POOL_NOT_OFFERED_REASON
+    if cooldown is not None and cooldown > now:
+        moment = _iso(cooldown)
+        if moment:
+            return POOL_COOLDOWN_REASON.format(cooldown=moment)
+    return POOL_NOT_OFFERED_REASON
+
+
+def _pool_probe_reading(
+    evidence: Mapping[str, Any] | None, model: str
+) -> dict[str, Any] | None:
+    """The pool's own probe of one route, or None.
+
+    The pool publishes the model it checked, so a probe of another model
+    never answers for this row. A probe the pool ran without sending
+    anything is not a reading either.
+    """
+    if not isinstance(evidence, Mapping):
+        return None
+    probe = evidence.get("probe")
+    if not isinstance(probe, Mapping):
+        return None
+    checked_model = str(probe.get("model") or "")
+    if checked_model and checked_model != model:
+        return None
+    category = str(probe.get("category") or "")
+    state = str(probe.get("state") or "")
+    if category == POOL_PROBE_NOTHING_SENT:
+        return None
+    checked = _epoch(probe.get("at"))
+    if checked is None:
+        return None
+    if category == PROBE_CLASS_SUCCESS or (
+        not category and state == "verified_ok"
+    ):
+        answer_state, answer_class = PROBE_WORKS, PROBE_CLASS_SUCCESS
+    elif not category and not state:
+        return None
+    elif category in POOL_PROBE_QUOTA_CATEGORIES:
+        answer_state, answer_class = PROBE_FAILS, PROBE_CLASS_QUOTA
+    else:
+        answer_state = PROBE_FAILS
+        answer_class = POOL_PROBE_CLASSES.get(
+            category, PROBE_CLASS_UPSTREAM_ERROR
+        )
+    return {
+        "state": answer_state,
+        "class": answer_class,
+        "checked_at": checked,
+        "source": PROBE_SOURCE_POOL,
+    }
+
+
+def _t3_probe_reading(reading: Any) -> dict[str, Any] | None:
+    """The probe the OpenCode record shows for one route, or None."""
+    if not isinstance(reading, Mapping):
+        return None
+    checked = _epoch(reading.get("checked_at"))
+    if checked is None:
+        return None
+    state = str(reading.get("state") or PROBE_UNPROBED)
+    if state not in (PROBE_WORKS, PROBE_FAILS):
+        state = PROBE_UNPROBED
+    answer_class = str(reading.get("class") or "") if state != PROBE_UNPROBED else ""
+    return {
+        "state": state,
+        "class": answer_class,
+        "checked_at": checked,
+        "source": str(reading.get("source") or PROBE_SOURCE_T3),
+    }
+
+
+def _probe_record(
+    model: str,
+    evidence: Mapping[str, Any] | None,
+    t3_probe: Any,
+    now: float,
+) -> dict[str, Any]:
+    """Whether the route answered its last live probe.
+
+    The pool's own probe and the latest OpenCode request of the route are
+    both readings, and the newer one is the probe. A reading older than
+    `PROBE_MAX_AGE_SECONDS` is kept with its moment and its source, and it
+    no longer counts: a route nothing probed reads `unprobed`.
+    """
+    readings = [
+        reading
+        for reading in (
+            _pool_probe_reading(evidence, model),
+            _t3_probe_reading(t3_probe),
+        )
+        if reading is not None
+    ]
+    if not readings:
+        return {
+            "state": PROBE_UNPROBED,
+            "class": "",
+            "checked_at": None,
+            "source": None,
+            "max_age_seconds": PROBE_MAX_AGE_SECONDS,
+        }
+    newest = max(readings, key=lambda reading: reading["checked_at"])
+    state = str(newest["state"])
+    answer_class = str(newest["class"])
+    if now - float(newest["checked_at"]) > PROBE_MAX_AGE_SECONDS:
+        state, answer_class = PROBE_UNPROBED, ""
+    return {
+        "state": state,
+        "class": answer_class,
+        "checked_at": _iso(float(newest["checked_at"])),
+        "source": str(newest["source"]),
+        "max_age_seconds": PROBE_MAX_AGE_SECONDS,
+    }
+
+
 def _candidate(
     provider: str,
     model: str,
@@ -637,6 +958,9 @@ def _candidate(
     aa_cache: Mapping[str, Any] | None = None,
     free_set: set[tuple[str, str]] | None = None,
     promo_set: set[tuple[str, str]] | None = None,
+    catalog: Any = None,
+    pool_evidence: Mapping[str, Any] | None = None,
+    t3_probe: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -648,6 +972,8 @@ def _candidate(
     remaining: float | None = None
     expires_in: float | None = None
     available = False
+    not_offered = False
+    parked = False
     settled = True
     pending_reason = ""
     used_tokens = 0.0
@@ -659,6 +985,8 @@ def _candidate(
     raw_windows: list[Any] = []
     surplus: dict[str, Any] = {}
     observed_failure: dict[str, Any] = {}
+    capacity_basis = ""
+    capacity_inference: dict[str, Any] = {}
 
     for entry in entries:
         if entry.tier:
@@ -671,6 +999,20 @@ def _candidate(
         if entry.expires_in_seconds is not None:
             expires_in = float(entry.expires_in_seconds)
         available = bool(entry.available)
+        # The ranking decides that a route is not offered; the snapshot keeps
+        # that judgement so the published reason can say it instead of
+        # rebuilding an empty one from the windows.
+        not_offered = not_offered or (
+            str(getattr(entry, "availability_reason", "") or "")
+            == ranking_module.REASON_NOT_OFFERED
+        )
+        # The ranking decides that the free pool parked the route; the
+        # snapshot keeps that judgement so the published reason can say it
+        # instead of rebuilding an empty one from the windows.
+        parked = parked or (
+            str(getattr(entry, "availability_reason", "") or "")
+            == ranking_module.REASON_ROUTE_PARKED
+        )
         settled = bool(entry.settled)
         pending_reason = entry.pending_reason
         used_tokens = float(entry.used_tokens)
@@ -678,6 +1020,10 @@ def _candidate(
         account = entry.account or account
         pace = getattr(entry, "pace", pace)
         surplus = getattr(entry, "frontier_surplus", None) or surplus
+        capacity_basis = getattr(entry, "capacity_basis", "") or capacity_basis
+        capacity_inference = dict(
+            getattr(entry, "capacity_inference", None) or capacity_inference
+        )
         for reason in entry.reasons:
             if reason not in reasons:
                 reasons.append(reason)
@@ -699,6 +1045,18 @@ def _candidate(
             expected, actual = _pace_record(
                 binding, now, _window_record(binding, now)["remaining_ratio"]
             )
+
+    # The pace state of the row: where the share left sits on the line of the
+    # most constraining window, in points. The line of that window is the
+    # share left minus the Paced Availability, so the state is the one the
+    # published number draws; a row with no line, or with nothing left, says
+    # so instead of guessing.
+    expected_left = None
+    if remaining is not None and pace is not None:
+        expected_left = remaining - pace
+    elif expected is not None:
+        expected_left = 1.0 - expected
+    pace_state = value_policy.pace_state(remaining, expected_left)
 
     native_record = _native_record(provider, model, native)
     # The owner's lists, read once from the runtime policy. Every consumer
@@ -750,6 +1108,10 @@ def _candidate(
         # account that reports no quota at all is usable, with an unknown
         # headroom. The quota state keeps the three window states.
         "available": bool(available),
+        # Whether the route answered its last live probe: the newer of the
+        # pool's own probe and the latest OpenCode request of the route. A
+        # reading older than two days is kept but does not count.
+        "probe": _probe_record(model, pool_evidence, t3_probe, now),
         "availability": {
             "state": "available" if available else "unavailable",
             "evidence": (
@@ -761,12 +1123,24 @@ def _candidate(
                 str(observed_failure.get("label") or "")
                 if observed_failure
                 else (
-                    "every applicable window has headroom"
-                    if available and capacity_measured
+                    # The pool parked the route. The pool publishes no
+                    # reason of its own, so the snapshot names the two
+                    # cases: a cooldown that has not run out, and a route
+                    # the pool does not offer for development work.
+                    _pool_parked_reason(pool_evidence, now)
+                    if parked
                     else (
-                        "a window is spent"
-                        if quota_state == QUOTA_EXHAUSTED
-                        else unknown_reason
+                        "every applicable window has headroom"
+                        if available and capacity_measured
+                        else (
+                            "a window is spent"
+                            if quota_state == QUOTA_EXHAUSTED
+                            else (
+                                _not_offered_reason(catalog, provider, model)
+                                if not_offered
+                                else unknown_reason
+                            )
+                        )
                     )
                 )
             ),
@@ -816,6 +1190,25 @@ def _candidate(
             "basis": _binding_basis(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),
+            # Where the capacity of the route comes from: a reading the
+            # provider reported, an inference from the limit failures of the
+            # route, a statement the provider publishes, or nothing at all.
+            "capacity_basis": str(capacity_basis or ""),
+            # The inference behind the capacity, when the capacity was
+            # inferred: the window it was measured over, the budget, the
+            # unit, the scope, the weights, the episode count and the state.
+            # A route that reports its usage has none of these.
+            "inference": {
+                "window": capacity_inference.get("window"),
+                "budget": capacity_inference.get("budget"),
+                "unit": capacity_inference.get("unit") or None,
+                "scope": capacity_inference.get("scope") or None,
+                "weights": dict(capacity_inference.get("weights") or {}),
+                "weights_basis": capacity_inference.get("weights_basis") or None,
+                "episodes": capacity_inference.get("episodes"),
+                "state": capacity_inference.get("state") or None,
+                "rolling": bool(capacity_inference.get("rolling")),
+            },
             "ends_at": _binding_ends_at(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),
@@ -850,6 +1243,11 @@ def _candidate(
             "paced_availability_window": _binding_id(
                 getattr(entries[0], "pace_binding", None) if entries else None
             ),
+            # The band the Paced Availability falls in: ahead, on_pace,
+            # behind, far_behind, spent or unknown. The Providers page colours
+            # a route by this state instead of drawing its own band, so the
+            # collector and the page cannot disagree about where a route is.
+            "pace_state": pace_state,
         },
         "usage": {
             "tokens_7d": round(used_tokens, 1),
@@ -2283,31 +2681,136 @@ def _winners(
                 )
             return (1, 0.0, 0.0, -strength, row["provider"], row["model"])
 
-        if tier == "free":
-            ordered = sorted(chosen.values(), key=_free_key)
-        else:
-            ordered = sorted(
-                chosen.values(),
-                key=lambda row: (
-                    # A model reserved for the 3D tier comes last in the tiers
-                    # it is reserved away from. The reserve changes the order,
-                    # never the value.
-                    1 if (row.get("reserve") or {}).get("3d") else 0,
-                    -(_pace_of(row) if _pace_of(row) is not None else 0.0),
+        # The best quality of every trust level of the tier, over every
+        # route that holds it, free or paid. A free route leads while it is
+        # within the margin of the best available model of its own trust
+        # level: it costs nothing, so being close is enough, and among the
+        # free routes that lead the published value decides.
+        best_quality: dict[str, float] = {}
+        if tier == "bulk":
+            for key in members:
+                row = by_key.get(key)
+                if row is None or not _holds_the_tier(row, tier):
+                    continue
+                quality = _outcome_quality(row, tier)
+                if quality is None:
+                    continue
+                level = _trust_level(row, tier)
+                if level not in best_quality or quality > best_quality[level]:
+                    best_quality[level] = quality
+
+        def _free_leads(row: dict[str, Any]) -> int:
+            """Zero when a free route leads its trust level, one otherwise."""
+            if tier != "bulk" or not _is_free_route(row):
+                return 1
+            quality = _outcome_quality(row, tier)
+            if quality is None:
+                return 1
+            best = best_quality.get(_trust_level(row, tier))
+            if best is None:
+                return 1
+            return 0 if value_policy.free_route_leads(quality, best) else 1
+
+        def _pace_key(row: dict[str, Any]) -> tuple:
+            """The order of the pace: a known pace first, then the pace.
+
+            A route with no window has no pace. It is not a pace of zero:
+            an unknown pace waits behind every route that has one.
+            """
+            pace = _pace_of(row)
+            if pace is None:
+                return (1, 0.0)
+            return (0, -pace)
+
+        def _reserve_key(row: dict[str, Any]) -> int:
+            """One for a model that is reserved for the 3D tier."""
+            return 1 if (row.get("reserve") or {}).get("3d") else 0
+
+        def _far_behind(row: dict[str, Any]) -> int:
+            """One for a route more than twenty points behind its line.
+
+            The owner's rule: a route whose binding window is far behind the
+            pace goes to the back of the pool. It follows every route of its
+            trust group that is not far behind, whatever the value of those
+            routes; an untrusted route stays last, and a route that is
+            merely behind keeps its place in the value order.
+            """
+            state = (row.get("capacity") or {}).get("pace_state")
+            return 1 if state == "far_behind" else 0
+
+        def _tier_key(row: dict[str, Any]) -> tuple:
+            """The order of one tier.
+
+            The trust of the route comes first: a trusted route leads, a
+            backup route follows, and an untrusted route comes last with
+            its reason. A route that is far behind the pace of its binding
+            window follows every route of its trust group that is not, so
+            the pool puts it at the back of the group. A model reserved for
+            the 3D tier follows the other members of the tiers it is
+            reserved away from. The bulk tier then reads the published
+            value, and a free route that is close enough to the best route
+            of its trust level leads it.
+            """
+            trust = value_policy.trust_rank(_trust_level(row, tier))
+            # A route of a provider reserved for another workload is not a
+            # worker of this tier: it joins the backup group and follows
+            # every unreserved route of it. An untrusted route stays last.
+            reserved = 1 if _reserved_for(row, tier) else 0
+            if reserved and trust < value_policy.trust_rank("backup"):
+                trust = value_policy.trust_rank("backup")
+            if tier == "free":
+                # The free tier keeps the order it had: the band, the
+                # headroom and the last use.
+                return (trust, _far_behind(row), reserved, _free_key(row))
+            if tier == "bulk":
+                published = _published_value_for(row, tier)
+                return (
+                    trust,
+                    _far_behind(row),
+                    reserved,
+                    _reserve_key(row),
+                    _free_leads(row),
+                    -(published if published is not None else 0.0),
+                    _pace_key(row),
                     row["provider"],
                     row["model"],
-                ),
+                )
+            return (
+                trust,
+                _far_behind(row),
+                reserved,
+                _reserve_key(row),
+                _pace_key(row),
+                row["provider"],
+                row["model"],
             )
+
+        ordered = sorted(chosen.values(), key=_tier_key)
         winners[tier] = []
         for row in ordered:
+            trust = _trust_record(row, tier)
+            outcome = _outcome_record(row, tier)
+            published = _published_value_for(row, tier)
             winner = {
                 "provider": row["provider"],
                 "model": row["model"],
                 "key": _key(row["provider"], row["model"]),
                 "tier": tier,
-                "value": (row.get("value") or {}).get("value"),
+                # The published value: the outcome-weighted value under the
+                # trust of the model. The Artificial Analysis value it was
+                # built from is published beside it.
+                "value": published,
+                "value_aa": (row.get("value") or {}).get("value"),
                 "strength": (row.get("value") or {}).get("strength"),
                 "strength_source": (row.get("value") or {}).get("strength_source"),
+                # The display score of the model, the same one every page
+                # reads: one number per model, with the basis it was built
+                # from and the global counts behind it.
+                "quality_score": row.get("quality_score"),
+                "quality_p0": row.get("quality_p0"),
+                "quality_n": row.get("quality_n"),
+                "quality_s": row.get("quality_s"),
+                "quality_basis": row.get("quality_basis"),
                 "relative_cost": (row.get("value") or {}).get("relative_cost"),
                 "pace_delta": (row.get("capacity") or {}).get("pace_delta"),
                 # The owner's name for the ordering measure: the Paced
@@ -2319,16 +2822,37 @@ def _winners(
                 "paced_availability_window": (row.get("capacity") or {}).get(
                     "paced_availability_window"
                 ),
+                # The band of that number: ahead, on_pace, behind,
+                # far_behind, spent or unknown. The order of the tier reads
+                # it, and so does the Providers page.
+                "pace_state": (row.get("capacity") or {}).get("pace_state"),
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
+                # The trust of the route, and the reason it holds, so a
+                # reader sees why an untrusted route is where it is.
+                "trust_level": str(trust.get("level") or "trusted"),
+                "trust_reason": str(trust.get("reason") or ""),
+                "trust_source": str(trust.get("source") or "default"),
+                "trust_task_type": str(trust.get("task_type") or ""),
+                # The workload the provider is reserved for, when this tier
+                # is outside it: the route is shown, and it is not a worker.
+                "reserved_for": _reserved_for(row, tier),
+                # The outcome the published value was built from.
+                "outcome": {
+                    "p0": outcome.get("p0"),
+                    "n": outcome.get("n"),
+                    "s": outcome.get("s"),
+                    "p": outcome.get("p"),
+                },
                 # The access of the winner, with the billing class. A
                 # consumer that picks a route reads the same access record
                 # the candidate row carries.
                 "access": dict(row.get("access") or {}),
                 "reason": (
                     "the best eligible model of this provider for this tier, "
-                    "ordered by the pace of the account window"
+                    "ordered by the trust of the route and then by the pace "
+                    "of the account window"
                 ),
             }
             if tier == "free":
@@ -2607,6 +3131,344 @@ def _frontier_workhorse(model: str, workhorses: Any = None) -> bool:
     return str(model or "").strip().lower() in wanted
 
 
+# -- the trust and the outcomes of a model --------------------------------
+
+
+class _Trust:
+    """The trust and the observed outcomes of the models, read once.
+
+    The trust of a model and the rounds it was measured on are read once
+    per identity and task type, not once per row: two routes of one
+    identity are one model, and they are counted once.
+
+    Everything is total. A missing file is an empty history, a model
+    without a policy entry and without a fabrication is trusted, and a
+    model without a round keeps the prior of its intelligence.
+    """
+
+    def __init__(self, outcomes: Mapping[str, Any] | None = None) -> None:
+        source = outcomes if isinstance(outcomes, Mapping) else {}
+        self.identities = source.get("identities")
+        self.policy = source.get("policy")
+        self.rounds = source.get("rounds")
+        self.backfill = source.get("backfill")
+        self._counts: dict[tuple[str, str], dict[str, Any]] | None = None
+        self._levels: dict[tuple[str, str], dict[str, Any]] = {}
+        self._identities: dict[tuple[str, str], str] = {}
+        self.reservations: dict[str, str] = {}
+        policy = self.policy if isinstance(self.policy, Mapping) else {}
+        for entry in policy.get("provider_reservations") or ():
+            if not isinstance(entry, Mapping):
+                continue
+            if str(entry.get("status") or "") not in RESERVATION_IN_FORCE:
+                continue
+            provider = RESERVATION_PROVIDERS.get(str(entry.get("provider") or ""))
+            if provider:
+                self.reservations[provider] = str(entry.get("workload") or "")
+
+    def reserved_for(self, provider: str, tier: str) -> str:
+        """The workload a provider is reserved for, outside that workload's tiers."""
+        workload = self.reservations.get(str(provider or ""), "")
+        if not workload or tier in RESERVATION_TIERS.get(workload, ()):
+            return ""
+        return workload
+
+    def identity(self, provider: str, model: str) -> str:
+        """The identity of a route: the model it serves."""
+        key = (str(provider or ""), str(model or ""))
+        if key not in self._identities:
+            self._identities[key] = outcomes_module.identity_of(
+                key[0], key[1], self.identities
+            )
+        return self._identities[key]
+
+    def counts(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """The observed rounds of every model and task type."""
+        if self._counts is None:
+            self._counts = outcomes_module.outcome_counts(
+                self.rounds, self.backfill, self.identities
+            )
+        return self._counts
+
+    def observed(self, identity: str, task_type: str) -> tuple[int, int]:
+        """The rounds and the accepted rounds of a model and task type."""
+        entry = self.counts().get((identity, task_type)) or {}
+        rounds = entry.get("n")
+        accepted = entry.get("s")
+        return (
+            int(rounds) if isinstance(rounds, (int, float)) else 0,
+            int(accepted) if isinstance(accepted, (int, float)) else 0,
+        )
+
+    def totals(self, identity: str) -> tuple[int, int]:
+        """The rounds and the accepted rounds of a model, every task type.
+
+        The display score of a model is one number, so it reads every round
+        the model was measured on, not only the rounds of the task type of
+        one tier. An identity with no round sums to zero.
+        """
+        rounds = 0
+        accepted = 0
+        for (name, _task_type), entry in self.counts().items():
+            if name != identity:
+                continue
+            observed = entry.get("n")
+            succeeded = entry.get("s")
+            rounds += int(observed) if isinstance(observed, (int, float)) else 0
+            accepted += int(succeeded) if isinstance(succeeded, (int, float)) else 0
+        return rounds, accepted
+
+
+    def trust(self, identity: str, task_type: str) -> dict[str, Any]:
+        """The trust of a model for a task type, and the reason it holds."""
+        key = (str(identity or ""), str(task_type or ""))
+        if key not in self._levels:
+            self._levels[key] = outcomes_module.trust_for(
+                key[0],
+                key[1],
+                self.policy,
+                self.rounds,
+                self.backfill,
+                self.identities,
+            )
+        return self._levels[key]
+
+
+def _trust_record(row: Mapping[str, Any], tier: str) -> dict[str, Any]:
+    """The trust of a row for a tier, as it is published."""
+    record = (row.get("trust") or {}).get(tier)
+    return dict(record) if isinstance(record, Mapping) else {}
+
+
+def _trust_level(row: Mapping[str, Any], tier: str) -> str:
+    """The trust level of a row for a tier.
+
+    A row that holds no trust record is trusted: the policy grants no
+    penalty to a route nobody has judged.
+    """
+    level = str(_trust_record(row, tier).get("level") or "").strip().lower()
+    if level not in value_policy.TRUST_LEVELS:
+        return "trusted"
+    return level
+
+
+def _outcome_record(row: Mapping[str, Any], tier: str) -> dict[str, Any]:
+    """The outcome record of a row for a tier, as it is published."""
+    record = (row.get("outcome") or {}).get(tier)
+    return dict(record) if isinstance(record, Mapping) else {}
+
+
+def _reserved_for(row: Mapping[str, Any], tier: str) -> str:
+    """The workload the provider of a row is reserved for, in this tier."""
+    return str((row.get("reservation") or {}).get(tier) or "")
+
+
+def _published_value_for(row: Mapping[str, Any], tier: str) -> float | None:
+    """The published value of a row for a tier: its value under its trust."""
+    value = _outcome_record(row, tier).get("published")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _outcome_quality(row: Mapping[str, Any], tier: str) -> float | None:
+    """The outcome quality p of a row for a tier, when it is known."""
+    quality = _outcome_record(row, tier).get("p")
+    if isinstance(quality, (int, float)) and not isinstance(quality, bool):
+        return float(quality)
+    return None
+
+
+def _is_free_route(row: Mapping[str, Any]) -> bool:
+    """True when a route costs nothing: its billing class says so."""
+    access = row.get("access") or {}
+    billing = str(access.get("billing") or "") if isinstance(access, Mapping) else ""
+    return billing == BILLING_FREE
+
+
+def _intelligence_of(row: Mapping[str, Any]) -> float | None:
+    """The measured Artificial Analysis intelligence index of a row."""
+    value = (row.get("value") or {}).get("strength")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _efficiency_of(row: Mapping[str, Any]) -> float | None:
+    """The efficiency of the measured cost per task of a row."""
+    components = (row.get("value") or {}).get("components") or {}
+    cost = (components.get("cost_per_task") or {}).get("value")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        return float(cost)
+    return None
+
+
+def _quality_basis(intelligence: float | None, rounds: int) -> str:
+    """The basis of a display score: the measurements that built it.
+
+    The intelligence of the model and the rounds it was measured on are two
+    evidences, and the basis names which of them were there. A model with
+    neither keeps the neutral prior, and its basis says so.
+    """
+    if intelligence is not None:
+        if rounds > 0:
+            return value_policy.QUALITY_BASIS_AA_OUTCOMES
+        return value_policy.QUALITY_BASIS_AA_ONLY
+    if rounds > 0:
+        return value_policy.QUALITY_BASIS_OUTCOMES_DEFAULT
+    return value_policy.QUALITY_BASIS_DEFAULT
+
+
+
+def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
+    """The trust and the outcome of every row, for every tier it holds.
+
+    The trust of a model is the trust the owner's policy gives it, and the
+    trust the ledger's own rule gives it: the worse of the two. The
+    outcome of a model is its measured intelligence inside its tier, shrunk
+    toward the rounds that were actually observed, combined with the
+    measured efficiency, and scaled by the trust of the model.
+
+    The display score of a model is added beside the per-tier outcome: one
+    number per model, from the intelligence of every ranked candidate and
+    the rounds of every task type. It never orders a tier, and the tier
+    order is unchanged.
+    """
+    for row in candidates:
+        row["trust"] = {}
+        row["outcome"] = {}
+        row["reservation"] = {
+            tier: trust.reserved_for(str(row.get("provider") or ""), tier)
+            for tier in TIER_NAMES
+        }
+    # The trust of every row, for every tier it is a member of. The trust
+    # of a tier decides whether the row may hold it at all: an excluded
+    # level never holds a tier.
+    for row in candidates:
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        identity = trust.identity(provider, model)
+        for tier in row.get("tiers") or []:
+            task_type = TIER_TASK_TYPES.get(str(tier), "implementation")
+            entry = trust.trust(identity, task_type)
+            level = str(entry.get("level") or "trusted").strip().lower()
+            if level not in value_policy.TRUST_LEVELS:
+                level = "trusted"
+            row["trust"][tier] = {
+                "level": level,
+                "reason": str(entry.get("reason") or ""),
+                "evidence": entry.get("evidence") or {},
+                "source": str(entry.get("source") or "default"),
+                "task_type": task_type,
+            }
+    # The outcome of every row, per tier. The range of the tier is the
+    # range of the models that hold it: the prior places a model inside
+    # the tier it competes in.
+    for tier in TIER_NAMES:
+        task_type = TIER_TASK_TYPES.get(tier, "implementation")
+        holders = [
+            row
+            for row in candidates
+            if tier in (row.get("tiers") or []) and _holds_the_tier(row, tier)
+        ]
+        strengths = [
+            strength
+            for strength in (_intelligence_of(row) for row in holders)
+            if strength is not None
+        ]
+        i_min = min(strengths) if strengths else None
+        i_max = max(strengths) if strengths else None
+        for row in candidates:
+            if tier not in (row.get("tiers") or []):
+                continue
+            identity = trust.identity(
+                str(row.get("provider") or ""), str(row.get("model") or "")
+            )
+            level = _trust_level(row, tier)
+            intelligence = _intelligence_of(row)
+            p0 = value_policy.outcome_prior(intelligence, i_min, i_max)
+            rounds, accepted = trust.observed(identity, task_type)
+            try:
+                quality = value_policy.outcome_quality(p0, rounds, accepted)
+            except ValueError:
+                # A count that cannot exist is not a quality: the value of
+                # the row stays unknown rather than invented.
+                quality = None
+            efficiency = _efficiency_of(row)
+            if tier == "3d":
+                # The 3D tier is valued by its own measure: the intelligence,
+                # the measured AA-3D capability and the cost. The outcome of
+                # the model is published beside it, and its trust scales it.
+                three_d = (row.get("value_3d") or {}).get("value")
+                value = (
+                    float(three_d)
+                    if isinstance(three_d, (int, float)) and not isinstance(three_d, bool)
+                    else None
+                )
+            else:
+                value = (
+                    value_policy.outcome_value(quality, efficiency)
+                    if quality is not None
+                    else None
+                )
+            published = value_policy.trust_adjusted_value(value, level)
+            row["outcome"][tier] = {
+                "identity": identity,
+                "task_type": task_type,
+                "intelligence": intelligence,
+                "i_min": i_min,
+                "i_max": i_max,
+                "p0": p0,
+                "k": value_policy.OUTCOME_PRIOR_STRENGTH,
+                "n": rounds,
+                "s": accepted,
+                "p": quality,
+                "value": value,
+                # The published value: the outcome value under the trust of
+                # the model. An untrusted route keeps half of it.
+                "published": published,
+            }
+
+    # The display score of a model is one number, not one per tier. The
+    # prior places the model inside the range of every ranked candidate,
+    # across every tier, and the counts are every task type of the identity:
+    # two routes of one model read the same score. It is published beside
+    # the per-tier outcome and it does not order a tier.
+    ranked = [
+        row
+        for row in candidates
+        if any(
+            tier in (row.get("tiers") or []) and _holds_the_tier(row, tier)
+            for tier in TIER_NAMES
+        )
+    ]
+    strengths = [
+        strength
+        for strength in (_intelligence_of(row) for row in ranked)
+        if strength is not None
+    ]
+    i_min_all = min(strengths) if strengths else None
+    i_max_all = max(strengths) if strengths else None
+    for row in candidates:
+        identity = trust.identity(
+            str(row.get("provider") or ""), str(row.get("model") or "")
+        )
+        intelligence = _intelligence_of(row)
+        p0 = value_policy.outcome_prior(intelligence, i_min_all, i_max_all)
+        rounds, accepted = trust.totals(identity)
+        try:
+            score = value_policy.quality_score(p0, rounds, accepted)
+        except ValueError:
+            # A count that cannot exist is not a score: the display number
+            # stays unknown rather than invented.
+            score = None
+        row["quality_score"] = score
+        row["quality_p0"] = p0
+        row["quality_n"] = rounds
+        row["quality_s"] = accepted
+        row["quality_basis"] = _quality_basis(intelligence, rounds)
+
+
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     """True when a model may hold a rank in a tier.
 
@@ -2659,21 +3521,35 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
 
 
 def _winner_key(row: dict[str, Any], tier: str = "") -> tuple:
-    """The order of the candidates of one provider: value, then quality.
+    """The order of the candidates of one provider: trust, then value.
 
-    The 3D tier is ordered by the 3D value: the intelligence, the measured
-    AA-3D capability and the cost, with the weights of the policy. The
-    ordinary value is not a substitute for it, and it does not replace it
-    either.
+    The trust of a route comes first: a trusted route of a provider is
+    used before a backup one, and an untrusted one is used last. Inside
+    one trust level the published value decides, and the published value
+    is the outcome-weighted value under that trust.
+
+    The 3D tier keeps its own value as the last tiebreak, so the measured
+    AA-3D capability still separates two routes of one trust level and
+    one published value.
     """
-    if tier == "3d":
-        value = (row.get("value_3d") or {}).get("value")
-    else:
-        value = (row.get("value") or {}).get("value")
-    quality = (row.get("quality") or {}).get("value")
+    level = _trust_level(row, tier)
+    published = _published_value_for(row, tier)
+    three_d = (row.get("value_3d") or {}).get("value") if tier == "3d" else None
+    if published is None:
+        # A route whose published value is unknown keeps the value it had:
+        # the Artificial Analysis value, and the 3D value in the 3D tier.
+        if tier == "3d" and isinstance(three_d, (int, float)) and not isinstance(three_d, bool):
+            published = float(three_d)
+        else:
+            value = (row.get("value") or {}).get("value")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                published = float(value)
     return (
-        float(value) if isinstance(value, (int, float)) else 0.0,
-        float(quality) if isinstance(quality, (int, float)) else 0.0,
+        # The lowest trust rank is the best: the key is negated, because
+        # the winner of a provider is the largest key.
+        -value_policy.trust_rank(level),
+        published if published is not None else 0.0,
+        float(three_d) if isinstance(three_d, (int, float)) and not isinstance(three_d, bool) else 0.0,
         str(row.get("model") or ""),
     )
 
@@ -2690,11 +3566,15 @@ def _holds_the_tier(row: Mapping[str, Any], tier: str) -> bool:
     """True when a route may hold a rank in a tier.
 
     A route that is not available, that waits for its evaluation, or that
-    the tier does not permit never holds a rank.
+    the tier does not permit never holds a rank. A route the owner's policy
+    excludes never holds one either: an excluded trust level holds no tier
+    at all.
     """
     if (row.get("availability") or {}).get("state") != "available":
         return False
     if (row.get("admission") or {}).get("state") != "settled":
+        return False
+    if _trust_level(row, tier) == "excluded":
         return False
     return _eligible_for_tier(row, tier)
 
@@ -2747,10 +3627,20 @@ def build_snapshot(
     free_models: Iterable[Any] | None = None,
     promo_models: Iterable[Any] | None = None,
     pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+    t3_probes: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+    inferred_windows: Iterable[Mapping[str, Any]] | None = None,
+    outcomes: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
-    """Build the routing snapshot from the ranked models and the readings."""
+    """Build the routing snapshot from the ranked models and the readings.
+
+    The `outcomes` mapping carries the trust and the observed outcomes of
+    the models: the `identities` of the models, the owner's `policy` of
+    trust, the `rounds` of the ledger and the `backfill` of the rounds it
+    does not carry. It is optional: without it every model is trusted and
+    no round was observed.
+    """
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
     for record in free_models or ():
@@ -2783,7 +3673,31 @@ def build_snapshot(
         account = str(measured.get("provider") or "")
         if not account:
             continue
+        # The window keeps the scope the ranking gives it, so a window that
+        # covers one model family is never published as a window of the
+        # whole account. A reading of one model that names no family is
+        # not a window of the account at all.
+        scope = quota_module.measured_scope(measured)
+        if scope is None:
+            continue
         record = _window_record(measured, now)
+        if scope:
+            record["applies_to"] = [str(token) for token in scope]
+        known = accounts.setdefault(account, [])
+        if record not in known:
+            known.append(record)
+    # The windows the limit failures of the routes measured, beside the
+    # readings the provider reported and never over one. They are published
+    # once per account, and a refused route keeps its record even while the
+    # ranking holds no row for it: the account's capacity is not a property
+    # of the ranked rows.
+    for inferred in inferred_windows or ():
+        account = str(inferred.get("provider") or "")
+        if not account:
+            continue
+        record = _inferred_window_record(
+            inferred.get("window"), now, inferred.get("applies_to") or ()
+        )
         known = accounts.setdefault(account, [])
         if record not in known:
             known.append(record)
@@ -2798,6 +3712,9 @@ def build_snapshot(
             aa_cache,
             free_set,
             promo_set,
+            catalog,
+            (pool_evidence or {}).get((provider, model)),
+            (t3_probes or {}).get((provider, model)),
         )
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
@@ -2854,7 +3771,11 @@ def build_snapshot(
         reported = [
             window
             for window in applicable
-            if window.get("evidence") == "provider_reported"
+            # A provider-reported reading and a window the limit failures of
+            # the account's routes learned are both evidence of the share
+            # that is left; an inferred window is never counted as a number
+            # it did not measure.
+            if window.get("evidence") in ("provider_reported", "inferred")
             and isinstance(window.get("remaining_ratio"), (int, float))
             and not isinstance(window.get("remaining_ratio"), bool)
         ]
@@ -2931,6 +3852,10 @@ def build_snapshot(
             ),
         )
     _calibrate_values(candidates)
+    # The trust of every model, and the outcome its published value is
+    # built from. Both are read before the tiers are ordered, so a trusted
+    # route leads a tier and an untrusted one comes last with its reason.
+    _fill_trust(candidates, _Trust(outcomes))
     winners, tier_coverage = _winners(candidates, tiers, aa_cache=aa_cache)
     pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
@@ -3291,6 +4216,379 @@ def provider_capacity_samples(
                 paced,
             )
         )
+    return samples
+
+
+# The place a window row takes in the card of its account. The session
+# window comes first, because it is the one that runs out first, and the
+# monthly window comes after the weekly one. An inferred window comes
+# after every window a provider reported, and a window of an unknown kind
+# comes last.
+ACCOUNT_WINDOW_ORDER = {
+    "session": 1,
+    "daily": 2,
+    "weekly": 3,
+    "monthly": 4,
+    "quota": 5,
+    "inferred": 8,
+}
+ACCOUNT_WINDOW_ORDER_OTHER = 9
+
+# How many decimals the even-spend line of a window is published with. The
+# line is a position in a bar, and a tenth of a percent is finer than a
+# bar shows.
+ACCOUNT_WINDOW_LINE_DECIMALS = 3
+
+# The marks of an account that has no period to show. The inference files
+# a route that was never refused under one of them, and the account is
+# learning rather than holding a window.
+NOT_A_WINDOW_QUOTA_IDS = frozenset({usage_inference.QUOTA_ID_NO_FAILURE})
+
+# The length of a window as the inference names it: '5h', '1m', '12d'. The
+# suffix of an inferred quota id is a window only when it is a length of
+# time; a suffix that names a state of the inference, such as 'exhausted',
+# is not a period, and the row of that window is named by its kind alone.
+INFERRED_WINDOW_LENGTH = re.compile(r"^[0-9]+(s|m|h|d|w)$")
+
+
+def _epoch_seconds(value: Any) -> float | None:
+    """A moment in seconds, from the epoch or from the published form."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return _finite(value)
+    if isinstance(value, str):
+        try:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.timestamp()
+    return None
+
+
+def _title_case(text: Any) -> str:
+    """A name in title case: 'seven_day' reads 'Seven Day'."""
+    return " ".join(
+        word.capitalize()
+        for word in re.split(r"[^0-9A-Za-z]+", str(text or ""))
+        if word
+    )
+
+
+def _is_window(record: Mapping[str, Any]) -> bool:
+    """True when a record is a window of an account.
+
+    The mark of an account whose limit was never seen is not a window: the
+    account has no period to show, and the card says it is learning.
+    """
+    return str(record.get("quota_id") or "") not in NOT_A_WINDOW_QUOTA_IDS
+
+
+def _window_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The identity of a window: its kind, its quota and its scope.
+
+    The quota id is the canonical one, so the two names of one window
+    (the OpenCode Go status and the Go usage endpoint name the same three
+    windows) are one window.
+    """
+    kind = str(record.get("kind") or "")
+    quota_id = str(record.get("quota_id") or "")
+    canonical = quota_module.QUOTA_ALIASES.get(quota_id, quota_id)
+    applies = tuple(str(token) for token in (record.get("applies_to") or ()))
+    return (kind, canonical, applies)
+
+
+def _window_rank(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The order the readings of one window are read in.
+
+    The reading that carries the length of the window wins, then the one
+    that carries its reset, then the freshest one, then the one with the
+    least left, and finally the one that resets first. A reading that
+    knows nothing is never the one that wins.
+    """
+    duration = _finite(record.get("duration_seconds"))
+    reset = _epoch_seconds(record.get("reset_at"))
+    check = _epoch_seconds(record.get("check_at"))
+    remaining = _finite(record.get("remaining_ratio"))
+    return (
+        0 if duration is not None and duration > 0 else 1,
+        0 if reset is not None else 1,
+        -check if check is not None else float("inf"),
+        remaining if remaining is not None else float("inf"),
+        reset if reset is not None else float("inf"),
+    )
+
+
+def _kept_windows(records: Iterable[Any]) -> list[dict[str, Any]]:
+    """One record per window: the reading the row of the card is drawn from."""
+    kept: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for record in records or ():
+        if not isinstance(record, Mapping):
+            continue
+        if not _is_window(record):
+            continue
+        key = _window_key(record)
+        current = kept.get(key)
+        if current is None or _window_rank(record) < _window_rank(current):
+            kept[key] = dict(record)
+    return list(kept.values())
+
+
+def _window_suffix(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
+    """The part of the label that names the window itself.
+
+    An inferred window names the window it was inferred over, and a window
+    whose quota id extends another window of the same kind says which one
+    it is. An inferred window whose suffix names a state of the inference
+    rather than a period names no window, and it says nothing more.
+    """
+    prefix = f"{kind}:"
+    if quota_id.startswith(prefix):
+        suffix = quota_id[len(prefix):]
+        if quota_id.startswith(usage_inference.QUOTA_ID_PREFIX):
+            # The suffix of an inferred quota id is the window it was
+            # learned over, and a length of time is that window. A state
+            # of the inference is not a period.
+            if not INFERRED_WINDOW_LENGTH.match(suffix):
+                return ""
+        return _title_case(suffix)
+    for other in sorted(siblings):
+        if other == quota_id:
+            continue
+        for separator in ("_", "-"):
+            if quota_id.startswith(other + separator):
+                return _title_case(quota_id[len(other) + 1:])
+    return ""
+
+
+def _window_label(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
+    """The label of a row of a card.
+
+    The label is the kind of the window, and a window that names a
+    narrower period than its kind says which one after a dot: the weekly
+    window of a model family reads 'Weekly · Fable'.
+    """
+    base = _title_case(kind)
+    suffix = _window_suffix(kind, quota_id, siblings)
+    return f"{base} · {suffix}" if suffix else base
+
+
+def _scope_suffix(scope: Iterable[str], label: str) -> str:
+    """The scope of a window, as the label of the row names it.
+
+    A window that covers one model family says which one, and the label of
+    the row names it: 'Session · Claude & GPT'. A label that names the
+    scope already is not named twice: 'Weekly · Fable' stays that.
+    """
+    names = [
+        quota_module.SCOPE_NAMES.get(str(token).lower(), _title_case(token))
+        for token in scope or ()
+    ]
+    names = [name for name in names if name]
+    if not names:
+        return ""
+    text = " & ".join(names)
+    if str(label or "").lower().endswith(text.lower()):
+        return ""
+    return f" · {text}"
+
+
+def _scoped_quota_id(window: Mapping[str, Any]) -> str:
+    """The quota id a published window series carries.
+
+    The card of an account keys its rows by the account, the kind and the
+    quota id, so a provider that publishes one quota id for several model
+    families would draw one row of the card for all of them. The scope of
+    the window is named after the id when the id does not name it already,
+    and every series of an account carries an id of its own.
+
+    A window whose id names its scope keeps it: '3p-5h' names the Claude
+    and the GPT models of the third-party group, and 'seven_day_fable'
+    names the Fable models of the Claude account. A window without a scope
+    is a window of the whole account, and it keeps its id. An inferred
+    window keeps its id too: it names the window it was learned over, and
+    the scope of the route is not part of that name.
+    """
+    quota_id = str(window.get("quota_id") or "")
+    if str(window.get("evidence") or "") == "inferred":
+        return quota_id
+    scope = [
+        str(token).strip().lower()
+        for token in (window.get("applies_to") or ())
+        if str(token).strip()
+    ]
+    if not scope or not quota_id:
+        return quota_id
+    named = quota_module.window_scope(quota_id)
+    if named and set(named) == set(scope):
+        return quota_id
+    return f"{quota_id}@{'+'.join(scope)}"
+
+
+def _published_quota_id(quota_id: str) -> ExactLabel:
+    """The quota id of a published series, as the text file holds it.
+
+    The writer's safe form of a label value replaces every character it
+    does not know, and the id of a scoped window carries an '@' and a '+':
+    the safe form of 'quotaInfo@gemini' is 'quotaInfo_gemini', and that is
+    another id than the one the card keys its rows by. The id is a name
+    the collector composed, so it is published as it is, and it keeps the
+    bound every label value has.
+    """
+    return ExactLabel(str(quota_id)[:MAX_LABEL_LENGTH])
+
+
+def account_window_samples(
+    snapshot: Mapping[str, Any],
+) -> list[tuple[str, dict[str, str], float]]:
+    """The capacity windows of every account, one series per window.
+
+    A row of a card is one window of one account: the label of the window,
+    the share that is left, the even-spend line, the reset, the moment the
+    window was checked, and the place the row takes in the card. The values
+    are read from the routing snapshot, and the page never recomputes a
+    window.
+
+    Two readings of one window are one series. The reading that carries
+    the length of the window wins, then the one that carries its reset,
+    then the freshest one, then the one with the least left, and finally
+    the one that resets first. The check time is the one of the reading
+    that won, so the age of a card is the age of the reading it draws.
+
+    Every series of an account carries a quota id of its own, so a
+    provider that publishes one quota id for several model families draws
+    one row of the card for each of them. The id is published the way the
+    collector composed it, so the text file holds 'quotaInfo@gemini' and
+    not another id.
+
+    An account that publishes no window of its own is learning, and the
+    collector says so instead of drawing a row.
+    """
+    quota = snapshot.get("quota") or {}
+    accounts = {
+        str(name): records for name, records in (quota.get("accounts") or {}).items()
+    }
+    capacity = {
+        str(name): value for name, value in (quota.get("provider_capacity") or {}).items()
+    }
+    samples: list[tuple[str, dict[str, str], float]] = []
+    for account in sorted(set(accounts) | set(capacity)):
+        windows = _kept_windows(accounts.get(account) or [])
+        if not windows:
+            samples.append(
+                (
+                    "ghostship_ai_account_window_learning",
+                    {"account": account},
+                    1.0,
+                )
+            )
+            continue
+        published = [(window, _scoped_quota_id(window)) for window in windows]
+        siblings: dict[str, list[str]] = {}
+        for window, quota_id in published:
+            kind = str(window.get("kind") or "")
+            siblings.setdefault(kind, []).append(quota_id)
+        for window, quota_id in sorted(
+            published,
+            key=lambda item: (
+                ACCOUNT_WINDOW_ORDER.get(str(item[0].get("kind") or ""), ACCOUNT_WINDOW_ORDER_OTHER),
+                str(item[0].get("kind") or ""),
+                item[1],
+            ),
+        ):
+            kind = str(window.get("kind") or "")
+            # The scope of the window is named by the label of the row. An
+            # inferred window names the window it was learned over, and
+            # that name is the whole of it.
+            scope = window.get("applies_to") or ()
+            if str(window.get("evidence") or "") == "inferred":
+                scope = ()
+            label = _window_label(kind, quota_id, siblings.get(kind, []))
+            labels = {
+                "account": account,
+                "kind": kind,
+                # The quota id is a name the collector composed, and it is
+                # published as it is: the card keys its rows by it.
+                "quota_id": _published_quota_id(quota_id),
+                # The label is a name for a reader, and it is published the
+                # way it reads.
+                "label": ExactLabel(label + _scope_suffix(scope, label)),
+                "evidence": str(window.get("evidence") or "unknown"),
+            }
+            remaining = _finite(window.get("remaining_ratio"))
+            if remaining is not None:
+                samples.append(
+                    ("ghostship_ai_account_window_remaining_ratio", dict(labels), remaining)
+                )
+            seconds = _finite(window.get("seconds_to_reset"))
+            duration = _finite(window.get("duration_seconds"))
+            line = None
+            if seconds is not None and duration is not None and duration > 0:
+                line = max(0.0, min(1.0, float(seconds) / float(duration)))
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_expected_remaining_ratio",
+                        dict(labels),
+                        round(line, ACCOUNT_WINDOW_LINE_DECIMALS),
+                    )
+                )
+            # The band of the window's own line: ahead, on_pace, behind,
+            # far_behind, spent or unknown. A window with no line to compare
+            # with says unknown, so a card always has a state to colour and
+            # never draws a band of its own.
+            samples.append(
+                (
+                    "ghostship_ai_account_window_pace_state",
+                    {**labels, "state": value_policy.pace_state(remaining, line)},
+                    1.0,
+                )
+            )
+            reset = _epoch_seconds(window.get("reset_at"))
+            if reset is not None:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_reset_timestamp_seconds",
+                        dict(labels),
+                        reset,
+                    )
+                )
+            # The moment the provider reported the window. It is read from
+            # the record the row is drawn from, so a card can be compared
+            # with the provider's own site. A reading without a check time
+            # publishes none, and the other series of the row stay as they
+            # are.
+            check = _epoch_seconds(window.get("check_at"))
+            if check is not None:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_check_timestamp_seconds",
+                        dict(labels),
+                        check,
+                    )
+                )
+            # The mark of an inferred window that rolls: a window shorter
+            # than five minutes with no reset. The page says 'rolling' for
+            # it, and a reading that carries no mark publishes none.
+            inference = window.get("inference")
+            if isinstance(inference, Mapping) and inference.get("rolling") is True:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_rolling",
+                        dict(labels),
+                        1.0,
+                    )
+                )
+            samples.append(
+                (
+                    "ghostship_ai_account_window_order",
+                    dict(labels),
+                    float(
+                        ACCOUNT_WINDOW_ORDER.get(kind, ACCOUNT_WINDOW_ORDER_OTHER)
+                    ),
+                )
+            )
     return samples
 
 

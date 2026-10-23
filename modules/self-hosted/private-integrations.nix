@@ -9,13 +9,18 @@ let
     inherit system;
     mcpIcon = ./private-integrations/ghostship.png;
   };
-  brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
+  # The account the owner signs in as is supplied by the deployment outside
+  # this repository; the template keeps only the placeholder name.
+  renderOwnerConfig = pkgs.writeShellScriptBin "ghostship-render-owner-config" ''
+    exec ${pkgs.python3}/bin/python3 ${./render-owner-config.py} "$@"
+  '';
+  brokerConfigTemplate = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
     # Each account names the expected Google identity; the broker verifies the
     # signed-in account on the identity page and resolves its index at session
     # acquisition. No account index is configured or assumed.
     accounts = {
-      User = { identity = "personal"; expected_email = "<owner-email>"; };
-      Agent = { identity = "agent"; expected_email = "<agent-email>"; };
+      User = { identity = "personal"; expected_email = "@GHOSTSHIP_KEEP_PERSONAL_EMAIL@"; };
+      Agent = { identity = "agent"; expected_email = "@GHOSTSHIP_KEEP_AGENT_EMAIL@"; };
     };
     principal = "chatgpt-personal-owner";
     client = "${tools.google-pp-cli}/bin/google-pp-cli";
@@ -138,7 +143,7 @@ let
   # Host operations broker: allowlisted host operations for the MCP container
   # (container lifecycle, MariaDB reads, restic, Recyclarr, Uptime Kuma,
   # read-only Cloudflare, ntfy publish). Host credentials stay on the host.
-  hostopsConfig = pkgs.writeText "ghostship-hostops.json" (builtins.toJSON {
+  hostopsConfigTemplate = pkgs.writeText "ghostship-hostops.json" (builtins.toJSON {
     socket = "/run/ghostship-hostops/ops.sock";
     client_uid = 62020;
     socket_gid = 62020;
@@ -191,7 +196,9 @@ let
     kuma = {
       container = "uptime-kuma";
       port = 3001;
-      username = "the owner";
+      # The administrator account name is supplied by the deployment outside
+      # this repository.
+      username = "@GHOSTSHIP_KUMA_USERNAME@";
       env_file = config.ghostship.selfHostedSecrets.projections.monitoring.path;
     };
     cloudflare.env_file = config.ghostship.selfHostedSecrets.projections.cloudflare-management.path;
@@ -257,7 +264,8 @@ in {
       path = [ pkgs.podman pkgs.systemd pkgs.restic pkgs.coreutils ];
       environment.SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       serviceConfig = {
-        ExecStart = "${tools.hostops-broker}/bin/ghostship-hostops-broker --config ${hostopsConfig}";
+        ExecStartPre = "${renderOwnerConfig}/bin/ghostship-render-owner-config ${hostopsConfigTemplate} /run/ghostship-hostops/hostops.json";
+        ExecStart = "${tools.hostops-broker}/bin/ghostship-hostops-broker --config /run/ghostship-hostops/hostops.json";
         RuntimeDirectory = "ghostship-hostops";
         RuntimeDirectoryMode = "0750";
         # The MCP container bind-mounts this directory. Removing it on stop left
@@ -270,6 +278,9 @@ in {
         RestartSec = 3;
         NoNewPrivileges = true;
         PrivateTmp = true;
+        # The owner identity values are supplied by the deployment outside this
+        # repository.
+        EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       };
     };
     systemd.services.ghostship-keep-broker = {
@@ -299,16 +310,23 @@ in {
           "AGENT_DESKTOP_SSH_KEY=/run/ghostship-integrations/agent-desktop-key"
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
-        ExecStart = "${tools.keep-broker}/bin/ghostship-keep-broker --config ${brokerConfig}";
+        ExecStartPre = "${renderOwnerConfig}/bin/ghostship-render-owner-config ${brokerConfigTemplate} /run/ghostship-personal/keep-broker.json";
+        ExecStart = "${tools.keep-broker}/bin/ghostship-keep-broker --config /run/ghostship-personal/keep-broker.json";
         Restart = "on-failure";
         RestartSec = 3;
         NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = true;
         PrivateTmp = true;
-        ReadWritePaths = [ "/run/ghostship-keep" ];
+        ReadWritePaths = [
+          "/run/ghostship-keep"
+          "/run/ghostship-personal"
+        ];
         RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
         CapabilityBoundingSet = "";
+        # The owner identity values are supplied by the deployment outside this
+        # repository.
+        EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       };
     };
     systemd.services.ghostship-private-relay-config = {
@@ -416,9 +434,12 @@ in {
       pull = "never";
       user = "62020:62020";
       environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${privateAddons.image.imageTag}";
-      # health op query type documents: only these Drive folders (and their subfolders) are read, so other
-      # people's records in the shared Healthcare folder stay out. "the owner" and "HealthConnect".
-      environment.GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS = "1zZTtDHRv09HayWZ0IzNWIOZDxM9rnpB-,1VLTMH9t2oD_texoqmZZCMYf2sCpagBKp";
+      # The MCP runtime's account settings come from a root-owned file outside the
+      # repository: GHOSTSHIP_GOOGLE_OWNER_ACCOUNT, GHOSTSHIP_GOOGLE_AGENT_ACCOUNT
+      # and GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS (the only Drive folders, and their
+      # subfolders, the health op reads, so other people's records in a shared
+      # folder stay out). A missing setting fails closed in the tool that needs it.
+      environmentFiles = [ "/etc/ghostship/mcp-identity.env" ];
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"

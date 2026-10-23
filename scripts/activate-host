@@ -7,24 +7,41 @@
 # This helper sets the system profile first, switches to the generation, and
 # then verifies that the running system and the profile name the same store
 # path. Use it instead of calling switch-to-configuration directly.
+#
+# An activation needs the deploy slot, the one deploy at a time the other
+# deploy tooling takes: the helper checks that the caller holds it before it
+# touches the system profile. The slot stays held after the switch, so the
+# deploy's own checks run inside it; `--verify-only --holder NAME` verifies the
+# generation once more and releases the slot with it.
 set -euo pipefail
 
 system_profile="${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
 current_system="${GHOSTSHIP_CURRENT_SYSTEM:-/run/current-system}"
+slot_bin="${GHOSTSHIP_DEPLOY_SLOT_BIN:-$(dirname "$0")/deploy-slot}"
+holder="${GHOSTSHIP_DEPLOY_HOLDER:-}"
 toplevel=""
 verify_only=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/activate-host [--toplevel PATH] [--verify-only]
+Usage: scripts/activate-host [--toplevel PATH] [--verify-only] [--holder NAME]
 
   --toplevel PATH  the built system generation to activate (default ./result)
   --verify-only    only check that the running system and the system profile
                    name the same generation
+  --holder NAME    the deploy slot holder, from `agent deploy slot acquire`
+                   (default GHOSTSHIP_DEPLOY_HOLDER)
+
+An activation needs the deploy slot: the helper checks it before it sets the
+system profile, and keeps it held after the switch. `--verify-only --holder
+NAME` verifies the generation and releases the slot, recording the generation. Without a holder
+it exits 3 and names `agent deploy slot acquire`. A verify-only run never
+touches the slot unless a holder is given.
 
 The system profile is set before the switch, so the activation records the
 system generation. The paths can be overridden with GHOSTSHIP_SYSTEM_PROFILE
-and GHOSTSHIP_CURRENT_SYSTEM.
+and GHOSTSHIP_CURRENT_SYSTEM, and the slot tool with
+GHOSTSHIP_DEPLOY_SLOT_BIN.
 EOF
 }
 
@@ -37,6 +54,10 @@ while [ $# -gt 0 ]; do
     --verify-only)
       verify_only=1
       shift
+      ;;
+    --holder)
+      holder="${2:?--holder needs a name}"
+      shift 2
       ;;
     -h|--help)
       usage
@@ -68,9 +89,80 @@ verify() {
   echo "activate-host: the running system and the system profile name $running"
 }
 
+# The generation number is the one in the profile link name, system-413-link.
+profile_generation() {
+  local link
+  link=$(readlink "$system_profile" 2>/dev/null || true)
+  if [[ "$(basename -- "${link:-}")" =~ ^system-([0-9]+)-link$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+slot_check() {
+  local output status
+  if [ ! -x "$slot_bin" ]; then
+    echo "activate-host: the deploy slot tool $slot_bin is missing or not executable" >&2
+    return 1
+  fi
+  if output=$("$slot_bin" check --holder "$holder" 2>&1); then
+    return 0
+  else
+    status=$?
+  fi
+  if [ "$status" -eq 3 ]; then
+    echo "activate-host: $holder does not hold the deploy slot" >&2
+  else
+    echo "activate-host: the deploy slot check failed with exit $status" >&2
+  fi
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
+  if [ "$status" -eq 3 ]; then
+    return 3
+  fi
+  return 1
+}
+
+slot_release() {
+  local output status generation
+  local -a args=(release --holder "$holder")
+  if [ ! -x "$slot_bin" ]; then
+    echo "activate-host: the deploy slot tool $slot_bin is missing or not executable" >&2
+    return 1
+  fi
+  generation=$(profile_generation)
+  if [ -n "$generation" ]; then
+    args+=(--generation "$generation")
+  fi
+  if output=$("$slot_bin" "${args[@]}" 2>&1); then
+    return 0
+  else
+    status=$?
+  fi
+  if [ "$status" -eq 3 ]; then
+    echo "activate-host: the deploy slot release for $holder was refused" >&2
+  else
+    echo "activate-host: the deploy slot release failed with exit $status" >&2
+  fi
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
+  if [ "$status" -eq 3 ]; then
+    return 3
+  fi
+  return 1
+}
+
 if [ "$verify_only" -eq 1 ]; then
-  verify
-  exit $?
+  if ! verify; then
+    exit 1
+  fi
+  if [ -z "$holder" ]; then
+    exit 0
+  fi
+  status=0
+  slot_release || status=$?
+  exit "$status"
 fi
 
 if [ -z "$toplevel" ]; then
@@ -82,8 +174,21 @@ if [ ! -x "$toplevel/bin/switch-to-configuration" ]; then
   exit 1
 fi
 
+if [ -z "$holder" ]; then
+  echo "activate-host: no deploy slot holder; run \`agent deploy slot acquire\` and pass --holder NAME or set GHOSTSHIP_DEPLOY_HOLDER" >&2
+  exit 3
+fi
+status=0
+slot_check || status=$?
+if [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+
 echo "activate-host: recording the system generation in $system_profile"
 nix-env -p "$system_profile" --set "$toplevel"
 echo "activate-host: switching to $toplevel"
 "$toplevel/bin/switch-to-configuration" switch
 verify
+# The slot stays held: the deploy's own checks run after the switch, and the
+# separate `--verify-only --holder NAME` run releases it at the end.
+echo "activate-host: $holder still holds the deploy slot; release it with --verify-only --holder"

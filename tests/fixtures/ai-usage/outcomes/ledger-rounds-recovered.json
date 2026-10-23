@@ -1,0 +1,55 @@
+{
+  "schema": "ghostship.delegation.ledger/v1",
+  "columns": [
+    "model",
+    "task_type",
+    "verdict",
+    "verdict_source",
+    "cause",
+    "fabrication",
+    "started_at",
+    "round_id"
+  ],
+  "rounds": [
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "rejected",
+      "verdict_source": "observed",
+      "cause": "the answer invented an API",
+      "fabrication": 1,
+      "started_at": "2026-10-21T09:00:00Z",
+      "round_id": "g-1"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-22T09:00:00Z",
+      "round_id": "g-2"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-23T09:00:00Z",
+      "round_id": "g-3"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-24T09:00:00Z",
+      "round_id": "g-4"
+    }
+  ]
+}

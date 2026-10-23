@@ -36,7 +36,8 @@ let
       notify = "${config.ghostship.notify.package}/bin/ghostship-notify";
       github_env = config.ghostship.selfHostedSecrets.units.github.path;
       # Canaries run with production's environment and resource options;
-      # each canary picks its own network.
+      # each canary picks its own network, and the updater gives each canary
+      # its own API bind address (the image's default is production's).
       canary_environment = production.environment;
       canary_options = builtins.filter (
         option: !(lib.hasPrefix "--network" option) && !(lib.hasPrefix "--health-on-failure" option)

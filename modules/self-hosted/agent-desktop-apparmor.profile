@@ -167,6 +167,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   /usr/lib/locale/locale-archive r,
 
   # --- Daemon entry points (one child per class) ---
+  # Named transition budget: 12 per profile file (apparmor_parser 5.x); see
+  # tests/check-apparmor-profiles.py. This profile names 12 of them, so a new
+  # child class has to replace one instead of adding to them.
   /usr/sbin/nginx cx -> nginx,
   /usr/sbin/sshd cx -> sshd,
   /usr/bin/dbus-daemon cx -> dbus-system,

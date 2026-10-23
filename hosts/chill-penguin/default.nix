@@ -15,6 +15,10 @@ in
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   ghostship.githubEngineering.enable = true;
+  # Model routing is off: the owner turned it off on 2026-10-22. The static
+  # worker table (worker_routes in ghostship-agent's runtime policy) governs
+  # until the owner approves the selection framework.
+  ghostship.aiUsage.routing.enabled = false;
   # Held off by the owner until the coordinator replay fix is deployed and
   # passes a backlog replay.
   ghostship.githubEngineering.coordinatorAutoStart = false;
@@ -35,14 +39,6 @@ in
   };
   hardware.firmwareCompression = "none";
 
-  # CVE-2026-31431: the running Asahi kernel predates the AF_ALG AEAD fix.
-  # Deny module autoload and explicit modprobe until a patched kernel is running.
-  # This blocks the userspace AEAD interface, not kernel-internal cryptography.
-  boot.blacklistedKernelModules = [ "algif_aead" ];
-  boot.extraModprobeConfig = ''
-    install algif_aead ${pkgs.coreutils}/bin/false
-  '';
-
   # Network
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;
@@ -62,6 +58,16 @@ in
   # Bootloader setup for Asahi
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = false;
+
+  # CVE-2026-31431 (algif_aead) and CVE-2026-53266 (ebt_snat), both in CISA KEV:
+  # the running 6.19 kernel lacks the fixes. Deny autoload and explicit modprobe
+  # until a patched kernel runs. This is containment, not a patched kernel:
+  # privileged direct insmod and an already-loaded module stay outside it.
+  boot.blacklistedKernelModules = [ "algif_aead" "ebt_snat" ];
+  boot.extraModprobeConfig = ''
+    install algif_aead ${pkgs.coreutils}/bin/false
+    install ebt_snat ${pkgs.coreutils}/bin/false
+  '';
 
   # SSH server
   services.openssh = {

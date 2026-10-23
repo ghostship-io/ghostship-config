@@ -20,20 +20,29 @@ FETCH_DEPTH = 1000
 # The owner of the private flake inputs. The organisation owns them now, and
 # the previous account is accepted only while a lock still names it: a lock
 # written before the transfer keeps working, and nothing else is accepted.
+# The previous account is supplied by the deployment (GHOSTSHIP_TRANSITION_OWNERS)
+# instead of being stored here, so no owner identifier lives in this
+# repository.
 CANONICAL_OWNER = "ghostship-io"
-TRANSITION_OWNERS = frozenset({"owner"})
-ACCEPTED_OWNERS = frozenset({CANONICAL_OWNER}) | TRANSITION_OWNERS
+TRANSITION_OWNERS_VARIABLE = "GHOSTSHIP_TRANSITION_OWNERS"
 
 
-def accepted_owner(owner: str) -> bool:
+def transition_owners(environ: dict | None = None) -> frozenset[str]:
+    """The accounts a pre-transfer lock may still name."""
+    environ = os.environ if environ is None else environ
+    raw = environ.get(TRANSITION_OWNERS_VARIABLE, "")
+    return frozenset(name.strip() for name in raw.split(",") if name.strip())
+
+
+def accepted_owner(owner: str, environ: dict | None = None) -> bool:
     """True when a locked input's owner is one this deployment accepts."""
-    return owner in ACCEPTED_OWNERS
+    return owner == CANONICAL_OWNER or owner in transition_owners(environ)
 
 
-def supported_source(locked: dict, repository: str) -> bool:
+def supported_source(locked: dict, repository: str, environ: dict | None = None) -> bool:
     """True when a locked input is the private source this deployment expects."""
     return (locked.get("type") == "github"
-            and accepted_owner(locked.get("owner") or "")
+            and accepted_owner(locked.get("owner") or "", environ)
             and locked.get("repo") == repository)
 
 
