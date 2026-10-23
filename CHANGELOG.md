@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.197] - 2026-10-23
+
+- Use cached PR gates once and keep complete integration manual on main.
+
+PR #358.
+
 ## [3.17.196] - 2026-10-23
 
 - Activate the approved per-provider selected-model favorites reconciler in the AI usage collector.
