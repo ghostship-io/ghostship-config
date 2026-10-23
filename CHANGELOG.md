@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.134] - 2026-10-23
+## [3.17.135] - 2026-10-23
 
 - ai-usage: every static route and every free provider's selection publishes its pace state, so a reader of those series no longer draws its own band. `ghostship_ai_static_route_pace_state{row,state}` holds one series per row of the owner's static worker table, and `ghostship_ai_free_provider_selection_pace_state{provider,state}` holds one per free provider. The state is the band of `value_policy.pace_state`: the left is the remaining ratio of the route, the expected left is that share minus the route's Paced Availability, and the band is read from the two, so left `0.4129` with a Paced Availability of `-0.033` reads `on_pace`, and left `0.9712` with `0.3306` reads `ahead`. A row or selection with no Paced Availability is `unknown`, one with nothing left is `spent`, and a row the snapshot does not carry is `unknown` rather than drawing a band. The modules call the value policy and never re-implement the band. This is the collector half; the Providers page keeps its own identical band until a separate change switches it to these series.
+
+## [3.17.134] - 2026-10-23
+
+- ai-usage: the collector publishes the place of every provider card. The Providers page draws one card per provider account in the order the owner approved, and a Grafana variable keeps only the order of the query that fills it, so the page could not sort the cards itself: the collector now publishes the place of every account, and the page reads it. The new series `ghostship_ai_account_card_order{account}` holds the place of every card, counted from one, with no gap between the places and one series per account. The order is the approved list of the owner, `APPROVED_CARD_ORDER` in `collector/card_order.py`: Claude, Codex, Ollama, OpenCode Go, Antigravity, Grok and OpenRouter, in that order. The accounts that are not on the list follow it: the ones that publish at least one window with a number come first, by name, and the accounts that publish none come after them, by name. A spent window holds the number zero, and a zero is a number, so an account whose window is spent keeps its place ahead of the accounts that are still learning theirs. An account of the approved list that the snapshot does not hold is skipped, and the cards behind it move up, so the places are the places of the cards that exist and they never leave a hole. The accounts are every key of `quota.accounts` and every provider of the candidates, the same set of accounts the availability of an account covers.
 
 ## [3.17.133] - 2026-10-23
 
