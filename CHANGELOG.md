@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.126] - 2026-10-23
+## [3.17.127] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
+
+## [3.17.126] - 2026-10-23
+
+- change control: a deploy slot the host enforces records who may deploy, so a release no longer depends on a lead relaying it between sessions. A lost release message cost twenty idle minutes last night, and two sessions then raced for the same host. `scripts/deploy-slot`, a root-run tool of the Python 3 standard library, keeps one record in `$GHOSTSHIP_DEPLOY_SLOT_DIR` (default `/var/lib/ghostship-deploy-slot`, 0700): `slot.json` names the holder, its purpose, when it acquired, when it was last seen and the system generation it started from, read from the link `$GHOSTSHIP_SYSTEM_PROFILE` names (`system-412-link` records 412); `ledger.jsonl` keeps one line per acquire, release and takeover; and `lock` holds one exclusive flock for every operation, so two sessions can no longer both believe they hold the slot. A write is a temporary file and a rename. `acquire` refuses a fresh slot held by another and can queue the caller behind it, a queue entry lives for 180 seconds and the one that queued first goes first, and a slot idle for `$GHOSTSHIP_DEPLOY_SLOT_STALE_MINUTES` minutes (default 60) is stale and is taken over only with `--force --reason`, which the ledger records with the previous holder. `release` records the generation it closed, `check` refreshes the clock of the holder, and `status` names the state, the holder and the live queue. Every command prints one JSON object and exits 0 when it acted, 3 when the slot refuses, 2 on a usage error and 1 when the record cannot be read or written. The tests pin each case on temporary directories and a pinned clock, including two real processes racing for a free slot, exactly one of which wins.
 
 ## [3.17.125] - 2026-10-23
 
