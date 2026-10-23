@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from metrics import ExactLabel, Sample
+from metrics import ExactLabel, Sample, label_value
 from util import iso_to_epoch
 
 # The billing classes of a route that costs nothing. A dedicated free route
@@ -174,6 +174,23 @@ def _basis(capacity: Mapping[str, Any]) -> str:
     return BASIS_NONE
 
 
+def _display_name(
+    names: Mapping[tuple[str, str], str], provider: str, model: str
+) -> str:
+    """The name the collector published for a model.
+
+    The name is published with the model id the exposition format allows,
+    and the id a provider gave is not always one of them: a slash and an
+    at sign are not. The name is therefore looked up by the id of the
+    route first, and by the published form of that id after it. The
+    provider is part of the key, so the name of another provider's model
+    is never used. A model without a published name falls back to its own
+    id.
+    """
+    found = names.get((provider, model)) or names.get((provider, label_value(model)))
+    return str(found or model)
+
+
 def samples(
     snapshot: Mapping[str, Any] | None,
     display_names: Mapping[tuple[str, str], str] | None = None,
@@ -181,7 +198,9 @@ def samples(
     """The free selection of every free provider, as Prometheus samples.
 
     The display name is the name the collector already publishes for the
-    model, and the row falls back to the model id.
+    model, and the row falls back to the model id. The name is found by
+    the id of the winning route, and by the form of that id the
+    exposition format allows, since a name is published under the latter.
     """
     names = display_names or {}
     candidates = _candidates(snapshot)
@@ -205,7 +224,7 @@ def samples(
                 {
                     "provider": provider,
                     "model": model,
-                    "display_name": ExactLabel(str(names.get((provider, model)) or model)),
+                    "display_name": ExactLabel(_display_name(names, provider, model)),
                     "basis": basis,
                 },
                 1.0,
