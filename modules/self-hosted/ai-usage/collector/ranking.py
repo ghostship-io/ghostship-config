@@ -300,9 +300,6 @@ FRESH_BONUS = 1.0
 # The 3D tier stays small: only the best models are worth printing with.
 THREE_D_MAX_MEMBERS = 20
 
-# A model whose account has less than this share left cannot be used.
-MIN_REMAINING = 0.05
-
 # A quota reading older than this is stale. The collector reads the providers
 # every five minutes, so half an hour is a generous bound; a stale reading
 # never counts as headroom.
@@ -1506,11 +1503,40 @@ def _observed_failures(
     return grouped
 
 
+def _quota_recovered(failure: Mapping[str, Any], windows: Iterable[Any], now: float) -> bool:
+    """A newer reported allowance can supersede an old account quota failure.
+
+    A reset timestamp, inferred budget or static published limit cannot prove
+    recovery. Every applicable gating window needs fresh positive headroom.
+    Other failures keep their own authority until an observed success.
+    """
+    if failure.get('scope') != 'account' or failure.get('reason') != 'account_usage_limit':
+        return False
+    failed_at = _as_float(failure.get('observed_at'))
+    if failed_at is None or not math.isfinite(failed_at):
+        return False
+    def field(window, name, default=None):
+        return window.get(name, default) if isinstance(window, Mapping) else getattr(window, name, default)
+    applicable = [window for window in windows if field(window, 'gating', True) is not False]
+    if not applicable:
+        return False
+    for window in applicable:
+        basis = str(field(window, 'basis') or '')
+        observed = _as_float(field(window, 'observed_at'))
+        state, remaining = _window_state(window, now)
+        if (basis not in ('', BASIS_REPORTED) or _is_inferred_window(window)
+                or _is_unlimited_window(window) or observed is None or observed <= failed_at
+                or state != 'known' or remaining is None or remaining <= 0):
+            return False
+    return True
+
+
 def _failure_for(
     failures: Mapping[str, list[Mapping[str, Any]]],
     account: str,
     provider_instance: str,
     model: str,
+    *, windows: Iterable[Any] = (), now: float = 0.0,
 ) -> Mapping[str, Any] | None:
     """The failure that reaches a model, if there is one."""
     for key in (
@@ -1518,7 +1544,8 @@ def _failure_for(
         f"route:{provider_instance}",
         f"model:{model}",
     ):
-        found = failures.get(key)
+        found = [entry for entry in failures.get(key) or ()
+                 if not _quota_recovered(entry, windows, now)]
         if found:
             return max(found, key=lambda entry: float(entry.get("observed_at") or 0.0))
     return None
@@ -1677,7 +1704,7 @@ def rank_models(
             )
             or ""
         )
-        failure = _failure_for(failures, account, native_instance, model)
+        failure = _failure_for(failures, account, native_instance, model, windows=windows, now=now)
         # A route whose model the provider retired. The retirement is about
         # that one route, whatever window it has: a route that is published
         # as unlimited is still gone when the model behind it is retired.
@@ -1719,7 +1746,7 @@ def rank_models(
             # A window that is unknown, malformed, or stale makes the
             # headroom unknown, and unknown headroom is not usable headroom.
             available = bool(in_inventory) and (
-                remaining is not None and remaining > MIN_REMAINING
+                remaining is not None and remaining > 0
             )
             if available:
                 availability_reason = REASON_AVAILABLE

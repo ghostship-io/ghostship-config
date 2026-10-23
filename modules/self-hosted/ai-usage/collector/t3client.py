@@ -22,6 +22,7 @@ failure is a fixed reason code.
 from __future__ import annotations
 
 import json
+from time import monotonic as _monotonic
 from typing import Any
 
 import codes
@@ -69,6 +70,7 @@ class T3Client:
         self.orchestration_protocol = orchestration_protocol
         self.max_size = max_size
         self._connection = None
+        self._request_id = 0
 
     # -- connection -----------------------------------------------------
     def socket_url(self) -> str:
@@ -137,12 +139,15 @@ class T3Client:
     # -- requests -------------------------------------------------------
     def call(self, tag: str, payload: dict[str, Any] | None = None) -> Any:
         """Call one read method and return its success value."""
+        deadline = _monotonic() + self.timeout
         if self._connection is None:
             self.connect()
         assert self._connection is not None
+        self._request_id += 1
+        request_id = self._request_id
         request = {
             "_tag": "Request",
-            "id": 1,
+            "id": request_id,
             "tag": tag,
             "payload": payload or {},
             "headers": [],
@@ -150,13 +155,16 @@ class T3Client:
         try:
             self._connection.send(json.dumps(request))
             while True:
-                raw = self._connection.recv(timeout=self.timeout)
+                remaining = deadline - _monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("T3 RPC deadline elapsed")
+                raw = self._connection.recv(timeout=remaining)
                 message = json.loads(raw)
                 kind = message.get("_tag")
                 if kind in ("Ack", "Pong"):
                     continue
                 if kind == "Exit":
-                    if message.get("requestId") != 1:
+                    if message.get("requestId") != request_id:
                         continue
                     exit_payload = message.get("exit") or {}
                     if exit_payload.get("_tag") == "Success":
@@ -166,9 +174,13 @@ class T3Client:
                     raise T3Error(codes.RPC_FAILED)
                 if kind == "Defect":
                     raise T3Error(codes.PROTOCOL_ERROR)
-        except T3Error:
+        except T3Error as error:
+            if error.reason != codes.RPC_FAILED:
+                self.close()
             raise
         except Exception as error:  # noqa: BLE001 - the reason must stay a code
+            # Never let a timed-out reply satisfy a following cached read.
+            self.close()
             raise T3Error(_reason_for(error)) from None
 
 
