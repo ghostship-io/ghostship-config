@@ -8,7 +8,7 @@ T3 state and native Antigravity ACP; see [current operations](../../t3code.md).
 Replace the Paseo workload on `chill-penguin` with upstream T3 Code while
 preserving the established coding-container platform: persistent projects and
 credentials, Codex and OpenCode providers, Antigravity alongside them, Ollama
-Cloud access, nested Docker, Nix, user systemd services, maintenance, recovery,
+Cloud access, rootless Podman development engine, Nix, user systemd services, maintenance, recovery,
 and monitoring.
 
 ## Runtime
@@ -17,7 +17,7 @@ and monitoring.
 - Run the container as `t3code` with hostname `t3code.ghostship.io`.
 - Serve `t3 serve` on its native internal port at `t3code:3773`.
 - Keep the existing UID/GID 3000 account and `/srv/apps/paseo` state paths so
-  the in-place replacement retains `/home/paseo`, `/workspace`, Docker data,
+  the in-place replacement retains `/home/paseo`, `/workspace`, development image data,
   and the isolated Nix store.
 - Keep the service private to `ghostship_net`; external Cloudflare routing is
   managed outside this repository.
@@ -36,14 +36,14 @@ available directly in the container. A managed `codex_ollama` provider instance
 launches Codex with `--local-provider=ollama` and the local authenticated Ollama
 compatibility proxy. The ollama.com model catalog refreshes on the same
 maintenance schedule. The image also contains `ollama`, `rg`, Git/Git LFS,
-GitHub CLI, Node.js, Python, `uv`, build tools, Docker, Nix, and Cloudflared.
+GitHub CLI, Node.js, Python, `uv`, build tools, Podman, Nix, and Cloudflared.
 
 Every top-level Git repository in `/workspace` is registered with T3 Code
 during setup.
 
 ## Services and recovery
 
-The container uses systemd for setup, the T3 Code server, nested Docker, Nix,
+The container uses systemd for setup, the T3 Code server, rootless Podman development engine, Nix,
 the persistent user manager and D-Bus session, Secret Service, Ollama proxy,
 bootstrap hooks, tool updates, restart gating, and health monitoring.
 
@@ -61,6 +61,6 @@ Persisted user services and quick tunnels remain available through
 1. Evaluate and build the `chill-penguin` configuration and T3 Code image.
 2. Deploy the committed configuration to `chill-penguin`.
 3. Verify the `t3code` container hostname, native port, root UI, user services,
-   Docker, Nix, Ollama proxy, CLIs, provider caches, and project registration.
+   Podman, Nix, Ollama proxy, CLIs, provider caches, and project registration.
 4. Verify all existing `/workspace` repositories and persisted credentials are
    available after migration.

@@ -142,7 +142,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   /run/s6/basedir/scripts/{rc.init,rc.shutdown,rc.shutdown.final} rix,
   /run/{service,s6/basedir/run-image/service}/.s6-svscan/{SIGINT,SIGPWR,SIGQUIT,SIGTERM,SIGUSR1,SIGUSR2,SIGWINCH,crash,finish} rix,
   /run/{service,s6/basedir/run-image/service}/s6-linux-init-shutdownd/run rix,
-  @{gs_svcdirs}/{s6rc-fdholder,s6rc-oneshot-runner,svc-agent-desktop-api,svc-agent-desktop-apps,svc-agent-desktop-chrome-idle,svc-agent-desktop-sshd,svc-agent-desktop-viewer,svc-cron,svc-dbus,svc-de,svc-docker,svc-nginx,svc-pulseaudio,svc-selkies,svc-watchdog,svc-xorg,svc-xsettingsd}/run rix,
+  @{gs_svcdirs}/{s6rc-fdholder,s6rc-oneshot-runner,svc-agent-desktop-api,svc-agent-desktop-apps,svc-agent-desktop-chrome-idle,svc-agent-desktop-sshd,svc-agent-desktop-viewer,svc-cron,svc-dbus,svc-de,svc-nginx,svc-pulseaudio,svc-selkies,svc-watchdog,svc-xorg,svc-xsettingsd}/run rix,
   # Each identity's Chrome service enters its own launcher, so the agent
   # and personal browsers never share a profile domain.
   @{gs_svcdirs}/svc-agent-desktop-chrome-agent/run cx -> chrome-agent-launcher,

@@ -1,5 +1,87 @@
 # Changelog
 
+## [3.17.159] - 2026-10-23
+
+- Keep routine AppArmor learning status and scheduled collector journal output bounded while preserving all evidence gates.
+
+PR #322.
+
+## [3.17.158] - 2026-10-23
+
+- Keep Zen models outside T3 Code and reserve its OpenCode routes for the Go OAuth subscription.
+
+PR #316.
+
+## [3.17.157] - 2026-10-23
+
+Reserve shared static addresses and apply a safe dynamic allocation range to existing Podman networks.
+
+PR #319.
+
+## [3.17.156] - 2026-10-23
+
+Use native rootless Podman for development and remove obsolete runtime consumers. Refresh the daily security procedure.
+
+PR #318.
+
+## [3.17.155] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 5d5bcc6c; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #320.
+
+## [3.17.154] - 2026-10-23
+
+- Keep CI runners available for fast PR gates by running slow main coverage nightly and cancelling obsolete main checks.
+
+PR #317.
+
+## [3.17.153] - 2026-10-23
+
+- Remove superseded engineering handoff and deployment instructions.
+
+PR #315.
+
+## [3.17.152] - 2026-10-23
+
+- Exclude non-model causes from historical quality counts and preserve explicit backfill causes.
+
+PR #314.
+
+## [3.17.151] - 2026-10-23
+
+- Stage opt-in per-container network containment
+
+PR #242.
+
+## [3.17.150] - 2026-10-23
+
+- T3: isolate development Docker and remove blanket runtime privileges
+
+PR #246.
+
+## [3.17.149] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7a022352; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #313.
+
+## [3.17.148] - 2026-10-23
+
+- Deploy: `agent deploy run` replaces the deploy slot. `scripts/deploy-slot` is removed, and `scripts/activate-host` no longer takes `--holder`; rollout step 3 points to the command.
+
+
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+PR #312.
+
+## [3.17.147] - 2026-10-23
+
+- Keep account and deployment identifiers in runtime settings
+
+PR #245.
+
 ## [3.17.146] - 2026-10-23
 
 - Run fast PR checks and host integration on main

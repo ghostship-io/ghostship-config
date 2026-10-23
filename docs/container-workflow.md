@@ -7,6 +7,12 @@ environment. Keep their existing launchers, credentials, and configuration.
 Do not apply `home/profiles/develop.nix` or run
 `ghostship-agent-maintenance` here; those target the NixOS develop hosts.
 
+Git worktrees share `refs/stash`. Preserve uncommitted work with a private
+patch or a recorded stash object ID; apply that exact object and verify the
+result before any removal. An unqualified `git stash pop` can consume another
+worker's entry even from a different worktree. Leave other workers' entries
+and worktrees untouched.
+
 ## Runtime memory containment
 
 The inner `t3code-server.service` shares a memory cgroup with provider tools.
@@ -225,8 +231,9 @@ mount and commit paths are implemented. Scheduled provider probes remain off
 until their native adapters are validated. Run the deployed boundary proof with
 `agent worker toolcheck --profile research` inside the worker container.
 
-An explicit later instruction scheduling a T3 Code restart is required to
-override this guard; ordinary authorization to deploy is insufficient.
+Use `agent deploy run` for merged changes. It preserves busy T3 sessions and
+checks activation gates; a deployment that requires an unauthorized restart
+waits for idle. Record the owner's explicit request for any authorized exception.
 
 The container hostname identifies the coding environment. Always select the
 target explicitly instead of using `.#$(hostname)` here. Host configuration
@@ -250,20 +257,13 @@ The result must be `0`. If SSH access or Git push is unavailable, fix that
 access before deployment. Do not substitute container-local activation or copy
 uncommitted files onto the host.
 
-After landing the PR, make sure the intended commit is on
-`origin/main`. For an authorized deployment, use `ssh chill-penguin` and the
-host checkout at `/home/nixos/nixos-config` to run these commands as root:
+After landing the PR, deploy the committed configuration with:
 
 ```sh
-git -C /home/nixos/nixos-config pull --ff-only origin main
-cd /home/nixos/nixos-config
-nixos-rebuild build -L --impure --flake .#chill-penguin
-./result/bin/switch-to-configuration switch
+agent deploy run
 ```
 
-Run long or prompt-driven remote work in detached tmux, then inspect its output
-with `capture-pane` and provide input with `send-keys`. The `--impure` flag on
-Chill Penguin allows extraction from its local `/boot/asahi` firmware; the
-container's pure evaluation cannot validate that hardware-specific step.
-Verify affected live services after switching. Other hosts use their own
-explicit flake target, root SSH access, and host-specific deployment procedure.
+Use `agent deploy run --agent-rev REV` to pin an agent change first. The command
+builds with local firmware support, checks dry-activation and live health, and
+records the system generation. Other hosts retain their explicit target and
+host-specific procedure. Do not bypass failed gates with a direct switch.

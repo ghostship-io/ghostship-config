@@ -43,6 +43,22 @@ Media/download files live on the NAS, while app databases and settings
 live locally. The backup repository covers local service state, not a second
 copy of the bulk media library.
 
+The shared bridge reserves low addresses for static assignments and allocates
+ordinary endpoints from its explicit lease range. The common module checks the
+native OCI network fields and canonical Podman argv for overlap. Split argv is
+refused. The pinned allocator clamps a persisted cursor into the current range,
+including its exhaustion sentinel; changing configuration alone is insufficient.
+
+`shared-network-range.service` updates only the root-owned network JSON's lease
+range under Netavark's POSIX lock. Its atomic replacement invalidates the network
+metadata cache. It preserves the bridge, network identity and existing leases,
+and never reads or changes the IPAM database. The init unit is kept running on
+switch because containers require it. Hash-checked rollback receipts stay under
+`/var/lib/ghostship/network-policy`; invoke the service's generated command with
+`--rollback RECEIPT` only if its current hash still matches that receipt. After a
+switch, verify a real disposable endpoint's allocation and unchanged T3 identity;
+existing endpoints keep their addresses. No live shared bridge recreation.
+
 ## Audit findings and changes
 
 Apple Silicon support remains pinned to the compatible revision. Newer upstream
@@ -388,7 +404,7 @@ containers it paused and restores their health-check settings and removes the te
 Restic stores encrypted snapshots under
 `/mnt/share/Backups/ghostship/chill-penguin`. Backup selection includes app
 state, logical MariaDB exports, image/generation manifests, SSH host keys, and
-Apple Silicon firmware. Raw MariaDB directories, T3 Code's nested Docker and Nix
+Apple Silicon firmware. Raw MariaDB directories, T3 Code's rootless Podman development engine and Nix
 stores, node_modules, and caches are excluded. Nested Btrfs subvolumes are not
 recursively included by a parent snapshot; review coverage before adding any
 under `/srv/apps`.
@@ -428,9 +444,7 @@ Registry-labeled applications keep native Podman automatic updates with health
 readiness and rollback. Database digests require review. Recyclarr stays on
 supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
-refresh. The two WSL hosts and `chill-penguin` run `system.autoUpgrade` nightly from GitHub
-`main`; `chill-penguin` adds `--impure` so pure evaluation cannot silently drop
-its Asahi peripheral firmware. The T3 Code container is never restarted by the
+refresh. Host changes follow the gated deployment procedure below. The T3 Code container is never restarted by the
 switch; its image change waits for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
 switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
@@ -441,8 +455,13 @@ Fleet checks after review when needed.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
-3. `chill-penguin` applies merged main automatically overnight. To deploy
-   sooner, pull merged main and switch natively with `--impure`.
+3. Deploy `chill-penguin` with `agent deploy run` (ghostship-agent
+   `docs/deploy.md`) from the thread that merged the work. It holds a host
+   `flock` for the whole run, builds `github:ghostship-io/ghostship-config/<sha>`
+   with `--impure` so the system records its revision, passes the dry-activate
+   gates, sets the profile, switches, verifies, and checks T3 Code, container
+   health, failed units and the upgrade timer. `--agent-rev REV` pins the
+   private agent first. The unattended upgrade is off on this host.
 4. Check failed units, container health, NAS mounts, configuration file modes,
    secret-dependent integrations, and active agent sessions.
 5. Verify automatic Cloudflare reconciliation, then validate Google browser login and Android
@@ -464,7 +483,8 @@ profile first, switches, and then verifies that the running system and the
 system profile name the same store path.
 
 ```bash
-# From the built checkout in the server's root shell.
+# By hand, from the built checkout in the server's root shell; `agent deploy
+# run` does the same and more.
 nixos-rebuild build --impure --flake .#chill-penguin
 scripts/activate-host --toplevel ./result
 ```
@@ -526,7 +546,7 @@ the next normal unit start. Signal/error traps handle ordinary failures.
 ## Security review decisions
 
 The 2026-10-10 security review retained these operator-approved trust choices:
-services remain unauthenticated on the Docker network; developer/agent tools
+services remain unauthenticated on the container network; developer/agent tools
 keep their broad privileges and mutable automatic updates; service secrets
 retain the shared apps-account model; Gluetun's HTTP proxy remains available
 on the shared network.

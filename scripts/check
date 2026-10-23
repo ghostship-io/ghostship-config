@@ -25,6 +25,23 @@ python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 python3 -m unittest discover -s tests -p test_opencode_model_catalog.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
+nix eval --impure --json --file tests/t3code-hardening.nix >/dev/null
+nix eval --impure --json --file tests/t3code-podman.nix >/dev/null
+python3 tests/check_podman_runtime.py
+python3 tests/check_podman_runtime.py --selftest
+nix eval --impure --json --file tests/security-package-fixes.nix >/dev/null
+python3 -m unittest discover -s tests -p 'test_t3code_podman_*.py'
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  modules/self-hosted/apparmor/t3code.profile
+
+printf 'Checking shared network allocation admission\n'
+nix eval --impure --json --file tests/shared-network.nix >/dev/null
+python3 -m unittest discover -s tests -p test_shared_network_range.py
+nix build --no-link .#nixosConfigurations.chill-penguin.config.system.build.sharedNetworkIPAMRegression
+
+printf 'Checking the container containment policy model and module\n'
+nix eval --impure --json --file tests/container-isolation.nix >/dev/null
+python3 tests/check_container_isolation.py selftest >/dev/null
 
 printf 'Checking the configuration drift check\n'
 python3 -m unittest discover -s tests -p test_configuration_drift.py
@@ -44,9 +61,6 @@ python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
-
-printf 'Checking the deploy slot\n'
-python3 -m unittest discover -s tests -p test_deploy_slot.py
 
 printf 'Checking the agent pin against a regression\n'
 python3 scripts/check-agent-pin.py

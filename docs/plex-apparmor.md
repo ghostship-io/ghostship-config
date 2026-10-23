@@ -101,10 +101,16 @@ current repository revision and PR before editing; an old task checkout may be
 behind main. Use an isolated branch and the repository's normal checks and PR
 workflow for policy changes. Leave merging to the user.
 
-1. Read `ghostship-apparmor-review --report-only` on `chill-penguin` and the
-   root-only evidence in `/var/lib/ghostship-apparmor-review`. The collector reads
-   AppArmor records from VictoriaLogs (filtered per profile on the server), not
-   the journal. The journal keeps only hours at audit flood rates. Each heartbeat
+1. Read `ghostship-apparmor-review --report-only --brief` on `chill-penguin` and the
+   root-only evidence in `/var/lib/ghostship-apparmor-review`.
+   The brief report aggregates readiness, freshness, coverage days, unresolved
+   event counts and reset reasons without listing container names or event IDs.
+   The daily service uses this format too, avoiding an unbounded ID list in the
+   journal. Omit `--brief` only when individual event IDs are needed for review;
+   `--summary` groups the evidence by its kept fields. Neither a brief report nor
+   a fresh sample grants learning credit or clears an unresolved event.
+   The collector reads AppArmor records from VictoriaLogs (filtered per profile
+   on the server), not the journal. The journal keeps only hours at audit flood rates. Each heartbeat
    must reach the store, which proves kernel → journald → Vector → VictoriaLogs. Collect a fresh
    sample if the timer has not run. If the command is absent or AppArmor is still
    disabled, report deployment pending and leave the quiet-week counter stopped.
