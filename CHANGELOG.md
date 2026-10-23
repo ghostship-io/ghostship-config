@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.105] - 2026-10-23
+
+- AI usage: the value policy carries the outcome maths the ranking is about to be valued by, and nothing calls it yet. The quality is an outcome-weighted *p*: a prior *p0* places the measured intelligence index inside its own tier (0.5 when the index is missing, 0.9 when the tier holds one model, clamped to [0.5, 0.9]), and *p* shrinks that prior toward the outcomes actually measured, at a prior strength of ten outcomes. The value is `0.70 * p + 0.30 * E` through the existing weights, so *p* takes the intelligence slot and a missing component leaves the value unknown. The trust levels order the tiers (trusted, backup, untrusted, excluded, with an absent or unknown level ranking as trusted) and an untrusted route keeps half of its value. A free route leads while it is within 0.10 of the best paid quality. The published policy states the formulas, the prior strength, the margin, the untrusted factor and the trust order, and the measured `value_score` and the existing policy sections are unchanged.
+
 ## [3.17.104] - 2026-10-23
 
 - AI usage: an inferred window on the Providers page names only the window it was learned over. The suffix of an inferred quota id is a window when it is a length of time, so the row of a five hour window reads 'Inferred · 5h'. A suffix that names a state of the inference is not a period, so the row of an exhausted account reads 'Inferred', and no longer 'Inferred · Exhausted'. The label of every other window is unchanged.
