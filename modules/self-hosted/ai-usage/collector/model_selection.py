@@ -6,6 +6,8 @@ read from the collector; no model-family reservation or CAD category applies.
 from __future__ import annotations
 
 import math
+import json
+from pathlib import Path
 from datetime import datetime
 
 import value_policy
@@ -18,6 +20,24 @@ from typing import Any, Mapping
 CATEGORIES = ("orchestrator", "worker")
 SCHEMA = "ghostship.model-selection/v1"
 TRUST = {"trusted": 0, "backup": 1, "untrusted": 2, "excluded": 3}
+
+
+def load_worker_builds(path: str) -> dict[str, str]:
+    """Exact native build constraints are configuration, never identity aliases."""
+    if not path:
+        return {}
+    try:
+        document = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        raise ValueError('model selection preferences are unreadable') from None
+    if not isinstance(document, dict) or document.get('schema') != 'ghostship.model-selection-preferences/v1':
+        raise ValueError('model selection preferences have an unsupported schema')
+    builds = document.get('worker_builds')
+    if not isinstance(builds, dict) or any(
+            not isinstance(provider, str) or not provider.strip() or not isinstance(model, str)
+            or not model.strip() for provider, model in builds.items()):
+        raise ValueError('model selection worker builds are invalid')
+    return builds
 
 
 def policy_ready(evidence: Mapping[str, Any]) -> bool:
@@ -128,7 +148,7 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The preference used by picker defaults, pools and dashboard ranks."""
     best = {}
     for row in rows:
-        if row['available'] and row['quality_p'] is not None:
+        if row['available'] and row.get('selection_eligible', True) and row['quality_p'] is not None:
             level = row['trust_level']
             best[level] = max(best.get(level, 0), row['quality_p'])
 
@@ -136,7 +156,7 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         quality = row['quality_p']
         free = (row['billing'] in ('free', 'promotion') and quality is not None
                 and quality >= best.get(row['trust_level'], 1) - value_policy.FREE_ROUTE_MARGIN)
-        return (not row['available'], TRUST.get(row['trust_level'], 3),
+        return (not row.get('selection_eligible', True), not row['available'], TRUST.get(row['trust_level'], 3),
                 row['pace_state'] == 'far_behind', not free,
                 -(quality if quality is not None else -1),
                 -(row['pace_delta'] if row['pace_delta'] is not None else -2), row['key'])
@@ -147,7 +167,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
           *, evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Publish eligible sets and each provider's best available model.
 
-    Every available member of the sets is a managed favorite. The owner picks
+    Each provider's selected available models are managed favorites. The owner picks
     a model per thread; the first available worker is only the new-thread
     default. Non-native inference routes remain outside the T3 picker.
     """
@@ -155,6 +175,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
     trust_cache = {}
+    worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
         instance, model = native.get("provider_instance_id"), native.get("model_id")
@@ -181,6 +202,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         quality = number(source.get("quality_score"))
         posterior = quality_value(source)
         limit = limiting_window(source.get("windows") or [], snapshot.get("generated_at"))
+        required_build = worker_builds.get(str(source.get('provider') or ''))
+        build_allowed = required_build is None or (mapped and model == required_build)
         row = {
             "key": str(source.get("provider")) + ":" + str(source.get("model")),
             "provider": str(source.get("provider")), "model": str(source.get("model")),
@@ -189,6 +212,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                         **({"options": options} if options else {})} if mapped else None),
             "effort": effort[0] if effort else None,
             "picker_eligible": mapped,
+            "selection_eligible": build_allowed,
+            "selection_reason": '' if build_allowed else 'configured worker build: ' + required_build,
             "billing": (source.get("access") or {}).get("billing") or "unknown",
             "quality_basis": source.get("quality_basis"),
             "quality_n": source.get("quality_n"), "quality_s": source.get("quality_s"),
@@ -210,7 +235,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             review_options = native_options(descriptors, preferred='medium')
             review_native = {'instanceId': str(instance), 'model': str(model),
                              **({'options': review_options} if review_options else {})}
-            categories["orchestrator"].append({**row, 'native': review_native,
+            categories["orchestrator"].append({**row, 'selection_eligible': True, 'selection_reason': '', 'native': review_native,
                                                'effort': review_effort[0] if review_effort else None})
     for category, rows in categories.items():
         rows[:] = ordered(rows)
@@ -233,16 +258,16 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 native_pools[pool_id] = native_pools.get(pool_id, 0) + 1
                 row['picker_provider_position'] = native_providers[row['provider']]
                 row['picker_pool_position'] = native_pools[pool_id]
-            if row['available'] and group['selected'][category] is None:
+            if row['available'] and row['selection_eligible'] and group['selected'][category] is None:
                 group['selected'][category] = row['native']
-            if row["available"] and provider["selected"][category] is None:
+            if row["available"] and row["selection_eligible"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
     return {"schema": SCHEMA, "generated_at": snapshot.get("generated_at"),
             "partial": bool(snapshot.get("partial", False)),
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
-            "providers": providers, **categories,
+            "providers": providers, "worker_builds": dict(worker_builds), **categories,
             "default_worker": next((row["native"] for row in categories["worker"]
-                                    if row["available"] and row["picker_eligible"]), None)}
+                                    if row["available"] and row["picker_eligible"] and row["selection_eligible"]), None)}
 
 
 def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:

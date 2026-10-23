@@ -2296,6 +2296,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Where to write the Prometheus textfile.",
     )
     parser.add_argument("--stdout", action="store_true", help="Print instead of writing a file.")
+    parser.add_argument('--model-selection-preferences', default='',
+                        help='Versioned exact native worker-build choices per provider.')
     parser.add_argument("--now", type=float, default=None, help="Override the current time.")
     parser.add_argument(
         "--state",
@@ -2407,6 +2409,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Ownership journal for managed T3 model favorites.")
     args = parser.parse_args(argv)
 
+    worker_builds = model_selection.load_worker_builds(args.model_selection_preferences)
     started = time.monotonic()
     routing_enabled = args.routing_enabled == "true"
     log(f"the routing switch is {'on' if routing_enabled else 'off'}")
@@ -2437,6 +2440,8 @@ def main(argv: list[str] | None = None) -> int:
         ledger=args.delegation_ledger,
         backfill=args.delegation_backfill,
     )
+    if args.model_selection_preferences:
+        outcomes['policy'].setdefault('model_selection', {})['worker_builds'] = worker_builds
     snapshot = build_snapshot(
         results,
         context.get("ranked") or [],
