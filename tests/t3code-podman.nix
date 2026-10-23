@@ -67,6 +67,9 @@ assert builtins.elem "--hostname=t3code"
   cfg.virtualisation.oci-containers.containers.t3code.extraOptions;
 assert
   !(builtins.elem "--hostname=${cfg.ghostship.apps.t3code.hostname}" cfg.virtualisation.oci-containers.containers.t3code.extraOptions);
+# Relays follow the manager so socket activation can recover after its exit.
+assert builtins.elem "user@62040.service" cfg.systemd.services.t3code-podman.bindsTo;
+assert builtins.elem "user@62040.service" cfg.systemd.services.t3code-podman-ports.bindsTo;
 # Force generation of actual system unit text, including the template drop-in.
 {
   system = cfg.system.build.toplevel.drvPath;
