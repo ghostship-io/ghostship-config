@@ -1,5 +1,7 @@
 """Announcement evidence must change effective reset and pace without inventing usage."""
 import sys
+import re
+import subprocess
 import unittest
 from unittest.mock import patch, AsyncMock
 from types import SimpleNamespace
@@ -280,6 +282,23 @@ class RelayConfirmationTests(unittest.TestCase):
         result = announcements.check(document, call, NOW + announcements.INTERVAL)
         self.assertEqual(result['announcements'][0]['confidence'], 'confirmed')
         self.assertEqual(result['announcements'][0]['notice_sent_at'], NOW)
+
+
+class SandboxedDesktopTransportTests(unittest.TestCase):
+    def test_deployed_wrapper_uses_the_remote_api_instead_of_local_storage(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  'modules/self-hosted/ai-usage/announced-resets.nix').read_text()
+        script = re.search(r'desktop = pkgs.writeShellScript "[^"]+" \'\'(.*?)\'\';', source, re.S)[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'bin').mkdir()
+            podman = root / 'bin/podman'
+            podman.write_text('#!/bin/sh\n[ "$1" = "--remote" ] || exit 42\n[ "$2" = "exec" ] || exit 43\ncat\n')
+            podman.chmod(0o700)
+            result = subprocess.run(['bash', '-c', script.replace('${pkgs.podman}', str(root))],
+                                    input='MCP probe\n', text=True, capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'MCP probe\n')
 
 
 if __name__ == "__main__":

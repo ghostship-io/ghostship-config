@@ -105,5 +105,16 @@ class NotifyTests(unittest.TestCase):
                              ("x.service", "Service x.service failed", "exit 1"))
 
 
+class ServerDiscoveryTests(unittest.TestCase):
+    def test_configured_socket_uses_remote_inspection_without_opening_host_storage(self):
+        for environment, remote in (({}, False), ({'CONTAINER_HOST': 'unix:///fixture/podman.sock'}, True)):
+            with self.subTest(remote=remote), mock.patch.dict(os.environ, environment, clear=True), \
+                 mock.patch.object(notify.subprocess, 'run', return_value=mock.Mock(stdout='192.0.2.25\n')) as run:
+                self.assertEqual(notify.server(), 'http://192.0.2.25:8080')
+                command = run.call_args.args[0]
+                self.assertEqual('--remote' in command, remote)
+                self.assertEqual(command[2 if remote else 1], 'inspect')
+
+
 if __name__ == "__main__":
     unittest.main()
