@@ -36,6 +36,33 @@ let
   # history, and no credential in the file.
   brokerProjection = "/run/ghostship-github/model-routing.json";
   mcpProjection = "/run/ghostship-integrations/model-routing.json";
+  # The T3 Code container does not mount /run/ghostship-integrations, so a
+  # consumer inside it cannot read the projection above. A copy is written
+  # into its own tmpfs /run whenever the collector publishes, by rename, and
+  # the container is never started, stopped or recreated for it.
+  t3Projection = "/run/ghostship-model-routing/model-routing.json";
+  t3ProjectionDir = builtins.dirOf t3Projection;
+  # The writer runs inside the container as its user, from the container's
+  # own store, and replaces the file atomically. The mode is set explicitly:
+  # the host service's umask does not reach the container process.
+  writeT3Projection = pkgs.writeShellScript "ghostship-model-routing-write" ''
+    set -eu
+    umask 022
+    ${pkgs.coreutils}/bin/cat > ${t3Projection}.new
+    ${pkgs.coreutils}/bin/chmod 0644 ${t3Projection}.new
+    ${pkgs.coreutils}/bin/mv -fT ${t3Projection}.new ${t3Projection}
+  '';
+  # The host side: seed the writer into the container store, make its
+  # directory as root, then feed the current host projection to the writer
+  # as the container user. Nothing here starts or stops the container; a
+  # stopped container fails `requisite` below instead of being started.
+  syncT3Projection = pkgs.writeShellScript "ghostship-model-routing-sync" ''
+    set -eu
+    ${pkgs.nix}/bin/nix copy --no-check-sigs --to local?root=/srv/apps/t3code/nix-root ${writeT3Projection}
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
+      -d -m0755 -o3000 -g3000 ${t3ProjectionDir}
+    ${pkgs.podman}/bin/podman exec -i --user 3000:3000 t3code ${writeT3Projection} < ${mcpProjection}
+  '';
   # The collector is copied into the store whole, so the unit runs one
   # immutable interpreter over one immutable directory. It talks to T3 Code
   # over a WebSocket with the standard library the platform already uses.
@@ -202,6 +229,29 @@ in
         AccuracySec = "5min";
         # A missed pull is not caught up: the next one reads the current pages.
         Persistent = false;
+      };
+    };
+
+    # The container does not mount the host integration directories. Copy the
+    # routing snapshot into its own tmpfs whenever the collector replaces the
+    # MCP projection, so a consumer there reads the same bytes as the host.
+    systemd.paths.ghostship-ai-usage-t3-projection = {
+      description = "Copy the routing snapshot into the T3 Code container";
+      wantedBy = [ "multi-user.target" ];
+      pathConfig.PathChanged = mcpProjection;
+    };
+
+    systemd.services.ghostship-ai-usage-t3-projection = {
+      description = "Write the routing snapshot into the T3 Code container's /run";
+      # The container must already be running. `requisite` fails the copy when
+      # it is not, and never starts, stops or recreates it.
+      after = [ "podman-t3code.service" ];
+      requisite = [ "podman-t3code.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = syncT3Projection;
+        NoNewPrivileges = true;
+        UMask = "0022";
       };
     };
 
