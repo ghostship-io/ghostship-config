@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import aa  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
+import card_order as card_order_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
@@ -183,6 +184,17 @@ METRIC_HELP = {
     "ghostship_ai_free_model_observed_timestamp_seconds": "When the free model list was read.",
     "ghostship_ai_pool_model_info": "One for a model the free pool may use.",
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
+    "ghostship_ai_pool_model_unavailable_reason": (
+        "The pool's own reason a model is unavailable, with the account's or "
+        "the owner's rule it names."
+    ),
+    "ghostship_ai_pool_probe": (
+        "One for the free pool's own probe of a route, with the state and "
+        "category of the answer, the provider and the model it checked."
+    ),
+    "ghostship_ai_pool_probe_timestamp_seconds": (
+        "When the free pool checked a route."
+    ),
     "ghostship_ai_pool_model_selected": "Whether a pool model is the selected one.",
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
     "ghostship_ai_pool_route_last_used_timestamp_seconds": (
@@ -241,6 +253,14 @@ METRIC_HELP = {
         "prior strength k, the observed rounds n and s, and the quality p."
     ),
     "ghostship_ai_model_quality": "The quality score of a model.",
+    "ghostship_ai_model_quality_score": (
+        "The display quality score of a model: one integer 0..100 per model, "
+        "comparable across every tier, with the basis it was built from."
+    ),
+    "ghostship_ai_model_quality_rounds": (
+        "The observed rounds behind a model's display quality score, summed "
+        "over every task type: n the rounds and s the accepted ones."
+    ),
     "ghostship_ai_model_available": (
         "Whether a model can be used right now, with the reason it cannot."
     ),
@@ -423,6 +443,11 @@ METRIC_HELP = {
         "When the availability of an account was observed: the newest "
         "observation of the routes that were counted."
     ),
+    "ghostship_ai_account_card_order": (
+        "The place the card of an account takes on the Providers page: 1 is "
+        "the first card, and the places hold no gap. Scope is t3 when any "
+        "candidate is mapped to the live T3 catalog, otherwise free."
+    ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
     "ghostship_ai_collection_duplicate_series": (
@@ -445,6 +470,13 @@ METRIC_HELP = {
         "The Paced Availability of a static route: the pace delta of the "
         "capacity of its candidate."
     ),
+    "ghostship_ai_static_route_pace_state": (
+        "The band of a static route against the line of its capacity, in the "
+        "state label: ahead, on_pace, behind, far_behind, spent or unknown. "
+        "One series per row, with the row label plus the state. The line is "
+        "the share left minus the route's Paced Availability, and the band "
+        "is the value policy's."
+    ),
     "ghostship_ai_static_route_reset_timestamp_seconds": (
         "When the capacity window that binds a static route resets."
     ),
@@ -462,6 +494,13 @@ METRIC_HELP = {
     "ghostship_ai_free_provider_selection_paced_availability": (
         "The Paced Availability of the free selection of a provider: the "
         "pace delta of the capacity of the route it selected."
+    ),
+    "ghostship_ai_free_provider_selection_pace_state": (
+        "The band of a free provider's selection against the line of its "
+        "capacity, in the state label: ahead, on_pace, behind, far_behind, "
+        "spent or unknown. One series per free provider, with the provider "
+        "label plus the state. The line is the share left minus the "
+        "selection's Paced Availability, and the band is the value policy's."
     ),
     "ghostship_ai_free_provider_selection_reset_timestamp_seconds": (
         "When the capacity window that binds the free selection of a "
@@ -1113,6 +1152,8 @@ def ranking_inputs(
     pool_limits: dict[tuple[str, str, str, str], float] = {}
     pool_cooldowns: dict[tuple[str, str], float] = {}
     pool_last_used: dict[tuple[str, str], float] = {}
+    pool_probes: dict[tuple[str, str], dict[str, Any]] = {}
+    pool_unavailable_reasons: dict[tuple[str, str], str] = {}
     for name, labels, value in _iter_samples(results):
         pool_provider = str(labels.get("provider") or "")
         pool_model = str(labels.get("model") or "")
@@ -1143,6 +1184,24 @@ def ranking_inputs(
             # When the pool last sent a job to the route. The least recently
             # used route breaks the tie inside the quality band.
             pool_last_used[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_probe":
+            # The pool's own probe of the route: its state and the class of
+            # the answer. The moment comes with its own series.
+            entry = pool_probes.setdefault(
+                (pool_provider, pool_model), {}
+            )
+            entry["state"] = str(labels.get("state") or "")
+            entry["category"] = str(labels.get("category") or "")
+        elif name == "ghostship_ai_pool_probe_timestamp_seconds":
+            pool_probes.setdefault((pool_provider, pool_model), {})["at"] = float(
+                value
+            )
+        elif name == "ghostship_ai_pool_model_unavailable_reason":
+            # The pool's own reason a candidate is unavailable. The snapshot
+            # repeats it for a parked route instead of guessing one.
+            pool_unavailable_reasons[(pool_provider, pool_model)] = str(
+                labels.get("reason") or ""
+            )
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -1197,6 +1256,16 @@ def ranking_inputs(
                 "basis": value[1],
             }
         )
+    for (pool_provider, pool_model), probe in sorted(pool_probes.items()):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["probe"] = dict(probe)
+    for (pool_provider, pool_model), reason in sorted(
+        pool_unavailable_reasons.items()
+    ):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["unavailable_reason"] = reason
     for key, entry in pool_evidence.items():
         # A provider-wide cooldown belongs to every route of that provider.
         cooldown = pool_cooldowns.get(key)
@@ -1208,6 +1277,10 @@ def ranking_inputs(
         # quality band of the free tier, and it is absent when the pool has
         # no reading for the route.
         entry["last_used"] = pool_last_used.get(key)
+        # The pool's own probe of the route, and its reason for parking a
+        # candidate. Both are absent when the pool published neither.
+        entry["probe"] = pool_probes.get(key)
+        entry["unavailable_reason"] = pool_unavailable_reasons.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -1620,6 +1693,9 @@ def build_snapshot(
         free_models=free_models or set(),
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
+        # The probe of every route the OpenCode record shows. The snapshot
+        # takes the newer of it and the pool's own probe.
+        t3_probes=context.get("t3_probes") or {},
         inventory=context.get("ranking_inventory") or [],
         # The learned windows of the routes whose limit failures measured
         # them. The account section publishes them beside the reported
@@ -1710,6 +1786,7 @@ def collect(
     context["inferred_capacity"] = inferred.capacities
     context["inferred_retirements"] = dict(inferred.retirements)
     context["inferred_last_success"] = dict(inferred.last_success)
+    context["t3_probes"] = dict(inferred.probes)
     context["inference_unmatched"] = dict(inferred.unmatched)
     ranking_metrics, ranked = ranking_samples(
         results,
@@ -1869,6 +1946,31 @@ def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
                             "task_type": str(record.get("task_type") or ""),
                             "field": field,
                         },
+                        float(value),
+                    )
+                )
+        # The display score is one number per model, so neither series
+        # carries a tier: every page reads the same score of the same model.
+        score = row.get("quality_score")
+        if isinstance(score, (int, float)) and not isinstance(score, bool):
+            samples.append(
+                (
+                    "ghostship_ai_model_quality_score",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "basis": str(row.get("quality_basis") or ""),
+                    },
+                    float(score),
+                )
+            )
+        for field in ("n", "s"):
+            value = row.get(f"quality_{field}")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_quality_rounds",
+                        {"provider": provider, "model": model, "field": field},
                         float(value),
                     )
                 )
@@ -2103,6 +2205,10 @@ def render(
     # The availability of every account: whether it can serve right now, why
     # not when it cannot, and where its limit comes from.
     for name, labels, value in account_availability_module.samples(snapshot or {}, now):
+        writer.add(name, labels, value)
+    # The place every card takes on the Providers page. The page draws the
+    # cards in this order, and the order is the owner's.
+    for name, labels, value in card_order_module.samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:

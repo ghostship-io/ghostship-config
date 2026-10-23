@@ -1,8 +1,44 @@
 # Changelog
 
-## [3.17.131] - 2026-10-23
+## [3.17.140] - 2026-10-23
 
 - ai-usage: a provider whose published rate limits apply per model gets one learned limit per model, never one account-wide limit. Live, a Google account (the Gemini API key) read one account-wide 5h window fitted across three models, while Google documents per-model, per-project limits: the engine read two models refused seconds apart as one shared pool, and for these providers that is the same request refused by each model's own cap. The engine names `google` and `groq` as the per-model providers, with the sources of both (Google per project and per model, Groq per model and per organization), and measures every refused route of them on its own events with scope `model`, exactly like a route whose scope evidence said `model` today. A route of such a provider that was never refused keeps `no_failure` and `unknown`, and no route reads another model's events for its window, budget or state. Every other provider is unchanged, and the model-scoped capacity is still filed by `usage_inference.key_for` under `provider/model` with `applies_to [model]`.
+
+## [3.17.139] - 2026-10-23
+
+- ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
+
+## [3.17.138] - 2026-10-23
+
+- Allow the intentional SIEM URL credential fixture through the shared secret scan with a detector, value digest and path fingerprint in `.ghostship-secrets-ignore`. The exemption preserves the fixture and assertions, permits only this finding, and leaves privacy and commit identity checks active.
+
+## [3.17.137] - 2026-10-23
+
+- ai-usage: every static route and every free provider's selection publishes its pace state, so a reader of those series no longer draws its own band. `ghostship_ai_static_route_pace_state{row,state}` holds one series per row of the owner's static worker table, and `ghostship_ai_free_provider_selection_pace_state{provider,state}` holds one per free provider. The state is the band of `value_policy.pace_state`: the left is the remaining ratio of the route, the expected left is that share minus the route's Paced Availability, and the band is read from the two, so left `0.4129` with a Paced Availability of `-0.033` reads `on_pace`, and left `0.9712` with `0.3306` reads `ahead`. A row or selection with no Paced Availability is `unknown`, one with nothing left is `spent`, and a row the snapshot does not carry is `unknown` rather than drawing a band. The modules call the value policy and never re-implement the band. This is the collector half; the Providers page keeps its own identical band until a separate change switches it to these series.
+
+## [3.17.136] - 2026-10-23
+
+- Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.
+
+## [3.17.135] - 2026-10-23
+
+- t3: OpenRouter leaves T3 Code (owner request: "we should remove openrouter from t3"). The trimmed OpenCode catalog no longer carries the `openrouter` provider at all, so T3's model list and configuration stop offering it, and a pinned default or small model cannot keep an OpenRouter model in the list. A configured `enabled_providers` loses `openrouter`, `provider.openrouter` is removed, and a `model` or `small_model` naming it is repointed to `ollama-cloud/deepseek-v4.1-flash` and `ollama-cloud/minimax-m3.1-flash`. The config is rewritten only when something changes, atomically and mode 0600; a missing config or one that is not JSON is left untouched with one log line and a zero exit. The free-inference pool is unchanged: it reads the untrimmed models.dev cache and keeps its OpenRouter credential.
+
+## [3.17.134] - 2026-10-23
+
+- ai-usage: the collector publishes the place of every provider card. The Providers page draws one card per provider account in the order the owner approved, and a Grafana variable keeps only the order of the query that fills it, so the page could not sort the cards itself: the collector now publishes the place of every account, and the page reads it. The new series `ghostship_ai_account_card_order{account}` holds the place of every card, counted from one, with no gap between the places and one series per account. The order is the approved list of the owner, `APPROVED_CARD_ORDER` in `collector/card_order.py`: Claude, Codex, Ollama, OpenCode Go, Antigravity, Grok and OpenRouter, in that order. The accounts that are not on the list follow it: the ones that publish at least one window with a number come first, by name, and the accounts that publish none come after them, by name. A spent window holds the number zero, and a zero is a number, so an account whose window is spent keeps its place ahead of the accounts that are still learning theirs. An account of the approved list that the snapshot does not hold is skipped, and the cards behind it move up, so the places are the places of the cards that exist and they never leave a hole. The accounts are every key of `quota.accounts` and every provider of the candidates, the same set of accounts the availability of an account covers.
+
+## [3.17.133] - 2026-10-23
+
+- ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
+
+## [3.17.132] - 2026-10-23
+
+- Merge freeze: main can require a `ghostship/freeze` commit status, so a freeze set with `agent freeze set` refuses every merge, including `gh pr merge`, `--admin`, the merge API and the web button, not only `agent pr land`. The new `Merge freeze` workflow marks each pull request head from the repository variable `GHOSTSHIP_FREEZE` through `scripts/freeze-status`: success when no freeze runs or it has expired, failure while it runs, and failure for a record it cannot read. It runs as `pull_request_target`, so a pull request cannot mark itself unfrozen. `docs/fleet-operations.md` names the commands, the one-time protection and the marked-tip force-push a history rewrite needs.
+
+## [3.17.131] - 2026-10-23
+
+- ai-usage: every candidate row of the routing snapshot says whether its route answered its last live probe. `jq '.candidates[0].probe' routing.json` read null: the row carried the availability of the quota window and nothing about the last check of the route. The row now carries a top-level `probe` with `state` (`works`, `fails` or `unprobed`), `class`, `checked_at`, `source` (`pool_probe` or `t3_probe`) and `max_age_seconds` of 172800. The reading is the newer of the free pool's own probe of the route and the latest OpenCode request of it. A pool probe that answered works; the category `rate_limited`, `quota_exhausted` or `free_daily_exhausted` fails as `quota`, `credentials_or_access` as `auth`, `model_unavailable` as `model_not_found`, `no_verified_free_route` as `catalog_mismatch`, `awaiting_approval` as `policy_parked`, `timeout` as `timeout` and anything else as `upstream_error`; the pool's `quota_or_cooldown` sent nothing and is unprobed. An OpenCode success works, a limit fails as `quota` and a retirement as `model_not_found`. A probe of another model never answers for a row. A reading with `now - checked_at > 172800` is unprobed with an empty class, and still publishes the moment and the source it had; a route with no reading publishes `unprobed`, an empty class, and no moment or source. The collector reads the pool's probe as `ghostship_ai_pool_probe` and `ghostship_ai_pool_probe_timestamp_seconds`. A free-pool route the pool parked now repeats the pool's own `unavailable_reason` from the paged catalog: `hosting_restricted` reads "the owner's hosting rule keeps this route to research work", `account_policy` "the account's data policy or workloads do not allow development work", `suspended` "the account is suspended", and `cooldown` the cooldown text with its moment. A candidate without the field keeps the text it had, and the ranking order, the tier winners and the trust are unchanged.
 
 ## [3.17.130] - 2026-10-23
 
