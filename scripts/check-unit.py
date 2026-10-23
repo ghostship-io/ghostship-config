@@ -11,6 +11,7 @@ TESTS = (
     "test_shared_network_range.py",
     "test_t3code_podman_*.py",
     "test_ci_scheduling.py",
+    "test_github_ci.py",
     "test_fast_check.py",
     "test_apparmor_profile_paths.py",
     "test_apparmor_review.py",
