@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.231] - 2026-10-23
+
+- Probe desktop API health for readiness
+
+PR #398.
+
 ## [3.17.230] - 2026-10-23
 
 - Retain the coordinator's shared Python import closure and policy assets through deployment source filtering.
