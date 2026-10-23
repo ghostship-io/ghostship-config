@@ -28,8 +28,8 @@ of the same name.
 The trust of a model is the worse of two things: the level the owner's
 runtime policy gives it (``model_trust.entries``), and the ledger's own
 rule, that a model is not trusted again until three accepted rounds follow
-its last fabrication. The order of the levels is excluded, untrusted,
-backup, trusted.
+its last fabrication. The order of the levels is the order of the ranking
+(excluded, untrusted, backup, trusted), and it lives in the value policy.
 
 Every reading is total: a file that is missing, unreadable or empty is an
 empty history, and a model without a policy entry and without a
@@ -46,13 +46,10 @@ from typing import Any, Mapping, Sequence
 
 import catalog
 from util import iso_to_epoch
+from value_policy import TRUST_LEVELS, trust_rank
 
 # The schema of the backfill file.
 BACKFILL_SCHEMA = "ghostship.delegation.backfill/v1"
-
-# The trust levels, in the order the ranking reads them. The worst of the
-# levels is the one that decides the trust of a model.
-TRUST_LEVELS = ("trusted", "backup", "untrusted", "excluded")
 
 # The number of accepted rounds that follow a fabrication before the model
 # is trusted again.
@@ -521,11 +518,13 @@ def outcome_counts(
 
 
 def _trust_rank(level: str) -> int:
-    """The rank of a trust level: the worst of the levels is the highest."""
-    name = str(level or "").strip().lower()
-    if name in TRUST_LEVELS:
-        return TRUST_LEVELS.index(name)
-    return 0
+    """The rank of a trust level: the worst of the levels is the highest.
+
+    The order of the levels is the order of the ranking, and it lives in
+    the value policy, so the trust of a model and the value of a route
+    cannot disagree about it.
+    """
+    return trust_rank(str(level or "").strip().lower())
 
 
 def _policy_document(policy: Any) -> Mapping[str, Any] | None:
