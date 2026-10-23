@@ -67,9 +67,10 @@ def record(
     reset_at=None,
     check_at=None,
     evidence="provider_reported",
+    inference=None,
 ):
     """One measured window, in the shape the snapshot publishes it in."""
-    return {
+    window = {
         "quota_id": quota_id,
         "kind": kind,
         "evidence": evidence,
@@ -84,6 +85,9 @@ def record(
         "check_at": check_at,
         "provenance": "collector",
     }
+    if inference is not None:
+        window["inference"] = dict(inference)
+    return window
 
 
 # The live account windows, as the routing snapshot holds them.
@@ -482,6 +486,18 @@ class AccountWindowTests(unittest.TestCase):
                         if item["reset_at"]
                     ],
                 )
+            elif name == "ghostship_ai_account_window_check_timestamp_seconds":
+                # The check time of the reading the row is drawn from.
+                self.assertIn(
+                    value,
+                    [
+                        epoch_of(item["check_at"])
+                        for item in windows
+                        if item["check_at"]
+                    ],
+                )
+            elif name == "ghostship_ai_account_window_rolling":
+                self.assertEqual(value, 1.0)
             else:
                 self.assertIn(value, (1.0, 2.0, 3.0, 4.0, 5.0, 8.0, 9.0))
 
@@ -504,6 +520,7 @@ class AccountWindowTests(unittest.TestCase):
             "ghostship_ai_account_window_remaining_ratio",
             "ghostship_ai_account_window_expected_remaining_ratio",
             "ghostship_ai_account_window_reset_timestamp_seconds",
+            "ghostship_ai_account_window_check_timestamp_seconds",
             "ghostship_ai_account_window_order",
             "ghostship_ai_account_window_learning",
         ):
@@ -579,6 +596,219 @@ class AccountWindowTests(unittest.TestCase):
                 "inferred": 8.0,
                 "other": 9.0,
             },
+        )
+
+
+class AccountWindowCheckTimeTests(unittest.TestCase):
+    """How old a reading is, and the rolling mark of an inferred window.
+
+    A card is compared with the provider's own site, so the age of a
+    reading has to be published: the check time of the record the row is
+    drawn from, in seconds. A reading without a check time publishes no
+    check time, and the other series of the row stay as they are. An
+    inferred window that rolls carries the mark, so the page can say
+    'rolling'.
+    """
+
+    def rows(self, data, name, account=None):
+        """The rows of one metric, by their labels."""
+        return [
+            (labels, value)
+            for metric, labels, value in snapshot.account_window_samples(data)
+            if metric == name and (account is None or labels.get("account") == account)
+        ]
+
+    def declared(self, name):
+        """The collector declares the series, so the page can read it."""
+        self.assertIn(name, main.METRIC_HELP)
+
+    def test_the_check_time_of_a_window_is_published(self):
+        data = build_snapshot(
+            accounts={
+                "claude": [
+                    record(
+                        "five_hour",
+                        "session",
+                        remaining=0.67,
+                        seconds_to_reset=7722,
+                        duration=18000,
+                        reset_at=iso(NOW + 7722),
+                        check_at="2026-10-22T20:56:18Z",
+                    )
+                ]
+            }
+        )
+        rows = self.rows(data, "ghostship_ai_account_window_check_timestamp_seconds")
+        self.assertEqual(len(rows), 1)
+        labels, value = rows[0]
+        self.assertEqual(value, 1792702578)
+        self.assertEqual(labels["account"], "claude")
+        self.assertEqual(labels["kind"], "session")
+        self.assertEqual(labels["quota_id"], "five_hour")
+        self.assertEqual(labels["label"], "Session")
+        self.assertEqual(labels["evidence"], "provider_reported")
+
+    def test_two_readings_of_one_window_publish_one_check_time(self):
+        # The Go status names its window go_rolling and the Go usage
+        # endpoint names the same window rolling. The freshest reading is
+        # the one the row is drawn from, and the check time is its own.
+        data = build_snapshot(
+            accounts={
+                "opencode-go": [
+                    record(
+                        "go_rolling",
+                        "session",
+                        remaining=1.0,
+                        seconds_to_reset=7200,
+                        duration=18000,
+                        reset_at=iso(NOW + 7200),
+                        check_at="2026-10-22T21:01:18Z",
+                    ),
+                    record(
+                        "rolling",
+                        "session",
+                        remaining=1.0,
+                        seconds_to_reset=7200,
+                        duration=18000,
+                        reset_at=iso(NOW + 7200),
+                        check_at="2026-10-22T21:01:17Z",
+                    ),
+                ]
+            }
+        )
+        rows = self.rows(data, "ghostship_ai_account_window_check_timestamp_seconds")
+        self.assertEqual(len(rows), 1)
+        labels, value = rows[0]
+        self.assertEqual(value, 1792702878)
+        self.assertEqual(labels["quota_id"], "go_rolling")
+
+    def test_a_reading_without_a_check_time_publishes_no_check_time(self):
+        self.declared("ghostship_ai_account_window_check_timestamp_seconds")
+        data = build_snapshot(
+            accounts={
+                "claude": [
+                    record(
+                        "five_hour",
+                        "session",
+                        remaining=0.67,
+                        seconds_to_reset=7722,
+                        duration=18000,
+                        reset_at=iso(NOW + 7722),
+                        check_at=None,
+                    )
+                ]
+            }
+        )
+        self.assertEqual(
+            self.rows(data, "ghostship_ai_account_window_check_timestamp_seconds"), []
+        )
+        # The other series of the row are unchanged.
+        remaining = self.rows(data, "ghostship_ai_account_window_remaining_ratio")
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0][1], 0.67)
+        expected = self.rows(data, "ghostship_ai_account_window_expected_remaining_ratio")
+        self.assertEqual(len(expected), 1)
+        self.assertEqual(expected[0][1], 0.429)
+        reset = self.rows(data, "ghostship_ai_account_window_reset_timestamp_seconds")
+        self.assertEqual(len(reset), 1)
+        self.assertEqual(reset[0][1], NOW + 7722)
+        order = self.rows(data, "ghostship_ai_account_window_order")
+        self.assertEqual(len(order), 1)
+        self.assertEqual(order[0][1], 1.0)
+
+    def test_an_inferred_rolling_window_is_marked(self):
+        data = build_snapshot(
+            accounts={
+                "learner": [
+                    record(
+                        "inferred:1m",
+                        "inferred",
+                        remaining=0.5,
+                        check_at=iso(NOW - 120),
+                        evidence="inferred",
+                        inference={"rolling": True},
+                    )
+                ]
+            }
+        )
+        rows = self.rows(data, "ghostship_ai_account_window_rolling")
+        self.assertEqual(len(rows), 1)
+        labels, value = rows[0]
+        self.assertEqual(value, 1.0)
+        self.assertEqual(labels["account"], "learner")
+        self.assertEqual(labels["kind"], "inferred")
+        self.assertEqual(labels["quota_id"], "inferred:1m")
+        self.assertEqual(labels["evidence"], "inferred")
+        # A rolling window has no reset and no even-spend line.
+        self.assertEqual(
+            self.rows(data, "ghostship_ai_account_window_reset_timestamp_seconds"), []
+        )
+        self.assertEqual(
+            self.rows(data, "ghostship_ai_account_window_expected_remaining_ratio"), []
+        )
+        # The mark is published in the file of the collector, once.
+        text = render(data)
+        self.assertIn("# TYPE ghostship_ai_account_window_rolling gauge", text)
+        self.assertEqual(text.count("ghostship_ai_account_window_rolling{"), 1)
+        self.assertIn("ghostship_ai_collection_duplicate_series 0", text)
+
+    def test_a_reading_without_a_rolling_mark_publishes_no_rolling_mark(self):
+        self.declared("ghostship_ai_account_window_rolling")
+        data = build_snapshot(
+            accounts={
+                "claude": [
+                    record(
+                        "five_hour",
+                        "session",
+                        remaining=0.67,
+                        seconds_to_reset=7722,
+                        duration=18000,
+                        reset_at=iso(NOW + 7722),
+                        check_at=iso(NOW - 60),
+                    )
+                ]
+            }
+        )
+        self.assertEqual(self.rows(data, "ghostship_ai_account_window_rolling"), [])
+
+    def test_a_learning_account_publishes_no_check_time(self):
+        self.declared("ghostship_ai_account_window_check_timestamp_seconds")
+        self.declared("ghostship_ai_account_window_rolling")
+        data = build_snapshot()
+        # The account publishes no window of its own, so it has no reading
+        # and no age.
+        self.assertEqual(
+            self.rows(data, "ghostship_ai_account_window_check_timestamp_seconds", "google"),
+            [],
+        )
+        self.assertEqual(
+            self.rows(data, "ghostship_ai_account_window_rolling", "google"), []
+        )
+
+    def test_every_series_of_a_row_carries_the_labels_of_the_row(self):
+        self.declared("ghostship_ai_account_window_check_timestamp_seconds")
+        data = build_snapshot()
+        rows: dict[tuple, list] = {}
+        for name, labels, value in snapshot.account_window_samples(data):
+            if name == "ghostship_ai_account_window_learning":
+                continue
+            key = (labels["account"], labels["kind"], labels["quota_id"])
+            rows.setdefault(key, []).append(dict(labels))
+        self.assertTrue(rows)
+        for key, label_sets in rows.items():
+            distinct = {
+                tuple(sorted((str(name), str(value)) for name, value in labels.items()))
+                for labels in label_sets
+            }
+            self.assertEqual(
+                len(distinct),
+                1,
+                f"the row {key} publishes series with different labels",
+            )
+        # Every row of the live accounts publishes the time it was read.
+        self.assertEqual(
+            len(self.rows(data, "ghostship_ai_account_window_check_timestamp_seconds")),
+            len(rows),
         )
 
 

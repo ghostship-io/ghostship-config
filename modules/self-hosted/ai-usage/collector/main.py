@@ -390,6 +390,16 @@ METRIC_HELP = {
     "ghostship_ai_account_window_reset_timestamp_seconds": (
         "When an account window resets."
     ),
+    "ghostship_ai_account_window_check_timestamp_seconds": (
+        "When an account window was checked: the moment the provider "
+        "reported it, in seconds. It is the moment of the reading the row "
+        "is drawn from, so the age of a card is the age of its reading. A "
+        "reading without a check time publishes none."
+    ),
+    "ghostship_ai_account_window_rolling": (
+        "One for an account window that rolls: a window shorter than five "
+        "minutes with no reset."
+    ),
     "ghostship_ai_account_window_order": (
         "The place a window takes in the card of its account: 1 is the "
         "session window, and a monthly window comes after a weekly one."

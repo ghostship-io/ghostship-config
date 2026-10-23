@@ -4079,14 +4079,16 @@ def account_window_samples(
     """The capacity windows of every account, one series per window.
 
     A row of a card is one window of one account: the label of the window,
-    the share that is left, the even-spend line, the reset, and the place
-    the row takes in the card. The values are read from the routing
-    snapshot, and the page never recomputes a window.
+    the share that is left, the even-spend line, the reset, the moment the
+    window was checked, and the place the row takes in the card. The values
+    are read from the routing snapshot, and the page never recomputes a
+    window.
 
     Two readings of one window are one series. The reading that carries
     the length of the window wins, then the one that carries its reset,
     then the freshest one, then the one with the least left, and finally
-    the one that resets first.
+    the one that resets first. The check time is the one of the reading
+    that won, so the age of a card is the age of the reading it draws.
 
     Every series of an account carries a quota id of its own, so a
     provider that publishes one quota id for several model families draws
@@ -4171,6 +4173,32 @@ def account_window_samples(
                         "ghostship_ai_account_window_reset_timestamp_seconds",
                         dict(labels),
                         reset,
+                    )
+                )
+            # The moment the provider reported the window. It is read from
+            # the record the row is drawn from, so a card can be compared
+            # with the provider's own site. A reading without a check time
+            # publishes none, and the other series of the row stay as they
+            # are.
+            check = _epoch_seconds(window.get("check_at"))
+            if check is not None:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_check_timestamp_seconds",
+                        dict(labels),
+                        check,
+                    )
+                )
+            # The mark of an inferred window that rolls: a window shorter
+            # than five minutes with no reset. The page says 'rolling' for
+            # it, and a reading that carries no mark publishes none.
+            inference = window.get("inference")
+            if isinstance(inference, Mapping) and inference.get("rolling") is True:
+                samples.append(
+                    (
+                        "ghostship_ai_account_window_rolling",
+                        dict(labels),
+                        1.0,
                     )
                 )
             samples.append(
