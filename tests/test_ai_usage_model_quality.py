@@ -90,6 +90,7 @@ class QualityTests(unittest.TestCase):
         overall=next(r['overall'] for r in result['model_quality']['rows']
                      if r['model']=='measured' and r['effort']=='low')
         self.assertEqual(row['quality_score'],overall)
+        self.assertNotIn('quality_evidence',result['candidates'][0])
         text=main.render([],[],NOW,0,result)
         self.assertIn('ghostship_ai_quality_overall',text)
         self.assertIn('ghostship_ai_picker_model_selected',text)
