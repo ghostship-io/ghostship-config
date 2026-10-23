@@ -72,6 +72,21 @@ let
     in
     result.values ++ lib.optional (result.pending != null) "";
 
+  # Constrain extraOptions instead of partially emulating Podman's global and
+  # run parsers. Every accepted token carries its own value, so a label/env
+  # value cannot consume the following security option. Unknown flags are
+  # refused, including persistent runtime/context flags accepted after run.
+  # Native OCI options are emitted by the pinned module and shell-escaped.
+  allowedExtraFlags = (builtins.fromJSON (
+    builtins.readFile ./container-isolation/allowed-extra-options.json
+  )).allowedExtraFlags;
+  canonicalExtraOptions = name:
+    lib.all (element:
+      let parsed = builtins.match "--([a-z][a-z0-9-]*)=(.*)" element;
+      in parsed != null && lib.elem (builtins.head parsed) allowedExtraFlags
+    ) (containers.${name}.extraOptions or [ ]);
+  containerServiceName = name: containers.${name}.serviceName;
+
   # Podman normalises capability names: case is ignored and the CAP_ prefix is
   # optional. "net_raw", "CAP_NET_RAW" and "cap_net_admin" are the same caps.
   normalizeCapability = value:
@@ -205,6 +220,7 @@ let
         podman = {
           user = podmanUser policy.container;
           preRun = preRunOptions policy.container;
+          extraOptions = containers.${policy.container}.extraOptions;
         };
       }
     ) enabled;
@@ -265,6 +281,10 @@ let
         {
           assertion = podmanUser policy.container == "root";
           message = "Container isolation policy ${name} cannot contain ${policy.container}: it is a rootless unit for user ${podmanUser policy.container}, and the rules live in the rootful host network namespace.";
+        }
+        {
+          assertion = canonicalExtraOptions policy.container;
+          message = "Container isolation policy ${name} needs canonical allowed --flag=value extraOptions; split, unknown and runtime-context options are refused.";
         }
         {
           assertion = preRunOptions policy.container == [ ];
@@ -334,7 +354,7 @@ let
       # Start order: the policy is loaded before the container starts. Stop
       # order follows from the container's bindsTo and after below: the
       # container is stopped before the filter is removed.
-      before = [ "podman-${policy.container}.service" ];
+      before = [ "${containerServiceName policy.container}.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -349,7 +369,7 @@ let
   # policy unit keeps the workload down instead of running uncontained.
   containerServices = lib.mapAttrs' (
     name: policy:
-    lib.nameValuePair "podman-${policy.container}" {
+    lib.nameValuePair (containerServiceName policy.container) {
       requires = [ "ghostship-container-isolation-${name}.service" ];
       after = [ "ghostship-container-isolation-${name}.service" ];
       bindsTo = [ "ghostship-container-isolation-${name}.service" ];

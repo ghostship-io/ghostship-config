@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.54] - 2026-10-23
+
+- Repair per-container containment admission and lifecycle gates: require canonical allowlisted options, reject runtime-context overrides and unsupported network drivers, honor custom OCI service names, and preserve approved public-egress replies with ingress filtering. Actual module regressions and isolated packet tests distinguish the repaired behavior from the candidate base. Production policies remain disabled.
+
 ## [3.17.53] - 2026-10-22
 
 - Container isolation admission: replace the capability denylist with one allowlist that the Nix module and the policy model share, and refuse a contained container that joins a host namespace or runs in a pod. A container may now hold only CHOWN, DAC_OVERRIDE, FOWNER, FSETID, KILL, NET_BIND_SERVICE, SETFCAP, SETGID, SETPCAP, SETUID and SYS_CHROOT, the refusal names the capability that is not in the set, and `--pid`, `--userns`, `--ipc`, `--uts` and `--cgroupns` with the value host, container: or ns: are refused in every flag spelling.

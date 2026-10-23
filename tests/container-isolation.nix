@@ -89,6 +89,8 @@ let
   defaultCaps = capabilities: {
     virtualisation.containers.containersConf.settings.containers.default_capabilities = capabilities;
   };
+  canonicalOptions = "Container isolation policy candidate needs canonical allowed --flag=value extraOptions; split, unknown and runtime-context options are refused.";
+  customService = extend (withNative { networks = [ "ghostship_net" ]; serviceName = "candidate-custom"; });
   bareIdentity = [ "--network=ghostship_net" "--ip=${address}" "--mac-address=${mac}" ];
 in
 # Containment is off by default: no policy unit, no rules, no requirement.
@@ -226,8 +228,8 @@ assert fails (withCli (identity ++ [ "--network=ghostship_net" "--pod" ])) podNa
 assert accepted (withCli (identity ++ [ "--network=ghostship_net" "--userns=auto" ]));
 assert accepted (withCli (identity ++ [ "--network=ghostship_net" "--pid=private" ]));
 assert accepted (withCli (identity ++ [ "--network=ghostship_net" ]));
-# Split identity flags are read like joined ones.
-assert accepted (withCli [ "--network=ghostship_net" "--ip" address "--mac-address" mac "--cap-drop=ALL" ]);
+# Split extraOptions are refused rather than guessing arities for unrelated Podman flags.
+assert fails (withCli [ "--network=ghostship_net" "--ip" address "--mac-address" mac "--cap-drop=ALL" ]) canonicalOptions;
 assert fails (withCli [ "--network=ghostship_net" "--ip" address "--mac-address" mac "--ip" "10.89.0.44" ]) ip;
 assert fails (withCli [ "--network=ghostship_net" "--ip" address "--mac-address" mac "--mac-address=02:00:00:00:00:44" ]) macMessage;
 # The identity has to be the one the container starts with.
@@ -238,4 +240,24 @@ assert fails (withNative { networks = [ "ghostship_net" ]; } ++ [ { ghostship.co
   "Container isolation policy candidate needs an address inside ${subnet}, the subnet of ghostship_net.";
 assert fails (withNative { networks = [ "ghostship_net" ]; } ++ [ { ghostship.containerIsolation.policies.candidate = lib.mkForce (appPolicy // { dnsServer = "10.89.7.1"; }); } ])
   "Container isolation policy candidate needs a resolver inside ${subnet}, the subnet of ghostship_net.";
+# Regression: pflag consumes a following flag-shaped token as a label value.
+assert fails (withCli [ "--network=ghostship_net" "--label" "--ip=${address}" "--label" "--mac-address=${mac}" "--cap-drop=ALL" ]) canonicalOptions;
+assert fails (withCli (bareIdentity ++ [ "--label" "--cap-drop=ALL" ])) canonicalOptions;
+assert fails (withCli (identity ++ [ "--network=ghostship_net" "--label" "--cap-add=NET_RAW" ])) canonicalOptions;
+assert accepted (withCli (identity ++ [ "--network=ghostship_net" "--label=--ip=decoy" "--env=EXAMPLE=--cap-drop=ALL" ]));
+# Persistent and unknown flags are refused wherever extraOptions places them.
+assert lib.all (options: fails (withCli (identity ++ [ "--network=ghostship_net" ] ++ options)) canonicalOptions) [
+  [ "--runtime=/tmp/example-runtime" ] [ "--runtime" "/tmp/example-runtime" ]
+  [ "--remote=true" ] [ "--url=unix:///run/example.sock" ]
+  [ "--root=/tmp/example-root" ] [ "--connection=example" ]
+  [ "--module=/tmp/example.conf" ] [ "--hooks-dir=/tmp/example-hooks" ]
+  [ "--unknown-future-context=example" ] [ "--" ] [ "-l" "example" ]
+];
+# The real OCI unit name participates in both dependency directions.
+assert builtins.elem "ghostship-container-isolation-candidate.service" customService.config.systemd.services.candidate-custom.requires;
+assert builtins.elem "ghostship-container-isolation-candidate.service" customService.config.systemd.services.candidate-custom.after;
+assert builtins.elem "ghostship-container-isolation-candidate.service" customService.config.systemd.services.candidate-custom.bindsTo;
+assert builtins.elem "candidate-custom.service" customService.config.systemd.services.ghostship-container-isolation-candidate.before;
+assert !(builtins.elem "ghostship-container-isolation-candidate.service"
+  (customService.config.systemd.services.podman-candidate-app.requires or [ ]));
 true
