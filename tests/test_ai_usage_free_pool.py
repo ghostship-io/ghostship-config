@@ -13,6 +13,7 @@ published file is broken.
 """
 import importlib.util
 import json
+import math
 import re
 import sqlite3
 import sys
@@ -877,6 +878,96 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
             ],
             "the pool's own caps stay local admission metrics",
         )
+
+    def test_a_nonfinite_reported_duration_is_not_capacity(self):
+        huge = "9" * 400
+        valid = "valid-model"
+        observations = [
+            observation(
+                "huge-seconds",
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 50, "reset": huge},
+            ),
+            observation(
+                "huge-duration",
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 50, "reset": huge + "s"},
+            ),
+            observation(
+                valid,
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+            ),
+        ]
+        result = self.collect({"quota_observations": observations})
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [(valid, "rpd")],
+        )
+        for name, _labels, value in result.metrics:
+            if name.startswith("ghostship_ai_pool_quota_"):
+                self.assertTrue(
+                    math.isfinite(value),
+                    f"{name} publishes a finite diagnostic",
+                )
+
+    def test_a_nonfinite_reset_epoch_is_not_capacity(self):
+        valid = "valid-model"
+        observations = [
+            observation(
+                "overflowing-reset",
+                observed=1e308,
+                rpd={"limit": 100, "remaining": 50, "reset": 1e308},
+            ),
+            observation(
+                valid,
+                observed=1e308,
+                rpd={"limit": 100, "remaining": 50, "reset": 1e307},
+            ),
+        ]
+        # The observation is the collection instant, so it passes the
+        # freshness bound; the addition of the reported duration overflows.
+        result = self.collect({"quota_observations": observations}, now=1e308)
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [(valid, "rpd")],
+        )
+
+    def test_a_huge_integer_fails_closed_without_crashing(self):
+        valid = "valid-model"
+        observations = [
+            observation(
+                "huge-limit",
+                observed=1000.0,
+                rpd={"limit": 10**400, "remaining": 1, "reset": "1m"},
+            ),
+            observation(
+                "huge-remaining",
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 10**400, "reset": "1m"},
+            ),
+            observation(
+                "huge-observed",
+                observed=10**400,
+                rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+            ),
+            observation(
+                valid,
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+            ),
+        ]
+        result = self.collect({"quota_observations": observations})
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [(valid, "rpd")],
+        )
+        for name, _labels, value in result.metrics:
+            if name.startswith("ghostship_ai_pool_quota_"):
+                self.assertTrue(
+                    math.isfinite(value),
+                    f"{name} publishes a finite diagnostic",
+                )
 
     def test_no_unusable_reading_becomes_capacity(self):
         invalid = [
