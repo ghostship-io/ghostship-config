@@ -18,6 +18,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 COLLECTOR = REPO / "modules/self-hosted/ai-usage/collector"
@@ -29,6 +30,7 @@ if str(COLLECTOR) not in sys.path:
 
 import main as main_module  # noqa: E402
 import static_routes  # noqa: E402
+import value_policy  # noqa: E402
 from metrics import ExactLabel  # noqa: E402
 
 NOW = 1_800_000_000.0
@@ -390,6 +392,126 @@ class StaticRouteTableTests(unittest.TestCase):
         )
 
 
+class StaticRoutePaceStateTests(unittest.TestCase):
+    """The pace state of a static row, read from the value policy's band.
+
+    A row's left is the remaining ratio of its candidate, and its expected
+    left is that share minus the Paced Availability of the candidate. The
+    state is the band the value policy reads from the two; this module never
+    draws a band of its own. One series is published per row.
+    """
+
+    def state_samples(self, capacity, candidate=True):
+        policy = {
+            "schema_version": 1,
+            "worker_routes": {
+                "entries": [
+                    {
+                        "task_type": "implementation",
+                        "scope": "narrow",
+                        "routes": [{"instance_id": "ollama", "model": "route"}],
+                    }
+                ]
+            },
+        }
+        snapshot = {"candidates": []}
+        if candidate:
+            snapshot["candidates"].append(
+                {"provider": "ollama", "model": "route", "capacity": capacity}
+            )
+        samples = static_routes.samples(write_policy(self, document=policy), snapshot)
+        return [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_static_route_pace_state"
+        ]
+
+    def state_of(self, capacity):
+        states = self.state_samples(capacity)
+        self.assertEqual(len(states), 1, "a row publishes exactly one pace state")
+        labels, value = states[0]
+        self.assertEqual(labels["row"], "1")
+        self.assertEqual(value, 1.0)
+        return labels["state"]
+
+    def test_a_row_three_points_behind_its_line_is_on_pace(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.4129, "pace_delta": -0.033}),
+            "on_pace",
+        )
+
+    def test_a_row_five_points_behind_its_line_is_behind(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.50, "pace_delta": -0.051}),
+            "behind",
+        )
+
+    def test_a_row_twenty_points_behind_its_line_is_behind(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.50, "pace_delta": -0.20}),
+            "behind",
+        )
+
+    def test_a_row_past_twenty_points_behind_its_line_is_far_behind(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.50, "pace_delta": -0.201}),
+            "far_behind",
+        )
+
+    def test_a_row_five_points_ahead_of_its_line_is_ahead(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.50, "pace_delta": 0.051}),
+            "ahead",
+        )
+
+    def test_a_row_with_nothing_left_is_spent(self):
+        self.assertEqual(
+            self.state_of({"remaining_ratio": 0.0, "pace_delta": 0.051}),
+            "spent",
+        )
+
+    def test_a_row_with_nothing_left_and_no_line_is_still_spent(self):
+        self.assertEqual(self.state_of({"remaining_ratio": 0.0}), "spent")
+
+    def test_a_row_with_no_paced_availability_is_unknown(self):
+        self.assertEqual(self.state_of({"remaining_ratio": 0.5}), "unknown")
+
+    def test_a_row_the_snapshot_does_not_carry_is_unknown(self):
+        states = self.state_samples({}, candidate=False)
+        self.assertEqual(len(states), 1)
+        self.assertEqual(states[0][0]["state"], "unknown")
+
+    def test_every_row_has_exactly_one_state_series(self):
+        samples = static_routes.samples(write_policy(self), SNAPSHOT)
+        rows = info_rows(samples)
+        states = [
+            labels
+            for name, labels, _value in samples
+            if name == "ghostship_ai_static_route_pace_state"
+        ]
+        self.assertEqual(sorted(labels["row"] for labels in states), sorted(rows))
+        # Row 2 has a share but no pace, and row 5 has no candidate at all:
+        # both say unknown rather than drawing a band.
+        by_row_state = {labels["row"]: labels["state"] for labels in states}
+        self.assertEqual(by_row_state["2"], "unknown")
+        self.assertEqual(by_row_state["5"], "unknown")
+
+    def test_the_band_is_the_value_policy_s(self):
+        """The module delegates the band; it does not re-implement it."""
+        calls = []
+
+        def recorded(left, expected):
+            calls.append((left, expected))
+            return "behind"
+
+        with mock.patch.object(value_policy, "pace_state", recorded):
+            state = self.state_of({"remaining_ratio": 0.3, "pace_delta": -0.1})
+        self.assertEqual(state, "behind")
+        self.assertEqual(len(calls), 1)
+        self.assertAlmostEqual(calls[0][0], 0.3)
+        self.assertAlmostEqual(calls[0][1], 0.4)
+
+
 class StaticRouteWiringTests(unittest.TestCase):
     def test_the_collector_renders_the_published_name_of_a_route(self):
         """The name is read from the series the collector publishes."""
@@ -439,6 +561,20 @@ class StaticRouteWiringTests(unittest.TestCase):
         )
         self.assertIn('role="Bulk 1"', by_number["1"])
         self.assertIn("ghostship_ai_static_route_policy_ok 1", text)
+
+    def test_the_collector_renders_one_pace_state_per_row(self):
+        path = write_policy(self)
+        text = main_module.render([], [], NOW, 0.0, SNAPSHOT, runtime_policy=path)
+        self.assertIn("# HELP ghostship_ai_static_route_pace_state ", text)
+        states = [
+            line
+            for line in text.splitlines()
+            if line.startswith("ghostship_ai_static_route_pace_state{")
+        ]
+        self.assertEqual(len(states), 5)
+        self.assertIn(
+            'ghostship_ai_static_route_pace_state{row="1",state="ahead"} 1', text
+        )
 
     def test_the_collector_still_renders_when_the_policy_is_missing(self):
         directory = tempfile.TemporaryDirectory()

@@ -470,6 +470,13 @@ METRIC_HELP = {
         "The Paced Availability of a static route: the pace delta of the "
         "capacity of its candidate."
     ),
+    "ghostship_ai_static_route_pace_state": (
+        "The band of a static route against the line of its capacity, in the "
+        "state label: ahead, on_pace, behind, far_behind, spent or unknown. "
+        "One series per row, with the row label plus the state. The line is "
+        "the share left minus the route's Paced Availability, and the band "
+        "is the value policy's."
+    ),
     "ghostship_ai_static_route_reset_timestamp_seconds": (
         "When the capacity window that binds a static route resets."
     ),
@@ -487,6 +494,13 @@ METRIC_HELP = {
     "ghostship_ai_free_provider_selection_paced_availability": (
         "The Paced Availability of the free selection of a provider: the "
         "pace delta of the capacity of the route it selected."
+    ),
+    "ghostship_ai_free_provider_selection_pace_state": (
+        "The band of a free provider's selection against the line of its "
+        "capacity, in the state label: ahead, on_pace, behind, far_behind, "
+        "spent or unknown. One series per free provider, with the provider "
+        "label plus the state. The line is the share left minus the "
+        "selection's Paced Availability, and the band is the value policy's."
     ),
     "ghostship_ai_free_provider_selection_reset_timestamp_seconds": (
         "When the capacity window that binds the free selection of a "
