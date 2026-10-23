@@ -491,6 +491,9 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                        'quality_accepted': row.get('quality_s'),
                        'remaining_ratio': limit.get('remaining_ratio'),
                        'pace_delta': limit.get('pace_delta')}
+            guard = row.get('worker_pool_guard') or {}
+            numbers['guard_remaining_ratio'] = guard.get('remaining_ratio')
+            numbers['guard_expected_remaining_ratio'] = guard.get('expected_remaining_ratio')
             if limit.get('reset_at'):
                 try:
                     numbers['reset_timestamp_seconds'] = datetime.fromisoformat(

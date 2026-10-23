@@ -295,6 +295,30 @@ class SnapshotContractTests(unittest.TestCase):
             data = json.loads(path.read_text())
             self.assertEqual(data["schema_version"], 1)
 
+    def test_large_catalog_fits_the_picker_read_budget_in_every_projection(self):
+        # A real deployment crossed the CLI/MCP reader's 4 MiB bound solely
+        # because the publisher indented its repeated quota/quality evidence.
+        row = {'provider': 'fixture', 'model': 'model:1017',
+               'quality_evidence': {'aa': 80, 'observed': {'n': 5, 'passed': 4}},
+               'windows': [{'kind': 'weekly', 'remaining_ratio': .75,
+                            'reset_at': '2030-01-01T00:00:00Z'}] * 4}
+        data = {'schema_version': 1, 'candidates': [row] * 8000}
+        budget = 4 * 1024 * 1024  # ghostship_t3.ranking.MAX_SNAPSHOT_BYTES
+        self.assertGreater(len(json.dumps(data, indent=1).encode()), budget)
+        with tempfile.TemporaryDirectory() as directory:
+            canonical = Path(directory) / 'routing.json'
+            projection = Path(directory) / 'model-routing.json'
+            written = snapshot.write_snapshot(canonical, data)
+            projected = snapshot.publish(data, [projection])
+            for path in (canonical, projection):
+                with path.open('rb') as stream:
+                    payload = stream.read(budget + 1)
+                self.assertLessEqual(path.stat().st_size, budget)
+                self.assertEqual(json.loads(payload), data)
+            self.assertEqual(canonical.read_bytes(), projection.read_bytes())
+            self.assertEqual(written, canonical.stat().st_size)
+            self.assertEqual(projected, [(str(projection), written)])
+
 
 if __name__ == "__main__":
     unittest.main()

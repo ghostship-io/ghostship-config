@@ -53,8 +53,10 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertEqual([link['url'] for link in self.page['links']],
                          ['/d/ghostship-ai-usage', '/d/ghostship-paid-models', '/d/ghostship-free-workers'])
         self.assertEqual([p['id'] for p in self.page['panels']], [201, 210, 211, 240])
-        # Models live on their own pages; the providers page has no model queries.
-        self.assertNotIn('ghostship_ai_picker_model', json.dumps(self.page))
+        # Models live on their own pages; the providers page only reads why a free
+        # provider has no usable model, and never a selection.
+        for metric in ('selected', 'position', 'provider_position', 'default', 'quality'):
+            self.assertNotIn('ghostship_ai_picker_model_' + metric, json.dumps(self.page))
 
     def test_pools_are_single_panels_not_repeats_and_tables_are_collapsed(self):
         for panel_id, variable, scope in ((210, 'paid_account', 't3'), (211, 'free_account', 'free')):
@@ -162,8 +164,9 @@ class ProviderPoolTests(unittest.TestCase):
         cls.free = cls.panels[211]
 
     def pool(self, rows, panel=None, now=NOW, start=None, end=None):
+        kind = 'free' if panel is self.free else 'paid'
         return call(panel or self.paid, 'providerPool', rows, now, now - 7 * DAY if start is None else start,
-                    now if end is None else end)
+                    now if end is None else end, kind)
 
     def test_the_lowest_limit_leads_and_the_next_reset_is_the_soonest(self):
         rows = (window('claude', 'session', .82, 'Session', resetAt=NOW / 1000 + 5000)
@@ -186,28 +189,39 @@ class ProviderPoolTests(unittest.TestCase):
         card = self.pool(rows)['cards'][0]
         self.assertEqual(card['head']['text'], '60%')
         self.assertEqual([w['label'] for w in card['bars']], ['Weekly'])
-        self.assertIn('Not used', card['unusedText'])
-        self.assertIn('Fable', card['unusedText'])
+        # Fable is never used, so nothing on the card mentions it.
+        self.assertNotIn('Fable', json.dumps(card))
+        self.assertNotIn('unusedText', card)
+        self.assertNotIn('Not used', self.paid['options']['content'])
 
     def test_a_spent_limit_is_red_zero_and_blocks_the_headline(self):
         card = self.pool(window('grok', 'weekly', 0, 'Weekly', resetAt=NOW / 1000 + 3600))['cards'][0]
         self.assertEqual((card['head']['text'], card['head']['cls']), ('0%', 'spent'))
 
-    def test_only_confirmed_or_explicit_codex_resets_are_shown_on_the_card(self):
+    def test_only_confirmed_codex_resets_are_shown_on_the_card(self):
         base = window('codex', 'weekly', .5, 'Weekly')
         at = '2026-01-01T18:00:00Z'  # NOW + 6 hours
-        event = lambda confidence, reset=at: {'account': 'codex', 'field': 'announced', 'confidence': confidence,
-                                                'scope': 'codex', 'reset_at': reset, 'value': 1}
+        event = lambda confidence, reset=at, account='codex': {
+            'account': account, 'provider': account, 'field': 'announced', 'confidence': confidence,
+            'windows': 'weekly', 'plans': 'pro', 'reset_at': reset, 'value': 1}
         card = self.pool(base + [event('confirmed')])['cards'][0]
         self.assertEqual(card['event']['text'], 'Confirmed reset · 6h 0m')
-        self.assertEqual(card['event']['title'], 'Reset confirmed for 1 Jan 18:00 UTC')
-        self.assertEqual(card['event']['brief'], 'reset in 6h 0m')
-        self.assertEqual(self.pool(base + [event('high')])['cards'][0]['event']['text'].split(' ·')[0], 'Announced reset')
-        for rows in (base + [event('low')], base + [event('confirmed', 'time needs confirmation')],
+        self.assertEqual(card['event']['title'], 'Reset confirmed for 1 Jan 18:00 UTC · weekly · pro')
+        self.assertEqual(card['event']['brief'], 'Confirmed · 6h 0m')
+        # config#400 contract: confidence is confirmed or low; a low row is unverified evidence.
+        for rows in (base + [event('low')], base + [event('high')],
+                     base + [event('confirmed', 'time needs confirmation')],
                      base + [event('confirmed', '2026-02-01T00:00:00Z')]):
             self.assertIsNone(self.pool(rows)['cards'][0]['event'])
-        other = self.pool(window('claude', 'weekly', .5) + [event('confirmed')])['cards'][0]
-        self.assertIsNone(other['event'])
+        self.assertIsNone(self.pool(window('claude', 'weekly', .5) + [event('confirmed')])['cards'][0]['event'])
+        past = self.pool(base + [event('confirmed', '2026-01-01T10:00:00Z')])['cards'][0]['event']
+        self.assertEqual((past['text'], past['past']), ('Confirmed reset · done', True))
+
+    def test_the_reset_series_follows_the_announcement_contract(self):
+        query = self.panels[210]['targets'][0]['expr']
+        self.assertIn('ghostship_ai_announced_reset_info{provider="codex"}', query)
+        self.assertNotIn('scope="codex"', query)
+        self.assertNotIn('confirmed|high', json.dumps(self.page))
 
     def test_t3_tokens_and_cost_sum_the_days_inside_the_range_with_zero_filled_days(self):
         def bucket(day, tokens, cost=None, unpriced=0):
@@ -230,6 +244,17 @@ class ProviderPoolTests(unittest.TestCase):
         none = self.pool(window('codex', 'weekly', .5) + bucket('2025-01-01', 10, 1))
         self.assertIsNone(none['cards'][0]['usage'])
 
+    def test_free_providers_show_tokens_only_never_a_price(self):
+        rows = window('opencode', 'daily', .5) + [{'account': 'opencode', 'day': '2026-01-01', 'model': 'm',
+                                                    'field': 'usage_tokens', 'value': 2000000},
+                                                   {'account': 'opencode', 'day': '2026-01-01', 'model': 'm',
+                                                    'field': 'usage_cost', 'value': 9.5}]
+        pool = self.pool(rows, self.free)
+        self.assertEqual((pool['tokens'], pool['cost']), ('2.0M', ''))
+        self.assertEqual(pool['cards'][0]['usage']['cost'], '')
+        self.assertFalse(pool['cards'][0]['usage']['partial'])
+        self.assertEqual(self.pool(rows)['cost'], '$9.50')
+
     def test_free_provider_without_a_published_limit_is_one_calm_line(self):
         rows = [{'account': 'groq', 'field': 'availability', 'state': 'available', 'basis': 'unpublished', 'value': 1},
                 {'provider': 'groq', 'state': 'available', 'field': 'free_models', 'value': 3}]
@@ -239,15 +264,24 @@ class ProviderPoolTests(unittest.TestCase):
         self.assertEqual(card['modelsBrief'], '3 models')
         self.assertEqual(card['models'], '3 models available')
 
-    def test_free_provider_with_every_model_blocked_is_visibly_blocked(self):
+    def test_free_provider_with_every_model_blocked_says_why_and_until_when(self):
         rows = window('opencode', 'inferred', 1, 'Inferred · 1m', rolling=1) + [
             {'provider': 'opencode', 'state': 'available', 'field': 'free_models', 'value': 0},
-            {'provider': 'opencode', 'state': 'unavailable', 'field': 'free_models', 'value': 46}]
+            {'provider': 'opencode', 'state': 'unavailable', 'field': 'free_models', 'value': 46},
+            {'account': 'opencode', 'field': 'free_reason', 'value': 37,
+             'reason': 'not offered by the T3 instance (deprecated in the catalog)'},
+            {'account': 'opencode', 'field': 'free_reason', 'value': 7, 'reason': 'not offered by the T3 instance'},
+            {'account': 'opencode', 'field': 'free_reason', 'value': 1,
+             'reason': 'cooling down in the free pool until 2026-01-02T00:00:01Z'}]
         card = self.pool(rows, self.free)['cards'][0]
-        self.assertEqual((card['head']['text'], card['head']['cls']), ('Blocked', 'spent blocked'))
+        self.assertEqual(card['name'], 'OpenCode Zen')
+        self.assertEqual((card['head']['text'], card['head']['cls']), ('', 'spent blocked'))
         self.assertTrue(card['blocked'])
         self.assertIsNone(card['overall'])
-        self.assertEqual(card['models'], '46 models blocked')
+        self.assertEqual(card['models'], 'Blocked · 44 not offered · 1 cooling · back 2 Jan 00:00Z')
+        content = self.free['options']['content']
+        self.assertIn('{{#if blocked}} blocked{{/if}}', content)
+        self.assertIn('.ov.blocked{display:none}', self.free['options']['styles'])
 
     def test_the_content_has_no_empty_first_card_and_names_every_pool(self):
         for panel, pool in ((self.paid, 'paid'), (self.free, 'free')):

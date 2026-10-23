@@ -67,6 +67,16 @@ class ClaudeWorkerTests(unittest.TestCase):
         self.assertTrue(sonnet['selection_eligible'])  # Still listed, grey, until headroom returns.
         self.assertEqual(value['default_worker']['model'], 'gpt-6.1-sol')
 
+    def test_the_guard_readings_are_published_for_the_dashboard(self):
+        self.week.update(remaining_ratio=.4, reset_at=iso(NOW + WEEK * .5))
+        samples = model_selection.samples(self.build())
+        sonnet = {name: value for name, labels, value in samples
+                  if labels['model'] == SONNET and labels['category'] == 'worker'}
+        self.assertEqual(sonnet['ghostship_ai_picker_model_guard_remaining_ratio'], .4)
+        self.assertEqual(sonnet['ghostship_ai_picker_model_guard_expected_remaining_ratio'], .5)
+        opus = {name for name, labels, value in samples if labels['model'] == OPUS and labels['category'] == 'orchestrator'}
+        self.assertNotIn('ghostship_ai_picker_model_guard_remaining_ratio', opus)
+
     def test_reserve_and_pace_boundaries_are_both_inclusive(self):
         for remaining, expected, allowed in ((.2, .1, True), (.199, .1, False),
                                              (.5, .5, True), (.499, .5, False)):

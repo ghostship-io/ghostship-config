@@ -94,9 +94,46 @@ class PaidModelsPageTests(unittest.TestCase):
         self.assertTrue(models[0]['noLimit'])
         self.assertFalse(models[1]['noLimit'])
         content=panel['options']['content']
-        self.assertIn('{{#unless this.noLimit}}<div class="capacity-track"',content)
+        self.assertIn('{{else}}<div class="capacity-graph"',content)
+        self.assertIn('{{#if this.noLimit}}<div class="nolimit"',content)
         self.assertEqual(content.count('class="capacity-track"'),1)
         self.assertIn('next pick',content)
+
+    def test_a_reserved_claude_worker_shows_the_guard_numbers_muted(self):
+        panel = self.panels[233]
+        labels = {'provider': 'claude', 'model': 'claude-sonnet-5-5', 'category': 'worker', 'state': 'reserved',
+                  'display_name': 'claude-sonnet-5-5', 'window': 'weekly'}
+        rows = [{**labels, 'field': 'position', 'value': 5},
+                {**labels, 'field': 'guard_remaining_ratio', 'value': .51},
+                {**labels, 'field': 'guard_expected_remaining_ratio', 'value': .74}]
+        model = helper(panel, 'selectionModels', rows)[0]
+        self.assertTrue(model['reserved'])
+        self.assertTrue(model['restricted'])
+        self.assertEqual(model['reasonText'], 'reserved · Claude under pace (51% vs 74% expected)')
+        rows[1]['value'], rows[2]['value'] = .6, .5
+        self.assertEqual(helper(panel, 'selectionModels', rows)[0]['reasonText'],
+                         'reserved · Claude below its review reserve (60% vs 50% expected)')
+        for field in ('guard_remaining_ratio', 'guard_expected_remaining_ratio'):
+            self.assertIn('ghostship_ai_picker_model_' + field, panel['targets'][0]['expr'])
+        self.assertIn('selection-card {{#if this.restricted}}restricted{{/if}}{{#if this.reserved}} reserved{{/if}}',
+                      panel['options']['content'])
+
+    def test_estimated_limits_show_a_muted_line_instead_of_a_full_bar(self):
+        panel = self.panels[233]
+        labels = {'provider': 'nvidia', 'model': 'm', 'category': 'worker', 'window': 'inferred', 'state': 'available'}
+        model = helper(panel, 'selectionModels', [{**labels, 'field': 'remaining_ratio', 'value': 1}])[0]
+        self.assertTrue(model['noLimit'])
+        self.assertIn('no published limit', panel['options']['content'])
+        real = helper(panel, 'selectionModels', [{**labels, 'window': 'weekly', 'field': 'remaining_ratio', 'value': .4}])[0]
+        self.assertFalse(real['noLimit'])
+
+    def test_tokens_per_pass_are_formatted_like_t3(self):
+        panel = self.panels[250]
+        labels = {'provider': 'example', 'model': 'm', 'effort': 'low', 'effort_option': 'effort',
+                  'aa_date': '2026-10-23T00:00:00Z', 'source': 'bench', 'evidence_state': 'ok'}
+        for raw, text in ((1203481, '1.2M'), (1961703, '2M'), (4200, '4.2k'), (950, '950'), (3.2e9, '3.2B')):
+            rows = [{**labels, 'field': 'info', 'value': 1}, {**labels, 'field': 'tokens_per_pass', 'value': raw}]
+            self.assertEqual(helper(panel, 'qualityRows', rows)[0]['tokens'], text)
 
     def test_free_provider_names_are_human_on_the_model_cards(self):
         row={'provider':'cloudflare-workers-ai','model':'m','category':'worker','field':'position','value':1}
