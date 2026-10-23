@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.206] - 2026-10-23
+
+- Track public Codex reset announcements separately from owner overrides and provider measurements, with bounded Desktop checks and announced-reset pacing labels.
+
+PR #371.
+
 ## [3.17.205] - 2026-10-23
 
 Remove the two internal heading scrollbars at phone widths.
