@@ -39,16 +39,16 @@ jobs:
           # previous account; the deployment supplies that name.
           GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
         run: python3 scripts/ci-private-inputs.py
-      - name: Run unit tests
+      - name: Run fast repository checks
         if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: nix develop .#ci --no-write-lock-file -c python3 scripts/check-unit.py
+        run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Validate container development workflow
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           # The agent pin guard compares the pinned agent revision with the base
           # branch's, which needs the read-only agent key.
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
-        run: nix develop .#ci --no-write-lock-file -c scripts/check
+        run: nix develop .#ci --no-write-lock-file -c scripts/check-integration
       - name: Evaluate hosts and run regression tests
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package

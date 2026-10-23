@@ -81,7 +81,7 @@ Use the repository's pinned tools from any agent terminal:
 
 ```sh
 cd /workspace/nixos-config
-nix develop -c scripts/check
+nix develop .#ci -c scripts/check
 ```
 
 The default shell supplies Git, GitHub CLI, SSH, Nix, formatting and shell
@@ -99,19 +99,18 @@ and `PLAYWRIGHT_BROWSERS_PATH`. Ordinary Nix work does not download those
 browsers. The browser shell inherits the default tools. Browser tests still
 need the relevant project's JavaScript dependencies and any site credentials.
 
-`scripts/check` parses all tracked Nix files, runs ShellCheck on the workflow
-script, checks patch whitespace, and evaluates ci/default/browser shells for
-`x86_64-linux` and `aarch64-linux` plus every host's full system derivation.
-It uses the checked-in lock file without updating it. Stage new Nix files
-before running checks. These checks validate module assertions and derivation
-construction; target-host builds and live verification remain necessary for
-deployment.
+`scripts/check` runs the fast unit set, workflow and shell lint, fixture checks,
+patch whitespace checks and the redacted Gitleaks source scan. Unit modules
+fail above ten seconds, with measured 20s/15s budgets for the providers-page
+and OpenCode reader fixtures; the unit command has a 110s hard limit. PRs and
+main pushes use this same entry point.
 
-Pull requests run `nix develop .#ci -c python3 scripts/check-unit.py`, workflow
-and shell lint, and the existing redacted Gitleaks source scan. The job has a
-four-minute budget. Main pushes retain `scripts/check`, all host evaluations,
-configuration builds and the same secret scan. T3 browser integration also
-runs after merge on main. Superseded PR runs are cancelled; main runs finish.
+`scripts/check-integration` retains tracked Nix parsing, policy rendering,
+ci/default/browser shell evaluation for both Linux architectures and every
+host's full system derivation. Nightly/manual CI also builds host-evaluation,
+config-tests and config-package, retaining full regression and host assertion
+coverage. Stage new Nix files before evaluation. Integration and browser jobs
+run nightly or manually on main; superseded PR and main runs are cancelled.
 Review the exact diff and unit results, record approval, then use `agent pr land`.
 Frontier authors self-review; other models need one frontier review.
 
