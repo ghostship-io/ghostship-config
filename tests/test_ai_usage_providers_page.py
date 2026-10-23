@@ -17,6 +17,7 @@ The queries are executed against the committed review fixture, so the worked
 cases are the numbers the store returns and not a copy of them.
 """
 import json
+import math
 import os
 import re
 import shutil
@@ -47,9 +48,19 @@ CAPACITY_METRICS = {
     "ghostship_ai_account_window_remaining_ratio": "left",
     "ghostship_ai_account_window_expected_remaining_ratio": "expected",
     "ghostship_ai_account_window_reset_timestamp_seconds": "resetAt",
+    "ghostship_ai_account_window_check_timestamp_seconds": "checked",
+    "ghostship_ai_account_window_rolling": "rolling",
     "ghostship_ai_account_window_order": "order",
     "ghostship_ai_account_window_learning": "learning",
 }
+
+# The content of the panel with the fixture, measured in Playwright at the
+# production font (Inter), with the panel's own styles and a phone of 390 px
+# and a desktop of 1600 px. A grid row of the dashboard is 37 px, so the
+# panel is tall enough for the taller of the two readings.
+CAPACITY_PHONE_HEIGHT = 1713
+CAPACITY_DESKTOP_HEIGHT = 577
+CAPACITY_ROW_HEIGHT = 37
 
 # The moment the fixture was read. The resets of the fixture are counted
 # from it, so the worked cases are the rows of that moment.
@@ -864,13 +875,13 @@ class ProviderCapacityTests(unittest.TestCase):
         )
         return run_panel_helper(self.panel, expression, env=env)
 
-    def chips(self, rows=None, env=None):
-        """The chips of the accounts that are learning, as the helper builds them."""
+    def learning(self, rows=None, env=None):
+        """The line of the accounts that are learning, as the helper builds it."""
         expression = (
             "const rows = "
             + json.dumps(self.rows if rows is None else rows)
             + ";\n"
-            + "console.log(JSON.stringify(helpers.learningChips(rows)));"
+            + "console.log(JSON.stringify(helpers.learningLine(rows)));"
         )
         return run_panel_helper(self.panel, expression, env=env)
 
@@ -920,7 +931,56 @@ class ProviderCapacityTests(unittest.TestCase):
                 "openrouter",
                 # An account the approved list does not name follows it, by
                 # its name.
+                "cursor",
                 "example-free",
+                "google",
+                "opencode",
+                "requesty",
+            ],
+        )
+
+    def test_the_fixture_holds_the_set_the_height_is_sized_for(self):
+        """Twelve cards, twenty-two windows and seventeen learning accounts.
+
+        The panel is sized for the live set with the headroom of the next
+        collection, so the count of the fixture is the count the height
+        answers to.
+        """
+        cards = self.cards()
+        learning = self.rows
+        self.assertEqual(len(cards), 12)
+        self.assertEqual(sum(len(card["windows"]) for card in cards), 22)
+        self.assertEqual(
+            len([row for row in learning if row.get("field") == "learning"]), 17
+        )
+        self.assertEqual(len(self.learning()), 1)
+
+    def test_the_labels_carry_their_scope(self):
+        """A window that covers one model family names it, as #267 publishes it."""
+        cards = self.cards()
+        labels = [
+            window["label"]
+            for card in cards
+            for window in card["windows"]
+        ]
+        for label in (
+            "Session · Claude & GPT",
+            "Weekly · Claude & GPT",
+            "Quota · Gemini",
+            "Quota · Claude & GPT",
+            "Weekly · Fable",
+        ):
+            self.assertIn(label, labels)
+        self.assertEqual(
+            [
+                window["label"]
+                for window in self.card(cards, "antigravity")["windows"]
+            ],
+            [
+                "Session · Gemini",
+                "Weekly · Gemini",
+                "Quota · Gemini",
+                "Quota · Claude & GPT",
             ],
         )
 
@@ -947,7 +1007,7 @@ class ProviderCapacityTests(unittest.TestCase):
         """The three worked rows read exactly what the owner saw."""
         cards = self.cards()
         self.assertEqual(
-            self.window(self.card(cards, "claude"), "Session")["sub"],
+            self.window(self.card(cards, "claude"), "Session · Claude & GPT")["sub"],
             "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)",
         )
         self.assertEqual(
@@ -971,7 +1031,9 @@ class ProviderCapacityTests(unittest.TestCase):
     def test_a_window_with_no_expected_series_has_no_tick_and_no_pace_word(self):
         """A window with no even-spend line draws no line and says no pace."""
         cards = self.cards()
-        window = self.window(self.card(cards, "antigravity"), "Quota")
+        window = self.window(
+            self.card(cards, "antigravity"), "Quota · Claude & GPT"
+        )
         self.assertFalse(window["hasTick"])
         self.assertEqual(window["tick"], "")
         self.assertEqual(window["paceClass"], "")
@@ -1004,18 +1066,34 @@ class ProviderCapacityTests(unittest.TestCase):
         self.assertEqual(window["sub"], "resets in 1h 0m (22 Oct 22:01)")
         self.assertFalse(window["hasTick"])
 
-    def test_a_learning_account_is_a_chip_and_not_a_card(self):
-        """An account with no window of its own says so, and holds no card."""
-        chips = self.chips()
-        self.assertIn("Google", [chip["name"] for chip in chips])
-        self.assertNotIn(
-            "google", [card["account"] for card in self.cards()]
+    def test_a_learning_account_is_one_line_and_not_a_card(self):
+        """An account with no window of its own says so under the cards.
+
+        The chips of seventeen learning accounts were a grid of boxes that
+        took six rows of a phone; one wrapped line says the same thing.
+        """
+        line = self.learning()
+        self.assertEqual(len(line), 1)
+        self.assertEqual(
+            line[0]["text"],
+            "Kilo, NVIDIA, Groq, Cloudflare, Cohere, DeepSeek, Inception, "
+            "Kilo (keyed), Mistral, Moonshot, OVH, Orcarouter, Pi, Poolside, "
+            "Upstage, Vercel, Zai",
         )
-        # The chip says what the account is doing.
         self.assertIn(
-            "{{this.name}} · <i>learning window…</i>",
-            self.panel["options"]["content"],
+            "Learning: {{this.text}}", self.panel["options"]["content"]
         )
+        self.assertNotIn("ichip", self.panel["options"]["content"])
+
+    def test_an_account_without_a_window_is_never_on_the_line(self):
+        """The line holds the accounts that publish no window, and only them."""
+        names = self.learning()[0]["text"].split(", ")
+        self.assertEqual(len(names), 17)
+        # Google and Requesty hold a window of their own, so they are cards.
+        for name in ("Google", "Requesty", "OpenCode Zen", "Claude"):
+            self.assertNotIn(name, names)
+        for name in ("Kilo", "NVIDIA", "Groq"):
+            self.assertIn(name, names)
 
     def test_an_account_with_no_window_holds_no_card(self):
         """A card is an account that has a window to show."""
@@ -1032,7 +1110,9 @@ class ProviderCapacityTests(unittest.TestCase):
         cards = self.cards()
         window = self.window(self.card(cards, "example-free"), "Inferred · 5h")
         self.assertTrue(window["inferred"])
-        self.assertFalse(self.window(self.card(cards, "claude"), "Session")["inferred"])
+        self.assertFalse(
+            self.window(self.card(cards, "claude"), "Session · Claude & GPT")["inferred"]
+        )
 
     def test_a_window_with_no_remaining_is_never_a_zero_bar(self):
         """A window the collector could not read is not a window that is spent."""
@@ -1057,7 +1137,7 @@ class ProviderCapacityTests(unittest.TestCase):
         env = dict(os.environ, TZ="Etc/GMT+10")
         cards = self.cards(env=env)
         self.assertEqual(
-            self.window(self.card(cards, "claude"), "Session")["sub"],
+            self.window(self.card(cards, "claude"), "Session · Claude & GPT")["sub"],
             "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)",
         )
         self.assertEqual(
@@ -1065,30 +1145,249 @@ class ProviderCapacityTests(unittest.TestCase):
             "✕ spent · resets in 8.1d (30 Oct 22:34)",
         )
 
+    def test_the_share_left_reads_one_decimal(self):
+        """The share left is written with one decimal, so it can be compared.
+
+        The owner compares it with the provider's own site, which writes
+        95.9% and 39.5%. A whole number hides the second digit, and the
+        trailing zero of 100% is noise.
+        """
+        rows = []
+        for index, (label, left) in enumerate(
+            (("A", 0.9585), ("B", 0.3948), ("C", 1.0), ("D", 0.0))
+        ):
+            rows.append(
+                {
+                    "account": "example-free",
+                    "kind": "weekly",
+                    "quota_id": label,
+                    "label": label,
+                    "evidence": "provider_reported",
+                    "field": "left",
+                    "value": left,
+                }
+            )
+            rows.append(
+                {
+                    "account": "example-free",
+                    "kind": "weekly",
+                    "quota_id": label,
+                    "label": label,
+                    "evidence": "provider_reported",
+                    "field": "order",
+                    "value": index,
+                }
+            )
+        windows = self.card(self.cards(rows=rows), "example-free")["windows"]
+        self.assertEqual(
+            [window["pct"] for window in windows],
+            ["95.9%", "39.5%", "100%", "0%"],
+        )
+        self.assertEqual(windows[0]["width"], "95.9")
+        cards = self.cards()
+        ollama = self.card(cards, "ollama")
+        self.assertEqual(self.window(ollama, "Session")["pct"], "95.9%")
+        self.assertEqual(self.window(ollama, "Weekly")["pct"], "39.5%")
+        self.assertEqual(self.window(ollama, "Session")["width"], "95.9")
+
+    def test_a_reset_in_the_past_reads_resets_now(self):
+        """A window that is due says so: it never counts down to '0m'."""
+        cards = self.cards()
+        window = self.window(self.card(cards, "opencode"), "Inferred · 1h")
+        self.assertEqual(window["sub"], "● on pace · resets now")
+        self.assertEqual(window["brief"], "● on pace · resets now")
+        for text in (window["sub"], window["brief"]):
+            self.assertNotIn("0m", text)
+            self.assertNotIn("resets in", text)
+        # One minute before its reset, and one minute after: the words differ.
+        rows = [
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "left",
+                "value": 0.5,
+            },
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "resetAt",
+                "value": CAPACITY_NOW / 1000 - 60,
+            },
+        ]
+        past = self.window(self.card(self.cards(rows=rows), "example-free"), "Weekly")
+        self.assertEqual(past["sub"], "resets now")
+
+    def test_a_rolling_window_says_rolling_and_nothing_else(self):
+        """A rolling window has no reset, no tick and no pace.
+
+        The collector marks an inferred window shorter than five minutes
+        with ghostship_ai_account_window_rolling, and the window rolls: there
+        is nothing to reset and nothing to pace against.
+        """
+        cards = self.cards()
+        window = self.window(self.card(cards, "opencode"), "Inferred · 1m")
+        self.assertTrue(window["rolling"])
+        self.assertEqual(window["sub"], "rolling 1m")
+        self.assertEqual(window["brief"], "rolling 1m")
+        self.assertFalse(window["hasTick"])
+        self.assertEqual(window["tick"], "")
+        self.assertEqual(window["paceClass"], "")
+        self.assertEqual(window["pct"], "100%")
+        for text in (window["sub"], window["brief"]):
+            self.assertNotIn("resets", text)
+            self.assertNotIn("pace", text)
+        # The mark of the fixture is the collector's, one on the window.
+        marks = [
+            row
+            for row in self.rows
+            if row.get("field") == "rolling" and row.get("value") == 1
+        ]
+        self.assertEqual([row["label"] for row in marks], ["Inferred · 1m"])
+
+    def test_the_card_says_how_old_its_reading_is(self):
+        """A card dates its reading from the oldest window it holds.
+
+        The card is compared with the provider's own site, so the age of the
+        reading is part of it: Ollama was checked two minutes ago.
+        """
+        cards = self.cards()
+        self.assertEqual(self.card(cards, "ollama")["read"], "read 2m ago")
+        ollama = self.card(cards, "ollama")
+        checked = [
+            row["value"]
+            for row in self.rows
+            if row.get("account") == "ollama" and row.get("field") == "checked"
+        ]
+        self.assertEqual(len(checked), 2)
+        self.assertEqual(max(checked), CAPACITY_NOW / 1000 - 120)
+        # The age is the oldest window, not the freshest one.
+        rows = [
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "checked",
+                "value": CAPACITY_NOW / 1000 - 60,
+            },
+            {
+                "account": "example-free",
+                "kind": "monthly",
+                "quota_id": "monthly",
+                "label": "Monthly",
+                "evidence": "provider_reported",
+                "field": "checked",
+                "value": CAPACITY_NOW / 1000 - 600,
+            },
+        ]
+        card = self.card(self.cards(rows=rows), "example-free")
+        self.assertEqual(card["read"], "read 10m ago")
+
+    def test_a_window_without_a_check_time_dates_nothing(self):
+        """A reading without a check time prints no age."""
+        rows = [
+            {
+                "account": "example-free",
+                "kind": "weekly",
+                "quota_id": "weekly",
+                "label": "Weekly",
+                "evidence": "provider_reported",
+                "field": "left",
+                "value": 0.5,
+            }
+        ]
+        card = self.card(self.cards(rows=rows), "example-free")
+        self.assertEqual(card["read"], "")
+
+    def test_the_narrow_line_drops_the_clock_and_never_wraps(self):
+        """A phone row is one line of the window and one of its pace.
+
+        The clock of the reset is dropped on the narrow screen, and neither
+        line wraps: a long label such as 'Quota · Claude & GPT' stays on its
+        row. The wide screen keeps the clock.
+        """
+        window = self.window(
+            self.card(self.cards(), "claude"), "Session · Claude & GPT"
+        )
+        self.assertEqual(window["brief"], "▲ 24 ahead · resets in 2h 9m")
+        self.assertIn("(22 Oct 23:09)", window["sub"])
+        for label in (
+            self.window(self.card(self.cards(), "antigravity"), "Quota · Claude & GPT"),
+            self.window(self.card(self.cards(), "claude"), "Session · Claude & GPT"),
+        ):
+            self.assertNotIn("(", label["brief"])
+        styles = self.panel["options"]["styles"]
+        rules = dict(css_rules(styles))
+        narrow = media_body(styles)
+        for selector in (".capacity .wl", ".capacity .sub"):
+            self.assertIn("white-space: nowrap", rules[selector], selector)
+        # The label column is as wide as the label, so no label is cut.
+        self.assertIn("max-content", rules[".capacity .card"])
+        # The narrow screen shows the brief line and hides the clocked one.
+        self.assertIn(".capacity .sub .wide { display: none; }", narrow)
+        self.assertIn(".capacity .sub .brief { display: inline; }", narrow)
+        self.assertIn(".capacity .sub .brief { display: none; }", styles)
+
+    def test_the_panel_has_one_heading(self):
+        """The panel title is the heading: the content does not repeat it."""
+        content = self.panel["options"]["content"]
+        self.assertNotIn("<h2>", content)
+        self.assertNotIn("Provider capacity", content)
+        # Its chip and the as-of time stay on that line.
+        self.assertIn('% left · tick = where you should be now', content)
+        self.assertIn('{{utcStamp (variable "__to")}} UTC', content)
+        self.assertNotIn("<h2>", self.panel["options"]["defaultContent"])
+
+    def test_the_account_is_read_by_its_name(self):
+        """The Zen account of OpenCode is read as OpenCode Zen."""
+        card = self.card(self.cards(), "opencode")
+        self.assertEqual(card["name"], "OpenCode Zen")
+        self.assertEqual(card["icon"], "O")
+
     def test_no_window_of_the_page_is_a_fixed_value(self):
         """The page reads every number of a window; it never holds one."""
         page = json.dumps(self.panel)
         for value in (
             "0.67",
             "0.429",
-            "0.4134",
+            "0.9585",
+            "0.3948",
             "0.4463",
             "0.9994",
             "0.881",
             "0.966",
             "1792710599",
             "1793399640",
+            "1792702757",
         ):
             self.assertNotIn(value, page, value)
 
     def test_the_panel_is_tall_enough_for_its_cards(self):
-        """The panel holds every card, every row and every chip of the set.
+        """The panel holds every card, every row and the learning line.
 
-        Measured in Playwright with the panel's own styles and the live set
-        of the fixture: the content is 1651 px tall at 390 px, and a grid
-        row of the dashboard is 37 px.
+        Measured in Playwright with the panel's own helpers, styles and the
+        production font (Inter), at the widths the owner uses: the content is
+        1713 px tall at 390 px and 577 px at 1600 px. The taller reading is
+        rounded up to whole 37 px grid rows.
         """
-        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 1651)
+        rows = math.ceil(CAPACITY_PHONE_HEIGHT / CAPACITY_ROW_HEIGHT)
+        self.assertEqual(rows, 47)
+        self.assertEqual(self.panel["gridPos"]["h"], rows)
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * CAPACITY_ROW_HEIGHT,
+            CAPACITY_PHONE_HEIGHT,
+        )
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * CAPACITY_ROW_HEIGHT,
+            CAPACITY_DESKTOP_HEIGHT,
+        )
 
 
 class ModelSelectionTests(unittest.TestCase):
@@ -1753,7 +2052,7 @@ class WorkedCasesTests(unittest.TestCase):
         """The panel's own query returns the windows of the live set.
 
         The query reads every account window gauge in one go, so the rows
-        are the windows of the eight accounts that have one and the
+        are the windows of the twelve accounts that have one and the
         seventeen accounts that are learning.
         """
         panel = section(self.page, "Provider capacity")
@@ -1761,11 +2060,19 @@ class WorkedCasesTests(unittest.TestCase):
         rows = self.store.query(target["expr"].replace("$provider", ".*"))
         self.assertEqual(
             {row["metric"].get("field") for row in rows},
-            {"left", "expected", "resetAt", "order", "learning"},
+            {
+                "left",
+                "expected",
+                "resetAt",
+                "checked",
+                "rolling",
+                "order",
+                "learning",
+            },
         )
         accounts = {row["metric"].get("account") for row in rows}
-        self.assertEqual(len(accounts), 25)
-        self.assertEqual(len(rows), 74)
+        self.assertEqual(len(accounts), 29)
+        self.assertEqual(len(rows), 122)
 
     def test_the_worked_rows_are_the_rows_the_store_returns(self):
         """The cards of the page are the windows the store holds."""
@@ -1791,7 +2098,7 @@ class WorkedCasesTests(unittest.TestCase):
         session = next(
             window
             for window in by_account["claude"]["windows"]
-            if window["label"] == "Session"
+            if window["label"] == "Session · Claude & GPT"
         )
         self.assertEqual(session["sub"], "▲ 24 ahead · resets in 2h 9m (22 Oct 23:09)")
         monthly = next(

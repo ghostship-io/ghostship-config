@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.113] - 2026-10-23
+## [3.17.114] - 2026-10-23
 
 - ai-usage: a published window series carries a quota id of its own. The card of a provider keys its rows by the account, the kind and the quota id, so a provider that publishes one quota id for several model families drew one row of the card for all of them: the Antigravity account publishes 'quotaInfo' for the Gemini, the Claude and the GPT models, and the card showed one of the three. The scope of the window is named after the id when the id does not name it already, so the quota of the Gemini models is 'quotaInfo@gemini' and a window of two families is 'quotaInfo@claude+gpt'. A window whose id names its scope keeps it: '3p-5h' names the Claude and the GPT models of the third-party group, and 'seven_day_fable' names the Fable models of the Claude account. A window of the whole account keeps its id, an inferred window keeps the name of the window it was learned over, and the account records of the routing snapshot keep the quota id of the provider.
+
+## [3.17.113] - 2026-10-23
+
+- ai-usage: the capacity cards are sized for the live set and read the age of a reading. The panel took a fixed height from an eight-card fixture, so a phone clipped about 576 px behind an inner scroll while a desktop left about 800 px empty. The review fixture now holds twelve cards with twenty-two windows and seventeen learning accounts, the live set with the headroom of the next collection, labelled with the scope of a window ("Session · Claude & GPT", "Weekly · Claude & GPT", "Quota · Gemini", "Weekly · Fable"). Under 520 px a row of a card is the label, the bar and the share on one line and the pace with the reset under it, with the reset clock dropped and nothing wrapped, and the accounts that are learning are one wrapped line instead of a grid of chips. The share left keeps one decimal, a reset that is due reads "resets now", a window the collector marks as rolling reads "rolling 1m" with no reset, no tick and no pace, the header of a card dates its oldest reading ("read 2m ago"), the repeated inner heading is gone, and the account "opencode" is read as OpenCode Zen. The panel takes the taller of the two measured readings in whole 37 px rows: 1713 px at 390 px (47 rows) and 577 px at 1600 px.
 
 ## [3.17.112] - 2026-10-23
 
