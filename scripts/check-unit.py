@@ -97,6 +97,7 @@ TESTS = (
 # Nix module evaluation and a real VictoriaMetrics fixture are integration
 # checks. Nightly config-tests retains them alongside full host evaluation.
 POST_MERGE_CLASSES = {
+    "test_ssh_command_guard.WrapperTests",  # exec replaces the guarded interpreter with a shell
     "test_agent_pin_guard.PinGuardTests",  # real Git repositories and source fetches
     "test_agent_pin_guard.PullRequestEventTests",  # Git/CLI event integration
     "test_newsletter_health.DeliveryTests",  # pinned coordinator, HTTP and notifier processes
@@ -168,6 +169,8 @@ if __name__ == "__main__":
         directory = root / name
         directory.mkdir()
         os.environ[key] = str(directory)
+    sys.dont_write_bytecode = True
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     sys.path.insert(0, str(isolation))
     from unit_guard import install
     install()

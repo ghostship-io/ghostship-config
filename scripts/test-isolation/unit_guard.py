@@ -8,11 +8,12 @@ from pathlib import Path
 import sys
 
 _installed = False
+_source = str(Path(__file__).resolve().parents[2])
 _forbidden = ('/var/lib', '/run', '/srv/apps', '/etc/ghostship')
 _network_commands = re.compile(r'^(curl|wget|ssh|scp|sftp|ghostship-notify|podman|docker(?:-compose)?|nix(?:-env|-instantiate)?|systemctl)$')
 
 
-def protected(path):
+def protected(path, *, source_reads=False):
     if not isinstance(path, (str, bytes, os.PathLike)):
         return False
     path = os.fsdecode(path)
@@ -20,10 +21,21 @@ def protected(path):
         from urllib.parse import unquote, urlsplit
         path = unquote(urlsplit(path).path)
     absolute = os.path.abspath(path)
+    # Self-hosted runners check out the repository below /run. Source reads
+    # are fixtures, whereas unrelated runtime paths must remain forbidden.
+    if source_reads and (absolute == _source or absolute.startswith(_source + '/')):
+        return False
     if any(absolute == root or absolute.startswith(root + '/') for root in _forbidden):
         return True
     path = os.path.realpath(path)
     return any(path == root or path.startswith(root + '/') for root in _forbidden)
+
+
+def at_directory(path, descriptor=None):
+    if isinstance(path, (str, bytes, os.PathLike)) and descriptor is not None and descriptor >= 0:
+        if not os.path.isabs(path):
+            return os.path.join(os.readlink('/proc/self/fd/' + str(descriptor)), os.fsdecode(path))
+    return path
 
 
 def install():
@@ -42,10 +54,18 @@ def install():
     def audit(event, args):
         if event in {'open', 'os.listdir', 'os.scandir', 'os.mkdir', 'os.remove', 'os.rmdir',
                      'os.chmod', 'os.chown', 'os.truncate', 'os.utime', 'os.chdir'}:
-            if args and protected(args[0]):
+            read = event in {'os.listdir', 'os.scandir'}
+            if event == 'open':
+                read = not (args[2] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+            fd_index = {'os.remove': 1, 'os.rmdir': 1, 'os.mkdir': 2,
+                        'os.chmod': 2, 'os.chown': 3, 'os.utime': 3}.get(event)
+            path = at_directory(args[0], args[fd_index] if fd_index is not None else None)
+            if protected(path, source_reads=read):
                 deny('host state access')
         elif event in {'os.rename', 'os.link', 'os.symlink'}:
-            if any(protected(path) for path in args[:2]):
+            paths = (at_directory(args[1], args[2]),) if event == 'os.symlink' else (
+                at_directory(args[0], args[2]), at_directory(args[1], args[3]))
+            if any(protected(path) for path in paths):
                 deny('host state mutation')
         elif event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.sendto',
                        'socket.sendmsg', 'urllib.Request'}:
@@ -65,6 +85,7 @@ def install():
             child_env = args[3]
             if child_env is not None:
                 # Explicit subprocess environments must retain the child guard.
+                child_env['PYTHONDONTWRITEBYTECODE'] = '1'
                 child_env.update({key: os.environ[key] for key in (
                     'GHOSTSHIP_UNIT_ROOT', 'GHOSTSHIP_UNIT_VIOLATIONS', 'PYTHONPATH')
                     if key not in child_env})
@@ -82,8 +103,11 @@ def install():
         original = getattr(os, name)
         def guarded(path, *args, _original=original, **kwargs):
             if isinstance(path, (str, bytes, os.PathLike)):
+                path = at_directory(path, kwargs.get('dir_fd'))
                 absolute = os.path.abspath(os.fsdecode(path))
-                if any(absolute == base or absolute.startswith(base + '/') for base in _forbidden):
+                source = (absolute == _source or absolute.startswith(_source + '/')
+                          or _source.startswith(absolute.rstrip('/') + '/'))
+                if not source and any(absolute == base or absolute.startswith(base + '/') for base in _forbidden):
                     deny('host state metadata')
             return _original(path, *args, **kwargs)
         setattr(os, name, guarded)
