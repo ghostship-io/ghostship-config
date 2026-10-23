@@ -1,7 +1,5 @@
 name: T3 Code browser
 on:
-  pull_request:
-    paths: ['packages/t3code/**', 'tests/t3code-*.cjs', 'flake.nix', 'flake.lock', '.github/workflows/t3code.yml']
   push:
     branches: [main]
     paths: ['packages/t3code/**', 'tests/t3code-*.cjs', 'flake.nix', 'flake.lock', '.github/workflows/t3code.yml']
