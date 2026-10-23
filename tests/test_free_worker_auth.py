@@ -88,6 +88,16 @@ class AuthCutoverTests(unittest.TestCase):
         self.assertEqual(free.events, [])
         self.assertEqual(source.events, [])
 
+    def test_paid_credentials_on_the_free_side_refuse_the_cutover(self):
+        source, free = Side(), Side(free=True)
+        paid = record('paid', True)
+        paid['integrationID'] = 'opencode-go'
+        free.rows = [paid]
+        with self.assertRaisesRegex(auth.MigrationError, 'free_runtime_contains_paid_credentials'):
+            auth.migrate(source, free, self.manifest, PLAN)
+        self.assertEqual(free.tasks, 0)
+        self.assertEqual(source.events, [])
+
     def test_native_auth_import_puts_values_on_stdin_never_the_command_line(self):
         target = auth.Target('/podman', 'worker-fixture', '1234:1234', '/home/worker')
         secret_input = json.dumps([record('zen', True)])
