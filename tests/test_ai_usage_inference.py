@@ -900,5 +900,100 @@ class NeverRefused(unittest.TestCase):
         self.assertEqual(result.left, 1.0)
 
 
+class PerModelProviders(unittest.TestCase):
+    """A provider whose published limits apply per model.
+
+    Google documents its Gemini API rate limits per project and per model
+    (<https://ai.google.dev/gemini-api/docs/rate-limits>), and Groq documents
+    its rate limits per model and per organization
+    (<https://console.groq.com/docs/rate-limits>). Two of their models that
+    refuse seconds apart are each refused by their own cap, not by a pool the
+    account shares: each route is measured on its own events, whatever the
+    scope evidence would say for another provider.
+    """
+
+    NOW = DAY0 + 2 * HOUR
+
+    def repro(self, provider):
+        """Two models of one provider, each refused and recovered."""
+        return [
+            event(provider, "lumen-a", DAY0, usage=100000.0),
+            event(provider, "lumen-a", DAY0 + 30.0, outcome="limit"),
+            event(provider, "lumen-b", DAY0 + 40.0, usage=100000.0),
+            event(provider, "lumen-b", DAY0 + 50.0, outcome="limit"),
+            event(provider, "lumen-a", DAY0 + HOUR, usage=1.0),
+            event(provider, "lumen-b", DAY0 + HOUR + 10.0, usage=1.0),
+        ]
+
+    def assert_its_own_model(self, provider):
+        results = inference.infer_capacity(self.repro(provider), self.NOW)
+        for model in ("lumen-a", "lumen-b"):
+            result = results[(provider, model)]
+            self.assertEqual(result.scope, "model", model)
+            self.assertEqual(result.window, "1h", model)
+            self.assertEqual(result.window_seconds, HOUR, model)
+            self.assertEqual(result.budget, 100000.0, model)
+            self.assertEqual(dict(result.weights), {model: 1.0}, model)
+            self.assertIsNone(result.share, model)
+
+    def test_google_route_is_its_own_model(self):
+        self.assert_its_own_model("google")
+
+    def test_groq_route_is_its_own_model(self):
+        self.assert_its_own_model("groq")
+
+    def test_another_provider_keeps_the_account(self):
+        results = inference.infer_capacity(self.repro("acme"), self.NOW)
+        for model in ("lumen-a", "lumen-b"):
+            self.assertEqual(results[("acme", model)].scope, "account", model)
+
+    def test_a_listed_provider_route_never_refused_is_alone(self):
+        events = [
+            event("google", "lumen-a", DAY0, usage=100000.0),
+            event("google", "lumen-a", DAY0 + 30.0, usage=1.0),
+        ]
+        result = inference.infer_capacity(events, self.NOW)[("google", "lumen-a")]
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.scope, "unknown")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.budget)
+        self.assertEqual(result.episodes, 0)
+
+    def only_b_refused(self):
+        """The refusal of lumen-b alone, with lumen-a working throughout."""
+        return [
+            event("google", "lumen-a", DAY0, usage=100000.0),
+            event("google", "lumen-a", DAY0 + HOUR, usage=1.0),
+            event("google", "lumen-b", DAY0 + 40.0, usage=100000.0),
+            event("google", "lumen-b", DAY0 + 50.0, outcome="limit"),
+            event("google", "lumen-b", DAY0 + HOUR + 10.0, usage=1.0),
+        ]
+
+    def test_a_refusal_of_another_model_leaves_the_route_alone(self):
+        alone = inference.infer_capacity(self.only_b_refused(), self.NOW)[
+            ("google", "lumen-a")
+        ]
+        self.assertEqual(alone.state, "no_failure")
+        self.assertEqual(alone.scope, "unknown")
+        self.assertEqual(alone.left, 1.0)
+        self.assertIsNone(alone.window)
+        self.assertIsNone(alone.budget)
+        self.assertEqual(alone.episodes, 0)
+        self.assertIsNone(alone.share)
+
+    def test_the_refused_route_reads_only_its_own_events(self):
+        refused = inference.infer_capacity(self.only_b_refused(), self.NOW)[
+            ("google", "lumen-b")
+        ]
+        self.assertEqual(refused.scope, "model")
+        self.assertEqual(refused.window, "1h")
+        self.assertEqual(refused.window_seconds, HOUR)
+        self.assertEqual(refused.budget, 100000.0)
+        self.assertEqual(refused.episodes, 1)
+        self.assertEqual(dict(refused.weights), {"lumen-b": 1.0})
+        self.assertIsNone(refused.share)
+
+
 if __name__ == "__main__":
     unittest.main()
