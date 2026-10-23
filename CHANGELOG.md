@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.181] - 2026-10-23
+
+- Restore reported subscription limits and picker updates through the managed T3 bearer.
+- Distinguish missing reported limits from learning and remove OpenRouter from Providers capacity.
+
+PR #346.
+
 ## [3.17.180] - 2026-10-23
 
 Fix free-inference proxy socket startup ordering.
