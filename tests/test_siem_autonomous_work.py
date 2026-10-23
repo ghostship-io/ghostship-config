@@ -1018,7 +1018,7 @@ class DesignContractTests(unittest.TestCase):
         self.assertNotIn(self.EQUALITY, blob)
         self.assertIn(self.TOLERANCE, blob)
         by_id = panels_by_id(page)
-        for pid in (201, 202, 203, 204, 205):
+        for pid in (201, 202, 203, 204):
             self.assertIn('Paced Availability', by_id[pid]['description'], pid)
             # The share left and the share expected are read as percentages.
             overrides = json.dumps(by_id[pid]['fieldConfig'])
@@ -1036,7 +1036,7 @@ class DesignContractTests(unittest.TestCase):
         """Defect: remaining bars use the wrong cutoffs, unknown windows fake a 0, or a table sits in the first screen."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
         by_id = panels_by_id(page)
-        for pid in (201, 202, 203, 204, 205):
+        for pid in (201, 202, 203, 204):
             content = by_id[pid]['options']['content']
             # The bands of a bar are the owner's: normal, warning, destructive.
             self.assertIn('warning', content, pid)
@@ -1075,9 +1075,10 @@ class DesignContractTests(unittest.TestCase):
         self.assertIn('3D reserve', by_id[201]['options']['content'])
         # The pace of a route is the collector's own number.
         self.assertIn('ghostship_ai_model_paced_availability', bulk)
-        providers = ' '.join(t['expr'] for t in by_id[205]['targets'])
-        self.assertIn('ghostship_ai_provider_paced_availability', providers)
-        self.assertIn('100 *', providers)
+        # The static selection table reads the owner's route table.
+        selection = ' '.join(t['expr'] for t in by_id[206]['targets'])
+        self.assertIn('ghostship_ai_static_route_info', selection)
+        self.assertIn('ghostship_ai_routing_enabled', selection)
 
 
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_VLOGS') and os.environ.get('GHOSTSHIP_TEST_VMETRICS'),
@@ -1136,14 +1137,6 @@ class NativeStoreTests(unittest.TestCase):
         self.assertAlmostEqual(query(by_id[49]['targets'][1]), 100*(2/7-.05))
         self.assertEqual(query(by_id[49]['targets'][2]), 0,
                          'The shared exhausted weekly blocks the 95%-remaining sublimit')
-        left_target = next(t for t in by_id[205]['targets']
-                           if 'ghostship_ai_provider_capacity_remaining_ratio' in t['expr'])
-        expr = left_target['expr'].replace('$provider', '.*')
-        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
-            providers = json.load(response)['data']['result']
-        self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
-                         {'claude': 0, 'cursor': -1},
-                         'Exhausted and unknown providers must remain distinct')
         # The tier section lists every ranked route of the tier: the
         # available ones first, the spent or unknown ones below them.
         order_target = next(t for t in by_id[201]['targets'] if '1000 -' in t['expr'])
@@ -1519,7 +1512,7 @@ class NativeStoreTests(unittest.TestCase):
         self.assertTrue(all('unless on(source)' in t['expr'] for t in exception['targets']))
         # The sections of the page sit above the collapsed evidence.
         self.assertLess(by_id[201]['gridPos']['y'], by_id[46]['gridPos']['y'])
-        self.assertLess(by_id[205]['gridPos']['y'], by_id[46]['gridPos']['y'])
+        self.assertLess(by_id[206]['gridPos']['y'], by_id[46]['gridPos']['y'])
         self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
                         titles['Quota windows']['gridPos']['y'])
         frontier = by_id[203]
