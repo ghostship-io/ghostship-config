@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.183] - 2026-10-23
+
+- Prevent unrelated secret projections from restarting containers or the Cloudflare tunnel.
+
+PR #349.
+
 ## [3.17.182] - 2026-10-23
 
 - Preserve active T3 sessions when host configuration changes update Podman helpers.
