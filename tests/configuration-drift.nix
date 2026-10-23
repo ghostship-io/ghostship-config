@@ -63,6 +63,14 @@ assert lib.assertMsg (lib.elem "/run/current-system" hardening.ReadOnlyPaths)
   "the running system must be a read-only path.";
 assert lib.assertMsg (lib.elem "/nix/var/nix/profiles/system" hardening.ReadOnlyPaths)
   "the system profile must be a read-only path.";
+assert lib.assertMsg (lib.elem "/run/ghostship-podman" hardening.ReadOnlyPaths)
+  "the container snapshot must be a read-only path.";
+assert lib.assertMsg
+  (lib.elem "ghostship-podman-snapshot.service" service.after)
+  "the configuration drift service must start after the container snapshot.";
+assert lib.assertMsg
+  (lib.elem "ghostship-podman-snapshot.service" service.wants)
+  "the configuration drift service must want the container snapshot.";
 assert lib.assertMsg (revision != null && (revision == "dirty" || builtins.match "[0-9a-f]{40}" revision != null))
   "system.configurationRevision must record the flake revision or dirty, not ${toString revision}.";
 assert lib.assertMsg (lib.hasInfix "https://github.com/ghostship-io/ghostship-config.git" driftModule)
