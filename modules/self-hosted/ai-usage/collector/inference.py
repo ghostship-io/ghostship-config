@@ -50,7 +50,9 @@ The rules, in short:
   the model's own. The span of a completed episode starts at its refusal, and
   the span of an open episode starts after it, so a refusal is never evidence
   of the scope by itself. A scope of `unknown` is computed across the account
-  and labelled unknown.
+  and labelled unknown. A provider whose published limits apply per model has
+  no account pool: every refused route of it is its own model, measured on
+  its own events (see `PER_MODEL_PROVIDERS`).
 * Only the routes that were refused join an account group. A route that was
   never refused has no limit of its own: it is measured on its own, with its
   whole allowance and no pace, and its use never ends the episode of another
@@ -73,6 +75,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 __all__ = [
+    "PER_MODEL_PROVIDERS",
     "RouteCapacity",
     "STANDARD_WINDOWS",
     "UsageEvent",
@@ -103,6 +106,14 @@ TOKEN_COVERAGE = 0.95
 # The fit enumerates the subsets of the models, so it is only run while the
 # mix is small. A wider mix falls back to a projected gradient.
 FIT_MODEL_LIMIT = 12
+
+# The providers whose published rate limits apply per model, so two of their
+# routes that refuse seconds apart are each refused by their own cap and
+# never share one account-wide pool. Google's Gemini API documents its limits
+# per project and per model (https://ai.google.dev/gemini-api/docs/rate-limits),
+# and Groq documents its limits per model and per organization
+# (https://console.groq.com/docs/rate-limits).
+PER_MODEL_PROVIDERS = frozenset({"google", "groq"})
 
 
 @dataclass(frozen=True)
@@ -902,6 +913,14 @@ def infer_capacity(events: Iterable[Any], now: float) -> dict[tuple[str, str], R
             )
             continue
         account_group = account_groups[provider]
+        if provider in PER_MODEL_PROVIDERS:
+            # The provider publishes its limits per model, so a refusal is
+            # the route's own whatever the account evidence says: the route
+            # is measured on its own events, with its own window and budget.
+            results[(provider, model)] = _capacity_of(
+                route_group, provider, model, "model", None
+            )
+            continue
         scope = _route_scope(account_group, provider_events[provider], model)
         if scope == "model":
             results[(provider, model)] = _capacity_of(
