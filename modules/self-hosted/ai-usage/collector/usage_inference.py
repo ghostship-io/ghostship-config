@@ -394,14 +394,22 @@ def read_and_infer(
 
 
 def quota_id_for(capacity: Mapping[str, Any]) -> str:
-    """The quota id of the window an inferred capacity means."""
+    """The quota id of the window an inferred capacity means.
+
+    The id names the learned window whenever there is one, whatever the
+    state of the route: a spent route is spent for its window, not for its
+    state. A refusal with no learned window, and a reading that names no
+    window, keep the label of the state.
+    """
     state = str(capacity.get("state") or "")
     if state == STATE_NO_FAILURE:
         return QUOTA_ID_NO_FAILURE
+    window = str(capacity.get("window") or "")
+    if window:
+        return f"{QUOTA_ID_PREFIX}{window}"
     if state == STATE_EXHAUSTED:
         return QUOTA_ID_EXHAUSTED
-    window = str(capacity.get("window") or "")
-    return f"{QUOTA_ID_PREFIX}{window}" if window else QUOTA_ID_NO_FAILURE
+    return QUOTA_ID_NO_FAILURE
 
 
 def basis_for(capacity: Mapping[str, Any]) -> str:
