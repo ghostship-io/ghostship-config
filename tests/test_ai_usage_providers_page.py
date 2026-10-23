@@ -1869,6 +1869,67 @@ class ModelSelectionTests(unittest.TestCase):
                     f"{provider} {key}",
                 )
 
+    def test_a_phone_row_names_its_provider_in_the_model_cell(self):
+        """Under 520 px the hidden Provider column's name moves under the model.
+
+        A free row with no model held only the letter icon on a phone, and the
+        owner could not tell which provider it was. The name is hidden at the
+        wide width, where the Provider column carries it.
+        """
+        content = self.panel["options"]["content"]
+        self.assertEqual(
+            content.count('<span class="mp">{{providerName}}</span>'),
+            2,
+            "the static row and the free row carry the provider name in the model cell",
+        )
+        self.assertIn('<td class="hide-sm">{{providerName}}</td>', content)
+        styles = self.panel["options"].get("styles") or ""
+        base = styles[: styles.find("@media")]
+        self.assertIn("display: none", dict(css_rules(base))[".routes .mp"])
+        self.assertIn(
+            "display: block", dict(css_rules(media_body(styles)))[".routes .mp"]
+        )
+        row = self.free_row(provider="cohere")
+        self.assertEqual(row["providerName"], "Cohere")
+        self.assertEqual(row["model"], "")
+        self.assertEqual(row["displayName"], "")
+        self.assertEqual(row["left"], "no eligible free model")
+
+    def test_a_model_name_is_one_line_and_carries_its_id(self):
+        """A model name ends in an ellipsis on one line, the full id in its title.
+
+        On a phone a long raw id wrapped through the Left cell. The name is
+        one line in its own cell now, and the title holds the whole id.
+        """
+        content = self.panel["options"]["content"]
+        self.assertEqual(content.count('class="mn" title="{{model}}"'), 2)
+        styles = self.panel["options"].get("styles") or ""
+        base = dict(css_rules(styles[: styles.find("@media")]))
+        self.assertIn("white-space: nowrap", base[".routes .mn"])
+        self.assertIn("text-overflow: ellipsis", base[".routes .mn"])
+        self.assertIn("min-width: 0", base[".routes .mid"])
+        self.assertIn("min-width: 0", base[".routes .mrow"])
+        media = dict(css_rules(media_body(styles)))
+        for declaration in (
+            "white-space: nowrap",
+            "overflow: hidden",
+            "text-overflow: ellipsis",
+        ):
+            self.assertIn(declaration, media[".routes .mn"])
+        # A row that carries only the raw id reads it as its name.
+        rows = [
+            {
+                "provider": "kilo",
+                "field": "free_info",
+                "model": "nvidia/nemotron-3.5-super-vl:free",
+                "display_name": "",
+                "basis": "learning",
+                "value": 1,
+            }
+        ]
+        row = self.free_row(rows, provider="kilo")
+        self.assertEqual(row["displayName"], "nvidia/nemotron-3.5-super-vl:free")
+
     def test_the_panel_is_tall_enough_for_its_rows(self):
         """The panel holds every row of the live table at either width.
 
