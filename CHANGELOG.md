@@ -2,6 +2,10 @@
 
 ## [3.17.122] - 2026-10-23
 
+- Merge freeze: main can require a `ghostship/freeze` commit status, so a freeze set with `agent freeze set` refuses every merge, including `gh pr merge`, `--admin`, the merge API and the web button, not only `agent pr land`. The new `Merge freeze` workflow marks each pull request head from the repository variable `GHOSTSHIP_FREEZE` through `scripts/freeze-status`: success when no freeze runs or it has expired, failure while it runs, and failure for a record it cannot read. It runs as `pull_request_target`, so a pull request cannot mark itself unfrozen. `docs/fleet-operations.md` names the commands, the one-time protection and the marked-tip force-push a history rewrite needs.
+
+## [3.17.122] - 2026-10-23
+
 - ai-usage: the Model selection panel fits both widths and reads only the newest scrape. Live on generation 412 the table clipped about 100 px at 1600 px, and a row on a phone could run through the Left cell. Measured in Playwright with the panel's helpers and styles in Inter, the five static rows, the Free divider and twenty-four free rows are 1440 px at 358 px and 1096 px at 1568 px; the panel is 40 grid rows, so the body of 1454 px holds both without an inner scroll, and the panels below move down by the 16 rows it grew. Under 520 px the hidden Provider column's name moves into the Model cell, in muted text under the model and on its own when the model is empty; a model name is one line ending in an ellipsis, and its title holds the full id. Every series the panel reads, static and free selection and the routing gauge, counts only from the newest scrape: the newest timestamp of `ghostship_ai_static_route_policy_ok`, less 15 s. The old guard was 90 s wide while a scrape is 30 s, so after a policy edit the rows of the policy before it stayed on the table for about two minutes.
 
 ## [3.17.121] - 2026-10-23
