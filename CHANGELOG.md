@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.223] - 2026-10-23
+
+- Use the remote Podman socket for sandboxed reset-announcement checks and notification-server discovery.
+
+A live read-only transient sandbox probe using the deployed Podman executable and explicit remote inspection succeeded (exit 0, backend running). No service activation or T3 restart was performed.
+
+PR #388.
+
 ## [3.17.222] - 2026-10-23
 
 Label an empty reset-announcement table as “No reset announcement events yet”. Use an absent-series presentation row only when the announcement metric is absent. Actual event rows, source URLs, confidence, scope and reset times remain unchanged; no reset event or pacing input is fabricated. Preserve panel202 and all other IDs.
