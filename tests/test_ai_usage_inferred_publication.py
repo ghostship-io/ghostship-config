@@ -380,6 +380,7 @@ class RollingWindowTests(PublicationTestCase):
         self.assertEqual(found["duration_seconds"], 60)
         # The window the record was published from says that it rolls.
         self.assertTrue(ranked[0].capacity_inference["rolling"])
+        self.assertTrue(found["inference"]["rolling"])
 
 
 class ProviderKeyTests(PublicationTestCase):
