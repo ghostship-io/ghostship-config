@@ -149,6 +149,12 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertEqual(models[0]['rounds'],'rounds unknown')
         self.assertNotIn('NaN',json.dumps(models))
 
+    def test_long_headers_allow_phone_wrapping_without_inner_scroll(self):
+        # At 390px these headings need 66px of text; the old two-row panel
+        # leaves only 50px and creates an internal scrollbar.
+        for panel_id in (200, 234):
+            self.assertGreaterEqual(self.panels[panel_id]['gridPos']['h'], 3)
+
     def test_only_one_evidence_drawer_and_no_inner_scroll(self):
         self.assertEqual(len([p for p in self.page['panels'] if p['type']=='row']),1)
         for panel in self.page['panels']:
