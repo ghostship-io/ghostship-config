@@ -49,6 +49,7 @@ let
   coordinatorConfigTemplate = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
     allowed_user_ids = [ "@GHOSTSHIP_GITHUB_USER_ID@" ];
     ntfy_url = "http://ntfy:8080";
+    orchestrator_thread_file = "/run/ghostship-handoffs/coordination-list.md";
     t3_environment_id = "@GHOSTSHIP_T3_ENVIRONMENT_ID@";
     # The chief reviewer leads launched threads; the backup reviewer stands in
     # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
@@ -277,6 +278,8 @@ in
         "${root}/state:/state:rw,noexec,nosuid,nodev"
         "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
         "${root}/config.json:/etc/ghostship-github/config.json:ro"
+        # Mount the directory so atomic rotations of the list are visible immediately.
+        "/srv/apps/t3code/home/.t3/handoffs:/run/ghostship-handoffs:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"
@@ -291,6 +294,14 @@ in
       wants = [ "ghostship-github-t3-token.service" ];
       serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       preStart = lib.mkBefore ''
+        source=/srv/apps/t3code/home/.t3/handoffs/coordination-list.md
+        if [ ! -r "$source" ]; then
+          echo "coordinator: runtime coordination list is missing or unreadable" >&2
+          exit 1
+        fi
+        # Search permission only; the coordinator can read the public-mode list,
+        # without listing the private handoff directory.
+        ${pkgs.acl}/bin/setfacl -m u:62031:--x /srv/apps/t3code/home/.t3/handoffs
         ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-github-coordinator
         ${renderOwnerConfig}/bin/ghostship-render-owner-config ${coordinatorConfigTemplate} ${root}/config.json 644
       '';
