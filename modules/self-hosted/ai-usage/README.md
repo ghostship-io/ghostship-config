@@ -996,7 +996,11 @@ intelligence placed inside the range of the tier it competes in
 that were actually observed (`p = (k * p0 + s) / (k + n)`, with `k = 10`), and
 combined with the measured efficiency (`value = 0.70 * p + 0.30 * E`). The
 rounds n and s are the model's own outcomes: a round of the environment, or
-one whose cause is the `brief` or the `chief` reviewer, counts in neither. The
+one whose structured cause is `environment`, `brief` or `chief`, counts in neither.
+The backfill preserves that optional cause, including when correcting an inferred
+ledger verdict; a manual ledger verdict and its cause stand. Summary text never
+determines a cause, and excluding a round from the counts keeps its fabrication
+evidence available for trust checks. The
 trust scales it: an untrusted route keeps half of it. The Artificial
 Analysis value is published beside the published value, so the two cannot
 disagree about what the order was made of.
