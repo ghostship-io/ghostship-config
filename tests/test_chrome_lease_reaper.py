@@ -58,6 +58,29 @@ class Plan(unittest.TestCase):
         self.assertEqual(targets, ["A"])
 
 
+class Rollout(unittest.TestCase):
+    def test_schema1_anchor_window_remains_protected_until_its_lease_expires(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = "b" * 32
+            row = dict(schema=1, run_id=marker, identity="agent", label="Existing run")
+            (Path(directory)/(marker+".json")).write_text(json.dumps(row))
+            pages = [dict(page("OLD"), url=f"about:blank#ghostship-window-{marker}.{NOW+60}"),
+                     page("WORK"), page("HUMAN")]
+            windows = dict(OLD=1, WORK=1, HUMAN=2)
+            from unittest.mock import patch
+            with patch.object(reaper, "RUNS_DIR", directory):
+                rows = reaper.load_leases("agent", pages, windows)
+                self.assertEqual(reaper.plan(pages, windows, rows, NOW, 120), [])
+                self.assertEqual(reaper.plan(pages, windows, rows, NOW+181, 120), [(1,["OLD","WORK"])])
+                self.assertEqual(reaper.load_leases("personal", pages, windows), [])
+
+    def test_schema1_compatibility_requires_matching_record_and_exact_anchor(self):
+        marker = "b" * 32
+        rows = reaper.legacy_leases([dict(page("OLD"), url=f"about:blank#ghostship-window-{marker}.{NOW-1000}")],
+                                   {"OLD": 1}, set())
+        self.assertEqual(rows, [])
+
+
 class Records(unittest.TestCase):
     def test_malformed_symlink_oversize_wrong_identity_and_nonfinite_are_ignored(self):
         with tempfile.TemporaryDirectory() as directory:

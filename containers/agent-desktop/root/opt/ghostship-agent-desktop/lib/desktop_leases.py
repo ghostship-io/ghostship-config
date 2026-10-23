@@ -9,7 +9,7 @@ MARKER = re.compile(r"[0-9a-f]{32}")
 TARGET = re.compile(r"[A-Za-z0-9]{1,64}")
 
 
-def records(directory, identity):
+def records(directory, identity, schema=2):
     try:
         names = os.listdir(directory)
     except OSError:
@@ -27,7 +27,11 @@ def records(directory, identity):
             finally:
                 os.close(fd)
             row = json.loads(raw) if len(raw) <= 16384 else None
-            if (isinstance(row, dict) and row.get("schema") == 2 and row.get("run_id") == name[:-5]
+            if (schema == 1 and isinstance(row, dict) and row.get("schema") == 1
+                    and row.get("run_id") == name[:-5] and row.get("identity") == identity):
+                result.append(row)
+                continue
+            if (schema == 2 and isinstance(row, dict) and row.get("schema") == 2 and row.get("run_id") == name[:-5]
                     and row.get("identity") == identity
                     and type(row.get("chrome_window_id")) is int and row["chrome_window_id"] > 0
                     and isinstance(row.get("target_id"), str) and TARGET.fullmatch(row["target_id"])

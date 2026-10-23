@@ -7,7 +7,8 @@ Environment: CHROME_LEASE_SLACK_SECONDS (default 120)
 Each lease is an atomically renewed public run record. Only a record whose
 bound target still belongs to the recorded window authorizes closure. Expired
 records never grant authority over a reused numeric window id. Unknown windows
-are untouched. The chrome-idle service runs this each check.
+are untouched. For one release, matching schema-1 records and anchor URLs
+retain their old expiry semantics. The chrome-idle service runs this each check.
 
 Stdlib only: the desktop's system python3 has no extra packages.
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -26,6 +28,27 @@ PORTS = {"agent": 9222, "personal": 9223}
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
 from desktop_leases import records, bound_records
 RUNS_DIR = os.environ.get("CHROME_RUNS_DIR", "/config/agent-desktop/runs")
+
+
+# One-release rollout compatibility: old runtimes renew expiry in the anchor
+# URL and have schema-1 display records. New runtimes never create these tabs.
+LEGACY_ANCHOR = re.compile(r"about:blank#ghostship-window-([0-9a-f]{32})(?:\.([0-9]{9,11}))?")
+
+
+def legacy_leases(pages, windows, markers):
+    rows = []
+    for page in pages:
+        match = LEGACY_ANCHOR.fullmatch(page.get("url", ""))
+        target = page["targetId"]
+        if match and match[1] in markers and target in windows:
+            rows.append(dict(schema=1, run_id=match[1], chrome_window_id=windows[target],
+                             target_id=target, expires_at=int(match[2]) if match[2] else float("inf")))
+    return rows
+
+
+def load_leases(identity, pages, windows):
+    markers = {r["run_id"] for r in records(RUNS_DIR, identity, schema=1)}
+    return records(RUNS_DIR, identity) + legacy_leases(pages, windows, markers)
 
 
 def plan(pages, windows, rows, now, slack):
@@ -131,10 +154,6 @@ def reap(name: str, port: int, slack: int) -> int:
     try:
         pages = [t for t in browser.call("Target.getTargets").get("targetInfos", [])
                  if t.get("type") == "page"]
-        now = time.time()
-        rows = records(RUNS_DIR, name)
-        if not any(row["expires_at"] + slack < now for row in rows):
-            return 0
         windows = {}
         for page in pages:
             try:
@@ -142,15 +161,16 @@ def reap(name: str, port: int, slack: int) -> int:
                     "Browser.getWindowForTarget", {"targetId": page["targetId"]})["windowId"]
             except (LookupError, KeyError):
                 pass  # Closed mid-pass or not in a window; next pass retries.
+        rows = load_leases(name, pages, windows)
     finally:
         browser.close()
-    for window, targets in plan(pages, windows, records(RUNS_DIR, name), time.time(), slack):
+    for window, targets in plan(pages, windows, load_leases(name, pages, windows), time.time(), slack):
         closed = sum(close_target(port, target) for target in targets)
         if closed == len(targets):
             for row in rows:
-                if row["chrome_window_id"] != window or row["expires_at"] + slack >= now:
+                if row["chrome_window_id"] != window or row["expires_at"] + slack >= time.time():
                     continue
-                current = next((r for r in records(RUNS_DIR, name) if r["run_id"] == row["run_id"]), None)
+                current = next((r for r in load_leases(name, pages, windows) if r["run_id"] == row["run_id"]), None)
                 if current == row:
                     for suffix in (".json", ".pause"):
                         try:
