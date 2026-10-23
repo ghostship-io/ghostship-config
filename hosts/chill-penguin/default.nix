@@ -44,7 +44,7 @@ in
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;
   # The staged development engine may reach public IPv4 only through this NIC.
-  ghostship.t3codeDocker.egressInterface = "end0";
+  ghostship.t3codePodman.egressInterface = "end0";
 
   # Unattended upgrading is off: it bypassed change control. The daily
   # ghostship-configuration-drift check reports a host that is behind main.

@@ -1,7 +1,7 @@
 """Activate only committed rootless-engine candidate units; preserve active T3.
 
-Run as host root with the built t3codeDockerCandidate JSON. `stop` removes these
-runtime units, preserving the dedicated account and Docker data for inspection.
+Run as host root with the built t3codePodmanCandidate JSON. `stop` removes these
+runtime units, preserving the dedicated account and Podman candidate data for inspection.
 This never activates a system generation or changes the production T3 unit.
 """
 
@@ -78,15 +78,17 @@ def main():
         parser.error("run as host root")
     spec = json.loads(args.spec.read_text())
     if (
-        spec["user"] != "t3code-docker"
+        spec.get("candidate") is not True
+        or spec.get("graphRoot") != "/var/lib/t3code-podman/candidate"
+        or spec["user"] != "t3code-podman"
         or spec["uid"] != 62040
-        or spec["state"] != "/var/lib/t3code-docker"
+        or spec["state"] != "/var/lib/t3code-podman"
     ):
         parser.error(
             "this candidate driver is restricted to the dedicated UID62040 account"
         )
     units = spec["units"]
-    if any(not name.startswith("t3code-docker") or "/" in name for name in units):
+    if any(not name.startswith("t3code-podman") or "/" in name for name in units):
         parser.error("unexpected unit name")
     parent = Path("/var/lib/ghostship/t3code-hardening")
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -129,7 +131,7 @@ def main():
                             "RootDirectory",
                             "--value",
                         )
-                        != "/run/t3code-docker-rootfs"
+                        != "/run/t3code-podman-rootfs"
                     ):
                         raise RuntimeError(
                             "active manager is not the installed candidate; leaving it intact"
@@ -137,16 +139,16 @@ def main():
                 run(
                     "systemctl",
                     "stop",
-                    "t3code-docker.socket",
-                    "t3code-docker-ports.socket",
-                    "t3code-docker.service",
-                    "t3code-docker-ports.service",
+                    "t3code-podman.socket",
+                    "t3code-podman-ports.socket",
+                    "t3code-podman.service",
+                    "t3code-podman-ports.service",
                     manager,
-                    "t3code-docker-rootfs.service",
-                    "t3code-docker-network.service",
+                    "t3code-podman-rootfs.service",
+                    "t3code-podman-network.service",
                 )
                 gcroot = Path(
-                    "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-docker-runtime"
+                    "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-candidate"
                 )
                 if (
                     gcroot.is_symlink()
@@ -214,12 +216,12 @@ def main():
             finally:
                 os.close(state_fd)
             socket_fd = owned_directory(
-                "/run/t3code-docker", 0, grp.getgrnam("apps").gr_gid, mode=0o750
+                "/run/t3code-podman", 0, grp.getgrnam("apps").gr_gid, mode=0o750
             )
             os.close(socket_fd)
             # The engine receives only this closure in the isolated T3 store.
             gcroot = Path(
-                "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-docker-runtime"
+                "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-candidate"
             )
             if gcroot.is_symlink():
                 if os.readlink(gcroot) != spec["runtimePackage"]:
@@ -247,8 +249,8 @@ def main():
                 "systemctl",
                 "start",
                 manager,
-                "t3code-docker.socket",
-                "t3code-docker-ports.socket",
+                "t3code-podman.socket",
+                "t3code-podman-ports.socket",
             )
             print("Rootless candidate units started; production T3 unit untouched")
         finally:

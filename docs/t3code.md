@@ -2,19 +2,19 @@
 
 T3 Code runs at `https://t3code.ghostship.io` on `chill-penguin`. The repo builds
 `localhost/ghostship-t3code:t3code-runtime` with a systemd platform: UID/GID
-3000, persistent user services, nested Docker, Nix, build tools, Git/GitHub
+3000, persistent user services, rootless Podman development engine, Nix, build tools, Git/GitHub
 CLI, and Cloudflared Quick Tunnels. The access gateway
 listens on `t3code:3773` inside `ghostship_net`; the T3 backend listens only on
 container loopback port `3774`. No host ports are published.
 
-For the staged unprivileged runtime and separate development Docker engine, use
+For the staged unprivileged runtime and separate development Podman engine, use
 the [hardening acceptance workflow](t3code-hardening.md). Root SSH administration
 remains an explicit requirement; the active runtime stays intact during testing.
 
 ## Projects and state
 
 The container user is `t3code`, with home `/home/t3code`. Host state lives in
-`/srv/apps/t3code/{home,workspace,docker,nix-root}`. At container startup each missing top-level repository is copied to the new
+`/srv/apps/t3code/{home,workspace,nix-root}`. At container startup each missing top-level repository is copied to the new
 workspace, including Git history and uncommitted files. Copies use filesystem
 reflinks when available and publish only after copying completes. Existing
 destinations are never overwritten or synchronized. Project registration uses
@@ -441,7 +441,7 @@ restart an in-flight deploy. Operators can also queue a safe idle-aware restart 
 with `t3code-safe-restart`. A forced restart bypasses the idle gate and interrupts the work in
 flight, so it needs the owner's own deploy or activate instruction, recorded with
 `--owner-request "<short quote or reference>"`; without it the tool refuses the restart. Backups include the
-home and projects but exclude the Docker and Nix stores.
+home and projects but exclude the development engine and Nix stores.
 
 ```sh
 systemctl status podman-t3code.service --no-pager
@@ -449,7 +449,7 @@ podman exec t3code systemctl --failed --no-pager
 podman exec t3code curl -fsS http://127.0.0.1:3773/ >/dev/null
 podman exec t3code curl -fsS http://127.0.0.1:3773/.well-known/t3/environment >/dev/null
 podman exec --user 3000:3000 t3code t3 --version
-podman exec --user 3000:3000 t3code docker info
+podman exec --user 3000:3000 t3code podman info
 podman exec --user 3000:3000 t3code nix store ping --store daemon
 ```
 

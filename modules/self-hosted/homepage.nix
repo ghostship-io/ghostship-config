@@ -168,7 +168,7 @@ in
 
       # Update docker.yaml if it exists
       if [ -f "$DOCKER_FILE" ]; then
-        echo "Surgically updating Homepage docker config..."
+        echo "Surgically updating Homepage container config..."
         docker_args=(
           chill-penguin.socket=literal:/run/homepage-podman-broker/podman.sock
         )
