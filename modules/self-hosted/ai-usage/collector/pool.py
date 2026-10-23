@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import http.client
 import json
+import math
 import os
+import re
 import socket
 import sqlite3
 import time
@@ -22,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import codes
+import quota as quota_module
 from metrics import SourceResult, Sample
 
 MAX_RESPONSE = 8 * 1024 * 1024
@@ -154,6 +157,185 @@ def _limit_samples(provider: str, model: str, limits: Any, scope: str) -> list[S
     return samples
 
 
+# The provider whose response headers the pool records per model. Its own
+# rate-limit headers name a window and a reset, and the window is the
+# provider's capacity for that model, not the pool's admission cap.
+REPORTED_PROVIDER = "groq"
+
+# The scope Groq reports a per-model rate limit with. A reading of another
+# scope is not a window of one model, and it is left to the diagnostics
+# instead of being filed as capacity.
+REPORTED_MODEL_SCOPE = "model_in_organization"
+
+# The unit a reported window is measured in, the kind of window it is, and
+# how long that window runs. The provider's headers name a rate limit, and
+# the period it covers is the length of the window: requests per day refill
+# every day, tokens per minute every minute. A unit this table does not
+# name is not a window the collector knows how to file.
+REPORTED_UNITS = {
+    "rpd": ("daily", 86400.0),
+    "tpm": ("minute", 60.0),
+}
+
+# The basis of a window read from the provider's own response headers.
+BASIS_PROVIDER_REPORTED = "provider_reported"
+
+_DURATION_TEXT = re.compile(r"(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+")
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h|d)")
+_DURATION_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _finite_number(value: Any) -> float | None:
+    """A finite number, or None. A boolean is not a number.
+
+    An integer too large for a float fails closed: it has no measured
+    capacity and it never crashes the reading.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _diagnostic_number(value: Any) -> float | None:
+    """A number for a diagnostic series, or None when it cannot be one.
+
+    The diagnostics are tolerant of what they publish, but a number too
+    large for a float is not a reading: it is skipped rather than allowed
+    to overflow the run. A boolean keeps the value it had.
+    """
+    if not isinstance(value, (int, float)):
+        return None
+    try:
+        return float(value)
+    except (OverflowError, ValueError):
+        return None
+
+
+def _strict_duration_seconds(value: Any) -> float | None:
+    """Parse a reset duration only when the whole value is one.
+
+    The diagnostic reader is tolerant, so a provider string such as
+    "2s garbage" still yields a number for the metrics. A capacity reading
+    is not tolerant: the text has to be a duration on its own, because a
+    reset the collector had to guess would invent headroom.
+    """
+    number = _finite_number(value)
+    if number is not None:
+        return number if number >= 0.0 else None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if _DURATION_NUMBER.fullmatch(text):
+        seconds = float(text)
+        return seconds if math.isfinite(seconds) and seconds >= 0.0 else None
+    if not _DURATION_TEXT.fullmatch(text):
+        return None
+    parts = _DURATION_PART.findall(text)
+    if not parts:
+        return None
+    scale = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+    seconds = sum(float(part) * scale[unit] for part, unit in parts)
+    if not math.isfinite(seconds) or seconds < 0.0:
+        return None
+    return seconds
+
+
+def _reported_windows(status: dict[str, Any], now: float) -> list[dict[str, Any]]:
+    """The windows a provider's own rate-limit headers reported, per model.
+
+    The pool records the headers of a provider's answer as observations. A
+    reading of one model inside the organization is that model's capacity:
+    the share of the limit the provider says is used, the moment it refills,
+    and the length of its window. The reading is never filed for the whole
+    account, so one spent model does not lock out its siblings.
+
+    The reset is the moment the provider reported, counted from the moment
+    it observed the reading, and never from the collection time. A reading
+    that has already refilled, or that is older than the collector's quota
+    freshness bound, is not current capacity: it is dropped rather than
+    published as headroom or as a lockout. A limit, a remaining count, a
+    reset or an observation the reader cannot use gives no measured
+    capacity, and nothing is filled in for it.
+    """
+    windows: list[dict[str, Any]] = []
+    for row in status.get("quota_observations") or []:
+        if not isinstance(row, dict):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if provider.lower() != REPORTED_PROVIDER or not model:
+            continue
+        data = row.get("data") if isinstance(row.get("data"), dict) else {}
+        if str(data.get("scope") or "") != REPORTED_MODEL_SCOPE:
+            continue
+        observed = _finite_number(row.get("observed_at"))
+        if observed is None:
+            continue
+        if observed > now + quota_module.FUTURE_TOLERANCE_SECONDS:
+            continue
+        if now - observed > quota_module.STALE_AFTER_SECONDS:
+            continue
+        units = data.get("windows") if isinstance(data.get("windows"), dict) else {}
+        for unit, values in sorted(units.items()):
+            period = REPORTED_UNITS.get(str(unit))
+            if period is None or not isinstance(values, dict):
+                continue
+            kind, duration = period
+            limit = _finite_number(values.get("limit"))
+            remaining = _finite_number(values.get("remaining"))
+            if limit is None or limit <= 0.0:
+                continue
+            if remaining is None or remaining < 0.0 or remaining > limit:
+                continue
+            refill = _strict_duration_seconds(values.get("reset"))
+            if refill is None:
+                continue
+            reset = observed + refill
+            if not math.isfinite(reset) or reset <= now:
+                # A reset that overflows or is already behind us is not a
+                # window the provider has ahead of it.
+                continue
+            used = 1.0 - remaining / limit
+            if not math.isfinite(used):
+                continue
+            windows.append(
+                {
+                    "provider": provider,
+                    "account": "default",
+                    "model": model,
+                    "kind": kind,
+                    "quotaId": str(unit),
+                    "usedRatio": used,
+                    "resetEpoch": reset,
+                    "durationSeconds": duration,
+                    "observedAtEpoch": observed,
+                    "source": "free_pool",
+                    "basis": BASIS_PROVIDER_REPORTED,
+                    # The reading is the capacity of this model alone. Its
+                    # scope is explicit, so the account keeps no window of
+                    # the whole provider that every model would share.
+                    "applies_to": (model,),
+                }
+            )
+    return sorted(
+        windows,
+        key=lambda window: (
+            window["provider"],
+            window["model"],
+            window["kind"],
+            window["quotaId"],
+        ),
+    )
+
+
 def collect(
     server_file: str | os.PathLike[str],
     token_file: str | os.PathLike[str],
@@ -201,6 +383,10 @@ def collect(
             metrics=samples,
             observed_at=now,
             duration_s=time.monotonic() - started,
+            # The capacity the provider itself reported, through its own
+            # response headers. The pool's admission caps stay metrics and
+            # never become a provider window.
+            windows=_reported_windows(status, now),
         )
     ]
 
@@ -317,12 +503,20 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
         data = row.get("data") if isinstance(row.get("data"), dict) else {}
         windows = data.get("windows") if isinstance(data.get("windows"), dict) else {}
         observed = row.get("observed_at")
+        # The scope the provider reported the limit with. A per-model
+        # reading keeps its model scope, so a reader never files one
+        # model's limit as the limit of the whole account.
+        scope = (
+            "model"
+            if str(data.get("scope") or "") == REPORTED_MODEL_SCOPE
+            else "account"
+        )
         for unit, values in windows.items():
             if not isinstance(values, dict):
                 continue
             for kind in ("limit", "remaining"):
-                value = values.get(kind)
-                if not isinstance(value, (int, float)):
+                amount = _diagnostic_number(values.get(kind))
+                if amount is None:
                     continue
                 samples.append(
                     _pool_sample(
@@ -333,16 +527,14 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                             "kind": kind,
                             "unit": str(unit),
                         },
-                        float(value),
+                        amount,
                     )
                 )
             # A limit the provider's own response headers carried is an
             # observation. It is published with the observed basis, beside
             # the pool's own ceiling and the provider's published number.
-            observed_limit = values.get("limit")
-            if isinstance(observed_limit, (int, float)) and not isinstance(
-                observed_limit, bool
-            ):
+            observed_limit = _diagnostic_number(values.get("limit"))
+            if observed_limit is not None and not isinstance(values.get("limit"), bool):
                 samples.append(
                     _pool_sample(
                         "ghostship_ai_pool_observed_limit",
@@ -350,31 +542,39 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                             "provider": provider,
                             "model": model,
                             "limit": str(unit),
-                            "scope": "account",
+                            "scope": scope,
                         },
-                        float(observed_limit),
+                        observed_limit,
                     )
                 )
             reset = values.get("reset")
             if isinstance(reset, str) and reset:
                 seconds = _duration_seconds(reset)
                 if seconds is None and reset.replace(".", "", 1).isdigit():
-                    seconds = float(reset)
-                if seconds is not None:
-                    base = observed if isinstance(observed, (int, float)) else 0.0
-                    samples.append(
-                        _pool_sample(
-                            "ghostship_ai_pool_quota_reset_seconds",
-                            {"provider": provider, "model": model, "unit": str(unit)},
-                            base + seconds,
+                    try:
+                        seconds = float(reset)
+                    except ValueError:
+                        seconds = None
+                if seconds is not None and math.isfinite(seconds):
+                    base = _diagnostic_number(observed)
+                    if base is None:
+                        base = 0.0
+                    reset_epoch = base + seconds
+                    if math.isfinite(reset_epoch):
+                        samples.append(
+                            _pool_sample(
+                                "ghostship_ai_pool_quota_reset_seconds",
+                                {"provider": provider, "model": model, "unit": str(unit)},
+                                reset_epoch,
+                            )
                         )
-                    )
-        if isinstance(observed, (int, float)):
+        observed_sample = _diagnostic_number(observed)
+        if observed_sample is not None:
             samples.append(
                 _pool_sample(
                     "ghostship_ai_pool_quota_observed_timestamp_seconds",
                     {"provider": provider, "model": model},
-                    float(observed),
+                    observed_sample,
                 )
             )
     for row in status.get("concurrency") or []:

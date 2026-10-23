@@ -32,7 +32,6 @@ jobs:
         run: python3 scripts/ci-private-inputs.py
       - name: Refresh public inputs (private revisions are explicit pins)
         run: python3 -c 'import json, subprocess; subprocess.run(["nix", "flake", "update", *[k for k in json.load(open("flake.lock"))["nodes"]["root"]["inputs"] if not k.startswith("ghostship-private-")]], check=True)'
-      - run: nix develop .#ci -c python scripts/bump-flake-release.py
       - name: Validate candidate lock
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
       - name: Restore portable private source locks before publishing
@@ -42,12 +41,19 @@ jobs:
           branch: maintenance/flake-inputs
           add-paths: |
             flake.lock
-            VERSION
-            CHANGELOG.md
           title: 'chore: refresh validated Nix inputs'
-          commit-message: 'chore: refresh validated Nix inputs'
+          commit-message: |
+            chore: refresh validated Nix inputs
+
+            <!-- ghostship-agent -->
           body: |
             Refresh Nix inputs together. Host derivations and configuration tests passed in the update workflow.
 
-            Review compatibility before merging. The update includes a patch version and changelog entry. Native deployment remains staged; no host switches run in GitHub Actions.
+            ## Changelog
+
+            - Refresh coordinated Nix inputs; evaluate all hosts and run configuration checks.
+
+            Review compatibility before landing with `agent pr land`, which publishes the release. Native deployment remains staged; no host switches run in GitHub Actions.
+
+            <!-- ghostship-agent -->
           draft: true
