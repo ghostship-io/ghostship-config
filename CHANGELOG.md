@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.238] - 2026-10-23
+
+- Wait for desktop image startup before collecting container snapshots during activation.
+
+PR #406.
+
 ## [3.17.237] - 2026-10-23
 
 - Pin canonical coordinator reader and remove notes dependency
