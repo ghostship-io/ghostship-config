@@ -3570,6 +3570,38 @@ def _scope_suffix(scope: Iterable[str], label: str) -> str:
     return f" · {text}"
 
 
+def _scoped_quota_id(window: Mapping[str, Any]) -> str:
+    """The quota id a published window series carries.
+
+    The card of an account keys its rows by the account, the kind and the
+    quota id, so a provider that publishes one quota id for several model
+    families would draw one row of the card for all of them. The scope of
+    the window is named after the id when the id does not name it already,
+    and every series of an account carries an id of its own.
+
+    A window whose id names its scope keeps it: '3p-5h' names the Claude
+    and the GPT models of the third-party group, and 'seven_day_fable'
+    names the Fable models of the Claude account. A window without a scope
+    is a window of the whole account, and it keeps its id. An inferred
+    window keeps its id too: it names the window it was learned over, and
+    the scope of the route is not part of that name.
+    """
+    quota_id = str(window.get("quota_id") or "")
+    if str(window.get("evidence") or "") == "inferred":
+        return quota_id
+    scope = [
+        str(token).strip().lower()
+        for token in (window.get("applies_to") or ())
+        if str(token).strip()
+    ]
+    if not scope or not quota_id:
+        return quota_id
+    named = quota_module.window_scope(quota_id)
+    if named and set(named) == set(scope):
+        return quota_id
+    return f"{quota_id}@{'+'.join(scope)}"
+
+
 def account_window_samples(
     snapshot: Mapping[str, Any],
 ) -> list[tuple[str, dict[str, str], float]]:
@@ -3584,6 +3616,10 @@ def account_window_samples(
     the length of the window wins, then the one that carries its reset,
     then the freshest one, then the one with the least left, and finally
     the one that resets first.
+
+    Every series of an account carries a quota id of its own, so a
+    provider that publishes one quota id for several model families draws
+    one row of the card for each of them.
 
     An account that publishes no window of its own is learning, and the
     collector says so instead of drawing a row.
@@ -3607,20 +3643,20 @@ def account_window_samples(
                 )
             )
             continue
+        published = [(window, _scoped_quota_id(window)) for window in windows]
         siblings: dict[str, list[str]] = {}
-        for window in windows:
+        for window, quota_id in published:
             kind = str(window.get("kind") or "")
-            siblings.setdefault(kind, []).append(str(window.get("quota_id") or ""))
-        for window in sorted(
-            windows,
+            siblings.setdefault(kind, []).append(quota_id)
+        for window, quota_id in sorted(
+            published,
             key=lambda item: (
-                ACCOUNT_WINDOW_ORDER.get(str(item.get("kind") or ""), ACCOUNT_WINDOW_ORDER_OTHER),
-                str(item.get("kind") or ""),
-                str(item.get("quota_id") or ""),
+                ACCOUNT_WINDOW_ORDER.get(str(item[0].get("kind") or ""), ACCOUNT_WINDOW_ORDER_OTHER),
+                str(item[0].get("kind") or ""),
+                item[1],
             ),
         ):
             kind = str(window.get("kind") or "")
-            quota_id = str(window.get("quota_id") or "")
             # The scope of the window is named by the label of the row. An
             # inferred window names the window it was learned over, and
             # that name is the whole of it.
