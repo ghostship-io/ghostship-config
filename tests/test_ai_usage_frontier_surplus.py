@@ -98,25 +98,25 @@ class SurplusInTheTiersTests(unittest.TestCase):
     def test_a_frontier_model_with_an_expiring_surplus_holds_a_bulk_rank(self):
         ranked = self._rank([window(0.2, 12 * HOUR, "weekly"), window(0.1, 2 * HOUR, "session")])
         tiers = {entry.tier for entry in ranked}
-        self.assertIn("frontier", tiers)
-        self.assertIn("bulk", tiers)
+        self.assertIn("orchestrator", tiers)
+        self.assertIn("worker", tiers)
 
     def test_a_frontier_model_without_an_expiring_surplus_stays_out_of_bulk(self):
         ranked = self._rank([window(0.2, 5 * DAY, "weekly"), window(0.1, 2 * HOUR, "session")])
         tiers = {entry.tier for entry in ranked}
-        self.assertIn("frontier", tiers)
-        self.assertNotIn("bulk", tiers)
+        self.assertIn("orchestrator", tiers)
+        self.assertNotIn("worker", tiers)
 
     def test_a_frontier_model_with_a_spent_allowance_stays_out_of_bulk(self):
         ranked = self._rank([window(1.0, 12 * HOUR, "weekly"), window(0.1, 2 * HOUR, "session")])
         tiers = {entry.tier for entry in ranked}
-        self.assertNotIn("bulk", tiers)
+        self.assertNotIn("worker", tiers)
 
     def test_no_available_frontier_leaves_the_review_without_a_rank(self):
         # Every window is spent: the model cannot serve the review either.
         ranked = self._rank([window(1.0, 12 * HOUR, "weekly"), window(1.0, 2 * HOUR, "session")])
         self.assertFalse(any(entry.available for entry in ranked))
-        self.assertFalse(any(entry.tier == "frontier" for entry in ranked))
+        self.assertFalse(any(entry.tier == "orchestrator" for entry in ranked))
 
 
 class _Catalog:

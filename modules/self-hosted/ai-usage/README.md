@@ -843,7 +843,7 @@ a spent account. The markers are "has been deprecated", "has been retired",
 available". Such a failure is scoped to one route: the model itself, on the
 account that serves it. The other models of the same provider are not
 affected by it. The route is not available, with the reason
-`model_retired`, and it holds no tier at all - not the bulk tier, not the
+`model_retired`, and it holds no tier at all - not the worker tier, not the
 free tier - whatever window it has, including the published unlimited
 promotion of the Go free routes.
 
@@ -864,14 +864,22 @@ always produce the same ranks.
 
 The four tiers, in the order the dashboard reads them:
 
-* `frontier` - the owner's workhorses, and nothing else.
-* `bulk` - every other model with a measured value.
+* `orchestrator` - the owner's workhorses, and nothing else.
+* `worker` - every other model with a measured value.
 * `free` - the dedicated free routes: the free inference pool's own
   integrations and the routes a provider lists at no cost. A promotional
   zero-price route of a paid account is not one of them; it competes in
-  bulk.
+  worker.
 * `3d` - the models worth using for 3D printing work. The 3D scores come from
   another component; the ranking never invents them.
+
+The tiers were renamed for the redesigned pages: `bulk` is `worker` and
+`frontier` is `orchestrator`, and `free` and `3d` stay as they were. For one
+release every published name keeps its old name beside it: `tiers`,
+`tier_winners`, `tier_members`, `coverage.tiers` and every gauge with a tier
+label carry both `worker`/`bulk` and `orchestrator`/`frontier` with identical
+content. The alias set is one constant in the collector, so the next release
+deletes it in one place.
 
 How a model enters a tier:
 
@@ -881,11 +889,11 @@ How a model enters a tier:
 * Every tier needs a measured value: the intelligence index and the cost per
   task, both required. A model the feed does not measure has no value and
   holds no tier, whatever it is called and whatever its listing costs.
-* `frontier` takes the models the owner's policy names, and only those. A
-  promotional free model is never a frontier model either; it belongs to the
-  free and bulk tiers.
-* `bulk` holds every other model with a measured value. The free inference
-  pool is not part of the bulk tier: the pool belongs to the free tier.
+* `orchestrator` takes the models the owner's policy names, and only those.
+  A promotional free model is never an orchestrator model either; it belongs
+  to the free and worker tiers.
+* `worker` holds every other model with a measured value. The free inference
+  pool is not part of the worker tier: the pool belongs to the free tier.
 * `free` needs the model to be a dedicated free route. A pool route needs a
   current admission for a workload before it may hold the tier; a native
   free route is a provider-native thread and needs none.
@@ -934,8 +942,8 @@ value.
 
 The order of a tier is the trust of its routes first, and the value of a
 route second. The trust of a model is read for the task type of the tier it
-holds: `implementation` for the frontier, the bulk and the free tiers, and
-`cad-execution` for the 3D tier. The trust comes from the owner's runtime
+holds: `implementation` for the orchestrator, the worker and the free tiers,
+and `cad-execution` for the 3D tier. The trust comes from the owner's runtime
 policy (`model_trust.entries`) and from the delegation ledger, and the worse
 of the two wins. The levels are `trusted`, `backup`, `untrusted` and
 `excluded`; a model that nothing speaks about is trusted, and an excluded
@@ -954,7 +962,7 @@ The order of a tier is then:
   the backup group outside that workload's tier and follows every unreserved
   route of it; its winner names the workload in `reserved_for`;
 * the 3D reserve, for the tiers a reserved model is held away from;
-* the bulk tier reads the published value, and a free route leads it while
+* the worker tier reads the published value, and a free route leads it while
   its quality is within `0.10` of the best available route of its own
   trust level, free or paid; the 3D tier is valued by its own 3D value under
   the trust of the model;
@@ -1042,6 +1050,21 @@ trusted.
   whose headroom is unknown, with the reason it is unknown.
 * `ghostship_ai_model_tier{provider,model,tier}` - 1 for every tier a model
   belongs to.
+* `ghostship_ai_model_winner{provider,model,tier}` - 1 for the winner of a
+  provider and tier.
+* `ghostship_ai_model_winner_position{provider,model,tier}` - the position of
+  the winner among the providers of a tier, 1 is best.
+* `ghostship_ai_model_member_position{provider,model,tier}` - the position of
+  every member of a tier, winners and non-winners, 1-based, in the tier's own
+  order. The winners come first in their winner order, the other members
+  follow in the tier order, and an unavailable or spent member is last. A
+  winner's member position is therefore never after a non-winner's.
+* `ghostship_ai_model_reserved_for{provider,model,tier,role}` - 1 for a member
+  whose provider is reserved for another workload in this tier; `role` is the
+  workload, e.g. `review-roles`.
+* Every gauge above with a `tier` label is published under the new name and
+  its old name (`frontier`, `bulk`) for one release, with identical labels
+  and value.
 * `ghostship_ai_model_info{provider,model,name}` - 1 for every candidate model,
   with its human name: the label T3 Code's model catalog gives the model, else
   the Artificial Analysis record's name without its reasoning condition, else
@@ -1128,7 +1151,7 @@ The contract, version 1:
 | `routing` | the owner's routing switch: `enabled` is true only when the owner turned it on, and `source` says where the switch came from (`nixos-option`). The block is always there, so a consumer never has to guess whether it read a snapshot without a switch |
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
-| `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
+| `tiers` | the ordered members of `orchestrator`, `worker`, `free`, and `3d`, and the same members under the old names `frontier` and `bulk` for one release |
 | `quota.accounts` | the windows of each account, once per account: the ones the provider reported, and the ones learned from the limit failures of its routes (`evidence: inferred`, with the learned window, budget, unit, scope and episodes). A learned window that ends inside the collector's own run interval of five minutes carries no reset: it rolls, and the instant the inference measured is already past when the reading is published |
 | `quality_feed` | the Artificial Analysis feed: its status, the intelligence index version, the fetch time, the age, and the attribution. A missing feed is a coverage gap, never an empty quality |
 | `workload_policy` | the workload classes, their complexity ceiling, and the free route rule |
@@ -1265,7 +1288,7 @@ Look at the textfile node_exporter scrapes:
 
 Read the routing snapshot a consumer uses:
 
-    jq '.tiers.frontier, .candidates[0]' /var/lib/ghostship-ai-usage/routing.json
+    jq '.tiers.orchestrator, .tiers.frontier, .candidates[0]' /var/lib/ghostship-ai-usage/routing.json
 
 Check the timer:
 

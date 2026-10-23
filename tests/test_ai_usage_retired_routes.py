@@ -466,7 +466,7 @@ class RetiredRouteTests(unittest.TestCase):
             )
             # The route holds no tier, not the bulk tier and not the free
             # tier, whatever window it has.
-            for tier in ("bulk", "free", "frontier", "3d"):
+            for tier in ("worker", "free", "orchestrator", "3d"):
                 self.assertNotIn(
                     "opencode-go:minimax-m3.1-flash-free", snapshot["tiers"][tier]
                 )
@@ -527,7 +527,7 @@ class RetiredRouteTests(unittest.TestCase):
             ]
             self.assertTrue(available)
             self.assertEqual(available[0][2], 1.0)
-            self.assertIn("opencode-go:glm-5.3", snapshot["tiers"]["bulk"])
+            self.assertIn("opencode-go:glm-5.3", snapshot["tiers"]["worker"])
 
     def test_a_retired_openrouter_route_is_unavailable(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -701,7 +701,7 @@ class RetiredRouteTests(unittest.TestCase):
                 0.0,
             )
             self.assertNotIn(
-                "opencode-go/minimax-m3.1-flash-free", snapshot["tiers"]["bulk"]
+                "opencode-go/minimax-m3.1-flash-free", snapshot["tiers"]["worker"]
             )
 
     def test_a_later_success_makes_the_route_available_again(self):

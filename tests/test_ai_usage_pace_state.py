@@ -214,7 +214,7 @@ def build(routes, *, trust=TRUST):
 
 def bulk_winners(data):
     """The bulk tier, in the order the snapshot holds it."""
-    return [winner["key"] for winner in data["tier_winners"]["bulk"]]
+    return [winner["key"] for winner in data["tier_winners"]["worker"]]
 
 
 def row_of(data, key):
@@ -299,7 +299,7 @@ class PaceStateOrderTests(unittest.TestCase):
         untrusted = row_of(data, "opencode-go:beam-free")
         self.assertEqual(trusted["capacity"]["pace_state"], "far_behind")
         self.assertEqual(untrusted["capacity"]["pace_state"], "on_pace")
-        self.assertEqual(untrusted["trust"]["bulk"]["level"], "untrusted")
+        self.assertEqual(untrusted["trust"]["worker"]["level"], "untrusted")
         order = bulk_winners(data)
         self.assertLess(order.index("ollama:deepseek-v4.1-flash:1017"), order.index("opencode-go:beam-free"))
         self.assertEqual(order[-1], "opencode-go:beam-free")

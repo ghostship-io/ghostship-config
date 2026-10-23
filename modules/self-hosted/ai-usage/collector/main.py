@@ -292,6 +292,15 @@ METRIC_HELP = {
     "ghostship_ai_model_fact_confidence": "The confidence a fact carries.",
     "ghostship_ai_model_winner": "One for the winner of a provider and tier.",
     "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
+    "ghostship_ai_model_member_position": (
+        "The position of a member of a tier: every member, winners first in "
+        "their winner order, then the rest in the tier's order, with an "
+        "unavailable or spent member last."
+    ),
+    "ghostship_ai_model_reserved_for": (
+        "One for a member whose provider is reserved for another workload in "
+        "this tier, with the workload as the role."
+    ),
     "ghostship_ai_policy_frontier_workhorse": (
         "One for every model the owner's policy names a frontier workhorse."
     ),
@@ -1424,7 +1433,7 @@ def ranking_samples(
     if "exclude_providers" in inspect.signature(ranking_module.rank_models).parameters:
         # The free inference pool belongs to the free tier, not to the bulk
         # tier of the paid accounts.
-        rank_kwargs["exclude_providers"] = {"bulk": sorted(pool_providers)}
+        rank_kwargs["exclude_providers"] = {"worker": sorted(pool_providers)}
     if "promo_models" in inspect.signature(ranking_module.rank_models).parameters:
         rank_kwargs["promo_models"] = sorted(promo)
     if "external_availability" in inspect.signature(ranking_module.rank_models).parameters:

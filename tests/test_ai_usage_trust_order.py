@@ -322,7 +322,7 @@ def build(
 
 def bulk_winners(data):
     """The bulk tier, in the order the snapshot holds it."""
-    return [winner["key"] for winner in data["tier_winners"]["bulk"]]
+    return [winner["key"] for winner in data["tier_winners"]["worker"]]
 
 
 def row_of(data, key):
@@ -370,7 +370,7 @@ class TrustOrderTests(unittest.TestCase):
         ]
         data = build(routes)
         winner = winner_of(data, "opencode-go:beam-free")
-        outcome = row_of(data, "opencode-go:beam-free")["outcome"]["bulk"]
+        outcome = row_of(data, "opencode-go:beam-free")["outcome"]["worker"]
         # The reason is the reason of the owner's policy.
         self.assertEqual(
             winner["trust_reason"],
@@ -415,14 +415,14 @@ class OutcomeValueTests(unittest.TestCase):
         # The prior of the two models of the provider is read inside the
         # range of the tier: 24.7 to 45.1.
         row = row_of(data, "ollama:deepseek-v4.1-flash:1017")
-        self.assertAlmostEqual(row["outcome"]["bulk"]["i_min"], 24.7, places=6)
-        self.assertAlmostEqual(row["outcome"]["bulk"]["i_max"], 45.1, places=6)
-        self.assertAlmostEqual(row["outcome"]["bulk"]["p0"], 0.9, places=6)
+        self.assertAlmostEqual(row["outcome"]["worker"]["i_min"], 24.7, places=6)
+        self.assertAlmostEqual(row["outcome"]["worker"]["i_max"], 45.1, places=6)
+        self.assertAlmostEqual(row["outcome"]["worker"]["p0"], 0.9, places=6)
         # The model with no observed round keeps its prior, and it is worth
         # more than the model whose rounds were observed.
-        self.assertEqual(row["outcome"]["bulk"]["n"], 0)
-        self.assertEqual(row["outcome"]["bulk"]["s"], 0)
-        self.assertAlmostEqual(row["outcome"]["bulk"]["p"], 0.9, places=6)
+        self.assertEqual(row["outcome"]["worker"]["n"], 0)
+        self.assertEqual(row["outcome"]["worker"]["s"], 0)
+        self.assertAlmostEqual(row["outcome"]["worker"]["p"], 0.9, places=6)
         self.assertEqual(
             [key for key in bulk_winners(data) if key.startswith("ollama:")],
             ["ollama:deepseek-v4.1-flash:1017"],
@@ -433,9 +433,9 @@ class OutcomeValueTests(unittest.TestCase):
         rounds += rounds_for("ollama-cloud/deepseek-v4.1-flash:1017", 173, 106)
         data = build(self.ROUTES, rounds=rounds)
         row = row_of(data, "ollama:deepseek-v4.1-flash:1017")
-        self.assertEqual(row["outcome"]["bulk"]["n"], 173)
-        self.assertEqual(row["outcome"]["bulk"]["s"], 106)
-        self.assertAlmostEqual(row["outcome"]["bulk"]["p"], 115 / 183, places=6)
+        self.assertEqual(row["outcome"]["worker"]["n"], 173)
+        self.assertEqual(row["outcome"]["worker"]["s"], 106)
+        self.assertAlmostEqual(row["outcome"]["worker"]["p"], 115 / 183, places=6)
         # The observed rounds shrink the quality of the model below the
         # quality of the model that was not measured, and the other model of
         # the provider wins it.
@@ -460,10 +460,10 @@ class FreeRouteOrderTests(unittest.TestCase):
         paid = row_of(data, "ollama:deepseek-v4.1-flash:1017")
         # The free route is behind the paid one, but not by more than the
         # margin of the policy.
-        self.assertAlmostEqual(free["outcome"]["bulk"]["p"], 0.8529, places=4)
-        self.assertAlmostEqual(paid["outcome"]["bulk"]["p"], 0.9, places=6)
+        self.assertAlmostEqual(free["outcome"]["worker"]["p"], 0.8529, places=4)
+        self.assertAlmostEqual(paid["outcome"]["worker"]["p"], 0.9, places=6)
         self.assertLessEqual(
-            paid["outcome"]["bulk"]["p"] - free["outcome"]["bulk"]["p"],
+            paid["outcome"]["worker"]["p"] - free["outcome"]["worker"]["p"],
             value_policy.FREE_ROUTE_MARGIN,
         )
         self.assertEqual(bulk_winners(data)[0], "opencode-go:minimax-m3.1-flash-free")
@@ -482,10 +482,10 @@ class FreeRouteOrderTests(unittest.TestCase):
             self.ROUTES[2],
         ]
         data = build(routes)
-        self.assertNotIn("opencode-go:minimax-m3.1-flash-free", data["tiers"]["bulk"])
+        self.assertNotIn("opencode-go:minimax-m3.1-flash-free", data["tiers"]["worker"])
         self.assertNotIn(
             "opencode-go:minimax-m3.1-flash-free",
-            [winner["key"] for winner in data["tier_winners"]["bulk"]],
+            [winner["key"] for winner in data["tier_winners"]["worker"]],
         )
 
 
@@ -503,8 +503,8 @@ class FreeRouteMarginTests(unittest.TestCase):
             Route("claude", "low-anchor", 30.0),
         ]
         data = build(routes)
-        self.assertAlmostEqual(row_of(data, "openrouter:beta:free")["outcome"]["bulk"]["p"], 0.6333, places=4)
-        self.assertAlmostEqual(row_of(data, "ollama:gamma")["outcome"]["bulk"]["p"], 0.7, places=4)
+        self.assertAlmostEqual(row_of(data, "openrouter:beta:free")["outcome"]["worker"]["p"], 0.6333, places=4)
+        self.assertAlmostEqual(row_of(data, "ollama:gamma")["outcome"]["worker"]["p"], 0.7, places=4)
         order = bulk_winners(data)
         self.assertEqual(order[0], "opencode-go:alpha-free")
         self.assertLess(order.index("ollama:gamma"), order.index("openrouter:beta:free"))
@@ -521,8 +521,8 @@ class NewRouteTests(unittest.TestCase):
         ]
         data = build(routes)
         row = row_of(data, "ollama:a-brand-new-model")
-        self.assertAlmostEqual(row["outcome"]["bulk"]["p0"], 0.9, places=6)
-        self.assertEqual(row["outcome"]["bulk"]["n"], 0)
+        self.assertAlmostEqual(row["outcome"]["worker"]["p0"], 0.9, places=6)
+        self.assertEqual(row["outcome"]["worker"]["n"], 0)
         # The new route is the strongest of the tier, and it leads it.
         self.assertEqual(bulk_winners(data)[0], "ollama:a-brand-new-model")
 
@@ -541,7 +541,7 @@ class FrontierOrderTests(unittest.TestCase):
         with_policy = build(routes, trust=TRUST)
         without_policy = build(routes, trust={})
         order = [
-            winner["key"] for winner in with_policy["tier_winners"]["frontier"]
+            winner["key"] for winner in with_policy["tier_winners"]["orchestrator"]
         ]
         self.assertEqual(order, ["codex:gpt-6.1-sol", "claude:claude-opus-5-5"])
         # The order is the same with a policy and without one: no trust
@@ -550,7 +550,7 @@ class FrontierOrderTests(unittest.TestCase):
             order,
             [
                 winner["key"]
-                for winner in without_policy["tier_winners"]["frontier"]
+                for winner in without_policy["tier_winners"]["orchestrator"]
             ],
         )
 
@@ -565,12 +565,12 @@ class OutcomeRecordTests(unittest.TestCase):
         ]
         data = build(routes)
         row = row_of(data, "claude:claude-haiku-5-5")
-        trust = row["trust"]["bulk"]
+        trust = row["trust"]["worker"]
         self.assertEqual(trust["level"], "backup")
         self.assertEqual(trust["task_type"], "implementation")
         self.assertEqual(trust["source"], "policy")
         self.assertIn("backup route", trust["reason"])
-        outcome = row["outcome"]["bulk"]
+        outcome = row["outcome"]["worker"]
         self.assertEqual(outcome["identity"], "claude-haiku-5-5")
         self.assertEqual(outcome["task_type"], "implementation")
         self.assertAlmostEqual(outcome["intelligence"], 41.2, places=6)
@@ -579,9 +579,9 @@ class OutcomeRecordTests(unittest.TestCase):
         self.assertEqual(outcome["s"], 0)
         # The Artificial Analysis value of the row is not the published
         # value: the published value is the outcome-weighted one.
-        self.assertNotEqual(row["value"]["value"], row["outcome"]["bulk"]["value"])
+        self.assertNotEqual(row["value"]["value"], row["outcome"]["worker"]["value"])
         winner = winner_of(data, "claude:claude-haiku-5-5")
-        self.assertEqual(winner["value"], row["outcome"]["bulk"]["published"])
+        self.assertEqual(winner["value"], row["outcome"]["worker"]["published"])
         self.assertEqual(winner["value_aa"], row["value"]["value"])
         self.assertEqual(winner["trust_level"], "backup")
         self.assertEqual(winner["trust_reason"], trust["reason"])
@@ -603,10 +603,10 @@ class MissingHistoryTests(unittest.TestCase):
         routes = [Route("ollama", "deepseek-v4.1-flash:1017", 45.1)]
         data = build(routes, trust={}, identities={})
         row = row_of(data, "ollama:deepseek-v4.1-flash:1017")
-        self.assertEqual(row["trust"]["bulk"]["level"], "trusted")
-        self.assertEqual(row["trust"]["bulk"]["source"], "default")
-        self.assertEqual(row["outcome"]["bulk"]["n"], 0)
-        self.assertEqual(row["outcome"]["bulk"]["s"], 0)
+        self.assertEqual(row["trust"]["worker"]["level"], "trusted")
+        self.assertEqual(row["trust"]["worker"]["source"], "default")
+        self.assertEqual(row["outcome"]["worker"]["n"], 0)
+        self.assertEqual(row["outcome"]["worker"]["s"], 0)
 
 
 class PublishedGaugeTests(unittest.TestCase):
@@ -627,7 +627,7 @@ class PublishedGaugeTests(unittest.TestCase):
             'ghostship_ai_model_trust_info{level="backup",model="claude-haiku-5-5",'
             'provider="claude",reason="owner:_a_backup_route__used_only_when_every_'
             'other_route_for_the_task_is_exhausted_or_unavailable",source="policy",'
-            'task_type="implementation",tier="bulk"} 1',
+            'task_type="implementation",tier="worker"} 1',
             text,
         )
         # The outcome of the route, field by field.
@@ -636,7 +636,7 @@ class PublishedGaugeTests(unittest.TestCase):
                 'ghostship_ai_model_outcome{field="'
                 + field
                 + '",model="claude-haiku-5-5",provider="claude",'
-                'task_type="implementation",tier="bulk"} '
+                'task_type="implementation",tier="worker"} '
                 + value,
                 text,
             )
@@ -665,11 +665,11 @@ class ExcludedTrustTests(unittest.TestCase):
         ]
         data = build(routes, trust=self.TRUST)
         row = row_of(data, "ollama:deepseek-v4.1-flash:1017")
-        self.assertEqual(row["trust"]["bulk"]["level"], "excluded")
-        self.assertNotIn("ollama:deepseek-v4.1-flash:1017", data["tiers"]["bulk"])
+        self.assertEqual(row["trust"]["worker"]["level"], "excluded")
+        self.assertNotIn("ollama:deepseek-v4.1-flash:1017", data["tiers"]["worker"])
         self.assertNotIn(
             "ollama:deepseek-v4.1-flash:1017",
-            [winner["key"] for winner in data["tier_winners"]["bulk"]],
+            [winner["key"] for winner in data["tier_winners"]["worker"]],
         )
 
 
@@ -734,6 +734,6 @@ class ProviderReservationTests(unittest.TestCase):
     def test_a_released_reservation_and_the_reserved_tier_are_unaffected(self):
         data = build(self.ROUTES, trust=self.POLICY)
         self.assertEqual(winner_of(data, "codex:gpt-6.1-sol")["reserved_for"], "")
-        frontier = [w for w in data["tier_winners"].get("frontier", []) if w["provider"] == "claude"]
+        frontier = [w for w in data["tier_winners"].get("orchestrator", []) if w["provider"] == "claude"]
         for winner in frontier:
             self.assertEqual(winner["reserved_for"], "")
