@@ -6,16 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CISchedulingTests(unittest.TestCase):
-    def test_fast_push_lane_cancels_superseded_main_without_launching_integration(self):
+    def test_pr_lane_has_no_duplicate_main_or_scheduled_runs(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text()
-        self.assertIn("github.event_name == 'push' && 'main'", text)
+        self.assertNotIn('  push:', text)
         self.assertIn('cancel-in-progress: true', text)
         self.assertNotIn('|| github.sha', text)
-        self.assertIn("- cron: '17 5 * * *'", text)
-        self.assertIn("if: github.event_name == 'pull_request' || github.event_name == 'push'", text)
+        self.assertNotIn('schedule:', text)
+        self.assertIn('runs-on: [self-hosted, Linux, ARM64, ghostship-fast]', text)
+        self.assertIn('timeout-minutes: 2', text)
+        self.assertIn("if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository", text)
         for name in ('Validate container development workflow', 'Evaluate hosts and run regression tests'):
             step = text.split('- name: ' + name, 1)[1].split('- name:', 1)[0]
-            self.assertIn("if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", step)
+            self.assertNotIn('if:', step)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", text)
         self.assertIn('gitleaks dir --redact --no-banner .', text)
         scan = text.split('- name: Scan current source for secrets', 1)[1]
         self.assertNotIn('if:', scan)
@@ -34,12 +37,12 @@ class CISchedulingTests(unittest.TestCase):
         self.assertIn('nixosConfigurations.$host.config.system.build.toplevel.drvPath', integration)
         self.assertIn('tests/apparmor-public.nix', integration)
 
-    def test_browser_integration_is_nightly_or_manual_without_pr_push_triggers(self):
+    def test_browser_integration_is_manual_without_pr_push_triggers(self):
         text = (ROOT / '.github/workflows/t3code.yml').read_text()
         triggers = text.split('permissions:', 1)[0]
         self.assertNotIn('push:', triggers)
         self.assertNotIn('pull_request:', triggers)
-        self.assertIn('schedule:', triggers)
+        self.assertNotIn('schedule:', triggers)
         self.assertIn('workflow_dispatch:', triggers)
         self.assertIn('cancel-in-progress: true', text)
         self.assertIn('tests/t3code-pwa.browser.cjs', text)
