@@ -246,6 +246,8 @@ def _model_options(model: dict[str, Any]) -> list[dict[str, Any]]:
         # descriptor: the model offers it, the run setting is simply not
         # reported.
         option: dict[str, Any] = {"id": identifier}
+        if descriptor.get("type") in ("boolean", "select"):
+            option["type"] = descriptor["type"]
         if isinstance(value, (str, bool, int, float)):
             option["currentValue"] = value
         for key in ("values", "allowed", "allowedValues", "choices", "enum"):
@@ -331,6 +333,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             offered.append(pair)
             native[pair] = {
                 "providerInstance": instance,
+                "available": provider.get("enabled") is not False and provider.get("status") == "ready",
                 "modelId": slug,
                 # The label the instance gives the model, when it gives one.
                 # It is the name T3 Code's model catalog carries for it.

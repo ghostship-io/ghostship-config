@@ -272,6 +272,10 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
             round(max(0.0, 1.0 - used_value), 4) if known and not expired else None
         ),
         "reset_at": _iso(reset_value) if reset_value is not None else None,
+        "reset_source": str(_get("reset_source", "resetSource", default="provider")),
+        "reset_label": ("custom reset" if _get("reset_source", "resetSource") == "custom" else "reset"),
+        "provider_reset_at": _iso(_finite(_get("provider_reset_epoch", "providerResetEpoch")))
+            if _finite(_get("provider_reset_epoch", "providerResetEpoch")) is not None else None,
         "seconds_to_reset": (
             int(round(reset_value - now)) if reset_value is not None else None
         ),
@@ -369,6 +373,8 @@ def _native_option(option: Mapping[str, Any]) -> dict[str, Any]:
         "current_value": current,
         "current_published": current is not None,
     }
+    if option.get("type") in ("boolean", "select"):
+        record["type"] = option["type"]
     for key in ("values", "allowed", "allowedValues", "choices", "enum"):
         value = option.get(key)
         if isinstance(value, (list, tuple)) and 0 < len(value) <= 64:
@@ -413,6 +419,8 @@ def _native_record(
     return {
         "provider_instance_id": str(native.get("providerInstance") or ""),
         "model_id": str(native.get("modelId") or ""),
+        "display_name": str(native.get("name") or ""),
+        "available": native.get("available", True),
         "options": [_native_option(option) for option in (native.get("options") or []) if isinstance(option, Mapping) and option.get("id")],
         "mapped": True,
         "provenance": "live T3 Code instance catalog",
@@ -1032,7 +1040,8 @@ def _candidate(
         if failure:
             observed_failure = dict(failure)
     for window in raw_windows:
-        record = _window_record(window, now)
+        record = (_inferred_window_record(window, now, getattr(window, "applies_to", ()))
+                  if getattr(window, "inference", None) else _window_record(window, now))
         if record not in windows:
             windows.append(record)
     if pace is None and raw_windows:
@@ -1160,6 +1169,7 @@ def _candidate(
             ),
         },
         "quota_state": quota_state,
+        "windows": windows,
         # The reason the headroom is unknown, or an empty string when it is
         # known. An unknown headroom without a reason is a gap.
         "unknown_reason": unknown_reason,
@@ -3732,15 +3742,10 @@ def build_snapshot(
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
         if account:
-            # The measured windows are published once per account, not once
-            # per model of that account.
-            windows = row.get("quotaWindows") or []
-            known = accounts.setdefault(account, [])
-            for window in windows:
-                if window not in known:
-                    known.append(window)
+            # Account windows already came from the scoped source records.
+            # A candidate's applied copy must not add unscoped duplicates.
+            accounts.setdefault(account, [])
             row["quotaRef"] = f"accounts/{account}"
-        row.pop("quotaWindows", None)
         if row["admission"]["state"] == "pending":
             pending.append(
                 {
@@ -4506,6 +4511,8 @@ def account_window_samples(
             if str(window.get("evidence") or "") == "inferred":
                 scope = ()
             label = _window_label(kind, quota_id, siblings.get(kind, []))
+            if window.get("reset_source") == "custom":
+                label += " · custom reset"
             labels = {
                 "account": account,
                 "kind": kind,

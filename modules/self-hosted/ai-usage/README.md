@@ -1436,3 +1436,27 @@ Query the metrics in VictoriaMetrics (it listens on loopback only):
 
 The Grafana dashboard is in the "Ghostship" folder, next to the host,
 container and security dashboards.
+
+### Managed picker preferences
+
+`model_selection` is the shared `ghostship.model-selection/v1` contract for
+orchestrator and worker recommendations, grouped by provider. Native catalog
+membership and quota availability govern favorites; short windows can make a
+model unavailable but never become its displayed limiting window. The first
+available native worker is the new-thread default. Effort follows the role's
+supported native setting, with standard billing only.
+
+The collector calls the policy input's authenticated picker reconciler on its
+normal cadence. Incremental settings patches preserve unrelated favorites and
+preferences. A durable ownership journal makes retries converge; partial
+snapshots cannot retire omitted favorites. Existing threads keep their model.
+
+An optional runtime file, `--custom-resets` (default
+`/var/lib/ghostship-ai-usage/custom-resets.json`), contains
+`{"schema":1,"windows":[{"provider":"example","quota_id":"weekly","reset_at":"2030-01-01T17:00:00Z"}]}`.
+An optional `model` scopes an override to a per-model window. Only the matching
+window's effective reset changes, until that time passes. Usage and observation
+time remain provider measurements. Published windows and selection limits say
+`reset_source: custom` and `reset_label: custom reset`, retain
+`provider_reset_at`, and use the effective reset for pace. Invalid or duplicate
+overrides fail visibly. Keep owner-specific reset times in runtime state.

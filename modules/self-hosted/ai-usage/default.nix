@@ -1,9 +1,10 @@
-# AI usage collection: one read-only snapshot of every AI account in use,
+# AI usage collection and managed model favorites: one snapshot of every AI account in use,
 # written as a node_exporter textfile for VictoriaMetrics and the Grafana
 # dashboard provisioned in modules/self-hosted/siem/ui.nix.
 #
 # The collector is plain Python (standard library only). It never starts,
-# stops or reconfigures a provider, a container or T3 Code: it reads what
+# stops or restarts a provider, a container or T3 Code. Model preferences use
+# authenticated incremental settings patches. Usage is read from what
 # already exists - T3 Code's own read-only RPC surface, the provider APIs T3
 # Code does not read, the free inference pool, and the public model catalog.
 # The contract, every metric name and label, is in README.md.
@@ -44,11 +45,10 @@ let
     cp ${./collector}/*.py $out/collector/
   '';
   python = pkgs.python3.withPackages (ps: [ ps.websockets ]);
-  # The owner's runtime policy, which carries the static worker table that
-  # governs while routing is off. It is a plain source tree from its own
+  # The owner's runtime policy and picker reconciler. It is a plain source tree from its own
   # flake input. An evaluation that does not carry the flake's inputs (a
   # standalone module test) reads no policy, and the collector reports the
-  # table as unreadable rather than inventing one.
+  # policy as unreadable rather than inventing one.
   policy = (args.inputs or { }).ghostship-agent-policy or null;
   policyArg = lib.optionalString (policy != null) (
     " --runtime-policy ${policy}/config/agents/runtime-policy.json"
@@ -78,11 +78,12 @@ in
       wants = [ "network-online.target" "podman.socket" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}${lib.optionalString (policy != null) " --reconcile-picker"}";
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.
-        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ];
+        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ]
+          ++ lib.optional (policy != null) "PYTHONPATH=${policy}/tools/python";
         # The T3 usage summary pages over 30 days and the free pool catalog is
         # paged; a few minutes is the honest bound.
         TimeoutStartSec = "5min";

@@ -54,7 +54,6 @@ let
       shellcheck
       shfmt
       yq-go
-      buildkit
       bubblewrap
       fuse-overlayfs
       nodejs_24

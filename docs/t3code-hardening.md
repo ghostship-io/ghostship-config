@@ -65,6 +65,9 @@ account/group and configuration reintroduction. Unit tests exercise connected
 peer credentials, refusal before bytes, inherited listener lifetime, directory
 symlink safety, forwarding and candidate-manager ownership. Nix tests evaluate
 actual units, ID collision refusal, resources, mounts and hardened argv admission.
+Engine startup also verifies that the configured helper directories contain
+executable network, published-port and init helpers; a custom path cannot silently
+drop workload support.
 
 Integration acceptance remains separate from these fast checks. No prior engine
 workflow result establishes Podman compatibility. After landing and deploying the
