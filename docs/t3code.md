@@ -7,6 +7,10 @@ CLI, and Cloudflared Quick Tunnels. The access gateway
 listens on `t3code:3773` inside `ghostship_net`; the T3 backend listens only on
 container loopback port `3774`. No host ports are published.
 
+For the staged unprivileged runtime and separate development Docker engine, use
+the [hardening acceptance workflow](t3code-hardening.md). Root SSH administration
+remains an explicit requirement; the active runtime stays intact during testing.
+
 ## Projects and state
 
 The container user is `t3code`, with home `/home/t3code`. Host state lives in
