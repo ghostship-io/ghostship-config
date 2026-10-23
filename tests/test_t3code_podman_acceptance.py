@@ -88,11 +88,14 @@ class NativeNetworkInspection(unittest.TestCase):
 class ImageStartup(unittest.TestCase):
     def test_readiness_unit_executes_the_packaged_command(self):
         # A stale executable name prevents the bootstrap and server from starting.
-        source = (SOURCE.parents[3] / "packages/t3code/image.nix").read_text()
-        # This is the stable executable contract exported by ghostship-agent;
-        # the image must resolve it through the persistent home payload.
-        self.assertIn("ExecStart=${managedBin}/t3code-engine-ready\n", source)
-
+        source = (SOURCE.parents[3] / "modules/self-hosted/t3code.nix").read_text()
+        name = re.search(
+            r't3codeEngineReady = pkgs.writeShellScriptBin "([^"]+)"', source
+        )[1]
+        executable = re.search(
+            r"ExecStart=\$\{t3codeEngineReady\}/bin/([^\s]+)", source
+        )[1]
+        self.assertEqual(executable, name)
 
 
 class PublishedPort(unittest.TestCase):

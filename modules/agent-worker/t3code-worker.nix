@@ -2,7 +2,6 @@
   config,
   lib,
   pkgs,
-  inputs,
   ...
 }:
 
@@ -24,9 +23,9 @@ let
     pkgs.python3
   ];
   t3WorkerPath = "${agentBinDir}:${home}/.local/bin:${runtimePath}:/run/current-system/sw/bin:/usr/bin:/bin";
-  t3codeActivityProbe = pkgs.callPackage "${inputs.ghostship-private-agent}/packages/t3code/activity-probe/default.nix" { };
+  t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
 
-  antigravityAcp = pkgs.callPackage "${inputs.ghostship-private-agent}/packages/t3code/antigravity-acp.nix" { };
+  antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
   antigravityEntry = lib.optionalString cfg.enableAntigravity ''
     ,
         "antigravity": {"driver": "antigravity", "enabled": true, "config": {"binaryPath": "agy_acp_server.par"}}

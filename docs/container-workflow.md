@@ -65,9 +65,8 @@ skills does not transfer those plugins or their authentication to another CLI.
 Run `t3code-shared-agents` to rebuild and refresh the package, or
 `t3code-shared-agents --skills-only` to refresh discovery without a build. The
 installer persists this helper and a T3 Code bootstrap hook in the user home,
-so refreshes survive removal of the development worktree. Ghostship owns the container tooling payload at
-`~/.local/state/ghostship-t3-tools/current`; the managed release resolver refreshes
-it without replacing the image or container. The host
+so refreshes survive removal of the development worktree. The Nix-managed
+container bootstrap also refreshes skills on subsequent deployments. The host
 publishes a release candidate; the agent resolver selects the newer of that pin
 and agent origin/main. Its installed-release floor refuses downgrades, and host
 publication preserves the canonical launcher. Boot hooks remain offline.
@@ -153,9 +152,7 @@ dependency restarts, host reboot, and container bootstrap/activation helpers.
 
 Host configuration changes and image updates decouple deployment from container
 interruption. `podman-t3code.service` does not restart on configuration switch.
-Only changes to `packages/t3code/image.nix` or its base dependencies queue an
-image replacement. T3 app and provider updates happen in the persistent home;
-only an app release queues an idle app restart. Image updates are applied by
+Instead, image updates and restarts are queued and applied by
 `t3code-deploy-when-idle` only after confirming sustained idle across active turns
 and pending tasks. If a manual host restart is required, use `t3code-safe-restart`
 rather than restarting `podman-t3code.service` directly. A forced restart needs the
