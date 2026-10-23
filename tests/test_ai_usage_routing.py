@@ -486,11 +486,19 @@ class BillingClassTests(unittest.TestCase):
 
     def test_a_dedicated_free_route_is_free(self):
         data = build_snapshot(
+            [("opencode", "big-pickle")],
+            free_models={("opencode", "big-pickle")},
+        )
+        self.assertEqual(billing_of(data, "opencode", "big-pickle"), "free")
+
+    def test_open_code_go_is_paid_even_when_its_catalog_lists_a_zero_price(self):
+        data = build_snapshot(
             [("opencode-go", "minimax-m3.1-flash-free")],
             free_models={("opencode-go", "minimax-m3.1-flash-free")},
+            promo_models={("opencode-go", "minimax-m3.1-flash-free")},
         )
         self.assertEqual(
-            billing_of(data, "opencode-go", "minimax-m3.1-flash-free"), "free"
+            billing_of(data, "opencode-go", "minimax-m3.1-flash-free"), "subscription"
         )
 
     def test_a_promotional_route_is_a_promotion(self):

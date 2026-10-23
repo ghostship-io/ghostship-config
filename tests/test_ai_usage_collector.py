@@ -453,7 +453,12 @@ class DashboardTests(unittest.TestCase):
             "ghostship_ai_model_info",
             "ghostship_ai_model_capacity_basis",
         }
-        for panel in self.dashboard.get("panels") or []:
+        def walk(panels):
+            for panel in panels:
+                yield panel
+                yield from walk(panel.get("panels") or [])
+
+        for panel in walk(self.dashboard.get("panels") or []):
             for target in panel.get("targets") or []:
                 expression = target.get("expr") or ""
                 for name in re.findall(r"ghostship_ai_[a-z0-9_]+", expression):

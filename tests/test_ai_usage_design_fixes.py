@@ -230,16 +230,19 @@ class FreeSetTests(unittest.TestCase):
             }
         )
 
-    def test_the_free_route_providers_are_free_and_the_rest_is_promotional(self):
+    def test_zen_and_openrouter_are_free_routes_and_go_is_always_paid(self):
         main = _load("ai_usage_design_main", "main")
         catalog = self._catalog()
         inputs = main.ranking_inputs([], catalog, {}, [])
         free = inputs["free"]
         promo = inputs["promo"]
         self.assertIn(("openrouter", "cohere/north-mini-code:free"), free)
-        self.assertIn(("opencode-go", "minimax-m3.1-flash-free"), free)
-        self.assertIn(("opencode", "big-pickle"), promo)
-        self.assertNotIn(("opencode", "big-pickle"), free)
+        # OpenCode Zen is the free OpenCode login. OpenCode Go is a paid
+        # subscription, so even its zero-price listings are neither free nor promotional.
+        self.assertIn(("opencode", "big-pickle"), free)
+        self.assertNotIn(("opencode", "big-pickle"), promo)
+        self.assertNotIn(("opencode-go", "minimax-m3.1-flash-free"), free)
+        self.assertNotIn(("opencode-go", "minimax-m3.1-flash-free"), promo)
         self.assertNotIn(("openrouter", "cohere/north-mini-code:free"), promo)
 
 
