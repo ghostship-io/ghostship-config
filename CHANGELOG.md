@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.120] - 2026-10-23
+
+- AI usage: a free provider and a static route carry the name of their model. The name of a model is published with the model id the exposition format allows, and the id a provider gave is not always one of them: a slash and an at sign are not. The free selection and the static table looked the name up by the raw id of the route, so six of the nineteen free rows of the Providers page read a raw id where the collector publishes a name, and the Groq, OpenRouter, NVIDIA and Cloudflare Workers AI models of the free tier read 'qwen/qwen3.8-27b', 'thinkingmachines/inkling-small:free' and '@cf/openai/gpt-oss-120b' instead of 'Qwen3.8 27B', 'Inkling Small (free)' and 'GPT-OSS 120B'. The name is looked up by the id of the route first, and by the published form of that id after it. The provider is part of the key, so the name of another provider's model is never used, a model that is published nowhere still falls back to its own id, and no other label of a row changes.
+
 ## [3.17.119] - 2026-10-23
 
 - AI usage: the age of a capacity reading is published, so a card of the Providers page can be compared with the provider's own site. The check time of the record the row is drawn from is published in seconds as `ghostship_ai_account_window_check_timestamp_seconds`, with the labels of the row, and a reading without a check time publishes none: the other series of the row stay as they are. Two readings of one window are one row, and the check time of that row is the check time of the reading that won. An inferred window that rolls carries the mark of the inference, and the collector publishes it as `ghostship_ai_account_window_rolling`, so the page can say 'rolling'. The mark is carried as the inference published it, and a window of an inference that carries no mark publishes no rolling series.
