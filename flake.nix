@@ -12,7 +12,7 @@
     # source tree, not a flake, and it has its own pin: the T3 Code input
     # above is built and must not move with it.
     ghostship-agent-policy = {
-      url = "github:ghostship-io/ghostship-agent/331d74f99fe06265061a346f864b1539851cce9b";
+      url = "github:ghostship-io/ghostship-agent/4f477b3a8f575c09845909ba2e644ec7ff6190c4";
       flake = false;
     };
 
