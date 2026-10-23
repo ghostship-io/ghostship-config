@@ -147,7 +147,7 @@ def _finite(value: Any) -> float | None:
     return number
 
 
-def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[str, Any]:
+def load_cache(path: str | os.PathLike[str], now: float | None = None, *, allow_stale: bool = False) -> dict[str, Any]:
     """Read the cached feed.
 
     The result always says what it is: the records, the index version, the
@@ -196,7 +196,7 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
     records = document.get("records")
     if not isinstance(records, list):
         return missing
-    if age > MAX_CACHE_AGE_SECONDS:
+    if age > MAX_CACHE_AGE_SECONDS and not allow_stale:
         return {
             **missing,
             "status": "stale",
@@ -206,8 +206,8 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
             "age_seconds": int(age),
         }
     return {
-        "status": "ok",
-        "reason": codes.OK,
+        "status": "stale" if age > MAX_CACHE_AGE_SECONDS else "ok",
+        "reason": codes.STALE_READING if age > MAX_CACHE_AGE_SECONDS else codes.OK,
         "index_version": version,
         "fetched_at": _safe_text(document.get("fetched_at")),
         "fetched_at_epoch": fetched,

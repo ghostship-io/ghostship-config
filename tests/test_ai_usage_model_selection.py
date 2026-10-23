@@ -79,6 +79,8 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(value['default_worker']['model'], 'fast')
         self.assertEqual(value['orchestrator'][0]['state'], 'exhausted')
         rows[0]['capacity']['remaining_ratio'] = .5
+        self.assertEqual(self.build(rows)['providers']['codex']['selected']['worker']['model'], 'reviewer')
+        rows[1]['capacity']['remaining_ratio'] = .2
         self.assertEqual(self.build(rows)['default_worker']['model'], 'reviewer')
 
     def test_excluded_omitted_and_backup_follows_trusted(self):
@@ -163,7 +165,7 @@ class SelectionTests(unittest.TestCase):
         reset_overrides.apply(expired, [override], at + 18001)
         self.assertEqual(expired[0].windows[0], measured)
 
-    def test_short_windows_gate_but_never_become_display_limiting_window(self):
+    def test_five_hour_spent_model_stays_listed_and_is_the_display_binding(self):
         short = {'kind': 'session', 'remaining_ratio': 0, 'duration_seconds': 18000,
                  'seconds_to_reset': 9000, 'quota_id': 'session'}
         weekly = {'kind': 'weekly', 'remaining_ratio': .7, 'duration_seconds': 604800,
@@ -173,17 +175,23 @@ class SelectionTests(unittest.TestCase):
         value = self.build([row])
         selected = value['worker'][0]
         self.assertFalse(selected['available'])
-        self.assertEqual(selected['limiting_window']['kind'], 'weekly')
-        self.assertEqual(selected['limiting_window']['pace_state'], 'ahead')
-        self.assertEqual(selected['limiting_window']['pace_delta'], 20)
-        self.assertIsNone(selection.limiting_window([short], '2026-10-23T12:00:00Z'))
+        self.assertEqual(selected['limiting_window']['kind'], 'session')
+        self.assertEqual(selected['limiting_window']['pace_state'], 'spent')
+        self.assertIsNone(selected['limiting_window']['pace_delta'])
+        self.assertEqual(len(value['worker']),1)
+        self.assertIsNone(value['default_worker'])
+        self.assertTrue(any(name=='ghostship_ai_picker_model_selected' and number==1
+                            for name,labels,number in selection.samples(value)))
 
-    def test_daily_hourly_minute_and_short_inferred_never_limit(self):
+    def test_short_binding_windows_are_never_paced(self):
         for kind in ('daily', 'hourly', 'minute', 'inferred', 'quota', 'credits'):
             with self.subTest(kind=kind):
-                self.assertIsNone(selection.limiting_window(
-                    [{'kind': kind, 'duration_seconds': 3600, 'remaining_ratio': 0}],
-                    '2026-10-23T12:00:00Z'))
+                window=selection.limiting_window(
+                    [{'kind': kind, 'duration_seconds': 3600, 'remaining_ratio': .2}],
+                    '2026-10-23T12:00:00Z')
+                self.assertEqual(window['remaining_ratio'],.2)
+                self.assertIsNone(window['pace_delta'])
+                self.assertEqual(window['pace_state'],'on_pace')
 
     def test_free_route_close_to_best_quality_leads_subscription(self):
         free = candidate('free-provider', 'free', quality=85)
@@ -191,6 +199,40 @@ class SelectionTests(unittest.TestCase):
         value = self.build([candidate('codex', 'reviewer', quality=90), free])
         self.assertEqual(value['worker'][0]['model'], 'free')
         self.assertEqual(value['default_worker']['model'], 'free')
+
+    def test_lane_order_and_default_follow_live_capacity_without_fixed_provider_order(self):
+        one=candidate('one','strong',99,remaining=.2)
+        two=candidate('two','other',70,remaining=.8)
+        two['windows']=[{'kind':'session','duration_seconds':18000,'remaining_ratio':.8}]
+        value=self.build([one,two])
+        self.assertEqual(value['default_worker']['model'],'other')
+        self.assertEqual(value['worker'][0]['limiting_window']['kind'],'session')
+        two['capacity']['remaining_ratio']=0
+        two['windows'][0]['remaining_ratio']=0
+        self.assertEqual(self.build([one,two])['default_worker']['model'],'strong')
+        two['capacity']['remaining_ratio']=1
+        two['windows'][0]['remaining_ratio']=1
+        self.assertEqual(self.build([one,two])['default_worker']['model'],'other')
+
+    def test_untiered_gemini_inherits_its_live_family_limit_and_stays_listed_at_zero(self):
+        row=candidate('antigravity','gemini-example',remaining=None)
+        window={'kind':'session','quota_id':'gemini-5h','remaining_ratio':.15,
+                'duration_seconds':18000,'check_at':'2026-10-23T12:00:00Z',
+                'reset_at':'2026-10-23T13:00:00Z','applies_to':['gemini']}
+        unrelated={**window,'quota_id':'3p-5h','remaining_ratio':0,'applies_to':['claude','gpt']}
+        snapshot={'generated_at':'2026-10-23T12:00:00Z','candidates':[row],
+                  'quota':{'accounts':{'antigravity':[window,unrelated]}}}
+        value=selection.build(snapshot,[])
+        self.assertEqual(value['worker'][0]['remaining_ratio'],.15)
+        self.assertEqual(value['worker'][0]['limiting_window']['quota_id'],'gemini-5h')
+        self.assertIsNotNone(value['default_worker'])
+        window['remaining_ratio']=0
+        value=selection.build(snapshot,[])
+        self.assertEqual(len(value['worker']),1)
+        self.assertFalse(value['worker'][0]['available'])
+        self.assertIsNone(value['default_worker'])
+        self.assertTrue(any(name=='ghostship_ai_picker_model_selected' and number==1
+                            for name,labels,number in selection.samples(value)))
 
     def test_far_behind_follows_other_routes_in_same_trust_level(self):
         behind = candidate('one', 'strong', quality=99)
@@ -251,6 +293,7 @@ class SelectionTests(unittest.TestCase):
                                          'worker_builds':builds}))
             with patch.object(main,'collect',return_value=([],[],{})), \
                  patch.object(main,'read_outcomes',return_value=evidence), \
+                 patch.object(main.model_quality,'read_evidence',return_value=([],'no_evidence')), \
                  patch.object(main,'log'):
                 self.assertEqual(main.main(['--model-selection-preferences',str(prefs),
                     '--output',str(root/'metrics.prom'),'--snapshot',str(root/'routing.json'),

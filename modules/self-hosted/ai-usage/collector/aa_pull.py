@@ -1220,7 +1220,10 @@ def refresh(
         import aa_3d
 
         aa3d_usable = (aa_3d.load_cache(str(aa3d_path), moment) or {}).get("status") == "ok"
-    if current.get("status") == "ok" and aa3d_usable:
+    # Collection tolerates a 36h-old reading; a daily pull must refresh at
+    # 24h or it skips a day and leaves the dashboard stale before tomorrow.
+    if (current.get("status") == "ok" and aa3d_usable
+            and current.get("age_seconds", float('inf')) < 24 * 3600):
         # The cache is fresh: the pull runs once a day, and the collector
         # reads it every five minutes.
         return {
