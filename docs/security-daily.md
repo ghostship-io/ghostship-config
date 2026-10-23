@@ -95,7 +95,7 @@ possible intrusions under the SIEM campaign rules before changing detections.
 
 ## Completion
 
-Post one public-safe #102 checkpoint when material state changes: checked
+Include a public-safe checkpoint in the orchestrator report: checked
 coverage and unknowns, official sources, applicability, PR/commit/check results,
 prepared versus applied versus runtime-verified state, rollback, profile learning
 credit, containment results, remaining exposure and next action. Report categories
@@ -104,5 +104,5 @@ Check names and labels can also contain coordinates: export reviewed categories
 and counts, rather than assuming that removing a detail field sanitizes a report.
 Send one self-contained findings report to the orchestrator with severity, observed
 evidence, existing owner or proposed bounded fix, concrete blockers and verification
-state. Update the issue plan when material state changes. End the session after
+state. Link the existing tracking issues and reconcile their open items. End the session after
 reporting; follow-up ownership and the next daily run belong to the orchestrator.
