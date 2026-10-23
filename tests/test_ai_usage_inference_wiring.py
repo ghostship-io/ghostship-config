@@ -481,11 +481,11 @@ class PolicyExampleTests(WiringTestCase):
         self.assertEqual(window.duration_seconds, 18000)
         self.assertEqual(window.basis, "inferred from 1 limit episodes")
 
-    def test_the_route_has_three_quarters_left_and_is_on_pace(self):
+    def test_the_route_has_three_quarters_left_and_its_short_window_is_unpaced(self):
         samples, ranked = self.rank(self.inferred, self.routes)
         entry = ranked[0]
         self.assertAlmostEqual(entry.remaining, 0.75)
-        self.assertAlmostEqual(entry.pace, 0.0)
+        self.assertIsNone(entry.pace)
         self.assertEqual(entry.capacity_basis, "inferred")
         self.assertEqual(entry.capacity_inference["window"], "5h")
 
@@ -505,7 +505,7 @@ class PolicyExampleTests(WiringTestCase):
         row = snapshot["candidates"][0]
         self.assertEqual(row["capacity"]["capacity_basis"], "inferred")
         self.assertAlmostEqual(row["capacity"]["remaining_ratio"], 0.75)
-        self.assertAlmostEqual(row["capacity"]["paced_availability"], 0.0)
+        self.assertIsNone(row["capacity"]["paced_availability"])
         inference = row["capacity"]["inference"]
         self.assertEqual(inference["window"], "5h")
         self.assertEqual(inference["budget"], 600000.0)

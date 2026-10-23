@@ -17,6 +17,8 @@ window refills).
 
 The rules:
 
+* session, hourly and daily windows never have a pace; only weekly/monthly
+  periods have an even-spend line, including inferred periods of that length;
 * a window without a length, without a reset, with a stale reading, or with a
   reset in the past has no pace: no pace is invented, and an unknown pace is
   never published as zero;
@@ -148,21 +150,36 @@ def measured_scope(measured: Any) -> tuple[str, ...] | None:
     return model_scope(model) or None
 
 
+def is_paced_window(window: Any) -> bool:
+    """Only weekly/monthly periods have an even-spend line."""
+    kind = str(_get(window, "kind") or "").lower()
+    if any(token in kind for token in ("session", "hour", "daily", "minute")):
+        return False
+    if "week" in kind or "month" in kind:
+        return True
+    duration = _finite(_get(window, "duration_seconds", "durationSeconds"))
+    return duration == 7 * 86400 or (duration is not None and 28 * 86400 <= duration <= 31 * 86400)
+
+
+def current_reading(window: Any, now: float) -> bool:
+    """Quota usage can be current even when its period is unpaced."""
+    used = _finite(_get(window, "used_ratio", "usedRatio"))
+    reset = _finite(_get(window, "reset_epoch", "resetEpoch"))
+    observed = _finite(_get(window, "observed_at", "observedAtEpoch"))
+    return (used is not None and 0 <= used <= 1 and observed is not None
+            and now - STALE_AFTER_SECONDS <= observed <= now + FUTURE_TOLERANCE_SECONDS
+            and (reset is None or reset > now))
+
+
 def window_pace(window: Any, now: float) -> dict[str, Any] | None:
     """The pace of one window, or None when it cannot be known."""
     duration = _finite(_get(window, "duration_seconds", "durationSeconds"))
     reset = _finite(_get(window, "reset_epoch", "resetEpoch"))
     used = _finite(_get(window, "used_ratio", "usedRatio"))
     observed = _finite(_get(window, "observed_at", "observedAtEpoch"))
-    if duration is None or duration <= 0 or reset is None or used is None:
+    if not is_paced_window(window) or duration is None or duration <= 0 or reset is None or used is None:
         return None
-    if observed is None or (now - observed) > STALE_AFTER_SECONDS:
-        return None
-    if observed > now + FUTURE_TOLERANCE_SECONDS:
-        return None
-    if reset <= now:
-        # The window has already reset: the reading belongs to a window that
-        # is over.
+    if not current_reading(window, now):
         return None
     expected = max(0.0, min(1.0, 1.0 - (reset - now) / duration))
     return {
@@ -339,7 +356,7 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "observed_at": parts["observed_at"],
                 "basis": parts["basis"],
                 "ends_at": parts["ends_at"],
-                "usable": pace is not None,
+                "usable": now is not None and current_reading(window, now),
                 "expected_used_ratio": None if pace is None else pace["expected_used_ratio"],
                 "pace_delta_ratio": None if pace is None else pace["pace_delta_ratio"],
             }

@@ -105,10 +105,16 @@ class DeliveryTests(unittest.TestCase):
         # The broker reconciles native ownership/capacity before a launch.
         self.bridge.shell.return_value = {"threads": [], "archivedThreads": []}
         # Native launch receipts return the reserved caller-provided identity.
-        self.bridge.launch.side_effect = lambda *_args, **kwargs: {"thread_id": kwargs["thread_id"]}
+        def accepted_launch(*_args, **kwargs):
+            thread_id = kwargs["thread_id"]
+            self.bridge.shell.return_value["threads"].append({
+                "id": thread_id, "title": "Worker: incident recovery", "projectId": "test-project"})
+            return {"thread_id": thread_id}
+        self.bridge.launch.side_effect = accepted_launch
         store = self.coordinator_module.Store(self.root / "coordinator.sqlite")
         self.addCleanup(store.db.close)
         self.coordinator = self.coordinator_module.Coordinator({
+            "orchestrator_thread_id": "test-orchestrator",
             "allowed_user_ids": [], "repositories": {"ghostship-io/ghostship-config": {"project_id": "test-project"}},
             "model_selection": {"instanceId": "codex", "model": "gpt-6.1-sol"},
             "incidents": {"repository": "ghostship-io/ghostship-config", "daily_limit": 3,
@@ -232,7 +238,10 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(queued, [f"incident-{hashlib.sha256(event_id.encode()).hexdigest()}.json"
                                   for event_id in identities])
         self.assertEqual(self.bridge.launch.call_count, 1)
-        self.assertEqual(self.bridge.send.call_count, len(identities) - 1)
+        thread_id = self.bridge.launch.call_args.kwargs["thread_id"]
+        digest = json.loads(self.coordinator.store.meta("digest:" + thread_id, "{}"))
+        overflow = len(digest["pending"]) + len((digest.get("inflight") or {}).get("pending", []))
+        self.assertEqual(self.bridge.send.call_count + overflow, len(identities) - 1)
         self.available = True
         self.run_monitor(True)
         self.run_monitor(True)
