@@ -49,7 +49,7 @@ def pool_label(pool: str) -> str:
 
 def pool_of_window(provider: str, window: Mapping[str, Any]) -> str:
     model = str(window.get('model') or '')
-    identifier = str(window.get('quota_id') or window.get('quotaId') or '')
+    identifier = str(window.get('quota_id') or window.get('quotaId') or window.get('quota') or window.get('canonical_quota') or '')
     scope = ' '.join(str(part) for part in window.get('applies_to') or ())
     text = (identifier + ' ' + scope + ' ' + model).lower()
     if provider == 'antigravity':
@@ -72,3 +72,18 @@ def record(provider: str, model: str, billing: str = '') -> dict[str, Any]:
     pool = pool_of_route(provider, model, billing)
     return {'id': pool, 'label': pool_label(pool), 'parent': pool_parent(pool),
             'basis': 'per_model' if provider in PER_MODEL else ('audit' if pool in LABELS else 'default')}
+
+
+def usable_route(provider: str, model: str) -> bool:
+    """Unused routes remain usage evidence, never model candidates."""
+    return (pool_of_route(provider, model) != 'antigravity:3p'
+            and not model.lower().rsplit('/', 1)[-1].startswith('claude-fable-'))
+
+
+def not_used_window(provider: str, window: Any) -> bool:
+    def get(key):
+        return window.get(key) if isinstance(window, Mapping) else getattr(window, key, None)
+    if get('not_used') in (True, 'true'):
+        return True
+    fields = {key: get(key) for key in ('model', 'quota_id', 'quotaId', 'quota', 'canonical_quota', 'applies_to')}
+    return pool_of_window(provider, fields) in ('antigravity:3p', 'claude:fable')

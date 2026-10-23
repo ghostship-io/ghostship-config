@@ -247,22 +247,39 @@ class ProviderCapacityTests(unittest.TestCase):
 
     def test_unused_windows_are_grey_even_when_spent_and_have_no_pace_tick(self):
         labels={'account':'antigravity','kind':'weekly','quota_id':'3p-weekly','label':'Weekly · Claude & GPT',
-                'evidence':'provider_reported','usage':'not_used'}
+                'evidence':'provider_reported','not_used':'true'}
         rows=[{**labels,'field':'left','value':0},
               {**labels,'field':'expected','value':.5},
               {**labels,'field':'pace_state','state':'spent','value':1}]
         window=helper(self.panel,'capacityCards',rows)[0]['windows'][0]
-        self.assertEqual(window['fillClass'],'not-used')
-        self.assertEqual(window['paceClass'],'not-used')
-        self.assertIn('not used',window['sub'])
+        self.assertEqual(window['fillClass'],'not_used')
+        self.assertEqual(window['paceClass'],'not_used')
+        self.assertIn('Not used',window['sub'])
         self.assertFalse(window['hasTick'])
         self.assertTrue(window['notUsed'])
-        self.assertIn('.fill.not-used{background:#6b6f78}',self.panel['options']['styles'])
+        self.assertIn('.fill.not_used',self.panel['options']['styles'])
 
     def card(self,kind='weekly',left=.55,state='behind',extra=()):
         common={'account':'claude','kind':kind,'quota_id':'synthetic','label':kind,'evidence':'provider_reported'}
         rows=[{**common,'field':'left','value':left},{**common,'field':'pace_state','state':state,'value':1},*extra]
         return helper(self.panel,'capacityCards',rows)[0]['windows'][0]
+
+    def test_unused_limits_are_grey_with_real_usage_and_no_tick(self):
+        common={'account':'claude','kind':'weekly','quota_id':'seven_day_fable',
+                'label':'Weekly Fable','not_used':'true'}
+        rows=[{**common,'field':'left','value':.25},
+              {**common,'field':'expected','value':.8},
+              {**common,'field':'resetAt','value':1767272400}]
+        window=helper(self.panel,'capacityCards',rows)[0]['windows'][0]
+        self.assertTrue(window['notUsed'])
+        self.assertEqual(window['fillClass'],'not_used')
+        self.assertEqual(window['paceClass'],'not_used')
+        self.assertFalse(window['hasTick'])
+        self.assertEqual(window['width'],'25')
+        self.assertIn('Not used',window['sub'])
+        self.assertIn('reset',window['sub'])
+        self.assertIn('.fill.not_used',self.panel['options']['styles'])
+        self.assertIn('not_used',self.panel['targets'][0]['expr'])
 
     def test_short_windows_never_have_pace_ticks_or_green_amber(self):
         for kind in ('session','hourly','daily','minute','inferred'):

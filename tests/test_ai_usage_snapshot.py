@@ -157,7 +157,7 @@ class SnapshotContractTests(unittest.TestCase):
         self.assertTrue(rendered)
         unused = [(name,labels,value) for name,labels,value in rendered if '3p-' in labels.get('quota_id','')]
         self.assertTrue(unused)
-        self.assertTrue(all(labels.get('usage')=='not_used' for _,labels,_ in unused))
+        self.assertTrue(all(labels.get('not_used')=='true' for _,labels,_ in unused))
         self.assertTrue(any(name.endswith('remaining_ratio') and value==.7 for name,_,value in unused))
         self.assertFalse(any('expected_remaining' in name or 'pace_delta' in name for name,_,_ in unused))
         self.assertTrue(all(labels['state']=='not_used' for name,labels,_ in unused if name.endswith('pace_state')))

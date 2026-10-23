@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import json
 import math
-import pools
 import os
 import re
 import time
@@ -61,6 +60,7 @@ import aa_bind as bind_module
 import facts as facts_module
 import outcomes as outcomes_module
 import quota as quota_module
+import pools
 import ranking as ranking_module
 import usage_inference
 import value_policy
@@ -274,7 +274,8 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         ),
         "reset_at": _iso(reset_value) if reset_value is not None else None,
         "reset_source": str(_get("reset_source", "resetSource", default="provider")),
-        "reset_label": ("custom reset" if _get("reset_source", "resetSource") == "custom" else "reset"),
+        "reset_label": {"custom": "custom reset", "announced": "announced reset"}.get(
+            _get("reset_source", "resetSource"), "reset"),
         "provider_reset_at": _iso(_finite(_get("provider_reset_epoch", "providerResetEpoch")))
             if _finite(_get("provider_reset_epoch", "providerResetEpoch")) is not None else None,
         "seconds_to_reset": (
@@ -296,6 +297,8 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         "check_at": _iso(observed_value) if observed_value is not None else None,
         "provenance": "collector",
     }
+    if pools.not_used_window(str(_get('provider', default='')), window):
+        record['not_used'] = True
     if applies:
         record["applies_to"] = [str(token) for token in applies]
     if isinstance(status, str) and status:
@@ -3658,6 +3661,7 @@ def build_snapshot(
     no round was observed.
     """
     excluded_pools = set((((outcomes or {}).get('policy') or {}).get('model_selection') or {}).get('excluded_pools') or [])
+    ranked = [entry for entry in ranked if pools.usable_route(entry.provider, entry.model)]
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
     for record in free_models or ():
@@ -3681,6 +3685,16 @@ def build_snapshot(
         feed_version = str(aa_cache.get("index_version") or "") or None
     candidates: list[dict[str, Any]] = []
     selection_exclusions = []
+    # Ranking may already have removed unused routes. Keep their native
+    # identities so reconciliation can remove previously managed favorites
+    # even during a partial collection.
+    for (provider, model), native in native_models.items():
+        if not pools.usable_route(provider, model):
+            identity = _native_record(provider, model, native)
+            if identity['mapped']:
+                target = {'instanceId':identity['provider_instance_id'], 'model':identity['model_id']}
+                selection_exclusions.extend({'provider':provider, 'native':target, 'category':category,
+                                             'reason':'pool_excluded'} for category in ('orchestrator','worker'))
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
     accounts: dict[str, list[dict[str, Any]]] = {}
@@ -3699,7 +3713,7 @@ def build_snapshot(
         if scope is None:
             continue
         record = _window_record(measured, now)
-        if pools.pool_of_window(account, record) in excluded_pools:
+        if pools.pool_of_window(account, record) in excluded_pools or pools.not_used_window(account, measured):
             record["not_used"] = True
         if scope:
             record["applies_to"] = [str(token) for token in scope]
@@ -3718,7 +3732,7 @@ def build_snapshot(
         record = _inferred_window_record(
             inferred.get("window"), now, inferred.get("applies_to") or ()
         )
-        if pools.pool_of_window(account, record) in excluded_pools:
+        if pools.pool_of_window(account, record) in excluded_pools or pools.not_used_window(account, inferred):
             record["not_used"] = True
         known = accounts.setdefault(account, [])
         if record not in known:
@@ -3897,6 +3911,7 @@ def build_snapshot(
             inventory_keys.append((str(entry[0]), str(entry[1])))
         elif isinstance(entry, Mapping):
             inventory_keys.append((str(entry.get("provider") or ""), str(entry.get("model") or "")))
+    inventory_keys = [pair for pair in inventory_keys if pools.usable_route(*pair)]
     excluded = [list(pair) for pair in inventory_keys if pair not in candidate_keys]
     ranking_coverage = {
         "inventory": len(inventory_keys),
@@ -4530,8 +4545,8 @@ def account_window_samples(
             if str(window.get("evidence") or "") == "inferred":
                 scope = ()
             label = _window_label(kind, quota_id, siblings.get(kind, []))
-            if window.get("reset_source") == "custom":
-                label += " · custom reset"
+            if window.get("reset_source") in {"custom", "announced"}:
+                label += " · " + window["reset_label"]
             labels = {
                 "account": account,
                 "kind": kind,
@@ -4543,8 +4558,9 @@ def account_window_samples(
                 "label": ExactLabel(label + _scope_suffix(scope, label)),
                 "evidence": str(window.get("evidence") or "unknown"),
             }
-            if window.get("not_used"):
-                labels["usage"] = "not_used"
+            unused = pools.not_used_window(account, window)
+            if unused:
+                labels['not_used'] = 'true'
             remaining = _finite(window.get("remaining_ratio"))
             if remaining is not None:
                 samples.append(
@@ -4553,7 +4569,7 @@ def account_window_samples(
             seconds = _finite(window.get("seconds_to_reset"))
             duration = _finite(window.get("duration_seconds"))
             line = None
-            paced = not window.get("not_used") and quota_module.is_paced_window(window)
+            paced = not unused and quota_module.is_paced_window(window)
             if paced and seconds is not None and duration is not None and duration > 0:
                 line = max(0.0, min(1.0, float(seconds) / float(duration)))
                 samples.append(
@@ -4573,7 +4589,7 @@ def account_window_samples(
             samples.append(
                 (
                     "ghostship_ai_account_window_pace_state",
-                    {**labels, "state": ("not_used" if window.get("not_used") else value_policy.pace_state(remaining, line) if paced or remaining is None
+                    {**labels, "state": ("not_used" if unused else value_policy.pace_state(remaining, line) if paced or remaining is None
                                          else "spent" if remaining <= 0 else "on_pace")},
                     1.0,
                 )
