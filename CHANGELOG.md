@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.213] - 2026-10-23
+
+- Keep fast tests off live host state and external services, with temporary collector state, stubbed notifications and a guard that rejects accidental access.
+
+CI follow-up: only absolute runtime defaults are remapped; relative values and source-tree defaults are preserved. `/var/run` is recognized before symlink resolution. Regression probes reproduce the runner layout and preserve ordinary defaults. CI run 40020113356 passed at fa7d9e765132bc98eb25d0aea1ac5269f922fdc2.
+
+PR #379.
+
 ## [3.17.212] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 0ce0aa80; the lock's narHash is the `nix flake prefetch` hash of that revision.
