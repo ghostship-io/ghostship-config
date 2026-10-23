@@ -24,7 +24,11 @@ listener and no new port: the service is a oneshot job that writes a file.
   writing, for a manual run. `--runtime-policy` is the runtime policy that
   carries the owner's static worker routes; the unit passes the pinned
   `ghostship-agent-policy` input's
-  `config/agents/runtime-policy.json`.
+  `config/agents/runtime-policy.json`. `--model-identities` is the model
+  identities beside that policy, `--delegation-ledger` the ledger of the
+  observed rounds and `--delegation-backfill` the rounds the ledger does not
+  carry. All four are read only, and a file that is missing is an empty
+  history.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
 * The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
@@ -880,6 +884,56 @@ other member of the tiers they are reserved away from, and they are not
 used for that work at all while their provider has less than half of its
 capacity left. The reserve changes the order and the eligibility, never the
 value.
+
+### The trust of a model and the outcome it is worth
+
+The order of a tier is the trust of its routes first, and the value of a
+route second. The trust of a model is read for the task type of the tier it
+holds: `implementation` for the frontier, the bulk and the free tiers, and
+`cad-execution` for the 3D tier. The trust comes from the owner's runtime
+policy (`model_trust.entries`) and from the delegation ledger, and the worse
+of the two wins. The levels are `trusted`, `backup`, `untrusted` and
+`excluded`; a model that nothing speaks about is trusted, and an excluded
+level holds no tier at all.
+
+The order of a tier is then:
+
+* the trust of the route: a trusted route leads, a backup route follows, and
+  an untrusted route comes last with the reason it holds;
+* a provider reserved for another workload (`provider_reservations`) joins
+  the backup group outside that workload's tier and follows every unreserved
+  route of it; its winner names the workload in `reserved_for`;
+* the 3D reserve, for the tiers a reserved model is held away from;
+* the bulk tier reads the published value, and a free route leads it while
+  its quality is within `0.10` of the best available route of its own
+  trust level, free or paid; the 3D tier is valued by its own 3D value under
+  the trust of the model;
+* the pace of the account window, and a route with no window has no pace: it
+  waits behind every route that has one.
+
+The published value of a route is the outcome-weighted value: the measured
+intelligence placed inside the range of the tier it competes in
+(`p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min)`), shrunk toward the rounds
+that were actually observed (`p = (k * p0 + s) / (k + n)`, with `k = 10`), and
+combined with the measured efficiency (`value = 0.70 * p + 0.30 * E`). The
+trust scales it: an untrusted route keeps half of it. The Artificial
+Analysis value is published beside the published value, so the two cannot
+disagree about what the order was made of.
+
+The collector reads the trust and the outcomes from four files, and it never
+writes any of them: the model identities (`model-identities.json` beside the
+runtime policy), the runtime policy, the delegation ledger
+(`--delegation-ledger`) and its backfill (`--delegation-backfill`). A file
+that is missing, unreadable or empty is an empty history, and every model is
+trusted.
+
+* `ghostship_ai_model_trust_info{provider,model,tier,task_type,level,source,reason}`
+  - 1 for the trust of a model in a tier, with the level it holds, where the
+  level came from, and the reason it holds it.
+* `ghostship_ai_model_outcome{provider,model,tier,task_type,field}` - the
+  outcome of a model in a tier, field by field: `p0` the prior, `k` the
+  strength of the prior, `n` the observed rounds, `s` the accepted rounds,
+  and `p` the quality they produced.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
   best. Every ranked model keeps it, including the models that cannot be
