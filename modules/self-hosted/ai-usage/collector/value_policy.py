@@ -95,6 +95,25 @@ UNTRUSTED_VALUE_FACTOR = 0.5
 # The trust levels of a route, in rank order: a lower rank is more trusted.
 TRUST_LEVELS: tuple[str, ...] = ("trusted", "backup", "untrusted", "excluded")
 
+# The bands of the pace state, in points of the Paced Availability: a route
+# more than this many points ahead of the line is ahead, and one more than
+# this many points behind it is behind; beyond the far line it is far behind.
+PACE_AHEAD_POINTS = 5.0
+PACE_BEHIND_POINTS = -5.0
+PACE_FAR_BEHIND_POINTS = -20.0
+
+# The states a route's pace takes, from ahead of the line to unknown. A
+# spent route has nothing left whatever its line, and a route with no window
+# has no pace at all.
+PACE_STATES: tuple[str, ...] = (
+    "ahead",
+    "on_pace",
+    "behind",
+    "far_behind",
+    "spent",
+    "unknown",
+)
+
 
 def _finite(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -316,6 +335,40 @@ def free_route_leads(quality: Any, best_quality: Any) -> bool:
     if p is None or best is None:
         return False
     return best - p <= FREE_ROUTE_MARGIN
+
+
+def pace_state(left_ratio: Any, expected_left_ratio: Any) -> str:
+    """The pace state of one window: where the share left sits on its line.
+
+    ``delta`` is the Paced Availability of the window in points, the share
+    left minus the expected share left, rounded to six decimals so that the
+    noise of the subtraction does not move a route across a band:
+    ``100 * (0.50 - 0.55)`` is ``-5.000000000000004`` and reads ``-5``.
+
+    A window with nothing left is spent, whatever its line: it cannot be
+    used again before it resets. A window with no reading, or a reading with
+    no line to compare it with, has no delta and is unknown: it is never
+    read as on the pace. Every other window is ahead when the delta is more
+    than five points, on the pace when it is between five points behind and
+    five ahead, behind when it is between twenty points behind and five
+    behind, and far behind when it is more than twenty points behind.
+    """
+    left = _finite(left_ratio)
+    if left is None:
+        return "unknown"
+    if left <= 0.0:
+        return "spent"
+    expected_left = _finite(expected_left_ratio)
+    if expected_left is None:
+        return "unknown"
+    delta = round(100.0 * (left - expected_left), 6)
+    if delta > PACE_AHEAD_POINTS:
+        return "ahead"
+    if delta >= PACE_BEHIND_POINTS:
+        return "on_pace"
+    if delta >= PACE_FAR_BEHIND_POINTS:
+        return "behind"
+    return "far_behind"
 
 
 def policy_document(transform: str = DEFAULT_COST_TRANSFORM) -> dict[str, Any]:

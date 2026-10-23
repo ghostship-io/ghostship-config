@@ -103,6 +103,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_inference.py
 python3 -m unittest discover -s tests -p test_ai_usage_inference_wiring.py
 python3 -m unittest discover -s tests -p test_ai_usage_inferred_publication.py
 python3 -m unittest discover -s tests -p test_ai_usage_outcomes.py
+python3 -m unittest discover -s tests -p test_ai_usage_pace_state.py
 python3 -m unittest discover -s tests -p test_ai_usage_trust_order.py
 python3 -m unittest discover -s tests -p test_ai_usage_free_selection.py
 python3 -m unittest discover -s tests -p test_ai_usage_not_offered_reason.py
