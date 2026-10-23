@@ -56,10 +56,16 @@ class Target:
 
     def records(self, integration='opencode'):
         try:
-            rows = json.loads(self.native(['auth', 'export', integration]))
+            # Go is deliberately absent from the free runtime's integrations.
+            # A filtered export resolves that disabled integration and fails;
+            # audit this dedicated store without resolving a provider first.
+            command = ['auth', 'export']
+            if self.container != 'ghostship-worker':
+                command.append(integration)
+            rows = json.loads(self.native(command))
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError
-            return rows
+            return [row for row in rows if row.get('integrationID') == integration]
         except (ValueError, TypeError):
             raise MigrationError('native_auth_export_invalid') from None
 
