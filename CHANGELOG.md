@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.193] - 2026-10-23
+
+- Restore the stable T3 image with the startup environment required by managed helpers.
+- Refuse unproven image replacements even when an owner requests an immediate restart.
+
+PR #359.
+
 ## [3.17.192] - 2026-10-23
 
 - Provision cached, isolated ephemeral CI runners for frequent repository gates.
