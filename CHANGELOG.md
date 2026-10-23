@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.105] - 2026-10-23
+
+- AI usage: a Go free route keeps its free capacity when the live instance does not offer it. The unlimited window of the free routes was built from the instance inventory alone, so a free route the catalog lists but the instance did not offer that moment was left to the paid monthly allowance of the subscription and reported exhausted in `routing.json`. The window is now built from the inventory and the catalog's free list together; the catalog still keeps a "-free"-named route it prices on the paid allowance, and the OpenRouter free routes keep their daily free-models allowance. The status the Go usage endpoint reports for each window ("ok" or "rate-limited") also reaches the `quota.accounts` records of the snapshot, and a window without a status carries no status key.
+
 ## [3.17.104] - 2026-10-23
 
 - AI usage: an inferred window on the Providers page names only the window it was learned over. The suffix of an inferred quota id is a window when it is a length of time, so the row of a five hour window reads 'Inferred · 5h'. A suffix that names a state of the inference is not a period, so the row of an exhausted account reads 'Inferred', and no longer 'Inferred · Exhausted'. The label of every other window is unchanged.
