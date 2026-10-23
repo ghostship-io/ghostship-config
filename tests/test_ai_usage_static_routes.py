@@ -351,9 +351,17 @@ class StaticRouteWiringTests(unittest.TestCase):
             flake,
             r"ghostship-agent-policy\s*=\s*\{[^}]*flake\s*=\s*false;",
         )
-        self.assertIn(
-            "github:ghostship-io/ghostship-agent/797a4cc0f1fb1be5869857d33393a7d4cd28bb7c",
+        # The input is pinned to one exact revision, and the lock holds that
+        # revision: a branch name or a stale lock would let the policy drift.
+        pinned = re.search(
+            r"ghostship-agent-policy\s*=\s*\{[^}]*url\s*=\s*\"github:ghostship-io/"
+            r"ghostship-agent/([0-9a-f]{40})\"",
             flake,
+        )
+        self.assertIsNotNone(pinned, "the policy input names no exact revision")
+        lock = json.loads((FLAKE.parent / "flake.lock").read_text(encoding="utf-8"))
+        self.assertEqual(
+            lock["nodes"]["ghostship-agent-policy"]["locked"]["rev"], pinned.group(1)
         )
 
     def test_ci_imports_the_policy_input_with_the_agent_key(self):
