@@ -2730,11 +2730,12 @@ class ModelSelectionStoreTests(unittest.TestCase):
         providers = sorted(
             row["provider"] for row in free if row["field"] == "free_info"
         )
-        # The collector still publishes every free provider, including the
-        # eight without a winner that the page leaves out of the group.
+        # OpenRouter remains in the free-provider source, outside this page.
+        # Other providers without a winner still reach the query.
         self.assertEqual(
-            providers, sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN)
+            providers, sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN if row[0] != "openrouter")
         )
+        self.assertNotIn("openrouter", providers)
         selection = {row["provider"]: row for row in free if row["field"] == "free_info"}
         self.assertEqual(selection["opencode-go"]["model"], "beam-free")
         self.assertEqual(selection["opencode-go"]["basis"], "published")
@@ -2761,7 +2762,7 @@ class ModelSelectionStoreTests(unittest.TestCase):
         self.assertEqual(built[0], {"group": "Free"})
         self.assertEqual(
             [(row["provider"], row["left"]) for row in built[1:]],
-            [(row[0], row[4]) for row in FREE_ROWS],
+            [(row[0], row[4]) for row in FREE_ROWS if row[0] != "openrouter"],
         )
 
     def test_a_route_from_an_older_scrape_is_not_shown(self):
