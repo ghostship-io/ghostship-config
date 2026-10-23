@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.134] - 2026-10-23
+## [3.17.135] - 2026-10-23
 
 - Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.
+
+## [3.17.134] - 2026-10-23
+
+- ai-usage: the collector publishes the place of every provider card. The Providers page draws one card per provider account in the order the owner approved, and a Grafana variable keeps only the order of the query that fills it, so the page could not sort the cards itself: the collector now publishes the place of every account, and the page reads it. The new series `ghostship_ai_account_card_order{account}` holds the place of every card, counted from one, with no gap between the places and one series per account. The order is the approved list of the owner, `APPROVED_CARD_ORDER` in `collector/card_order.py`: Claude, Codex, Ollama, OpenCode Go, Antigravity, Grok and OpenRouter, in that order. The accounts that are not on the list follow it: the ones that publish at least one window with a number come first, by name, and the accounts that publish none come after them, by name. A spent window holds the number zero, and a zero is a number, so an account whose window is spent keeps its place ahead of the accounts that are still learning theirs. An account of the approved list that the snapshot does not hold is skipped, and the cards behind it move up, so the places are the places of the cards that exist and they never leave a hole. The accounts are every key of `quota.accounts` and every provider of the candidates, the same set of accounts the availability of an account covers.
 
 ## [3.17.133] - 2026-10-23
 
