@@ -14,7 +14,11 @@ let
   };
 in
 {
-  coordinator = source ([ "lib/github-integration.nix" "tools/python/ghostship_t3" ]
+  coordinator = source ([ "lib/github-integration.nix" "lib/coordinator-python-packages.nix"
+    "config/agents/runtime-policy.json" "config/agents/model-identities.json" ]
+    ++ map (name: "tools/python/${name}")
+      (lib.filter (name: name != "ghostship_github")
+        (import (agent.outPath + "/lib/coordinator-python-packages.nix")))
     ++ map (name: "tools/python/ghostship_github/${name}")
       (lib.filter (name: name != "ingress.py" && lib.hasSuffix ".py" name)
         (builtins.attrNames (builtins.readDir (agent.outPath + "/tools/python/ghostship_github")))));
