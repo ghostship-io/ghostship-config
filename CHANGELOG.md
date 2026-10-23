@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.191] - 2026-10-23
+
+- Activate the repaired MCP browser window and human handoff interfaces.
+
+PR #357.
+
 ## [3.17.190] - 2026-10-23
 
 - Revert #354: T3 stable image broke T3 (owner rolled back)
