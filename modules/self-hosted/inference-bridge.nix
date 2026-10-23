@@ -198,8 +198,6 @@ in
     # mounts only its own socket; it never receives the T3 home or auth store.
     systemd.sockets.ghostship-inference-proxy = {
       wantedBy = [ "sockets.target" ];
-      after = [ "ghostship-inference-bridge.service" ];
-      requires = [ "ghostship-inference-bridge.service" ];
       socketConfig = {
         ListenStream = "${hostHome}/${state}/socket/inference.sock";
         SocketMode = "0660";
