@@ -26,6 +26,10 @@ python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 python3 -m unittest discover -s tests -p test_opencode_model_catalog.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
+printf 'Checking the configuration drift check\n'
+python3 -m unittest discover -s tests -p test_configuration_drift.py
+nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
+
 printf 'Checking the kernel audit backlog limit\n'
 nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
 
