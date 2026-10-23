@@ -510,6 +510,60 @@ class Template:
         return False
 
 
+def pace_colour(styles, pace):
+    """The colour the panel's stylesheet gives a rendered pace span.
+
+    The span is the one the panel's content renders (`td.left` with the pace
+    beside the share), and the colour is resolved from the panel's own rules
+    by the cascade: the most specific selector that matches the span wins,
+    as it does in the browser.
+    """
+    markup = (
+        '<div class="routes"><table><tbody><tr><td class="left">'
+        '<span class="pct">50%</span>'
+        '<span class="sep"> \u00b7 </span>'
+        '<span class="pace ' + pace["leftClass"] + '">' + pace["leftPace"] + "</span>"
+        "</td></tr></tbody></table></div>"
+    )
+    template = Template(markup)
+    span = next(node for node in template.nodes if "pace" in node["classes"])
+    assert span["children"][0]["text"] == pace["leftPace"], (
+        "the pace text is not the one rendered"
+    )
+    best = None
+    colour = None
+    for order, (selector, declarations) in enumerate(css_rules(styles)):
+        if not template.matches(span, selector):
+            continue
+        match = re.search(r"(?:^|;)\s*color\s*:\s*([^;]+)", declarations)
+        if match is None:
+            continue
+        rank = (sum(part.count(".") for part in selector.split()), order)
+        if best is None or rank > best:
+            best = rank
+            colour = match.group(1).strip()
+    return colour
+
+
+def static_row_markup(panel, row):
+    """One static row of the table, rendered from the panel's own template.
+
+    The row element is cut out of the panel's content and its fields are
+    filled from the helper's output, so the measured markup is the markup
+    the page draws and not a copy of it.
+    """
+    content = panel["options"]["content"]
+    start = content.index("{{#each (selectionRows")
+    start = content.index("<tr>", start)
+    end = content.index("</tr>", start) + len("</tr>")
+    fragment = content[start:end]
+    # The only block of a row is its bulk tag, which the measured row has.
+    fragment = fragment.replace("{{#if tag}}", "").replace("{{/if}}", "")
+    return re.sub(
+        r"\{\{(\w+)\}\}", lambda match: str(row.get(match.group(1), "")), fragment
+    )
+
+
 class ProvidersPageTests(unittest.TestCase):
     """The shape of the page."""
 
@@ -1732,8 +1786,10 @@ class ModelSelectionTests(unittest.TestCase):
     def test_the_left_cell_carries_the_share_and_the_pace(self):
         """The cell reads the share left, a dot, and the pace beside it.
 
-        The share keeps the colour of the row; the pace alone is grey on
-        pace, green ahead, amber behind and red when spent, as on the cards.
+        The share keeps the colour of the row; the pace alone carries the
+        owner's colours: blue on pace, green ahead, amber behind, red far
+        behind and red when spent. The muted grey is kept for a row with no
+        pace at all.
         """
         content = self.panel["options"]["content"]
         self.assertIn(
@@ -1746,7 +1802,9 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertIn(".left .pace { color: #8b8f99;", styles)
         self.assertIn(".left .pace.spent { color: #d9534f; }", styles)
         self.assertIn(".left .pace.ahead { color: #8fc98f; }", styles)
+        self.assertIn(".left .pace.onpace { color: #5b9bd5; }", styles)
         self.assertIn(".left .pace.behind { color: #e0a03a; }", styles)
+        self.assertIn(".left .pace.far { color: #d9534f; }", styles)
 
     def test_the_chip_reads_the_routing_gauge(self):
         """The chip is the collector's routing state, and the table is static."""
@@ -1815,36 +1873,324 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertEqual(spent["left"], "0% \u00b7 \u2715 spent \u00b7 resets in 4.4d")
         self.assertEqual(spent["leftClass"], "spent")
 
-    def test_a_route_ahead_or_behind_reads_its_points(self):
-        """More than ten points off the pace reads ahead or behind."""
+    def test_the_owner_s_pace_bands_and_their_colours(self):
+        """The band is five points wide and twenty points deep, as the owner set it.
+
+        The delta is the Paced Availability in points, rounded to six places
+        before the band is read, and the number shown is the rounded size of
+        the delta. The colour is the panel's own, resolved by applying its
+        stylesheet to the rendered pace span: blue on pace, green ahead,
+        amber behind, red far behind and red when spent.
+        """
         now = CAPACITY_NOW / 1000
 
-        def route(pace):
+        def route(pace, left=0.5, reset=now + 3600):
             rows = [
                 {
                     "row": "7",
                     "field": "info",
-                    "role": "Free 1",
+                    "role": "Bulk 3",
                     "provider": "ollama",
                     "model": "worked",
                     "display_name": "Worked",
                     "used_for": "Research",
                     "value": 1.0,
                 },
-                {"row": "7", "field": "left", "value": 0.5},
-                {"row": "7", "field": "reset", "value": now + 3600},
+                {"row": "7", "field": "left", "value": left},
+                {"row": "7", "field": "reset", "value": reset},
             ]
             if pace is not None:
                 rows.append({"row": "7", "field": "pace", "value": pace})
             return next(row for row in self.selection(rows) if row["row"] == "7")
 
-        self.assertEqual(route(0.15)["left"], "50% \u00b7 \u25b2 15 ahead")
-        self.assertEqual(route(0.15)["leftClass"], "ahead")
-        self.assertEqual(route(-0.2)["left"], "50% \u00b7 \u25bc 20 behind")
-        self.assertEqual(route(-0.2)["leftClass"], "behind")
-        # Ten points is still on the pace.
-        self.assertEqual(route(0.1)["left"], "50% \u00b7 \u25cf on pace")
-        self.assertEqual(route(-0.1)["left"], "50% \u00b7 \u25cf on pace")
+        styles = self.panel["options"]["styles"]
+        cases = (
+            # paced availability, pace word, rendered classes, text colour
+            (0.05, "\u25cf on pace", "onpace", "#5b9bd5"),
+            (0.051, "\u25b2 5 ahead", "ahead", "#8fc98f"),
+            (-0.05, "\u25cf on pace", "onpace", "#5b9bd5"),
+            (-0.051, "\u25bc 5 behind", "behind", "#e0a03a"),
+            (-0.20, "\u25bc 20 behind", "behind", "#e0a03a"),
+            (-0.201, "\u25bc 20 behind", "far", "#d9534f"),
+            # 100 x (0.50 - 0.55) is -5.000000000000004 in a double: the
+            # sixth-place rounding reads it as the boundary it names.
+            (-0.05000000000000004, "\u25cf on pace", "onpace", "#5b9bd5"),
+            # No ten-point band: six points is already off the pace.
+            (0.06, "\u25b2 6 ahead", "ahead", "#8fc98f"),
+            (-0.06, "\u25bc 6 behind", "behind", "#e0a03a"),
+            (0.10, "\u25b2 10 ahead", "ahead", "#8fc98f"),
+            (-0.10, "\u25bc 10 behind", "behind", "#e0a03a"),
+        )
+        for pace, word, classes, colour in cases:
+            row = route(pace)
+            self.assertEqual(row["leftPace"], word, pace)
+            self.assertEqual(
+                row["leftClass"], classes, f"{pace} classes"
+            )
+            self.assertEqual(pace_colour(styles, row), colour, f"{pace} colour")
+            self.assertEqual(row["left"], "50% \u00b7 " + word, pace)
+
+        spent = route(None, left=0.0)
+        self.assertEqual(spent["leftPace"], "\u2715 spent \u00b7 resets in 1h 0m")
+        self.assertEqual(spent["leftClass"], "spent")
+        self.assertEqual(pace_colour(styles, spent), "#d9534f")
+
+        unknown = route(None)
+        self.assertEqual(unknown["leftPace"], "", "no pace series -> no pace word")
+        self.assertEqual(unknown["leftClass"], "")
+        self.assertEqual(unknown["left"], "50%")
+
+    def test_no_pace_state_is_printed_in_grey(self):
+        """Every pace state carries the owner's colour, never the muted grey.
+
+        The grey belongs to a row that has no pace at all (a learning window
+        or a reading the snapshot does not carry), never to one of the five
+        states the owner coloured.
+        """
+        styles = self.panel["options"]["styles"]
+        colours = {
+            "onpace": "#5b9bd5",
+            "ahead": "#8fc98f",
+            "behind": "#e0a03a",
+            "far": "#d9534f",
+            "spent": "#d9534f",
+        }
+        for classes, colour in colours.items():
+            pace = {"leftClass": classes, "leftPace": "the pace"}
+            self.assertEqual(pace_colour(styles, pace), colour, classes)
+            self.assertNotEqual(
+                pace_colour(styles, pace), "#8b8f99", f"{classes} is grey"
+            )
+
+    def test_a_reset_is_never_written_as_sixty_minutes(self):
+        """Minutes are rounded first, then carried into hours.
+
+        Rounding the hours and the minutes apart printed "18h 60m" live: the
+        hours were truncated and the minutes rounded on their own. The whole
+        span is one minute count now, so 59.6 minutes is 1h 0m and 18 h 59.7
+        minutes is 19h 0m.
+        """
+        now = CAPACITY_NOW / 1000
+
+        def spent(seconds):
+            rows = [
+                {
+                    "row": "7",
+                    "field": "info",
+                    "role": "Bulk 3",
+                    "provider": "ollama",
+                    "model": "worked",
+                    "display_name": "Worked",
+                    "used_for": "Research",
+                    "value": 1.0,
+                },
+                {"row": "7", "field": "left", "value": 0.0},
+                {"row": "7", "field": "reset", "value": now + seconds},
+            ]
+            return next(row for row in self.selection(rows) if row["row"] == "7")
+
+        self.assertEqual(
+            spent(59.6 * 60)["leftPace"], "\u2715 spent \u00b7 resets in 1h 0m"
+        )
+        self.assertEqual(
+            spent((18 * 60 + 59.7) * 60)["leftPace"],
+            "\u2715 spent \u00b7 resets in 19h 0m",
+        )
+        # No output of the panel carries a sixty-minute field.
+        seconds = list(range(1, 48 * 3600, 197)) + [
+            59.6 * 60,
+            (18 * 60 + 59.7) * 60,
+            3599.9,
+            48 * 3600,
+            3.04 * 86400,
+        ]
+        rows = []
+        for index, value in enumerate(seconds):
+            key = str(100 + index)
+            rows += [
+                {
+                    "row": key,
+                    "field": "info",
+                    "role": "Bulk 3",
+                    "provider": "ollama",
+                    "model": "worked",
+                    "display_name": "Worked",
+                    "used_for": "Research",
+                    "value": 1.0,
+                },
+                {"row": key, "field": "left", "value": 0.0},
+                {"row": key, "field": "reset", "value": now + value},
+            ]
+        for row in self.selection(rows):
+            self.assertNotIn("60m", row["left"], row["left"])
+        for part in (
+            self.panel.get("description") or "",
+            self.panel["options"]["content"],
+            self.panel["options"]["helpers"],
+            self.panel["options"].get("styles") or "",
+        ):
+            self.assertNotIn("60m", part)
+
+    def test_a_short_or_a_long_reset_reads_in_its_own_unit(self):
+        """Under an hour reads minutes, under two days hours, longer days."""
+        now = CAPACITY_NOW / 1000
+
+        def spent(seconds):
+            rows = [
+                {
+                    "row": "7",
+                    "field": "info",
+                    "role": "Bulk 3",
+                    "provider": "ollama",
+                    "model": "worked",
+                    "display_name": "Worked",
+                    "used_for": "Research",
+                    "value": 1.0,
+                },
+                {"row": "7", "field": "left", "value": 0.0},
+                {"row": "7", "field": "reset", "value": now + seconds},
+            ]
+            return next(row for row in self.selection(rows) if row["row"] == "7")
+
+        self.assertEqual(
+            spent(25 * 60)["leftPace"], "\u2715 spent \u00b7 resets in 25m"
+        )
+        self.assertEqual(
+            spent(3.04 * 86400)["leftPace"],
+            "\u2715 spent \u00b7 resets in 3.0d",
+        )
+        # The boundary is the day after two days, in whole minutes.
+        self.assertEqual(
+            spent(47 * 3600 + 59 * 60)["leftPace"],
+            "\u2715 spent \u00b7 resets in 47h 59m",
+        )
+        self.assertEqual(
+            spent(48 * 3600)["leftPace"], "\u2715 spent \u00b7 resets in 2.0d"
+        )
+
+    def test_the_description_states_the_pace_bands(self):
+        """The info tooltip names every band and the colour that carries it."""
+        description = self.panel.get("description") or ""
+        for sentence in (
+            "On pace = within 5 points of the ideal (blue \u25cf).",
+            "Ahead: more than 5 points over (green \u25b2).",
+            "Behind: 5 to 20 points under (amber \u25bc).",
+            "Far behind: more than 20 points under (red \u25bc).",
+            "Spent: nothing left (red \u2715).",
+        ):
+            self.assertIn(sentence, description)
+
+    def test_the_icon_is_the_size_of_the_capacity_card_s(self):
+        """The provider icon is the cards' icon at both widths, and never shrinks."""
+        capacity = section(self.page, "Provider capacity")
+        card = dict(css_rules(capacity["options"]["styles"]))[".capacity .ico"]
+        icon = dict(css_rules(self.panel["options"]["styles"]))[".routes .ico"]
+        for declaration in (
+            "width: 22px",
+            "height: 22px",
+            "border-radius: 6px",
+            "font-size: 13px",
+        ):
+            self.assertIn(declaration, card)
+            self.assertIn(declaration, icon, declaration)
+        self.assertIn("flex: none", icon)
+        # The narrow screen never shrinks the icon.
+        media = dict(css_rules(media_body(self.panel["options"]["styles"])))
+        for selector, declarations in media.items():
+            if not selector.endswith("ico"):
+                continue
+            for declaration in ("width:", "height:", "font-size:"):
+                self.assertNotIn(declaration, declarations, selector)
+
+    def test_a_phone_row_centres_the_icon_with_the_model_name(self):
+        """The icon is centred on the name, not on the name and the provider.
+
+        At the wide width the provider name is hidden, so the row's centring
+        puts the icon on the name. On a phone the provider name takes a line
+        under the model, and the icon still lines up with the name: the name
+        line is as tall as the icon and both start at the top of the cell.
+        """
+        styles = self.panel["options"]["styles"]
+        base = dict(css_rules(styles[: styles.find("@media")]))
+        media = dict(css_rules(media_body(styles)))
+        self.assertIn("align-items: center", base[".routes .mrow"])
+        self.assertIn("align-items: flex-start", media[".routes .mrow"])
+        self.assertIn("line-height: 22px", media[".routes .mn"])
+
+    @unittest.skipUnless(
+        os.environ.get("PLAYWRIGHT_MODULE") and shutil.which("node"),
+        "Set PLAYWRIGHT_MODULE (nix develop .#browser) to render a row",
+    )
+    def test_a_rendered_row_centres_the_icon_with_the_model_name(self):
+        """A row rendered at 1568 px and at 358 px: 22 px box, 13 px glyph.
+
+        The row is the panel's own markup, measured in Chromium with the
+        panel's stylesheet. The icon's vertical centre is within 2 px of the
+        model name's at both widths.
+        """
+        row = next(row for row in self.selection() if row["tag"] == "bulk")
+        styles = self.panel["options"]["styles"]
+        markup = static_row_markup(self.panel, row)
+        html = (
+            "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
+            + styles
+            + "</style></head><body>"
+            + '<div class="routes"><table><tbody>'
+            + markup
+            + "</tbody></table></div></body></html>"
+        )
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".html", delete=False, encoding="utf-8"
+        ) as page:
+            page.write(html)
+            path = Path(page.name)
+        script = """
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
+(async () => {
+  const browser = await chromium.launch();
+  const out = [];
+  for (const width of [1568, 358]) {
+    const page = await browser.newPage({ viewport: { width: width + 40, height: 800 } });
+    await page.goto('file://' + process.env.ROW_FILE);
+    await page.evaluate((w) => { document.querySelector('.routes').style.width = w + 'px'; }, width);
+    out.push(await page.evaluate((w) => {
+      const icon = document.querySelector('.ico');
+      const name = document.querySelector('.mn');
+      const ib = icon.getBoundingClientRect();
+      const nb = name.getBoundingClientRect();
+      const style = getComputedStyle(icon);
+      return {
+        width: w,
+        box: [ib.width, ib.height],
+        glyph: style.fontSize,
+        radius: style.borderRadius,
+        centre: (ib.y + ib.height / 2) - (nb.y + nb.height / 2),
+        nameHeight: nb.height,
+      };
+    }, width));
+    await page.close();
+  }
+  console.log(JSON.stringify(out));
+  await browser.close();
+})();
+"""
+        try:
+            result = subprocess.run(
+                ["node", "-e", script],
+                capture_output=True,
+                text=True,
+                check=True,
+                env={**os.environ, "ROW_FILE": str(path)},
+            )
+        finally:
+            path.unlink()
+        measured = json.loads(result.stdout)
+        self.assertEqual([item["width"] for item in measured], [1568, 358])
+        for item in measured:
+            self.assertEqual(item["box"], [22, 22], item["width"])
+            self.assertEqual(item["glyph"], "13px", item["width"])
+            self.assertEqual(item["radius"], "6px", item["width"])
+            self.assertLessEqual(abs(item["centre"]), 2, item["width"])
 
     def test_a_route_with_no_remaining_reading_says_so(self):
         """A route the snapshot does not carry has no share, and never a zero."""
