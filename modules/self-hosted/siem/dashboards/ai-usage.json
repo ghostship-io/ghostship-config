@@ -117,7 +117,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (source_url, confidence, label, scope, reset_at) (ghostship_ai_announced_reset_info)",
+          "expr": "max by (source_url, confidence, label, scope, reset_at) (ghostship_ai_announced_reset_info) or label_replace(absent(ghostship_ai_announced_reset_info), \"label\", \"No reset announcement events yet\", \"\", \"\")",
           "instant": true,
           "range": false,
           "format": "table"
