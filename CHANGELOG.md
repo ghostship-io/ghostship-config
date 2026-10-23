@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.202] - 2026-10-23
+
+- Refuse foreign PR source at host-owned CI runner admission before checkout.
+
+PR #366.
+
 ## [3.17.201] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 7bf7ec3e; the lock's narHash is the `nix flake prefetch` hash of that revision.
