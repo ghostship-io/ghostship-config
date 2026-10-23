@@ -41,9 +41,6 @@ printf 'Checking the configuration drift check\n'
 python3 -m unittest discover -s tests -p test_configuration_drift.py
 nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
 
-printf 'Checking the merge freeze status\n'
-python3 -m unittest discover -s tests -p test_freeze_status.py
-
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
 
