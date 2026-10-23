@@ -430,14 +430,10 @@ class DashboardTests(unittest.TestCase):
         # that are not in this branch yet: the display name of a model and
         # the basis of its capacity. The page reads them when the collector
         # publishes them, and falls back to the raw model id and to the
-        # behaviour of today when it does not. The age of a capacity reading
-        # and the mark of a rolling window are published the same way, by
-        # the collector change the capacity cards are read from.
+        # behaviour of today when it does not.
         pending = {
             "ghostship_ai_model_info",
             "ghostship_ai_model_capacity_basis",
-            "ghostship_ai_account_window_check_timestamp_seconds",
-            "ghostship_ai_account_window_rolling",
         }
         for panel in self.dashboard.get("panels") or []:
             for target in panel.get("targets") or []:
