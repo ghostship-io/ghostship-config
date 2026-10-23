@@ -23,6 +23,7 @@ TESTS = (
     "test_t3_worker_tunnel.py",
     "test_security_monitoring.py",
     "test_inference_scheduler_stop.py",
+    "test_inference_mcp_socket.py",
     "test_ssh_command_guard.py",
     "test_boot_generation_drift.py",
     "test_activate_host.py",
