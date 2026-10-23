@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.156] - 2026-10-23
+
+Use native rootless Podman for development and remove obsolete runtime consumers. Refresh the daily security procedure.
+
+PR #318.
+
 ## [3.17.155] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 5d5bcc6c; the lock's narHash is the `nix flake prefetch` hash of that revision.
