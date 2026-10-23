@@ -699,3 +699,41 @@ class MainWiringTests(unittest.TestCase):
     def test_a_named_identities_file_wins_and_none_reads_nothing(self):
         self.assertEqual(main.model_identities_path("other.json", "x/p.json"), "other.json")
         self.assertEqual(main.model_identities_path("", ""), "")
+
+
+class ProviderReservationTests(unittest.TestCase):
+    """A provider reserved for another workload is not a worker of a tier."""
+
+    POLICY = dict(
+        TRUST,
+        provider_reservations=[
+            {"provider": "claudeAgent", "workload": "review-roles", "status": "active"},
+            {"provider": "grok", "workload": "3d", "status": "interim"},
+            {"provider": "codex", "workload": "review-roles", "status": "released"},
+        ],
+    )
+
+    ROUTES = [
+        Route("claude", "claude-sonnet-5-5", 44.0, pace=0.2),
+        Route("ollama", "minimax-m3.1-flash", 42.7, pace=-0.05),
+        Route("opencode-go", "beam-free", 30.3, free=True),
+        Route("codex", "gpt-6.1-sol", 47.8, pace=0.1),
+    ]
+
+    def test_a_reserved_provider_follows_every_unreserved_worker(self):
+        # Catches the reservation being ignored: the review-role provider's
+        # Sonnet outranked the bulk workers on value and pace.
+        data = build(self.ROUTES, trust=self.POLICY)
+        order = bulk_winners(data)
+        self.assertLess(order.index("ollama:minimax-m3.1-flash"), order.index("claude:claude-sonnet-5-5"))
+        # It stays ahead of an untrusted route, which is last in every tier.
+        self.assertLess(order.index("claude:claude-sonnet-5-5"), order.index("opencode-go:beam-free"))
+        winner = winner_of(data, "claude:claude-sonnet-5-5")
+        self.assertEqual(winner["reserved_for"], "review-roles")
+
+    def test_a_released_reservation_and_the_reserved_tier_are_unaffected(self):
+        data = build(self.ROUTES, trust=self.POLICY)
+        self.assertEqual(winner_of(data, "codex:gpt-6.1-sol")["reserved_for"], "")
+        frontier = [w for w in data["tier_winners"].get("frontier", []) if w["provider"] == "claude"]
+        for winner in frontier:
+            self.assertEqual(winner["reserved_for"], "")
