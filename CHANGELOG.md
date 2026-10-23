@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.107] - 2026-10-23
+## [3.17.108] - 2026-10-23
 
 - ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
+## [3.17.107] - 2026-10-23
+
+- AI usage: a Go free route keeps its free capacity when the live instance does not offer it. The unlimited window of the free routes was built from the instance inventory alone, so a free route the catalog lists but the instance did not offer that moment was left to the paid monthly allowance of the subscription and reported exhausted in `routing.json`. The window is now built from the inventory and the catalog's free list together; the catalog still keeps a "-free"-named route it prices on the paid allowance, and the OpenRouter free routes keep their daily free-models allowance. The status the Go usage endpoint reports for each window ("ok" or "rate-limited") also reaches the `quota.accounts` records of the snapshot, and a window without a status carries no status key.
 
 ## [3.17.106] - 2026-10-23
 
