@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.233] - 2026-10-23
+
+- Give coordinator review checks read-only access to issued approval metadata.
+
+PR #399.
+
 ## [3.17.232] - 2026-10-23
 
 - Protect Claude review headroom when selecting Sonnet workers.
