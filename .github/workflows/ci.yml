@@ -1,27 +1,38 @@
 name: Fleet checks
 on:
   pull_request:
-  push:
-    branches: [main]
-  schedule:
-    - cron: '17 5 * * *'
   workflow_dispatch:
 permissions:
   contents: read
-# Fast PR/main checks never queue behind a repository integration concurrency
-# group. Slow coverage runs nightly/manual only, one job per workflow.
+# PR gates run once on cached host runners. Complete integration is manual on main.
 concurrency:
-  group: fleet-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || 'integration' }}
+  group: fleet-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'integration' }}
   cancel-in-progress: true
 jobs:
   check:
-    # Neither private-source environment asks for a reviewer. Pull requests use
-    # private-source-ci, which holds the read-only agent key, and merged code
-    # on main uses private-source-main, which only the main branch may deploy
-    # to. A pull request from a fork gets no environment secrets at all.
-    environment: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'private-source-main' || 'private-source-ci' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 4 || 35 }}
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    environment: private-source-ci
+    runs-on: [self-hosted, Linux, ARM64, ghostship-fast]
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Import pinned private sources with read-only deploy keys
+        env:
+          GITHUB_META_TOKEN: ${{ github.token }}
+          GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          # A lock written before the organisation move still names the
+          # previous account; the deployment supplies that name.
+          GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
+        run: python3 scripts/ci-private-inputs.py
+      - name: Run fast repository checks
+        run: nix develop .#ci --no-write-lock-file -c scripts/check
+  integration:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: private-source-main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -39,18 +50,13 @@ jobs:
           # previous account; the deployment supplies that name.
           GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
         run: python3 scripts/ci-private-inputs.py
-      - name: Run fast repository checks
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Validate container development workflow
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           # The agent pin guard compares the pinned agent revision with the base
           # branch's, which needs the read-only agent key.
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
         run: nix develop .#ci --no-write-lock-file -c scripts/check-integration
       - name: Evaluate hosts and run regression tests
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
       - name: Check workflows and backup script
         run: |
