@@ -6,11 +6,25 @@
 }:
 
 let
+  sharedNetwork = {
+    name = "ghostship_net";
+    subnet = "10.89.0.0/24";
+    gateway = "10.89.0.1";
+    start = "10.89.0.32";
+    end = "10.89.0.254";
+  };
+  networkSpec = pkgs.writeText "shared-network-range.json" (builtins.toJSON sharedNetwork);
+  applyNetworkRange = "${pkgs.python3}/bin/python ${../../packages/podman-network/range.py} ${networkSpec}";
   # Run the update, list what changed on informational, and fail (so
   # ghostship-failure@ raises an incident) when any container failed or rolled back.
   podman-auto-update = pkgs.writeShellApplication {
     name = "ghostship-podman-auto-update";
-    runtimeInputs = [ pkgs.podman pkgs.gawk pkgs.util-linux config.ghostship.notify.package ];
+    runtimeInputs = [
+      pkgs.podman
+      pkgs.gawk
+      pkgs.util-linux
+      config.ghostship.notify.package
+    ];
     text = ''
       # Updates never overlap a backup or other maintenance.
       exec 9>/run/ghostship-maintenance.lock
@@ -84,6 +98,16 @@ let
 in
 
 {
+  system.build.sharedNetworkIPAMRegression = import ../../packages/podman-network/regression.nix {
+    inherit pkgs;
+  };
+
+  assertions = import ./shared-network-policy.nix {
+    inherit lib;
+    containers = config.virtualisation.oci-containers.containers;
+    inherit (sharedNetwork) name start end;
+  };
+
   # Shared configuration for all self-hosted services
   # (Podman is used by default in NixOS)
 
@@ -105,14 +129,31 @@ in
           description = "Create ghostship_net podman network";
           after = [ "network.target" ];
           wantedBy = [ "multi-user.target" ];
+          # Requires from running containers must not propagate a stop on switch.
+          restartIfChanged = false;
+          stopIfChanged = false;
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
           };
           script = ''
             ${pkgs.podman}/bin/podman network inspect ghostship_net >/dev/null 2>&1 || \
-            ${pkgs.podman}/bin/podman network create --subnet 10.89.0.0/24 ghostship_net
+            ${pkgs.podman}/bin/podman network create --subnet ${sharedNetwork.subnet} \
+              --gateway ${sharedNetwork.gateway} --ip-range ${sharedNetwork.start}-${sharedNetwork.end} ghostship_net
+            ${applyNetworkRange}
           '';
+        };
+
+        shared-network-range = {
+          description = "Apply the shared Podman allocation range without restarting its consumers";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "init-ghostship-net.service" ];
+          requires = [ "init-ghostship-net.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = applyNetworkRange;
+          };
         };
 
         podman-auto-update = {

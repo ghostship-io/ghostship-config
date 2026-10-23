@@ -5,7 +5,7 @@ let
 
   # Synthetic identity, container and peer. The test never touches a live
   # container: the candidate is a scratch image declared here.
-  address = "10.89.0.42";
+  address = "10.89.0.18";
   mac = "02:00:00:00:00:42";
   subnet = "10.89.0.0/24";
   identity = [ "--ip=${address}" "--mac-address=${mac}" "--cap-drop=ALL" ];
@@ -18,7 +18,7 @@ let
     edges = [
       {
         peer = "peer-service";
-        address = "10.89.0.43";
+        address = "10.89.0.19";
         protocol = "tcp";
         port = 8443;
         purpose = "service api";
