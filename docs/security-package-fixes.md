@@ -183,11 +183,9 @@ The functional derivation `8p41921m…` (derivation SHA-256
 `NIX_BUILD_CORES = 2` were observed during the run. It exited 0 with
 200 passed, 9 skipped and 0 failed.
 
-| Evidence | Value |
-| --- | --- |
-| Output | `/nix/store/r0xx3niwb4abxg1whnmykqmc0wl06aqi-nix-functional-tests-2.34.9` |
-| `narHash` | `sha256-pQpattmS9VmO3ZIQUFn66az8GSmB4IvYhTTCFn6SUmo=` |
-| Build log SHA-256 | `ee60a37143d941bd022825c1801b88637d6565263f04fabbbe7cd0ff9f08a916` |
+The protected evidence record retains the output identity, NAR hash and build-log
+digest. Historical success does not establish current store registration or
+GC-root retention; re-read those before any activation.
 
 A first functional attempt failed **before `nix` was executed** (a `PATH`
 problem in the invoking shell), so it says nothing about the suite; the second
