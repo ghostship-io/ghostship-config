@@ -445,7 +445,8 @@ METRIC_HELP = {
     ),
     "ghostship_ai_account_card_order": (
         "The place the card of an account takes on the Providers page: 1 is "
-        "the first card, and the places hold no gap."
+        "the first card, and the places hold no gap. Scope is t3 when any "
+        "candidate is mapped to the live T3 catalog, otherwise free."
     ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
