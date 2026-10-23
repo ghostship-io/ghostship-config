@@ -16,7 +16,7 @@ class CIRunnerTests(unittest.TestCase):
             lib.genAttrs = names: f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) names);
             pkgs = (builtins.listToAttrs (map (name: { inherit name; value = "/fixture/" + name; })
               [ "coreutils" "curl" "jq" "openssh" "python3" "unzip" "xz" ])) // {
-                writeShellScript = name: text: text;
+                writeShellScript = name: text: name + "\\n" + text;
               };
           };
           in module''' % (ROOT / 'modules/self-hosted/github-ci.nix')
@@ -31,6 +31,7 @@ class CIRunnerTests(unittest.TestCase):
             self.assertTrue(runner['ephemeral'])
             self.assertEqual(runner['extraLabels'], ['ghostship-fast'])
             hook = runner['extraEnvironment']['ACTIONS_RUNNER_HOOK_JOB_STARTED']
+            self.assertTrue(hook.splitlines()[0].endswith('.sh'), 'the runner only executes a script with a supported suffix')
             self.assertIn('python3 -I -S', hook)
             self.assertIn('github-ci-guard.py', hook)
             self.assertIn('ghostship-io/' + repo, hook)
