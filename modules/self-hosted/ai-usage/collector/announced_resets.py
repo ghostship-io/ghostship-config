@@ -13,6 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SOURCE = "https://x.com/thsottiaux"
+RELAY = "https://community.openai.com/t/another-reset-day-18-of-28-days-of-quality-of-life-improvements-and-or-a-full-reset/1403525"
 PATH = "/var/lib/ghostship-ai-usage/announced-resets.json"
 INTERVAL = 8 * 3600
 POST_URL = re.compile(r"https://x\.com/thsottiaux/status/\d+$")
@@ -116,12 +117,22 @@ EXTRACT = r"""(() => ({
  }))
 }))()"""
 
+RELAY_EXTRACT = r"""(() => ({
+ blocked: /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
+ posts: [...document.querySelectorAll('.cooked a[href*="x.com/thsottiaux/status/"]')].slice(-40).map(a => ({
+   text: a.innerText || a.closest('p')?.innerText || '',
+   url: a.href.split('?')[0],
+   published_at: ''
+ }))
+}))()"""
+
 
 def check(document, call, now):
     """One lease, no wall bypass, no independent HTTP fetches or search mirrors."""
     if now - document.get("checked_at", 0) < INTERVAL:
         return document
-    updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE}
+    updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE,
+               "identity": "personal", "sources": [{"source_url": SOURCE, "status": "unavailable"}]}
     window = None
     try:
         window = call("browser.window", action="open")["window_id"]
@@ -131,15 +142,37 @@ def check(document, call, now):
                 "!!document.querySelector('article') || /log in or sign up|sign in to|captcha|verify you are human/i.test(document.body.innerText)"}},
             {"action": "extract", "name": "announcements", "js": EXTRACT},
         ])["extracts"]["announcements"]
-        if page["blocked"]:
-            updated["status"] = "blocked"
-            return updated
+        updated["sources"] = [{"source_url": SOURCE, "status": "blocked" if page["blocked"] else "ok"}]
         records = {entry["source_url"]: entry for entry in document["announcements"]}
-        for post in page["posts"]:
+        for post in [] if page["blocked"] else page["posts"]:
             entry = parse(post)
             if entry:
                 records[entry["source_url"]] = {**entry, "observed_at": now}
-        updated.update(status="ok", announcements=list(records.values())[-100:])
+        if page["blocked"]:
+            updated["status"] = "blocked"
+            updated["sources"].append({"source_url": RELAY, "status": "unavailable"})
+            relay = call("browser.op", window_id=window, steps=[
+                {"action": "navigate", "url": RELAY},
+                {"action": "wait", "timeout": 15, "condition": {"js":
+                    "!!document.querySelector('.cooked') || /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText)"}},
+                {"action": "extract", "name": "announcements", "js": RELAY_EXTRACT},
+            ])["extracts"]["announcements"]
+            updated["sources"][-1]["status"] = "blocked" if relay["blocked"] else "ok"
+            if not relay["blocked"]:
+                for post in relay["posts"]:
+                    entry = parse(post)
+                    if entry:
+                        # This is a community relay on OpenAI's site, not a
+                        # statement authored by OpenAI. Keep provenance and
+                        # never promote it to a confirmed scheduled reset.
+                        entry.update(primary_source_url=entry["source_url"],
+                                     source_url=RELAY + "#announcement-" + entry["source_url"].rsplit('/', 1)[-1],
+                                     confidence="low", reason="community_relay", observed_at=now)
+                        records[entry["source_url"]] = entry
+                updated["status"] = "partial"
+        else:
+            updated["status"] = "ok"
+        updated["announcements"] = list(records.values())[-100:]
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         updated["status"] = "unavailable"
     finally:
@@ -152,7 +185,7 @@ def check(document, call, now):
 
 
 def cli_call(prefix, operation, **kwargs):
-    command = [*prefix, operation, "--identity", "agent", "--json",
+    command = [*prefix, operation, "--identity", "personal", "--json",
                "--idempotency-key", str(uuid.uuid4())]
     for key, value in kwargs.items():
         command += ["--" + key.replace("_", "-"), json.dumps(value) if isinstance(value, list) else value]
