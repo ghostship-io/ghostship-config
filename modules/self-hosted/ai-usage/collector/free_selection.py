@@ -13,6 +13,7 @@ The contract::
     ghostship_ai_free_provider_selection_info{provider,model,display_name,basis} 1
     ghostship_ai_free_provider_selection_remaining_ratio{provider}
     ghostship_ai_free_provider_selection_paced_availability{provider}
+    ghostship_ai_free_provider_selection_pace_state{provider,state} 1
     ghostship_ai_free_provider_selection_reset_timestamp_seconds{provider}
     ghostship_ai_provider_free_models{provider,state} count
 
@@ -36,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+import value_policy
 from metrics import ExactLabel, Sample, label_value
 from util import iso_to_epoch
 
@@ -231,6 +233,25 @@ def samples(
             )
         )
         remaining = _number(capacity.get("remaining_ratio"))
+        pace = _number(capacity.get("pace_delta"))
+        # The line of the selection is the share its winning route has left
+        # minus the Paced Availability of that route, and the state is the
+        # value policy's band of the two. A selection with no share, or with
+        # no line to compare it with, is unknown: the module never draws a
+        # band of its own. One series is published per free provider.
+        expected_left = (
+            remaining - pace if remaining is not None and pace is not None else None
+        )
+        published.append(
+            (
+                "ghostship_ai_free_provider_selection_pace_state",
+                {
+                    "provider": provider,
+                    "state": value_policy.pace_state(remaining, expected_left),
+                },
+                1.0,
+            )
+        )
         if remaining is not None:
             published.append(
                 (
@@ -239,7 +260,6 @@ def samples(
                     remaining,
                 )
             )
-        pace = _number(capacity.get("pace_delta"))
         if pace is not None:
             published.append(
                 (
