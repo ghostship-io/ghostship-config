@@ -13,7 +13,10 @@ deployer = load("t3code_deploy_when_idle", "packages/t3code/deploy-when-idle.py"
 
 class TestLiveActivityProbeGate(unittest.TestCase):
     def test_missing_v1_database_still_runs_real_probe_and_blocks(self):
-        probe = Path(__file__).resolve().parents[1] / "packages/t3code/activity-probe/t3code-activity-probe.sh"
+        source = os.environ.get("GHOSTSHIP_TEST_AGENT_SOURCE")
+        if not source:
+            self.skipTest("requires the pinned agent source, supplied by config-tests")
+        probe = Path(source) / "packages/t3code/activity-probe/t3code-activity-probe.sh"
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             state = home / "state.sqlite"
@@ -33,6 +36,9 @@ class TestLiveActivityProbeGate(unittest.TestCase):
 
 class TestT3CodeIdleDeployment(unittest.TestCase):
     def setUp(self):
+        candidate_gate = patch.object(deployer, "require_candidate")
+        candidate_gate.start()
+        self.addCleanup(candidate_gate.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
@@ -444,6 +450,9 @@ class TestIdleGateOnRetryAfterFailure(unittest.TestCase):
     """
 
     def setUp(self):
+        candidate_gate = patch.object(deployer, "require_candidate")
+        candidate_gate.start()
+        self.addCleanup(candidate_gate.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)

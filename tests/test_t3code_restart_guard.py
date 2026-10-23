@@ -20,6 +20,9 @@ spec.loader.exec_module(deployer)
 
 class ForcedRestartTests(unittest.TestCase):
     def setUp(self):
+        candidate_gate = patch.object(deployer, "require_candidate")
+        candidate_gate.start()
+        self.addCleanup(candidate_gate.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
