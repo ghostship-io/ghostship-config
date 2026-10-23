@@ -1127,6 +1127,7 @@ def ranking_inputs(
                 else None
             ),
             basis=str(measured.get("basis") or ""),
+            source=str(measured.get("source") or ""),
             # When the entitlement of the window ends, when the provider
             # publishes an end. A promotion without a published end has no
             # end, and that is unknown rather than zero.
@@ -1451,6 +1452,15 @@ def ranking_samples(
     Returns the ranking metrics and the ranked models themselves, so the
     snapshot can be built from the same ranking.
     """
+    runtime_windows = runtime_state_module.read_limit_windows(t3_state, now)
+    if runtime_windows:
+        results.append(SourceResult(
+            source='t3_runtime', status='ok', reason=codes.OK,
+            observed_at=max(window['observedAtEpoch'] for window in runtime_windows),
+            windows=runtime_windows,
+            metrics=[sample for window in runtime_windows
+                     for sample in providers_module._window_samples(window)],
+        ))
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
