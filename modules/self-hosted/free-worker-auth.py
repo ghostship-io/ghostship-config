@@ -190,8 +190,20 @@ def migrate(source, free, manifest_path, plan):
         try:
             result = json.loads(raw)
             job = result['job']
+            if not isinstance(job, dict) or not isinstance(job.get('id'), str) or not job['id']:
+                raise ValueError
         except (ValueError, KeyError, TypeError):
             raise MigrationError('zen_worker_probe_invalid') from None
+        detail = job.get('result')
+        if (job.get('status') == 'queued' and isinstance(detail, dict)
+                and detail.get('reason') == 'all eligible routes unavailable; retry drain after cooldown'):
+            # The durable job can be retried by the pool after cooldown. This
+            # is availability evidence, not a failed login or proof of cutover.
+            manifest['public_job'] = job['id']
+            manifest['zen_worker'] = 'unavailable'
+            write_private(manifest_path, manifest)
+            return {'phase': 'unavailable', 'reason': 'zen_probe_cooling_or_exhausted',
+                    'source_login_preserved': True}
         if job.get('status') != 'succeeded':
             raise MigrationError('zen_worker_probe_failed_source_login_preserved')
         manifest['public_job'] = job['id']
