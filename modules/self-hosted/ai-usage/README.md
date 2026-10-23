@@ -1481,15 +1481,16 @@ The scheduled checker connects to the deployed MCP over one stdio session,
 using its existing Desktop configuration and lease ownership. It does not run
 a second local browser backend or copy Desktop credentials into T3.
 
-When X is blocked, the same check reads the public OpenAI-hosted
-[community announcement relay](https://community.openai.com/t/another-reset-day-18-of-28-days-of-quality-of-life-improvements-and-or-a-full-reset/1403525).
-This page was verified to relay the reset announcements. Its content is written
-by the community, so records retain both the relay URL and primary post URL at
-low confidence and cannot change capacity. A wall or challenge on the relay
-also stops that source. `sources` preserves each source's status; `partial`
-means X was blocked and the relay was readable. A readable relay never clears
-the primary source's blocked status. Neither profile sign-ins nor private
-account details are stored in the cache.
+When X is blocked, the same check searches the OpenAI community announcements
+category for reset topics and reads at most three matching topics. Each topic
+has its own blocked/unavailable status. A readable relay never clears the
+primary source's blocked status. The dashboard shows community relays as
+`announced (unverified)` with a source link, and an operations notice asks for
+confirmation. A root operator can confirm global Codex scope and an explicit
+future time using `ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE`.
+Confirmed records survive later rediscovery and then use the normal announced
+reset path. See [confirmation and operations](../../../docs/ai-usage-announcements.md).
+Neither profile sign-ins nor private account details are stored in the cache.
 
 The separate runtime cache, `--announced-resets` (default
 `/var/lib/ghostship-ai-usage/announced-resets.json`), records reset time, scope,
@@ -1498,11 +1499,12 @@ includes this cache as `announced_resets`, including blocked-check status. Page
 prose is never stored. Repeated post URLs update one record; up to 100 records
 are retained and a failed check preserves previous announcements.
 
-Only an explicit global Codex reset with a dated PT time is applied. Dates may
+Automatic application requires an explicit global Codex reset with a dated PT time.
+Operator-confirmed announcements use the explicitly supplied timezone-qualified time. Dates may
 be ISO dates or `today`/`tomorrow` relative to the post's publication date in
 Pacific time. PT observes daylight saving; contradictory PST/PDT is rejected.
 Vague timing, deadlines, banked resets, unclear scope and other authors remain
-ineligible. Announcements change neither usage nor freshness and never grant
+ineligible until explicitly confirmed. Announcements change neither usage nor freshness and never grant
 capacity after the announced time. Future announcements within seven days use
 the existing custom-reset application path; owner overrides take precedence.
 Published quota windows, selection limits and dashboard metric labels say

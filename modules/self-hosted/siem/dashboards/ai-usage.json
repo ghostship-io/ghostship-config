@@ -96,12 +96,104 @@
       }
     },
     {
+      "id": 202,
+      "type": "table",
+      "title": "Reset announcements",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 6
+      },
+      "description": "Unverified announcements remain visible with provenance and require confirmation before changing pacing.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "max by (source_url, confidence, label, scope, reset_at) (ghostship_ai_announced_reset_info)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "confidence": true,
+              "__name__": true
+            },
+            "renameByName": {
+              "label": "Announcement",
+              "scope": "Scope",
+              "reset_at": "Reset time",
+              "source_url": "Source"
+            },
+            "indexByName": {
+              "label": 0,
+              "scope": 1,
+              "reset_at": 2,
+              "source_url": 3
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Source"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open source announcement",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
       "id": 230,
       "type": "text",
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 13,
         "w": 24,
         "h": 2
       },
@@ -120,7 +212,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 15,
         "w": 6,
         "h": 13
       },
@@ -183,7 +275,7 @@
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 28,
         "w": 24,
         "h": 2
       },
@@ -202,7 +294,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 30,
         "w": 6,
         "h": 13
       },
@@ -265,7 +357,7 @@
       "title": "",
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 43,
         "w": 24,
         "h": 3
       },
@@ -284,7 +376,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 46,
         "w": 6,
         "h": 14
       },
@@ -348,7 +440,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 54,
+        "y": 60,
         "w": 24,
         "h": 1
       },
