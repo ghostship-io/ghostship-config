@@ -1653,7 +1653,7 @@ def rank_models(
 
     candidates: list[_Candidate] = []
     for provider, model in sorted(universe):
-        if not pools.visible_route(provider, model):
+        if not pools.usable_route(provider, model):
             continue
         account = account_for(provider, model)
         observed_free_route = False

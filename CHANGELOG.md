@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.17.207] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7f180d26; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #373.
+
+## [3.17.206] - 2026-10-23
+
+- Track public Codex reset announcements separately from owner overrides and provider measurements, with bounded Desktop checks and announced-reset pacing labels.
+
+PR #371.
+
+## [3.17.205] - 2026-10-23
+
+Remove the two internal heading scrollbars at phone widths.
+
+PR #369.
+
+## [3.17.204] - 2026-10-23
+
+Restore the Providers model panes and capacity cards. Exact model IDs now survive Grafana regex interpolation, and capacity freshness no longer introduces a five-minute implicit subquery that empties the repeat variable.
+
+Show collector freshness and T3 usage/provider failures above the model panes. Keep only the latest source-status label variant in the evidence table. Give historical T3 usage scans the bounded 60-second transport budget and preserve fixed failure reasons such as timeout.
+
+Validation: 16 focused page tests, four usage tests and eight transport tests pass; staged privacy/security and whitespace checks pass. In the signed-in live browser, the original capacity variable returned zero rows and the repaired query returned seven at the same evaluation time. A local unsaved query preview renders real model quality/rounds/limits and all seven provider cards. The current authenticated T3 API returned both daily and hourly summaries; no bearer/URL change was needed. Desktop/phone final screenshots remain required after approved deployment.
+
+PR #367.
+
 ## [3.17.203] - 2026-10-23
 
 - Give CI job-start hooks the shell suffix required by the runner.

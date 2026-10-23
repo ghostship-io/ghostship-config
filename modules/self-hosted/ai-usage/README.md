@@ -1470,6 +1470,33 @@ time remain provider measurements. Published windows and selection limits say
 `provider_reset_at`, and use the effective reset for pace. Invalid or duplicate
 overrides fail visibly. Keep owner-specific reset times in runtime state.
 
+### Announced resets
+
+`ghostship-ai-usage-announcements` checks the public Codex announcement profile
+through the agent identity's Agent Desktop browser tools, at most once per
+eight hours (including retries and manual service starts). It owns and closes
+one browser lease. A sign-in wall or challenge records `blocked`; the check
+does not bypass it or use mirrors. Transport failures record `unavailable`.
+
+The separate runtime cache, `--announced-resets` (default
+`/var/lib/ghostship-ai-usage/announced-resets.json`), records reset time, scope,
+source post URL, confidence and observation time. The published routing snapshot
+includes this cache as `announced_resets`, including blocked-check status. Page
+prose is never stored. Repeated post URLs update one record; up to 100 records
+are retained and a failed check preserves previous announcements.
+
+Only an explicit global Codex reset with a dated PT time is applied. Dates may
+be ISO dates or `today`/`tomorrow` relative to the post's publication date in
+Pacific time. PT observes daylight saving; contradictory PST/PDT is rejected.
+Vague timing, deadlines, banked resets, unclear scope and other authors remain
+ineligible. Announcements change neither usage nor freshness and never grant
+capacity after the announced time. Future announcements within seven days use
+the existing custom-reset application path; owner overrides take precedence.
+Published quota windows, selection limits and dashboard metric labels say
+`reset_source: announced` and `reset_label: announced reset`, retain the provider
+reset, and pace against the announced reset. The collector reads the cache on
+its usual five-minute cadence; it never browses or restarts T3.
+
 ### Exact worker builds
 
 `ghostship.aiUsage.workerBuilds` maps a provider to an exact native model ID.
@@ -1482,3 +1509,12 @@ The generated versioned preferences reach the collector through
 `--model-selection-preferences` and are published as `model_selection.worker_builds`.
 Candidate `selection_eligible` and `selection_reason` explain the choice separately
 from quota availability and Quality.
+
+The Providers page uses raw MetricsQL strings for repeated model regexes,
+so punctuation in exact model identities survives Grafana interpolation.
+Capacity repeat freshness timestamps each selector directly; a timestamp of a
+composite expression introduces an implicit subquery and can hide live cards.
+Source health is visible above the model panes. It labels missing/stale
+collections and T3 usage/provider failures independently of model quota data.
+Historical T3 usage scans use the bounded sixty-second transport budget;
+failures preserve their fixed reason (including timeout), never server text.
