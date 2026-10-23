@@ -109,17 +109,13 @@ class CandidatePolicyTests(unittest.TestCase):
 class DrainTests(unittest.TestCase):
     def test_restart_waits_only_for_live_agent_leases_and_human_pauses(self):
         """Catches a restart under an active agent run or a person's takeover, or waiting on expired leases forever."""
-        anchor = "about:blank#ghostship-window-{}.{}".format
-        cases = [
-            ("no runs", set(), set(), ["https://example.test/"], []),
-            ("live lease", {"r1"}, set(), [anchor("r1", int(NOW + 60))], ["active agent run r1"]),
-            ("expired lease", {"r1"}, set(), [anchor("r1", int(NOW - 1))], []),
-            ("anchor without registry", set(), set(), [anchor("r1", int(NOW + 60))], []),
-            ("person paused a run", set(), {"r2"}, [], ["paused run r2"]),
-        ]
-        for name, registry, pauses, urls, expected in cases:
-            with self.subTest(name):
-                self.assertEqual(update.drain_blockers(registry, pauses, urls, NOW), expected)
+        cases = [({}, set(), []), ({"r1": NOW + 60}, set(), ["active agent run r1"]),
+                 ({"r1": NOW - 1}, set(), []), ({}, {"r2"}, ["paused run r2"]),
+                 ({"r1": None}, set(), ["active agent run r1"]),
+                 ({"r1": float("nan")}, set(), ["active agent run r1"])]
+        for registry, pauses, expected in cases:
+            with self.subTest(registry=registry):
+                self.assertEqual(update.drain_blockers(registry, pauses, NOW), expected)
 
 
 class CookieTests(unittest.TestCase):

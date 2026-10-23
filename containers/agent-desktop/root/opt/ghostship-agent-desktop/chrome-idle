@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reap expired agent lease windows and stop an on-demand Chrome identity once
-# it has had no page targets, or only plain about:blank ones, for
+# it has had no page targets for
 # CHROME_IDLE_TIMEOUT_SECONDS. Run by the svc-agent-desktop-chrome-idle s6
 # service as abc.
 #
@@ -9,14 +9,8 @@
 #   CHROME_IDLE_TIMEOUT_SECONDS  idle time before stopping (default 600)
 #   CHROME_LEASE_SLACK_SECONDS   grace after a lease expires (default 120)
 #
-# Each check first runs chrome-lease-reaper on every reachable identity: it
-# closes each window whose about:blank#ghostship-window-<token>.<expires>
-# anchor expired more than the slack ago, with the popups its pages opened.
-# Legacy anchors (no .<expires>) are never reaped. Any remaining page that is
-# not plain about:blank, including both anchor forms and pages a human
-# opened, resets the idle clock, as does a chrome-ensure call. The stop is
-# `s6-svc -d`, so supervision keeps the service down until the next
-# chrome-ensure.
+# Reap expired recorded agent windows first. Any remaining page, including a
+# human-owned blank page, prevents idle shutdown. Only windowless Chrome is idle.
 set -u
 
 check=${CHROME_IDLE_CHECK_SECONDS:-60}
@@ -40,13 +34,13 @@ port_for() {
 }
 
 # Exit 0 when the /json/list document on stdin has no page target other than
-# plain about:blank (an empty list, a windowless Chrome, is idle).
-only_blank_pages() {
+# any kind (an empty list, a windowless Chrome, is idle).
+no_pages() {
   python3 -I -c '
 import json, sys
 targets = json.load(sys.stdin)
 pages = [t for t in targets if t.get("type") == "page"]
-sys.exit(0 if all(t.get("url") == "about:blank" for t in pages) else 1)
+sys.exit(0 if not pages else 1)
 '
 }
 
@@ -76,7 +70,7 @@ stop_identity() {
   ) 9>>"$lock"
 }
 
-echo "[chrome-idle] stopping Chrome after ${timeout}s on about:blank only (checking every ${check}s)"
+echo "[chrome-idle] stopping Chrome after ${timeout}s on no pages (checking every ${check}s)"
 reaper=/opt/ghostship-agent-desktop/chrome-lease-reaper
 
 while :; do
@@ -87,7 +81,7 @@ while :; do
       python3 -I "$reaper" "$identity" || true
     fi
     if ! list=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/json/list" 2>/dev/null) \
-      || ! only_blank_pages <<<"$list" 2>/dev/null; then
+      || ! no_pages <<<"$list" 2>/dev/null; then
       unset "idle_since[$identity]"
       continue
     fi
@@ -99,7 +93,7 @@ while :; do
     fi
     if [ $((now - since)) -ge "$timeout" ]; then
       if stop_identity "$identity" "$port" "$since"; then
-        echo "[chrome-idle] stopped $identity Chrome (port $port) after $((now - since))s with only about:blank pages"
+        echo "[chrome-idle] stopped $identity Chrome (port $port) after $((now - since))s with no pages"
       fi
       unset "idle_since[$identity]"
     fi

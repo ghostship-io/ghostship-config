@@ -209,7 +209,7 @@ class CloseRunTest(unittest.TestCase):
             async def go():
                 app = server.App(runs, {})
                 asyncio.get_running_loop().call_later(0.3, os.unlink, busy)  # the agent call finishes
-                run = {"run_id": run_id, "identity": "agent", "anchor": "HOME", "members": ["HOME", "TAB1", "TAB2"]}
+                run = {"run_id": run_id, "identity": "agent", "binding": "HOME", "members": ["HOME", "TAB1", "TAB2"]}
                 # ...after opening a popup while the close waited
                 fresh = dict(run, members=run["members"] + ["POPUP"])
                 app.find = lambda rid: (browser, fresh)
@@ -340,3 +340,24 @@ class AccessJwtTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class WorkRunRecordsTest(unittest.TestCase):
+    def test_real_binding_identifies_run_and_stale_window_id_does_not(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            marker = "a" * 32
+            record = dict(schema=2, run_id=marker, identity="agent", target_id="REAL1",
+                          chrome_window_id=7, expires_at=1800000000)
+            with open(os.path.join(directory, marker+".json"), "w") as handle:
+                json.dump(record, handle)
+            browser = server.Browser(SimpleNamespace(runs_dir=directory), "agent", 9222)
+            browser.alive = lambda: True
+            browser.targets = {"REAL1": dict(targetId="REAL1", type="page", url="https://example.test/"),
+                               "REAL2": dict(targetId="REAL2", type="page", url="https://example.test/two"),
+                               "HUMAN": dict(targetId="HUMAN", type="page", url="https://example.test/human")}
+            browser.windows = dict(REAL1=7, REAL2=7, HUMAN=8)
+            [run] = browser.runs()
+            self.assertEqual(set(run["members"]), {"REAL1", "REAL2"})
+            self.assertEqual(run["binding"], "REAL1")
+            browser.windows["REAL1"] = 8
+            self.assertEqual(browser.runs(), [])
