@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.236] - 2026-10-23
+
+- Seed and project the dedicated canonical orchestrator pointer into the coordinator read-only.
+
+PR #402.
+
 ## [3.17.235] - 2026-10-23
 
 - Restore model picks by compacting published routing JSON within the reader budget.
