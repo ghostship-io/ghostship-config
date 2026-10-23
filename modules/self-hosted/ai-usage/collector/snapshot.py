@@ -3405,6 +3405,12 @@ ACCOUNT_WINDOW_LINE_DECIMALS = 3
 # learning rather than holding a window.
 NOT_A_WINDOW_QUOTA_IDS = frozenset({usage_inference.QUOTA_ID_NO_FAILURE})
 
+# The length of a window as the inference names it: '5h', '1m', '12d'. The
+# suffix of an inferred quota id is a window only when it is a length of
+# time; a suffix that names a state of the inference, such as 'exhausted',
+# is not a period, and the row of that window is named by its kind alone.
+INFERRED_WINDOW_LENGTH = re.compile(r"^[0-9]+(s|m|h|d|w)$")
+
 
 def _epoch_seconds(value: Any) -> float | None:
     """A moment in seconds, from the epoch or from the published form."""
@@ -3496,11 +3502,19 @@ def _window_suffix(kind: str, quota_id: str, siblings: Iterable[str]) -> str:
 
     An inferred window names the window it was inferred over, and a window
     whose quota id extends another window of the same kind says which one
-    it is.
+    it is. An inferred window whose suffix names a state of the inference
+    rather than a period names no window, and it says nothing more.
     """
     prefix = f"{kind}:"
     if quota_id.startswith(prefix):
-        return _title_case(quota_id[len(prefix):])
+        suffix = quota_id[len(prefix):]
+        if quota_id.startswith(usage_inference.QUOTA_ID_PREFIX):
+            # The suffix of an inferred quota id is the window it was
+            # learned over, and a length of time is that window. A state
+            # of the inference is not a period.
+            if not INFERRED_WINDOW_LENGTH.match(suffix):
+                return ""
+        return _title_case(suffix)
     for other in sorted(siblings):
         if other == quota_id:
             continue
