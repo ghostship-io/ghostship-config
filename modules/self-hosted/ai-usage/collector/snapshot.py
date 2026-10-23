@@ -262,7 +262,9 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     duration_value = _finite(duration)
     observed_value = _finite(observed)
     expired = reset_value is not None and reset_value <= now
-    evidence = "provider_reported" if known and not expired else "unknown"
+    evidence = ("announced_reset" if basis == "announced_reset" else "provider_reported")
+    if not known or expired:
+        evidence = "unknown"
 
     record: dict[str, Any] = {
         "quota_id": quota_id,
@@ -298,6 +300,12 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         "check_at": _iso(observed_value) if observed_value is not None else None,
         "provenance": "collector",
     }
+    if _get("announcement_url", "announcementUrl"):
+        record.update(
+            announcement_url=str(_get("announcement_url", "announcementUrl")),
+            provider_used_ratio=_finite(_get("provider_used_ratio", "providerUsedRatio")),
+            provider_check_at=_iso(_finite(_get("provider_observed_at", "providerObservedAtEpoch"))),
+            announced_reset_at=_iso(_finite(_get("announced_reset_epoch", "announcedResetEpoch"))))
     if pools.not_used_window(str(_get('provider', default='')), window):
         record['not_used'] = True
     if basis == 'provider_limit_message':
@@ -1102,6 +1110,8 @@ def _candidate(
     capacity_measured = bool(windows) and all(
         window["evidence"] == "provider_reported" for window in windows
     )
+    capacity_announced = bool(windows) and any(window["evidence"] == "announced_reset" for window in windows)
+    capacity_source = "announced" if capacity_announced else "measured" if capacity_measured else "unknown"
     # Why the headroom is unknown, when it is. An unknown headroom always
     # says why: a reader never has to guess why a window is missing.
     unknown_reason = _unknown_reason(windows, remaining, quota_state)
@@ -1138,7 +1148,7 @@ def _candidate(
             "evidence": (
                 "observed"
                 if observed_failure
-                else ("measured" if capacity_measured else "unknown")
+                else capacity_source
             ),
             "reason": (
                 str(observed_failure.get("label") or "")
@@ -1152,7 +1162,7 @@ def _candidate(
                     if parked
                     else (
                         "every applicable window has headroom"
-                        if available and capacity_measured
+                        if available and (capacity_measured or capacity_announced)
                         else (
                             "a window is spent"
                             if quota_state == QUOTA_EXHAUSTED
@@ -1199,7 +1209,7 @@ def _candidate(
         },
         "capacity": {
             "remaining_ratio": None if remaining is None else round(remaining, 4),
-            "source": "measured" if capacity_measured else "unknown",
+            "source": capacity_source,
             "measured": capacity_measured,
             "expires_in_seconds": None if expires_in is None else int(round(expires_in)),
             # The capacity binding is the window with the least headroom.
@@ -3814,9 +3824,10 @@ def build_snapshot(
             for window in applicable
             # A provider-reported reading and a window the limit failures of
             # the account's routes learned are both evidence of the share
-            # that is left; an inferred window is never counted as a number
-            # it did not measure.
-            if window.get("evidence") in ("provider_reported", "inferred")
+            # that is left. An explicit completed reset also supplies headroom,
+            # with its separate announced provenance and observation time.
+            # An inferred window is never counted as an unmeasured number.
+            if window.get("evidence") in ("provider_reported", "inferred", "announced_reset")
             and isinstance(window.get("remaining_ratio"), (int, float))
             and not isinstance(window.get("remaining_ratio"), bool)
         ]

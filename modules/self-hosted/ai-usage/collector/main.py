@@ -42,6 +42,7 @@ import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import reset_overrides  # noqa: E402
 import announced_resets  # noqa: E402
+import reset_events  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import static_routes as static_routes_module  # noqa: E402
@@ -1139,6 +1140,10 @@ def ranking_inputs(
             gating=gating is not False,
             reset_source=str(measured.get("resetSource") or "provider"),
             provider_reset_epoch=measured.get("providerResetEpoch"),
+            provider_used_ratio=measured.get("providerUsedRatio"),
+            provider_observed_at=measured.get("providerObservedAtEpoch"),
+            announced_reset_epoch=measured.get("announcedResetEpoch"),
+            announcement_url=str(measured.get("announcementUrl") or ""),
         )
         if model == "*":
             windows.setdefault(provider, []).append(window)
@@ -1849,6 +1854,7 @@ def collect(
     )
     results.extend(inferred.results)
     context["announced_resets"] = announcements or {"schema": 1, "status": "not_checked", "announcements": []}
+    reset_events.apply_completed(results, context["announced_resets"], moment)
     reset_overrides.apply(results, announced_resets.overrides(results, context["announced_resets"], moment), moment)
     reset_overrides.apply(results, custom_resets or [], moment)
     context["inferred_capacity"] = inferred.capacities
