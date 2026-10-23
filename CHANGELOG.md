@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.150] - 2026-10-23
+
+- T3: isolate development Docker and remove blanket runtime privileges
+
+PR #246.
+
 ## [3.17.149] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 7a022352; the lock's narHash is the `nix flake prefetch` hash of that revision.
