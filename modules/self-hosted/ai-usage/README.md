@@ -222,7 +222,14 @@ The rules:
   that one. An inference is never published over a reading.
 * The window of an inferred route is keyed by the route when the limit is
   the model's own, and by the provider when the limit belongs to the
-  account. The scope of a limit with no other model in its span is the
+  account. A provider whose published rate limits apply per model has no
+  account pool to share: Google's Gemini API documents its limits per
+  project and per model (<https://ai.google.dev/gemini-api/docs/rate-limits>),
+  and Groq documents its limits per model and per organization
+  (<https://console.groq.com/docs/rate-limits>), so every refused route of
+  either provider is its own model, with the window and the budget of its own
+  events, whatever the evidence of another provider would say. For every
+  other provider the scope of a limit with no other model in its span is the
   account, and it is labelled `unknown`.
 * The window of a route that was never refused reads like the window of a
   route the provider publishes as unlimited: all of the allowance is left,
@@ -606,7 +613,13 @@ collector publishes the place of every account, and the page reads it.
 
 | Series | Value |
 | --- | --- |
-| `ghostship_ai_account_card_order{account}` | the place the card of the account takes: 1 is the first card |
+| `ghostship_ai_account_card_order{account,scope}` | the place the card of the account takes: 1 is the first card |
+
+The scope is `t3` if any candidate for that account has `native.mapped`
+equal to true in the live T3 Code instance catalog; otherwise it is `free`.
+An account with windows but no candidates is `free`. Dashboard consumers
+can select cards by this label, with no provider exceptions. Removing a
+provider from T3 changes its scope on the next collection.
 
 The place is counted from one and holds no gap: the first card is 1, the
 last card is the number of accounts, and every account holds exactly one

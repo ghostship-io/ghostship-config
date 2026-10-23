@@ -1,8 +1,24 @@
 # Changelog
 
-## [3.17.138] - 2026-10-23
+## [3.17.142] - 2026-10-23
 
 - change control: the deployment host no longer upgrades itself. `chill-penguin` sets `myOptions.autoUpgrade.enable = false`, so `system.autoUpgrade` is false and no `nixos-upgrade` service or timer is rendered; the two WSL hosts keep their unattended upgrade. The replacement is the daily, read-only `ghostship-configuration-drift` timer and service. It reads the running revision from the running system (`nixos-version --configuration-revision`, recorded from `system.configurationRevision = self.rev`) rather than from the checkout or the evaluated candidate, fetches the public source into a private bare cache under `/var/lib/ghostship-configuration-drift`, and reports two security alerts through `ghostship-notify`: a generation mismatch between `/run/current-system` and `/nix/var/nix/profiles/system` immediately, and a running revision that has stayed behind main for more than 86400 seconds (86400 does not alert, 86401 does). The ntfy URL comes from the root container snapshot `/run/ghostship-podman/containers.json` (300-second maximum age), never from the Podman API, so the hardened unit needs no container storage access. Main advancing keeps the first observation; convergence or a new running revision clears it. A missing or dirty revision, a failed fetch, a missing symlink or unrelated histories is an explicit nonzero error, never health, and a failed delivery returns nonzero so the next run retries. The service mounts the host read-only, keeps no capability and writes only its `StateDirectory` and the notifier's state inside it. `docs/configuration-drift.md` describes the check and the response.
+
+## [3.17.141] - 2026-10-23
+
+- ai-usage: a provider whose published rate limits apply per model gets one learned limit per model, never one account-wide limit. Live, a Google account (the Gemini API key) read one account-wide 5h window fitted across three models, while Google documents per-model, per-project limits: the engine read two models refused seconds apart as one shared pool, and for these providers that is the same request refused by each model's own cap. The engine names `google` and `groq` as the per-model providers, with the sources of both (Google per project and per model, Groq per model and per organization), and measures every refused route of them on its own events with scope `model`, exactly like a route whose scope evidence said `model` today. A route of such a provider that was never refused keeps `no_failure` and `unknown`, and no route reads another model's events for its window, budget or state. Every other provider is unchanged, and the model-scoped capacity is still filed by `usage_inference.key_for` under `provider/model` with `applies_to [model]`.
+
+## [3.17.140] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `3f108af0` (agent 0.43.55). It adds the read-only `containers resources` host operation for CPU, memory against the declared limit, PIDs and host headroom, with 1 h/24 h peaks and a `stale` outcome when the container snapshot stops writing or a container restarted after it; the broker needs no new pipeline and no `metrics` section because it reads the counters the SIEM already collects. The bump also carries #152 (deploy slot), #157 (routing and worker policy), #139 (session handoff) and #155 (brief lesson), and #158, which retires the deployment freezes so that an owner deploy request is what deploys - the reason this pin goes out now.
+
+## [3.17.139] - 2026-10-23
+
+- ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
+
+## [3.17.138] - 2026-10-23
+
+- Allow the intentional SIEM URL credential fixture through the shared secret scan with a detector, value digest and path fingerprint in `.ghostship-secrets-ignore`. The exemption preserves the fixture and assertions, permits only this finding, and leaves privacy and commit identity checks active.
 
 ## [3.17.137] - 2026-10-23
 
