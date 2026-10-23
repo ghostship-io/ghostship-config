@@ -109,6 +109,48 @@ POOL_NOT_OFFERED_REASON = (
     "the free pool does not offer the route for development work"
 )
 
+# The pool's own reason a candidate is parked. The pool names the rule that
+# holds the route out of the pool, and the snapshot repeats it instead of
+# guessing one. A "cooldown" is the one reason that also carries a moment.
+POOL_PARKED_REASONS = {
+    "hosting_restricted": (
+        "the owner's hosting rule keeps this route to research work"
+    ),
+    "account_policy": (
+        "the account's data policy or workloads do not allow development work"
+    ),
+    "suspended": "the account is suspended",
+}
+POOL_PARKED_COOLDOWN = "cooldown"
+
+# Whether a route answered its last live probe. A reading older than two
+# days is not a probe any more: the route may have changed in the meantime.
+PROBE_WORKS = "works"
+PROBE_FAILS = "fails"
+PROBE_UNPROBED = "unprobed"
+PROBE_MAX_AGE_SECONDS = 172800
+PROBE_SOURCE_POOL = "pool_probe"
+PROBE_SOURCE_T3 = "t3_probe"
+
+# The class of a failed free-pool probe. The pool names the category of its
+# answer, and the snapshot maps it to the one word a consumer ranks on.
+POOL_PROBE_QUOTA_CATEGORIES = frozenset(
+    {"rate_limited", "quota_exhausted", "free_daily_exhausted"}
+)
+POOL_PROBE_CLASSES = {
+    "credentials_or_access": "auth",
+    "model_unavailable": "model_not_found",
+    "no_verified_free_route": "catalog_mismatch",
+    "awaiting_approval": "policy_parked",
+    "timeout": "timeout",
+}
+# The pool marks a route quota_or_cooldown when it sent nothing at all: no
+# route answered, so the mark is not a probe and never answers for one.
+POOL_PROBE_NOTHING_SENT = "quota_or_cooldown"
+PROBE_CLASS_UPSTREAM_ERROR = "upstream_error"
+PROBE_CLASS_SUCCESS = "success"
+PROBE_CLASS_QUOTA = "quota"
+
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
@@ -158,6 +200,29 @@ def _iso(epoch: float | None) -> str | None:
     if epoch is None:
         return None
     return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _epoch(value: Any) -> float | None:
+    """A moment in epoch seconds, from an epoch or an ISO-8601 string.
+
+    The pool publishes its checks as epoch seconds and the OpenCode record
+    as epoch seconds; a status surface that writes an ISO moment is read
+    too. A value that is not a moment is not a reading.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if number != number or number in (float("inf"), float("-inf")):
+            return None
+        return number
+    if isinstance(value, str) and value:
+        text = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            return datetime.fromisoformat(text).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def _key(provider: str, model: str) -> str:
@@ -748,21 +813,139 @@ def _pool_parked_reason(
 ) -> str:
     """Why a route the free pool parked is unusable, in words.
 
-    The pool publishes no reason of its own: it says a route is unavailable,
-    and it publishes the moment the route cools down. A cooldown that has
-    not run out yet names the moment it ends, and a route without one is not
-    offered for development work.
+    The pool names the rule that holds the route out of the pool, and that
+    reason is repeated. A "cooldown" names the moment the cooldown ends. A
+    candidate without a reason keeps the two cases the snapshot can read
+    from the cooldown alone: a cooldown that has not run out names its end,
+    and a route without one is not offered for development work.
     """
     cooldown = None
+    reason = ""
     if isinstance(evidence, Mapping):
         value = evidence.get("cooldown_until")
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             cooldown = float(value)
+        reason = str(evidence.get("unavailable_reason") or "")
+    if reason in POOL_PARKED_REASONS:
+        return POOL_PARKED_REASONS[reason]
+    if reason == POOL_PARKED_COOLDOWN:
+        if cooldown is not None and cooldown > now:
+            moment = _iso(cooldown)
+            if moment:
+                return POOL_COOLDOWN_REASON.format(cooldown=moment)
+        return POOL_NOT_OFFERED_REASON
     if cooldown is not None and cooldown > now:
         moment = _iso(cooldown)
         if moment:
             return POOL_COOLDOWN_REASON.format(cooldown=moment)
     return POOL_NOT_OFFERED_REASON
+
+
+def _pool_probe_reading(
+    evidence: Mapping[str, Any] | None, model: str
+) -> dict[str, Any] | None:
+    """The pool's own probe of one route, or None.
+
+    The pool publishes the model it checked, so a probe of another model
+    never answers for this row. A probe the pool ran without sending
+    anything is not a reading either.
+    """
+    if not isinstance(evidence, Mapping):
+        return None
+    probe = evidence.get("probe")
+    if not isinstance(probe, Mapping):
+        return None
+    checked_model = str(probe.get("model") or "")
+    if checked_model and checked_model != model:
+        return None
+    category = str(probe.get("category") or "")
+    state = str(probe.get("state") or "")
+    if category == POOL_PROBE_NOTHING_SENT:
+        return None
+    checked = _epoch(probe.get("at"))
+    if checked is None:
+        return None
+    if category == PROBE_CLASS_SUCCESS or (
+        not category and state == "verified_ok"
+    ):
+        answer_state, answer_class = PROBE_WORKS, PROBE_CLASS_SUCCESS
+    elif not category and not state:
+        return None
+    elif category in POOL_PROBE_QUOTA_CATEGORIES:
+        answer_state, answer_class = PROBE_FAILS, PROBE_CLASS_QUOTA
+    else:
+        answer_state = PROBE_FAILS
+        answer_class = POOL_PROBE_CLASSES.get(
+            category, PROBE_CLASS_UPSTREAM_ERROR
+        )
+    return {
+        "state": answer_state,
+        "class": answer_class,
+        "checked_at": checked,
+        "source": PROBE_SOURCE_POOL,
+    }
+
+
+def _t3_probe_reading(reading: Any) -> dict[str, Any] | None:
+    """The probe the OpenCode record shows for one route, or None."""
+    if not isinstance(reading, Mapping):
+        return None
+    checked = _epoch(reading.get("checked_at"))
+    if checked is None:
+        return None
+    state = str(reading.get("state") or PROBE_UNPROBED)
+    if state not in (PROBE_WORKS, PROBE_FAILS):
+        state = PROBE_UNPROBED
+    answer_class = str(reading.get("class") or "") if state != PROBE_UNPROBED else ""
+    return {
+        "state": state,
+        "class": answer_class,
+        "checked_at": checked,
+        "source": str(reading.get("source") or PROBE_SOURCE_T3),
+    }
+
+
+def _probe_record(
+    model: str,
+    evidence: Mapping[str, Any] | None,
+    t3_probe: Any,
+    now: float,
+) -> dict[str, Any]:
+    """Whether the route answered its last live probe.
+
+    The pool's own probe and the latest OpenCode request of the route are
+    both readings, and the newer one is the probe. A reading older than
+    `PROBE_MAX_AGE_SECONDS` is kept with its moment and its source, and it
+    no longer counts: a route nothing probed reads `unprobed`.
+    """
+    readings = [
+        reading
+        for reading in (
+            _pool_probe_reading(evidence, model),
+            _t3_probe_reading(t3_probe),
+        )
+        if reading is not None
+    ]
+    if not readings:
+        return {
+            "state": PROBE_UNPROBED,
+            "class": "",
+            "checked_at": None,
+            "source": None,
+            "max_age_seconds": PROBE_MAX_AGE_SECONDS,
+        }
+    newest = max(readings, key=lambda reading: reading["checked_at"])
+    state = str(newest["state"])
+    answer_class = str(newest["class"])
+    if now - float(newest["checked_at"]) > PROBE_MAX_AGE_SECONDS:
+        state, answer_class = PROBE_UNPROBED, ""
+    return {
+        "state": state,
+        "class": answer_class,
+        "checked_at": _iso(float(newest["checked_at"])),
+        "source": str(newest["source"]),
+        "max_age_seconds": PROBE_MAX_AGE_SECONDS,
+    }
 
 
 def _candidate(
@@ -777,6 +960,7 @@ def _candidate(
     promo_set: set[tuple[str, str]] | None = None,
     catalog: Any = None,
     pool_evidence: Mapping[str, Any] | None = None,
+    t3_probe: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -924,6 +1108,10 @@ def _candidate(
         # account that reports no quota at all is usable, with an unknown
         # headroom. The quota state keeps the three window states.
         "available": bool(available),
+        # Whether the route answered its last live probe: the newer of the
+        # pool's own probe and the latest OpenCode request of the route. A
+        # reading older than two days is kept but does not count.
+        "probe": _probe_record(model, pool_evidence, t3_probe, now),
         "availability": {
             "state": "available" if available else "unavailable",
             "evidence": (
@@ -3439,6 +3627,7 @@ def build_snapshot(
     free_models: Iterable[Any] | None = None,
     promo_models: Iterable[Any] | None = None,
     pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+    t3_probes: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     inferred_windows: Iterable[Mapping[str, Any]] | None = None,
     outcomes: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
@@ -3525,6 +3714,7 @@ def build_snapshot(
             promo_set,
             catalog,
             (pool_evidence or {}).get((provider, model)),
+            (t3_probes or {}).get((provider, model)),
         )
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)

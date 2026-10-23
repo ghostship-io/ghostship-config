@@ -183,6 +183,17 @@ METRIC_HELP = {
     "ghostship_ai_free_model_observed_timestamp_seconds": "When the free model list was read.",
     "ghostship_ai_pool_model_info": "One for a model the free pool may use.",
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
+    "ghostship_ai_pool_model_unavailable_reason": (
+        "The pool's own reason a model is unavailable, with the account's or "
+        "the owner's rule it names."
+    ),
+    "ghostship_ai_pool_probe": (
+        "One for the free pool's own probe of a route, with the state and "
+        "category of the answer, the provider and the model it checked."
+    ),
+    "ghostship_ai_pool_probe_timestamp_seconds": (
+        "When the free pool checked a route."
+    ),
     "ghostship_ai_pool_model_selected": "Whether a pool model is the selected one.",
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
     "ghostship_ai_pool_route_last_used_timestamp_seconds": (
@@ -1121,6 +1132,8 @@ def ranking_inputs(
     pool_limits: dict[tuple[str, str, str, str], float] = {}
     pool_cooldowns: dict[tuple[str, str], float] = {}
     pool_last_used: dict[tuple[str, str], float] = {}
+    pool_probes: dict[tuple[str, str], dict[str, Any]] = {}
+    pool_unavailable_reasons: dict[tuple[str, str], str] = {}
     for name, labels, value in _iter_samples(results):
         pool_provider = str(labels.get("provider") or "")
         pool_model = str(labels.get("model") or "")
@@ -1151,6 +1164,24 @@ def ranking_inputs(
             # When the pool last sent a job to the route. The least recently
             # used route breaks the tie inside the quality band.
             pool_last_used[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_probe":
+            # The pool's own probe of the route: its state and the class of
+            # the answer. The moment comes with its own series.
+            entry = pool_probes.setdefault(
+                (pool_provider, pool_model), {}
+            )
+            entry["state"] = str(labels.get("state") or "")
+            entry["category"] = str(labels.get("category") or "")
+        elif name == "ghostship_ai_pool_probe_timestamp_seconds":
+            pool_probes.setdefault((pool_provider, pool_model), {})["at"] = float(
+                value
+            )
+        elif name == "ghostship_ai_pool_model_unavailable_reason":
+            # The pool's own reason a candidate is unavailable. The snapshot
+            # repeats it for a parked route instead of guessing one.
+            pool_unavailable_reasons[(pool_provider, pool_model)] = str(
+                labels.get("reason") or ""
+            )
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -1205,6 +1236,16 @@ def ranking_inputs(
                 "basis": value[1],
             }
         )
+    for (pool_provider, pool_model), probe in sorted(pool_probes.items()):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["probe"] = dict(probe)
+    for (pool_provider, pool_model), reason in sorted(
+        pool_unavailable_reasons.items()
+    ):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )["unavailable_reason"] = reason
     for key, entry in pool_evidence.items():
         # A provider-wide cooldown belongs to every route of that provider.
         cooldown = pool_cooldowns.get(key)
@@ -1216,6 +1257,10 @@ def ranking_inputs(
         # quality band of the free tier, and it is absent when the pool has
         # no reading for the route.
         entry["last_used"] = pool_last_used.get(key)
+        # The pool's own probe of the route, and its reason for parking a
+        # candidate. Both are absent when the pool published neither.
+        entry["probe"] = pool_probes.get(key)
+        entry["unavailable_reason"] = pool_unavailable_reasons.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -1628,6 +1673,9 @@ def build_snapshot(
         free_models=free_models or set(),
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
+        # The probe of every route the OpenCode record shows. The snapshot
+        # takes the newer of it and the pool's own probe.
+        t3_probes=context.get("t3_probes") or {},
         inventory=context.get("ranking_inventory") or [],
         # The learned windows of the routes whose limit failures measured
         # them. The account section publishes them beside the reported
@@ -1718,6 +1766,7 @@ def collect(
     context["inferred_capacity"] = inferred.capacities
     context["inferred_retirements"] = dict(inferred.retirements)
     context["inferred_last_success"] = dict(inferred.last_success)
+    context["t3_probes"] = dict(inferred.probes)
     context["inference_unmatched"] = dict(inferred.unmatched)
     ranking_metrics, ranked = ranking_samples(
         results,
