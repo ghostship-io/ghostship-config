@@ -11,11 +11,20 @@ let
   endpoint = pkgs.writeText "inference-server.json" (builtins.toJSON {
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
+  hostRelease = pkgs.writeText "ghostship-managed-host-release.json" (builtins.toJSON {
+    source = toString inputs.ghostship-private-agent;
+    package = toString tools.default;
+    revision = inputs.ghostship-private-agent.rev or null;
+  });
   managedInstall = pkgs.writeShellScript "ghostship-managed-agents-refresh" ''
     unset LD_LIBRARY_PATH
+    canonical="$HOME/.local/bin/t3code-shared-agents"
+    if [ -f "$HOME/.local/state/t3code-shared-agents/release.json" ] && [ -x "$canonical" ]; then
+      exec "$canonical" "$@"
+    fi
     exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
-      --tools-package ${tools.default} --managed-only "$@"
+      --tools-package ${tools.default} --refresh --managed-only "$@"
   '';
   sourceSync = import ../../packages/t3code/source-sync.nix {
     inherit lib pkgs;
@@ -80,7 +89,7 @@ let
       systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
+      --to local?root=/srv/apps/t3code/nix-root ${scheduler} ${managedInstall} ${hostRelease} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
@@ -92,7 +101,12 @@ let
     ln -sfn ${toolUpdate} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update
     ln -sfn ${toolUpdateOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update-override
     install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
-    ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
+    install -m0600 -o3000 -g3000 ${hostRelease} ${hostHome}/.local/state/t3code-shared-agents/host-release.json.new
+    mv -fT ${hostHome}/.local/state/t3code-shared-agents/host-release.json.new ${hostHome}/.local/state/t3code-shared-agents/host-release.json
+    # The monotonic agent resolver owns the live launcher; the host supplies a candidate.
+    if [ ! -e ${hostHome}/.local/state/t3code-shared-agents/managed-installer ]; then
+      ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
+    fi
     # Override only the old image's scheduled installer, preserving its timer and repo sync.
     ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
       -D -m0644 ${syncOverride} \

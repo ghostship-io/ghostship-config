@@ -66,7 +66,10 @@ Run `t3code-shared-agents` to rebuild and refresh the package, or
 `t3code-shared-agents --skills-only` to refresh discovery without a build. The
 installer persists this helper and a T3 Code bootstrap hook in the user home,
 so refreshes survive removal of the development worktree. The Nix-managed
-container bootstrap also refreshes skills on subsequent deployments.
+container bootstrap also refreshes skills on subsequent deployments. The host
+publishes a release candidate; the agent resolver selects the newer of that pin
+and agent origin/main. Its installed-release floor refuses downgrades, and host
+publication preserves the canonical launcher. Boot hooks remain offline.
 
 Check discovery with `opencode debug skill` and Codex app-server `skills/list`.
 Start a fresh provider session to reload cached skill catalogs. Antigravity's
