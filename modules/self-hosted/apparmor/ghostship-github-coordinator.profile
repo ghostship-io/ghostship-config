@@ -1,13 +1,6 @@
-# Container policy, inspected on chill-penguin (aarch64), 2026-10-20:
-# localhost/ghostship-github-coordinator:z36h732xfvk6bxc6fzamr37s0c1q8dap, this
-# repository's Nix image (github-engineering.nix): stdlib CPython 3.13.12 plus
-# websockets 15.0.1 running `python3 -B -m ghostship_github.coordinator`.
-# uid 62031, gid 62032 (+62031); --cap-drop=ALL, no-new-privileges, read-only
-# root, /tmp tmpfs noexec. The image has no shell or coreutils.
-# Flat profile: under no_new_privs AppArmor never enters a cx child, so there
-# are no children and no transitions. The coordinator spawns nothing: the
-# ghostship_t3 bridge's `t3 auth session issue` fallback only runs when the
-# mounted token is unreadable, and no t3 binary exists in the image.
+# Coordinator code arrives through the private managed Nix store. The base
+# image contains utilities, with a stable entrypoint into that store. The
+# profile stays in complain mode until its documented learning gate passes.
 # No explicit deny: those rules would enforce even while in complain mode.
 # No abstractions: their implicit permissions would obscure this allowlist.
 profile ghostship-github-coordinator flags=(complain,attach_disconnected,mediate_deleted) {
@@ -19,6 +12,12 @@ profile ghostship-github-coordinator flags=(complain,attach_disconnected,mediate
 
   signal (receive) peer=unconfined,
   signal (send, receive) peer=ghostship-github-coordinator,
+
+  /nix/store/*-ghostship-coordinator-entrypoint/bin/start rix,
+  /nix/store/*-bash-*/bin/bash rix,
+  /nix/store/*-bash-*/lib/** mr,
+  /nix/store/*-coreutils-*/bin/cat rix,
+  /bin/cat rix,
 
   # Interpreter (entered via the python3-3.13.12-env bin/python3 symlink).
   # Only store hashes are globbed: an image rebuild that changes a version

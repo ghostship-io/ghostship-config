@@ -95,7 +95,7 @@ in
     "d /srv/apps/homepage/logs 0755 apps apps -"
   ];
 
-  systemd.services.podman-homepage.preStart = lib.mkAfter ''
+  systemd.services.ghostship-homepage-config.script = lib.mkAfter ''
     SETTINGS_FILE="/srv/apps/homepage/settings.yaml"
     SERVICES_FILE="/srv/apps/homepage/services.yaml"
     DOCKER_FILE="/srv/apps/homepage/docker.yaml"
