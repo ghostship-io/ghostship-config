@@ -1,16 +1,11 @@
 # Daily security maintenance
 
-The existing campaign daily task runs at 09:00 UTC. Its native prompt points
-here; this file owns the procedure. Reuse the existing task and campaign issue
-#102. Coordinate shared refs, deployment windows and history changes with the
-current program coordinator and privacy owner. Reconcile active workers and
-open PRs before starting work; continue their packages rather than duplicating
-initiators. Use free models only for low-complexity work. Route complex package,
-network and containment implementation to an available capable recent Flash model
-with its advertised reasoning setting; keep frontier review with the lead.
-Checkpoint accepted writes and active builds before changing the same owner's
-model selection, then read back the route. Preserve its thread/worktree and avoid
-duplicate workers or restarting active T3/provider processes.
+The existing campaign task runs at 09:00 UTC and points here. Reuse it and
+campaign issue #102; reconcile open work before changing source. Follow the
+installed `ghostship-engineering` skill and current `routing-policy.md` for
+review, landing and deployment. Security evidence and private configuration
+stay off free-tier workers. Report only completed work or blockers to the
+current orchestrator.
 
 ## Updates and exploit mitigation
 
@@ -32,27 +27,20 @@ duplicate workers or restarting active T3/provider processes.
    Prioritize escape, root/API sockets, mount trust, privileged capabilities and
    seccomp, exposed RCE, lateral movement/exfiltration and resource exhaustion.
    Preserve uncertain findings as work; an advisory is not evidence of intrusion.
-3. Automatically advance relevant fixes: reuse an existing owner/PR or delegate
-   a bounded implementation in an isolated worktree. Prefer a stable patch release
-   or verified backport over a broad dependency upgrade. Prepare reproducible
-   candidates, compare source/patch identity, run meaningful harmless regression
-   and canary checks, and run `nix develop .#ci -c scripts/check`. Stage new Nix
-   files before evaluation. Update release metadata for the delivered change.
-   Keep active T3, its inner runtime and provider processes intact. Use separate
-   disposable candidates; never execute an exploit against production.
-   Before integration, the frontier lead reviews and repairs bulk output,
-   including test quality, affected consumers/services, blast radius, security
-   and environment contracts, and required canonical docs/skills. Keep tests
-   load-bearing; reject mirrored, brittle or weakened checks. OpenCode review
-   alone is insufficient. The current coordinator is the final frontier gate
-   for shared integration; reuse that gate rather than creating duplicate reviewers.
+3. Advance relevant fixes in the existing feature branch. Prefer a stable
+   patch release or verified backport over a broad dependency upgrade. Prepare
+   reproducible candidates and compare source/patch identity. Run fast unit
+   regressions before merge; integration checks run in GitHub after merge.
+   Stage new Nix files before evaluation. Use the landing tool for release
+   metadata. Frontier authors self-review the exact diff; worker changes need
+   one frontier review. Record that revision with `agent review approve`, then
+   use `agent pr land`. Review affected consumers, privacy, test quality and
+   deployment impact. A patch-identity marker is not an executed vulnerability
+   regression. Keep production exploit execution out of the procedure.
 4. Before application, inspect the complete activation/unit diff and existing
-   maintenance locks. Inspect `/run/ghostship-security-continuity/hold` and
-   the deploy service's loaded `zz-ghostship-owned-security-continuity.conf`
-   drop-in. If present, report its protected ownership record and pending-image
-   status in the existing campaign checkpoint; retain it until the coordinator
-   reviews the destination and active sessions. Do not release it as routine
-   cleanup or restore an old queue snapshot over a newly queued request.
+   maintenance locks. Read the pending deployment destination and any existing
+   inhibition with its ownership record. Preserve unrelated controls and never
+   restore an old queue snapshot over a newly queued request.
    Recheck candidate output registration, NAR identity and owned GC roots:
    successful `--no-link` builds may have been collected since testing.
    Account for daemon/build continuity, indirect container
@@ -60,10 +48,9 @@ duplicate workers or restarting active T3/provider processes.
    The current program rollout has owner authorization after exact-revision,
    review, privacy and continuity gates. Future automatic work prepares and tests
    fixes but retains its human deployment gates. Apply through committed Git and
-   a coordinated window only within the applicable authorization. Follow the
+   the existing activation helper only within the applicable authorization. Follow the
    [session guard](container-workflow.md#preserve-the-active-t3-code-session).
-   Shared main/switch/history mutations require coordination, not a new generic
-   approval request. Material compatibility decisions, exposure, reboot,
+   Material compatibility decisions, exposure, reboot,
    destructive migration and unresolved broad enforcement retain their owner
    gates. Preserve the absolute active-T3 session guard even if an updater
    ordinarily permits an idle restart. Advance independent preparation while
