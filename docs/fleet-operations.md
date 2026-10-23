@@ -404,7 +404,7 @@ containers it paused and restores their health-check settings and removes the te
 Restic stores encrypted snapshots under
 `/mnt/share/Backups/ghostship/chill-penguin`. Backup selection includes app
 state, logical MariaDB exports, image/generation manifests, SSH host keys, and
-Apple Silicon firmware. Raw MariaDB directories, T3 Code's nested Docker and Nix
+Apple Silicon firmware. Raw MariaDB directories, T3 Code's rootless Podman development engine and Nix
 stores, node_modules, and caches are excluded. Nested Btrfs subvolumes are not
 recursively included by a parent snapshot; review coverage before adding any
 under `/srv/apps`.
@@ -546,7 +546,7 @@ the next normal unit start. Signal/error traps handle ordinary failures.
 ## Security review decisions
 
 The 2026-10-10 security review retained these operator-approved trust choices:
-services remain unauthenticated on the Docker network; developer/agent tools
+services remain unauthenticated on the container network; developer/agent tools
 keep their broad privileges and mutable automatic updates; service secrets
 retain the shared apps-account model; Gluetun's HTTP proxy remains available
 on the shared network.

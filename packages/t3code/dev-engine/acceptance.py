@@ -1,7 +1,7 @@
 """Run INSIDE a disposable T3 candidate, after starting its localhost bridge.
 
-Never selects the active legacy engine: verifies the candidate daemon label
-before creating anything. Uses only uniquely named disposable Docker objects
+Never selects the production engine: verifies rootless Podman candidate storage
+before creating anything. Uses only uniquely named disposable Podman objects
 and a temporary directory in the mapped workspace. A nonzero exit is a real
 enablement gate, including nonroot bind-write incompatibility. This does NOT
 prove all kernel/firewall isolation; also inspect host nft policy, rootfs mounts,
@@ -21,7 +21,7 @@ import uuid
 from pathlib import Path
 
 # The client resolves a project-scoped alias and then talks to that service.
-# Docker's embedded DNS answers the alias only inside the project's network.
+# Netavark/aardvark DNS answers the alias only inside the project's network.
 DNS_CLIENT_SCRIPT = r"""
 import json, socket, sys, time
 
@@ -95,16 +95,16 @@ TTY_SCRIPT = "import sys; sys.exit(0 if sys.stdout.isatty() else 1)"
 
 
 class CommandFailure(RuntimeError):
-    """A required Docker probe failed and must be reported, not hidden."""
+    """A required Podman probe failed and must be reported, not hidden."""
 
     def __init__(self, arguments, result):
         self.arguments = list(arguments)
         self.result = result
-        super().__init__(f"docker {arguments[0]} exited {result.returncode}")
+        super().__init__(f"podman {arguments[0]} exited {result.returncode}")
 
 
 def list_ids(command, *arguments):
-    """Return the object ids printed by a docker listing command."""
+    """Return the object ids printed by a podman listing command."""
     try:
         result = command(*arguments, check=False)
     except (OSError, subprocess.SubprocessError):
@@ -151,11 +151,11 @@ def project_networks(command, project):
             continue
         for row in rows:
             details[name] = {
-                "driver": row.get("Driver", ""),
+                "driver": row.get("driver", ""),
                 "subnets": [
-                    entry["Subnet"]
-                    for entry in row.get("IPAM", {}).get("Config", [])
-                    if "Subnet" in entry
+                    entry["subnet"]
+                    for entry in row.get("subnets", [])
+                    if "subnet" in entry
                 ],
             }
     return details
@@ -163,7 +163,7 @@ def project_networks(command, project):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--socket", default="/var/run/docker.sock")
+    parser.add_argument("--socket", default="/var/run/podman/podman.sock")
     parser.add_argument("--workspace", default="/workspace", type=Path)
     parser.add_argument(
         "--control-report",
@@ -178,7 +178,7 @@ def main():
         help="Known listening HOST/PUBLIC-HOST/LAN IPv4:port canary; repeat for each",
     )
     parser.add_argument("--subid-start", type=int, default=2000000)
-    parser.add_argument("--image", default="python:3.13-alpine")
+    parser.add_argument("--image", default="docker.io/library/python:3.13-alpine")
     args = parser.parse_args()
     control = json.loads(args.control_report.read_text())
     if not 0 <= time.time() - control["observed_at"] <= 300:
@@ -187,11 +187,21 @@ def main():
         ipaddress.IPv4Address(endpoint.rsplit(":", 1)[0])
         if control.get("endpoints", {}).get(endpoint) is not True:
             parser.error(f"control did not prove this endpoint live: {endpoint}")
-    docker = ["docker", "--host", f"unix://{args.socket}"]
+    engine = ["podman", "--remote", "--url", f"unix://{args.socket}"]
 
     def command(*arguments, check=True, quiet=False, **kwargs):
+        argv = [*engine, *arguments]
+        if arguments[0] == "compose":
+            argv = [
+                "podman",
+                "--remote",
+                "--url",
+                f"unix://{args.socket}",
+                "compose",
+                *arguments[1:],
+            ]
         result = subprocess.run(
-            [*docker, *arguments],
+            argv,
             check=False,
             text=True,
             capture_output=True,
@@ -203,7 +213,7 @@ def main():
             # broken probe, and the collected results must not be lost with it.
             if not quiet:
                 print(
-                    f"docker {arguments[0]} exited {result.returncode}: "
+                    f"podman {arguments[0]} exited {result.returncode}: "
                     f"{' '.join(str(item) for item in arguments[1:])}\n"
                     f"{result.stderr[-2000:]}",
                     file=sys.stderr,
@@ -213,10 +223,14 @@ def main():
         return result
 
     info = json.loads(command("info", "--format", "{{json .}}").stdout)
-    if "ghostship.t3code-docker=candidate" not in info.get("Labels", []):
-        parser.error(
-            "refusing to mutate a daemon without the dedicated candidate label"
-        )
+    # Podman has no daemon-label equivalent. Native info identifies the actual
+    # rootless storage. Production uses a different graph root; refuse before
+    # the first mutation, even when the socket was redirected.
+    if (
+        info.get("store", {}).get("graphRoot") != "/var/lib/t3code-podman/candidate"
+        or info.get("host", {}).get("security", {}).get("rootless") is not True
+    ):
+        parser.error("refusing to mutate a non-candidate Podman store")
     results = []
 
     def record(name, good, detail=""):
@@ -224,9 +238,9 @@ def main():
 
     record(
         "rootless + systemd cgroup v2",
-        any("rootless" in item for item in info["SecurityOptions"])
-        and info["CgroupDriver"] == "systemd"
-        and info["CgroupVersion"] == "2",
+        info["host"]["security"]["rootless"]
+        and info["host"]["cgroupManager"] == "systemd"
+        and info["host"]["cgroupVersion"] == "v2",
     )
     tag = f"t3code-acceptance-{uuid.uuid4().hex}"
     # Every object this run creates carries the unique tag, so cleanup can
@@ -235,7 +249,7 @@ def main():
     failure = None
     try:
         with tempfile.TemporaryDirectory(
-            prefix=".t3-docker-acceptance-", dir=args.workspace
+            prefix=".t3-podman-acceptance-", dir=args.workspace
         ) as directory:
             source = Path(directory)
             # Project owners opt in to nonroot writes. Never change an existing
@@ -296,7 +310,7 @@ def main():
                 attempt("image", "rm", "-f", tag)
 
             try:
-                (source / "Dockerfile").write_text(
+                (source / "Containerfile").write_text(
                     f"FROM {args.image}\nRUN python -c 'import socket; assert socket.getaddrinfo(\"example.com\", 443)'\n"
                 )
                 build = command(
@@ -563,7 +577,7 @@ def main():
                     any(ipaddress.ip_address(address) in subnet for subnet in subnets)
                     for address in addresses
                 )
-                embedded_dns = "127.0.0.11" in report.get("resolver", "")
+                embedded_dns = bool(report.get("resolver", "").strip())
                 isolated = bool(networks) and "bridge" not in networks
                 record(
                     "Compose service-to-service DNS on the isolated project network",

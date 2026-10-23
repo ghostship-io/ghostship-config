@@ -1,7 +1,7 @@
 """Boot a disposable, unprivileged T3 platform preserving the active runtime.
 
 Run as host root. Requires the committed ghostship-t3code learning profile.
-The default uses fresh data. Optional Docker checks create disposable data in
+The default uses fresh data. Optional Podman checks create disposable data in
 the explicitly supplied workspace; neither mode proves authenticated providers.
 """
 
@@ -67,37 +67,37 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", default="localhost/ghostship-t3code:t3code-runtime")
     parser.add_argument(
-        "--docker-workspace",
+        "--podman-workspace",
         type=Path,
-        help="Opt in to disposable Docker checks using this mapped host workspace",
+        help="Opt in to disposable Podman checks using this mapped host workspace",
     )
-    parser.add_argument("--docker-control-report", type=Path)
+    parser.add_argument("--podman-control-report", type=Path)
     parser.add_argument("--denied-endpoint", action="append", default=[])
     args = parser.parse_args()
-    if args.docker_workspace:
-        if not args.docker_control_report or not args.denied_endpoint:
-            parser.error("Docker checks require a control report and denied endpoints")
+    if args.podman_workspace:
+        if not args.podman_control_report or not args.denied_endpoint:
+            parser.error("Podman checks require a control report and denied endpoints")
         if (
-            not args.docker_workspace.is_absolute()
-            or args.docker_workspace.resolve() != args.docker_workspace
-            or not args.docker_workspace.is_dir()
-            or args.docker_workspace.stat().st_uid != 3000
+            not args.podman_workspace.is_absolute()
+            or args.podman_workspace.resolve() != args.podman_workspace
+            or not args.podman_workspace.is_dir()
+            or args.podman_workspace.stat().st_uid != 3000
         ):
             parser.error(
-                "Docker workspace must be a real absolute directory owned by T3"
+                "Podman workspace must be a real absolute directory owned by T3"
             )
         try:
             same_workspace = os.path.samefile(
-                args.docker_workspace, "/run/t3code-docker-rootfs/workspace"
+                args.podman_workspace, "/run/t3code-podman-rootfs/workspace"
             )
         except OSError:
-            parser.error("start the isolated engine before testing Docker workflows")
+            parser.error("start the isolated engine before testing Podman workflows")
         if not same_workspace:
             parser.error(
-                "Docker workspace must match the engine's /workspace bind source"
+                "Podman workspace must match the engine's /workspace bind source"
             )
-    elif args.docker_control_report or args.denied_endpoint:
-        parser.error("Docker arguments require --docker-workspace")
+    elif args.podman_control_report or args.denied_endpoint:
+        parser.error("Podman arguments require --podman-workspace")
     if os.geteuid() != 0:
         parser.error("run on the host as root")
     with open("/run/t3code-hardening-probe.lock", "w") as lock:
@@ -145,20 +145,20 @@ def main():
                 raise RuntimeError(
                     "previous candidate exists; inspect it before retrying"
                 )
-            docker_mounts = []
-            if args.docker_workspace:
+            podman_mounts = []
+            if args.podman_workspace:
                 acceptance = (
-                    Path(__file__).with_name("docker-sandbox") / "acceptance.py"
+                    Path(__file__).with_name("dev-engine") / "acceptance.py"
                 )
-                docker_mounts = [
+                podman_mounts = [
                     "-v",
-                    "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw",
+                    "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw",
                     "-v",
-                    "/run/t3code-docker/ports.sock:/var/run/t3code-docker-ports.sock:rw",
+                    "/run/t3code-podman/ports.sock:/var/run/t3code-podman-ports.sock:rw",
                     "-v",
-                    f"{acceptance.resolve()}:/run/t3code-docker-acceptance.py:ro",
+                    f"{acceptance.resolve()}:/run/t3code-podman-acceptance.py:ro",
                     "-v",
-                    f"{args.docker_control_report.resolve()}:/run/t3code-canaries.json:ro",
+                    f"{args.podman_control_report.resolve()}:/run/t3code-canaries.json:ro",
                 ]
             try:
                 run(
@@ -183,14 +183,14 @@ def main():
                     "-v",
                     f"{root / 'home'}:/home/t3code:rw",
                     "-v",
-                    f"{args.docker_workspace or root / 'workspace'}:/workspace:rw",
+                    f"{args.podman_workspace or root / 'workspace'}:/workspace:rw",
                     "-v",
                     f"{root / 'tmp'}:/tmp:rw",
                     "-v",
                     f"{setup}:/etc/systemd/system/t3code-container-setup.service:ro",
                     "-v",
                     f"{target}:/etc/systemd/system/t3code-probe.target:ro",
-                    *docker_mounts,
+                    *podman_mounts,
                     f"--entrypoint={systemd}",
                     args.image,
                     "--unit=t3code-probe.target",
@@ -284,11 +284,11 @@ def main():
                 assert "Seccomp:\t2" in status, "container seccomp is disabled"
                 checks["seccomp"] = "filtering"
                 assert execute("cat", checks["nix_build"]) == "verified"
-                if args.docker_workspace:
+                if args.podman_workspace:
                     try:
-                        docker_report = execute(
+                        podman_report = execute(
                             "python3",
-                            "/run/t3code-docker-acceptance.py",
+                            "/run/t3code-podman-acceptance.py",
                             "--control-report",
                             "/run/t3code-canaries.json",
                             *(
@@ -303,7 +303,7 @@ def main():
                         # The child prints partial results even when a probe fails.
                         print(error.output, flush=True)
                         raise
-                    checks["docker_workflows"] = json.loads(docker_report)
+                    checks["podman_workflows"] = json.loads(podman_report)
                 print(json.dumps(checks, indent=2))
             finally:
                 subprocess.run(["podman", "logs", "--tail=30", name], check=False)

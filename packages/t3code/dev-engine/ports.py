@@ -3,7 +3,7 @@
 Gateway protocol is exactly two network-order bytes selecting a TCP port >=1024,
 followed by the byte stream. Destination is ALWAYS namespace-local 127.0.0.1.
 The gateway runs in the host-owned dev namespace and uses systemd socket
-activation. Bridge runs inside T3, discovers Docker-published ports, and binds
+activation. Bridge runs inside T3, discovers Podman-published ports, and binds
 only 127.0.0.1. It never replaces a listener already owned by another process.
 """
 
@@ -32,15 +32,15 @@ def start_forward(reader, writer, connect):
 def published_ports(containers):
     return {
         port["PublicPort"]
-        for container in containers
-        for port in container.get("Ports", [])
+        for container in containers or []
+        for port in container.get("Ports") or []
         if port.get("Type") == "tcp"
         and port.get("IP", "") in ("", "0.0.0.0", "127.0.0.1")
         and 1024 <= port.get("PublicPort", 0) <= 65535
     }
 
 
-class DockerConnection(http.client.HTTPConnection):
+class PodmanConnection(http.client.HTTPConnection):
     def __init__(self, path):
         super().__init__("localhost", timeout=5)
         self.path = path
@@ -52,12 +52,12 @@ class DockerConnection(http.client.HTTPConnection):
 
 
 def discover(path):
-    connection = DockerConnection(path)
+    connection = PodmanConnection(path)
     try:
         connection.request("GET", "/containers/json")
         response = connection.getresponse()
         if response.status != 200:
-            raise RuntimeError(f"Docker API returned {response.status}")
+            raise RuntimeError(f"Podman API returned {response.status}")
         return published_ports(json.load(response))
     finally:
         connection.close()
@@ -151,7 +151,7 @@ async def bridge(api_socket, gateway_socket):
                 http.client.HTTPException,
                 RuntimeError,
             ) as error:
-                logger.warning("Docker port discovery failed: %s", error)
+                logger.warning("Podman port discovery failed: %s", error)
                 desired = set()  # stale listeners must not expose a reused port
             for port in set(servers) - desired:
                 servers.pop(port).close()
@@ -172,8 +172,8 @@ async def bridge(api_socket, gateway_socket):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("gateway", "bridge"))
-    parser.add_argument("--api-socket", default="/var/run/docker.sock")
-    parser.add_argument("--gateway-socket", default="/var/run/t3code-docker-ports.sock")
+    parser.add_argument("--api-socket", default="/var/run/podman/podman.sock")
+    parser.add_argument("--gateway-socket", default="/var/run/t3code-podman-ports.sock")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     asyncio.run(

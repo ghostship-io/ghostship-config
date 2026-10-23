@@ -31,7 +31,7 @@ To create a robust, modular, and reproducible NixOS configuration repository tha
     - Support production hardware (AMD) with native optimizations.
 
 ### chill-penguin
-- **Purpose**: High-performance headless server for media, home automation, and Docker containers.
+- **Purpose**: High-performance headless server for media, home automation, and Podman containers.
 - **Hardware**: Mac Studio (M1 Ultra).
     - **Architecture**: aarch64 (16k page size).
     - **Storage**: 4TB NVMe SSD.
