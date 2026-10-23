@@ -324,20 +324,25 @@ def read_opencode_go(
         percent = entry.get("percent")
         if not isinstance(percent, (int, float)):
             continue
-        windows.append(
-            {
-                "provider": "opencode-go",
-                "account": "default",
-                "model": "*",
-                "kind": windows_by_key[key],
-                "quotaId": key,
-                "usedRatio": _clamp(float(percent) / 100.0),
-                "resetEpoch": iso_to_epoch(entry.get("resetsAt")),
-                "durationSeconds": duration,
-                "source": source,
-                "observedAtEpoch": now,
-            }
-        )
+        window = {
+            "provider": "opencode-go",
+            "account": "default",
+            "model": "*",
+            "kind": windows_by_key[key],
+            "quotaId": key,
+            "usedRatio": _clamp(float(percent) / 100.0),
+            "resetEpoch": iso_to_epoch(entry.get("resetsAt")),
+            "durationSeconds": duration,
+            "source": source,
+            "observedAtEpoch": now,
+        }
+        # The provider's own status of the window ("ok" or "rate-limited").
+        # It is published beside the reading, so a consumer sees the state
+        # the provider states and not only the share of the window.
+        state = entry.get("status")
+        if isinstance(state, str) and state:
+            window["status"] = state
+        windows.append(window)
     return SourceResult(
         source=source,
         status="ok",
