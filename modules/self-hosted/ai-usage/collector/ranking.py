@@ -129,6 +129,7 @@ class QuotaWindow:
     inference: Any = None
     reset_source: str = "provider"
     provider_reset_epoch: float | None = None
+    source: str = ""
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -843,6 +844,11 @@ def _window_state(window: Any, now: float) -> tuple[str, float | None]:
 
 def _reading_is_fresh(window: Any, now: float) -> bool:
     """True when a window was read recently enough to be believed."""
+    basis = getattr(window, 'basis', None)
+    if basis is None and isinstance(window, Mapping):
+        basis = window.get('basis')
+    if basis == 'provider_limit_message' and quota_module is not None:
+        return quota_module.current_reading(window, now)
     observed = getattr(window, "observed_at", None)
     if observed is None and isinstance(window, Mapping):
         observed = window.get("observed_at")
@@ -1440,6 +1446,8 @@ def _inference_detail(windows: Iterable[Any]) -> dict[str, Any]:
 
 def _window_applies(window: Any, model: str) -> bool:
     """True when a window applies to the model."""
+    if isinstance(window, Mapping) and window.get('basis') == 'provider_limit_message':
+        return window.get('model') == model
     applies = getattr(window, "applies_to", None)
     if applies is None and isinstance(window, Mapping):
         applies = window.get("applies_to")

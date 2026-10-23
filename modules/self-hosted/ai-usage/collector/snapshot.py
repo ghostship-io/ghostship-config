@@ -288,6 +288,7 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         # reading the provider reported are never mixed, and the label says
         # which one a reader is looking at.
         "basis": basis,
+        "source": str(_get('source', default='')),
         "label": WINDOW_LABELS.get(quota_id, ""),
         # When the entitlement of the window ends. A promotion without a
         # published end has none, and that is unknown rather than zero.
@@ -299,6 +300,8 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     }
     if pools.not_used_window(str(_get('provider', default='')), window):
         record['not_used'] = True
+    if basis == 'provider_limit_message':
+        record['model'] = str(_get('model', default=''))
     if applies:
         record["applies_to"] = [str(token) for token in applies]
     if isinstance(status, str) and status:

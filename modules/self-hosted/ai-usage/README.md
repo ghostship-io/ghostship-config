@@ -13,6 +13,16 @@ listener and no new port: the service is a oneshot job that writes a file.
 
 ## How it runs
 
+Antigravity can return its quota denial as an entire assistant response on a
+completed T3 run. The collector reads those exact provider notices from the
+read-only message/run projections and publishes a zero-capacity window for the
+run's selected model. The reset countdown is anchored to the message time, with
+`t3_runtime` provenance and `provider_limit_message` basis. It stays spent until
+that deadline, beyond the ordinary reading freshness limit; polling or another
+model's successful run cannot release it. Prompts, quoted examples and raw error
+text never become published quota evidence. This window feeds the same selection
+used by the dashboard, managed favorites/default, CLI picks and MCP picks.
+
 * Unit: `ghostship-ai-usage.service` (`Type=oneshot`), timer
   `ghostship-ai-usage.timer` (`OnUnitActiveSec=5min`, `AccuracySec=1s`,
   `Persistent=false`).

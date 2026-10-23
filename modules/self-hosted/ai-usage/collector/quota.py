@@ -169,8 +169,11 @@ def current_reading(window: Any, now: float) -> bool:
     used = _finite(_get(window, "used_ratio", "usedRatio"))
     reset = _finite(_get(window, "reset_epoch", "resetEpoch"))
     observed = _finite(_get(window, "observed_at", "observedAtEpoch"))
+    timed_denial = (_get(window, 'basis') == 'provider_limit_message' and used == 1
+                    and reset is not None and reset > now)
     return (used is not None and 0 <= used <= 1 and observed is not None
-            and now - STALE_AFTER_SECONDS <= observed <= now + FUTURE_TOLERANCE_SECONDS
+            and observed <= now + FUTURE_TOLERANCE_SECONDS
+            and (timed_denial or observed >= now - STALE_AFTER_SECONDS)
             and (reset is None or reset > now))
 
 
