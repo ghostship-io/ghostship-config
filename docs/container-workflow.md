@@ -20,6 +20,13 @@ The [memory budget and containment policy](t3code.md#memory-budget) prioritizes
 the server: 32/40 GiB reclaim/hard limits, kernel OOM protection for its launcher
 and native server, and tool containment instead of memory-driven restarts.
 
+## Independent host recovery
+
+For outage recovery, maintenance holds, advisor isolation and targeted host
+artifacts, read [independent T3 recovery](t3code-recovery.md). Its controller
+runs outside T3. A static page that answers while the authenticated database
+check stalls produces advice only.
+
 ## Shared skills and tools
 
 Install the existing Ghostship catalog for all three T3 Code providers:
