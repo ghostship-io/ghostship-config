@@ -241,7 +241,8 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(self.bridge.send.call_count, self.coordinator_module.WAKE_LIMIT)
         thread_id = self.bridge.launch.call_args.kwargs["thread_id"]
         digest = json.loads(self.coordinator.store.meta("digest:" + thread_id))
-        self.assertEqual(len(digest["pending"]), len(identities) - 1 - self.coordinator_module.WAKE_LIMIT)
+        overflow = len(digest["pending"]) + len((digest.get("inflight") or {}).get("pending", []))
+        self.assertEqual(overflow, len(identities) - 1 - self.coordinator_module.WAKE_LIMIT)
         self.available = True
         self.run_monitor(True)
         self.run_monitor(True)
