@@ -1,0 +1,18 @@
+--- a/vendor/go.podman.io/common/libnetwork/netavark/ipam.go
++++ b/vendor/go.podman.io/common/libnetwork/netavark/ipam.go
+@@ -196,6 +196,9 @@
+-	curIP := net.IP(lastIPByte)
+-	if curIP == nil {
+-		curIP = rangeStart
+-	} else {
+-		curIP = util.NextIP(curIP)
+-	}
++	curIP := net.IP(lastIPByte)
++	if curIP != nil {
++		curIP = util.NextIP(curIP)
++	}
++	// A persisted cursor can predate a changed lease range. Clamp before
++	// recording the loop sentinel, including a cursor above the upper bound.
++	if curIP == nil || util.Cmp(curIP, rangeStart) < 0 || util.Cmp(curIP, rangeEnd) > 0 {
++		curIP = rangeStart
++	}

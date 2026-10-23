@@ -37,8 +37,9 @@ let
   # binary wrapper, the AppArmor, seccomp and SELinux inputs, the
   # extraPackages and extraRuntimes overrides used by the NixOS podman module
   # and the systemd unit files are all inherited unchanged.
-  package = prev.podman.overrideAttrs (_old: {
+  package = prev.podman.overrideAttrs (old: {
     inherit version src;
+    patches = (old.patches or [ ]) ++ [ ../podman-network/clamp-cursor.patch ];
   });
 in
 {
