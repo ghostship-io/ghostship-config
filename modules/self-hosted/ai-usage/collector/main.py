@@ -41,6 +41,10 @@ import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
 import usage_inference  # noqa: E402
 from metrics import MetricWriter, Sample, SourceResult  # noqa: E402
+# The scope of a quota window lives with the other window rules now, in the
+# quota module. Both names are imported here, so the collector keeps one
+# place that knows the scope of a window.
+from quota import WINDOW_SCOPES, _window_scope  # noqa: E402,F401
 from t3client import T3Client, T3Error  # noqa: E402
 from util import now as wall_clock  # noqa: E402
 
@@ -661,21 +665,6 @@ def free_model_samples(
     return samples
 
 
-# The providers that report a window per model family. A window that names a
-# family only applies to the models of that family; every other window
-# applies to the whole account.
-WINDOW_SCOPES = (
-    ("3p-", ("claude", "gpt")),
-    ("gemini-", ("gemini",)),
-    ("fable", ("fable",)),
-    ("sonnet", ("sonnet",)),
-    ("opus", ("opus",)),
-    ("haiku", ("haiku",)),
-    ("sol", ("sol",)),
-    ("astra", ("astra",)),
-)
-
-
 # A cooldown further out than this cannot be true. A millisecond timestamp
 # read as seconds lands tens of thousands of years out, and a value like
 # that is a broken reading, not a park. It is reported as an issue and it
@@ -693,15 +682,6 @@ FREE_ROUTE_PROVIDERS = ("opencode-go", "openrouter")
 # and it competes in bulk. A model that is in both sets is a promotional
 # route: the promotional zero price is checked first.
 PROMO_PROVIDERS = ("opencode", "ollama")
-
-
-def _window_scope(quota_id: str) -> tuple[str, ...]:
-    """The model families a quota window applies to."""
-    text = str(quota_id or "").lower()
-    for marker, families in WINDOW_SCOPES:
-        if marker in text:
-            return families
-    return ()
 
 
 def _published_unlimited_routes(
@@ -1051,8 +1031,13 @@ def ranking_inputs(
     # window of its own, so it has a stated state instead of no state, and
     # the paid allowance of the account does not gate it. The documentation
     # lists those routes as unlimited "for a limited time", so the basis of
-    # the window is a promotion and the end of it is unknown.
-    for provider, model in _published_unlimited_routes(catalog, inventory):
+    # the window is a promotion and the end of it is unknown. A free route
+    # reaches the collector on two paths, the instance inventory and the
+    # catalog's free list, and it is the same route on both: the published
+    # listing does not depend on whether the instance offers it today.
+    for provider, model in _published_unlimited_routes(
+        catalog, set(inventory) | free
+    ):
         windows.setdefault(f"{provider}/{model}", []).append(
             ranking_module.QuotaWindow(
                 kind="unlimited",
