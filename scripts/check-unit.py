@@ -37,6 +37,7 @@ TESTS = (
     "test_ai_usage_collector.py",
     "test_ai_usage_ranking.py",
     "test_ai_usage_model_selection.py",
+    "test_ai_usage_reported_limits.py",
     "test_ai_usage_pools.py",
     "test_ai_usage_short_windows.py",
     "test_ai_usage_outcome_value.py",

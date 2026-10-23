@@ -1102,7 +1102,6 @@ class ProviderCapacityTests(unittest.TestCase):
                 "opencode-go",
                 "antigravity",
                 "grok",
-                "openrouter",
                 # An account the approved list does not name follows it, by
                 # its name.
                 "cursor",
@@ -1114,7 +1113,7 @@ class ProviderCapacityTests(unittest.TestCase):
         )
 
     def test_the_fixture_holds_the_set_the_height_is_sized_for(self):
-        """Twelve cards, twenty-two windows and seventeen learning accounts.
+        """Eleven cards, twenty-one windows and seventeen learning accounts.
 
         The panel is sized for the live set with the headroom of the next
         collection, so the count of the fixture is the count the height
@@ -1122,8 +1121,8 @@ class ProviderCapacityTests(unittest.TestCase):
         """
         cards = self.cards()
         learning = self.rows
-        self.assertEqual(len(cards), 12)
-        self.assertEqual(sum(len(card["windows"]) for card in cards), 22)
+        self.assertEqual(len(cards), 11)
+        self.assertEqual(sum(len(card["windows"]) for card in cards), 21)
         self.assertEqual(
             len([row for row in learning if row.get("field") == "learning"]), 17
         )
@@ -1168,7 +1167,6 @@ class ProviderCapacityTests(unittest.TestCase):
             "opencode-go": ("OpenCode Go", "{}", "#2b2f3a", "subscription"),
             "antigravity": ("Antigravity", "A", "linear-gradient", "subscription"),
             "grok": ("Grok", "⊘", "#000", "subscription · 3D reserve"),
-            "openrouter": ("OpenRouter", "⇄", "#6466f1", "free daily"),
         }
         for account, (name, icon, background, meta) in approved.items():
             card = self.card(cards, account)
@@ -1602,12 +1600,6 @@ class ProviderCapacityTests(unittest.TestCase):
         self.assertEqual(
             card["free"],
             {"text": "Free models \u00b7 none available \u00b7 7 models", "cls": ""},
-        )
-        # OpenRouter counts its available routes, not all of them.
-        openrouter = self.card(self.cards(), "openrouter")
-        self.assertEqual(
-            openrouter["free"],
-            {"text": "Free models \u00b7 available \u00b7 10 models", "cls": "ok"},
         )
 
     def test_an_account_with_no_free_model_has_no_free_line(self):
@@ -2557,7 +2549,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
     def test_the_free_rows_name_their_provider_as_the_cards_do(self):
         """The provider of a free row is the name and the icon of its card."""
         capacity = section(self.page, "Provider capacity")
-        providers = [row[0] for row in FREE_ROWS]
+        providers = [row[0] for row in FREE_ROWS if row[0] != "openrouter"]
         cards = run_panel_helper(
             capacity,
             "const rows = "
@@ -2569,9 +2561,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
         by_provider = {card["account"]: card for card in cards}
         selected = {row["provider"]: row for row in self.free()[1:]}
         for provider, name, _model, _display, _left in FREE_ROWS:
-            card = by_provider[provider]
             row = selected[provider]
             self.assertEqual(row["providerName"], name, provider)
+            if provider == "openrouter":
+                self.assertNotIn(provider, by_provider)
+                continue
+            card = by_provider[provider]
             self.assertEqual(row["providerName"], card["name"], provider)
             for key in ("icon", "background", "foreground"):
                 self.assertEqual(row[key], card[key], f"{provider} {key}")
@@ -2735,11 +2730,12 @@ class ModelSelectionStoreTests(unittest.TestCase):
         providers = sorted(
             row["provider"] for row in free if row["field"] == "free_info"
         )
-        # The collector still publishes every free provider, including the
-        # eight without a winner that the page leaves out of the group.
+        # OpenRouter remains in the free-provider source, outside this page.
+        # Other providers without a winner still reach the query.
         self.assertEqual(
-            providers, sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN)
+            providers, sorted(row[0] for row in FREE_ROWS + FREE_HIDDEN if row[0] != "openrouter")
         )
+        self.assertNotIn("openrouter", providers)
         selection = {row["provider"]: row for row in free if row["field"] == "free_info"}
         self.assertEqual(selection["opencode-go"]["model"], "beam-free")
         self.assertEqual(selection["opencode-go"]["basis"], "published")
@@ -2766,7 +2762,7 @@ class ModelSelectionStoreTests(unittest.TestCase):
         self.assertEqual(built[0], {"group": "Free"})
         self.assertEqual(
             [(row["provider"], row["left"]) for row in built[1:]],
-            [(row[0], row[4]) for row in FREE_ROWS],
+            [(row[0], row[4]) for row in FREE_ROWS if row[0] != "openrouter"],
         )
 
     def test_a_route_from_an_older_scrape_is_not_shown(self):
