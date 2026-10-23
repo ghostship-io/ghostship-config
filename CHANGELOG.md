@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.180] - 2026-10-23
+
+Fix free-inference proxy socket startup ordering.
+
+PR #347.
+
 ## [3.17.179] - 2026-10-23
 
 - Audit the free runtime auth store without resolving its deliberately hidden Go provider.
