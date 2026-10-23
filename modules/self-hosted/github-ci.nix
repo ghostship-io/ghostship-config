@@ -3,6 +3,15 @@ let
   repositories = [ "ghostship-agent" "ghostship-config" "ghostship-3dprinting" ];
   tokenPath = "/run/ghostship-ci/registration-token";
   projection = config.ghostship.selfHostedSecrets.projections.ghostship-ci-registration;
+  registrationCommand = repo: op: lib.escapeShellArgs [
+    "${pkgs.python3}/bin/python3" "${./github-ci-register.py}" "--op" op
+    "--runner" "${config.services.github-runners.${repo}.package}/bin/Runner.Listener"
+    "--token-file" tokenPath "--repository" "ghostship-io/${repo}"
+    "--name" "${repo}-fast" "--label" "ghostship-fast"
+    "--state-dir" "/var/lib/github-runner/${repo}"
+    "--work-dir" "/run/github-runner/${repo}"
+    "--logs-dir" "/var/log/github-runner/${repo}"
+  ];
 in
 {
   # Repository-scoped runners need no organization-admin token. The normal
@@ -47,6 +56,16 @@ in
       exec ${pkgs.python3}/bin/python3 -I -S ${./github-ci-guard.py} "ghostship-io/${repo}"
     '';
     serviceOverrides = {
+      # The upstream configure helper puts the PAT in --pat and a temporary
+      # user-readable file. Keep B in the root registrar; only its one-use
+      # registration token reaches the configure process, through its environment.
+      ExecStartPre = lib.mkForce [
+        ("+" + registrationCommand repo "prepare")
+        (registrationCommand repo "configure")
+      ];
+      # The former .current-token copy no longer exists. Hide the root PAT
+      # source from configure/run; only the privileged preparation reads it.
+      InaccessiblePaths = lib.mkForce [ "-${tokenPath}" ];
       CacheDirectory = "github-ci-${repo}";
       CacheDirectoryMode = "0700";
       CPUQuota = if repo == "ghostship-3dprinting" then "400%" else "200%";
