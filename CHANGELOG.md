@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.224] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 3d9046bd; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #391.
+
 ## [3.17.223] - 2026-10-23
 
 - Use the remote Podman socket for sandboxed reset-announcement checks and notification-server discovery.
