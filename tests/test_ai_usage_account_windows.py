@@ -521,7 +521,6 @@ class AccountWindowTests(unittest.TestCase):
             "ghostship_ai_account_window_expected_remaining_ratio",
             "ghostship_ai_account_window_reset_timestamp_seconds",
             "ghostship_ai_account_window_check_timestamp_seconds",
-            "ghostship_ai_account_window_rolling",
             "ghostship_ai_account_window_order",
             "ghostship_ai_account_window_learning",
         ):
@@ -747,6 +746,11 @@ class AccountWindowCheckTimeTests(unittest.TestCase):
         self.assertEqual(
             self.rows(data, "ghostship_ai_account_window_expected_remaining_ratio"), []
         )
+        # The mark is published in the file of the collector, once.
+        text = render(data)
+        self.assertIn("# TYPE ghostship_ai_account_window_rolling gauge", text)
+        self.assertEqual(text.count("ghostship_ai_account_window_rolling{"), 1)
+        self.assertIn("ghostship_ai_collection_duplicate_series 0", text)
 
     def test_a_reading_without_a_rolling_mark_publishes_no_rolling_mark(self):
         self.declared("ghostship_ai_account_window_rolling")
