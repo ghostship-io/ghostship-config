@@ -2,7 +2,7 @@
 { config, pkgs, ... }:
 let
   desktop = pkgs.writeShellScript "ai-usage-announcement-desktop" ''
-    exec ${pkgs.podman}/bin/podman exec -i ghostship-private-integrations \
+    exec ${pkgs.podman}/bin/podman --remote exec -i ghostship-private-integrations \
       /bin/ghostship-mcp ghostship
   '';
   python = pkgs.python3.withPackages (ps: [ ps.mcp ]);
