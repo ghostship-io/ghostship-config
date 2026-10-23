@@ -122,8 +122,8 @@ host's full system derivation. Manual main CI also builds host-evaluation,
 config-tests and config-package, retaining full regression and host assertion
 coverage. Stage new Nix files before evaluation. Integration and browser jobs
 run manually on main; superseded PR runs are cancelled.
-Review the exact diff and unit results, record approval, then use `agent pr land`.
-Frontier authors self-review; other models need one frontier review.
+The orchestrator reviews each diff and records approval; workers ship with
+`agent pr land` and deploy their own approved PRs.
 
 ## Git access
 
