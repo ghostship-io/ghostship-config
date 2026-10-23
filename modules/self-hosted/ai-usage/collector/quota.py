@@ -39,6 +39,43 @@ STALE_AFTER_SECONDS = 1800.0
 # A reading from the future is not a reading.
 FUTURE_TOLERANCE_SECONDS = 60.0
 
+# The scope of a quota window: the model families it applies to. A window
+# that names a family only applies to the models of that family; every
+# other window applies to the whole account.
+WINDOW_SCOPES = (
+    ("3p-", ("claude", "gpt")),
+    ("gemini-", ("gemini",)),
+    ("fable", ("fable",)),
+    ("sonnet", ("sonnet",)),
+    ("opus", ("opus",)),
+    ("haiku", ("haiku",)),
+    ("sol", ("sol",)),
+    ("astra", ("astra",)),
+)
+
+# The model families a reading the provider reports for one model belongs
+# to. A provider that reports a window per model names the family in the
+# model id, and the family is the scope of the reading.
+MODEL_FAMILY_SCOPES = (
+    ("gemini-", ("gemini",)),
+    ("claude-", ("claude",)),
+    ("gpt-", ("gpt",)),
+)
+
+# The names the scope of a window is written with. A scope names a family
+# of models, and the family is written the way its models are named.
+SCOPE_NAMES = {
+    "claude": "Claude",
+    "gpt": "GPT",
+    "gemini": "Gemini",
+    "fable": "Fable",
+    "sonnet": "Sonnet",
+    "opus": "Opus",
+    "haiku": "Haiku",
+    "sol": "Sol",
+    "astra": "Astra",
+}
+
 
 def _finite(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -57,6 +94,58 @@ def _get(item: Any, *names: str) -> Any:
         if value is not None:
             return value
     return None
+
+
+def window_scope(quota_id: str) -> tuple[str, ...]:
+    """The model families a quota window applies to.
+
+    The scope of a window is the name of the window: a window whose id
+    names a model family applies to the models of that family, and every
+    other window applies to the whole account.
+    """
+    text = str(quota_id or "").lower()
+    for marker, families in WINDOW_SCOPES:
+        if marker in text:
+            return families
+    return ()
+
+
+# The name the lookup had where the table lived before it moved here, so
+# the collector keeps one name for the scope of a window.
+_window_scope = window_scope
+
+
+def model_scope(model_id: str) -> tuple[str, ...]:
+    """The model families a reading of one model belongs to.
+
+    A provider that reports a window per model names the family in the
+    model id. A model id that names no family is not a route of the
+    account but an internal name of the provider.
+    """
+    text = str(model_id or "").strip().lower()
+    for marker, families in MODEL_FAMILY_SCOPES:
+        if text == marker[:-1] or text.startswith(marker):
+            return families
+    return ()
+
+
+def measured_scope(measured: Any) -> tuple[str, ...] | None:
+    """The scope of a measured reading, or None when it is not a window.
+
+    A reading of the whole account is scoped by the name of its window,
+    which is the scope the ranking gives it. A reading of one model is
+    scoped by the family of that model, and a model id that names no
+    family is not a route of the account: such a reading is not a window
+    of the account, because it would read as a window of the whole
+    account.
+    """
+    scope = _get(measured, "applies_to", "appliesTo")
+    if scope:
+        return tuple(str(token) for token in scope)
+    model = str(_get(measured, "model") or "*")
+    if model == "*":
+        return window_scope(str(_get(measured, "quota_id", "quotaId") or ""))
+    return model_scope(model) or None
 
 
 def window_pace(window: Any, now: float) -> dict[str, Any] | None:
