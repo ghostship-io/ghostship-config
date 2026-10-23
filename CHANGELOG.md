@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.111] - 2026-10-23
+
+- AI usage: an inferred route that was refused reads "spent" only for the learned window that holds its last refusal, and it becomes available again once that window rolls over, with all of its allowance and a reset one window later. A refusal in the new window spends it again; a route with no learned window keeps its spent state with no reset. The quota id of an inferred window now names the learned window (`inferred:1h`, `inferred:5h`) rather than the state, so a spent route with a known window no longer reads `inferred:exhausted`; a refusal with no learned window keeps that id.
+
 ## [3.17.110] - 2026-10-23
 
 - ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
