@@ -132,8 +132,9 @@ Install newsletter 0.5.18 or later first: the command is
 `ghostship-am-monitor-status --runtime-only --json --fail-on-unhealthy`.
 Newsletter code owns due times, artifact validation and the Gmail delivery ledger.
 A failed or unavailable monitor opens one alert episode in `operations` and queues
-the stable `newsletter-runtime` incident through `ghostship-notify`; the coordinator
-reuses that incident's T3 thread with its existing daily launch limit. The monitor
+the stable `newsletter-runtime` incident through `ghostship-notify`; the GitHub
+event router reuses that incident's T3 thread with its
+existing daily launch limit. The monitor
 persists a distinct event ID for each episode before handing it off, then calls
 `ghostship-notify --incident-only --incident-id ID` separately from ntfy publishing.
 Exit zero from this operation acknowledges a spool file and directory fsync, not
@@ -351,7 +352,7 @@ ghostship-backup restore-check
 ```
 
 The backup command holds a maintenance lock shared with Podman auto-update
-and the entire NixOS automatic upgrade,
+and host system upgrades,
 requires a real NFS mount, and uses the encrypted `backup` secret. It briefly
 pauses the active RomM/Grimmory containers, exports both MariaDB engines,
 snapshots `/srv` read-only (or the root subvolume when `/srv` is an ordinary
@@ -428,10 +429,9 @@ Registry-labeled applications keep native Podman automatic updates with health
 readiness and rollback. Database digests require review. Recyclarr stays on
 supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
-refresh. The two WSL hosts and `chill-penguin` run `system.autoUpgrade` nightly from GitHub
-`main`; `chill-penguin` adds `--impure` so pure evaluation cannot silently drop
-its Asahi peripheral firmware. The T3 Code container is never restarted by the
-switch; its image change waits for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
+refresh. A reviewed change reaches a host through the gated procedure below.
+The T3 Code container is never restarted by the switch; its image change waits
+for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
 switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
 second workflow run; use the update workflow's validation and explicitly run
@@ -441,8 +441,8 @@ Fleet checks after review when needed.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
-3. `chill-penguin` applies merged main automatically overnight. To deploy
-   sooner, pull merged main and switch natively with `--impure`.
+3. The server deploys the merged change through the deploy slot below. An
+   owner request to deploy is carried out promptly.
 4. Check failed units, container health, NAS mounts, configuration file modes,
    secret-dependent integrations, and active agent sessions.
 5. Verify automatic Cloudflare reconciliation, then validate Google browser login and Android
@@ -458,23 +458,34 @@ test builds it in a temporary directory or the line states why the reference is
 harmless with a `# fixture-path-ok: <reason>` comment. It does not claim native ARM builds, live container startup, secret
 decryption on every host, GPU/controller acceptance, or successful restore drills.
 
-An activation must record the system generation. Use `scripts/activate-host`
-instead of calling `switch-to-configuration` directly: it sets the system
-profile first, switches, and then verifies that the running system and the
-system profile name the same store path.
+An activation must record the system generation and take the deploy slot. In
+the server's host checkout as root, with `HOST`, `HOLDER` and `PURPOSE` naming
+the target and this deploy:
 
 ```bash
-# From the built checkout in the server's root shell.
-nixos-rebuild build --impure --flake .#chill-penguin
-scripts/activate-host --toplevel ./result
+scripts/deploy-slot acquire --holder "$HOLDER" --purpose "$PURPOSE"
+git pull --ff-only origin main
+nixos-rebuild build -L --impure --flake ".#$HOST"
+./result/bin/switch-to-configuration dry-activate
+scripts/activate-host --toplevel ./result --holder "$HOLDER"
+# Verify live service health and the intended change before releasing.
+scripts/activate-host --verify-only --holder "$HOLDER"
 ```
+
+Acquire the slot before pulling so two sessions cannot build the same checkout
+at once. `scripts/deploy-slot status` shows the holder and queue, and a stale
+slot is taken over only with `--force --reason`.
 
 `scripts/activate-host` runs `nix-env -p /nix/var/nix/profiles/system --set
 <toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then
 compares `readlink -f /run/current-system` with `readlink -f
 /nix/var/nix/profiles/system`. It exits non-zero when the two differ, so an
-activation that did not record the generation is visible instead of silent.
-`--verify-only` performs the comparison alone. The
+activation that did not record the generation is visible instead of silent. It
+keeps the slot held after the switch so the deploy's checks run inside it;
+`--verify-only --holder "$HOLDER"` repeats the comparison and releases the slot.
+If the pull, build or dry-activate fails before activation, release with
+`scripts/deploy-slot release --holder "$HOLDER"`; once activation has started,
+keep the slot held through reconciliation and live verification. The
 `ghostship-boot-generation-drift` timer compares `/run/current-system` with
 `/nix/var/nix/profiles/system` every five minutes; a mismatch that lasts more
 than ten minutes reaches operations through `ghostship-notify` with the
@@ -531,9 +542,7 @@ keep their broad privileges and mutable automatic updates; service secrets
 retain the shared apps-account model; Gluetun's HTTP proxy remains available
 on the shared network.
 These choices leave supply-chain, lateral-access and shared-secret risks
-unresolved. CloakBrowser was retired independently during this review; its
-findings remain in progress until activation removes the old enabled units. Emulation findings are deferred while Boomer
-is offline.
+unresolved.
 
 Trusted LAN clients also retain the Plex/qBittorrent login bypass. Gluetun
 retains Podman-gateway DNS for internal names, leaving VPN DNS leakage

@@ -7,6 +7,11 @@ environment. Keep their existing launchers, credentials, and configuration.
 Do not apply `home/profiles/develop.nix` or run
 `ghostship-agent-maintenance` here; those target the NixOS develop hosts.
 
+Free workers run outside T3 Code on the separate `ghostship-worker` runtime
+with a caller-selected sandbox profile and accept only public-sensitivity work.
+The providers here are T3 Code's provider accounts; model choice belongs to the
+current `ghostship-agent/config/agents/routing-policy.md`.
+
 ## Runtime memory containment
 
 The inner `t3code-server.service` shares a memory cgroup with provider tools.
@@ -147,8 +152,10 @@ Build first; inspect the candidate unit definitions, activation scripts, and
 unit diff alone does not prove activation is safe: inspect dependencies and
 imperative hooks too. If T3 Code could be interrupted, activate only the exact
 new service's Nix-generated unit through root SSH and retain its build as a
-GC root. Report the deferred full-system switch. Never stop T3 Code to make a
-deployment pass. Verify the recorded identity, start time, and MainPID afterward.
+GC root. Report the deferred full-system switch. If the owner explicitly
+requested the deployment or activation that requires a restart, record that
+request through the guarded restart helper. Verify the
+recorded identity, start time, and MainPID afterward.
 
 The idle deployment helper protects active sessions itself: its probe reads T3
 Code 2's `statev2.sqlite` and defers while a run, subagent or thread launch is
@@ -208,8 +215,11 @@ approved repositories for selected-file reviews with public or private
 sensitivity; broker roots derive from that same list. Trusted test commands are
 configured per repository; the existing test command belongs to the fixture.
 
-An explicit later instruction scheduling a T3 Code restart is required to
-override this guard; ordinary authorization to deploy is insufficient.
+A restart waits for the idle gate. Only the owner's own deploy or activate
+instruction authorizes bypassing it, recorded with `--owner-request "<quote or
+reference>"`, and the request is carried out promptly. The deploy slot, the
+`dry-activate` output and live verification remain the safety gates, and the
+continuity checks above still apply.
 
 The container hostname identifies the coding environment. Always select the
 target explicitly instead of using `.#$(hostname)` here. Host configuration
@@ -234,15 +244,29 @@ access before deployment. Do not substitute container-local activation or copy
 uncommitted files onto the host.
 
 After the user merges the PR, make sure the intended commit is on
-`origin/main`. For an authorized deployment, use `ssh chill-penguin` and the
-host checkout at `/home/nixos/nixos-config` to run these commands as root:
+`origin/main`. For an authorized deployment, use the host's root SSH access and
+run this in the host checkout, with `HOST`, `HOLDER` and `PURPOSE` naming the
+target and this deploy:
 
 ```sh
-git -C /home/nixos/nixos-config pull --ff-only origin main
-cd /home/nixos/nixos-config
-nixos-rebuild build -L --impure --flake .#chill-penguin
-./result/bin/switch-to-configuration switch
+scripts/deploy-slot acquire --holder "$HOLDER" --purpose "$PURPOSE"
+git pull --ff-only origin main
+nixos-rebuild build -L --impure --flake ".#$HOST"
+./result/bin/switch-to-configuration dry-activate
+scripts/activate-host --toplevel ./result --holder "$HOLDER"
+# Verify live service health and the intended change before releasing.
+scripts/activate-host --verify-only --holder "$HOLDER"
 ```
+
+Run the deploy slot and activation on the host rather than inside this
+container: the slot record lives at `/var/lib/ghostship-deploy-slot` on the
+host, and `scripts/activate-host` writes the host system profile. A stale slot
+is taken over only with `--force --reason`, and `scripts/deploy-slot status`
+shows the holder and queue. If the pull, build or `dry-activate` fails before
+activation, release with `scripts/deploy-slot release --holder "$HOLDER"`. Once
+activation has started, keep the slot held through reconciliation and live
+verification; `--verify-only --holder "$HOLDER"` releases it, and release
+explicitly only when abandoning the deploy.
 
 Run long or prompt-driven remote work in detached tmux, then inspect its output
 with `capture-pane` and provide input with `send-keys`. The `--impure` flag on
