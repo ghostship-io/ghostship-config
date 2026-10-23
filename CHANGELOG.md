@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.111] - 2026-10-23
+## [3.17.112] - 2026-10-23
 
 - ai-usage: the collector can read the observed outcomes of the delegation rounds. A new module reads the rounds the ledger holds, per model and task type: the count of the rounds of work (n), the count of the accepted ones (s), the fabrications that were seen, and the trust of the model with the reason it holds. The model identities are read from the `models` map of `model-identities.json`, where every key is the id of a model and every entry holds its label and its routes. The identity of a route is one model on every provider: a route of an identity names the provider and the model, the normalized model is the id of an identity or the model of one of its routes, and the normalized model is the identity itself; a checkpoint tag such as `:1017` is kept, so a tagged model never pools with the untagged model of the same name. The ledger is opened read only, a backfill row replaces the verdict of the round it names unless the verdict of the ledger is a manual one, and the trust of a model is the worse of the level the owner's runtime policy gives it and the level the ledger gives it: a model is not trusted again until three accepted rounds follow its last fabrication. Nothing calls the module yet.
+
+## [3.17.111] - 2026-10-23
+
+- AI usage: an inferred route that was refused reads "spent" only for the learned window that holds its last refusal, and it becomes available again once that window rolls over, with all of its allowance and a reset one window later. A refusal in the new window spends it again; a route with no learned window keeps its spent state with no reset. The quota id of an inferred window now names the learned window (`inferred:1h`, `inferred:5h`) rather than the state, so a spent route with a known window no longer reads `inferred:exhausted`; a refusal with no learned window keeps that id.
 
 ## [3.17.110] - 2026-10-23
 
