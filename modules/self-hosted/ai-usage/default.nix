@@ -58,6 +58,10 @@ let
   # decides. Routing stays off until the owner turns it on, so a consumer
   # that ignores the switch still sees it off.
   routingEnabled = if cfg.routing.enabled then "true" else "false";
+  workerPreferences = pkgs.writeText "ghostship-model-selection-preferences.json" (builtins.toJSON {
+    schema = "ghostship.model-selection-preferences/v1";
+    worker_builds = cfg.workerBuilds;
+  });
 in
 {
   options.ghostship.aiUsage.routing.enabled = lib.mkOption {
@@ -71,6 +75,12 @@ in
     '';
   };
 
+  options.ghostship.aiUsage.workerBuilds = lib.mkOption {
+    type = lib.types.attrsOf lib.types.str;
+    default.ollama = "ollama-cloud/deepseek-v4.1-flash:1017";
+    description = "Exact native worker builds selected by the owner, keyed by provider. A missing or unavailable build cannot fall back to an alias.";
+  };
+
   config = {
     systemd.services.ghostship-ai-usage = {
       description = "Collect AI provider usage, limits, and free models for Prometheus";
@@ -78,7 +88,7 @@ in
       wants = [ "network-online.target" "podman.socket" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}${lib.optionalString (policy != null) " --reconcile-picker"}";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled} --model-selection-preferences ${workerPreferences}${policyArg}${lib.optionalString (policy != null) " --reconcile-picker"}";
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.
