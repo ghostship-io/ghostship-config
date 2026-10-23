@@ -4890,7 +4890,7 @@ def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) ->
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".new")
     payload = json.dumps(
-        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
+        _json_safe(snapshot), separators=(",", ":"), sort_keys=False, default=str, allow_nan=False
     )
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
@@ -4909,7 +4909,7 @@ def publish(
     an error: a consumer would read the previous file and believe it.
     """
     payload = json.dumps(
-        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
+        _json_safe(snapshot), separators=(",", ":"), sort_keys=False, default=str, allow_nan=False
     )
     written: list[tuple[str, int]] = []
     for path in paths:
