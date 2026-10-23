@@ -24,7 +24,6 @@ let
     "init-ghostship-github-net"
     "init-ghostship-net"
     "init-ghostship-siem-net"
-    "nixos-upgrade"
     "prometheus-node-exporter"
     "pyload-restart-failed"
     "qbittorrent-auto-resume"
@@ -35,7 +34,11 @@ let
     "tdarr-language-policy"
     "tdarr-staged-guard"
     "vector"
-  ];
+  ]
+  # A host that still upgrades unattended keeps its nixos-upgrade failure
+  # path. The deployment host turns that unit off, so naming it there would
+  # trip the stale-entry assertion below.
+  ++ lib.optional config.system.autoUpgrade.enable "nixos-upgrade";
 
   exemptions = {
     "ghostship-failure@" = "the failure notifier itself; a failing notifier would notify about itself";
