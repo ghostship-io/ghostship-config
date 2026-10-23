@@ -35,11 +35,11 @@ in
     };
   };
   systemd.timers.ghostship-ai-usage-announcements = {
-    description = "Check reset announcements at most three times per day";
+    description = "Check primary reset announcements hourly with wall backoff";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "7min";
-      OnUnitActiveSec = "8h";
+      OnUnitActiveSec = "1h";
       Persistent = false;
     };
   };

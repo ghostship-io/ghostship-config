@@ -1,16 +1,25 @@
 # Announced Codex resets
 
-The announcement checker uses the personal Agent Desktop profile at most once
-per eight hours. A sign-in or verification wall is recorded as blocked. When X
+The announcement checker reads the latest visible posts on the primary X timeline
+hourly through the persistent personal Agent Desktop profile, without scrolling.
+A sign-in or verification wall is recorded as blocked, sends one operations notice
+per blocked episode, and backs off to eight hours. Successful reads restore the
+hourly cadence. Transport failures record unavailable. When X
 is blocked, the checker searches the community announcements category for reset
-topics, reads at most three matching topics, and records their source status.
+topics at most once per eight hours, reads at most three matching topics, and
+records their source status. Hourly timer starts honor the locked cache deadline;
+manual starts cannot bypass the backoff. A crash reserves an eight-hour delay.
 It never bypasses a wall or fetches a mirror outside Agent Desktop.
 
 The AI usage dashboard lists recorded announcements with their source links.
 A community relay is **announced (unverified)** even when it includes a precise
 time. It raises an operations notification and leaves pacing unchanged.
 Notifications retry on subsequent checker runs until publication succeeds;
-successful notices are remembered across rediscovery.
+successful notices are remembered across rediscovery. Notices deduplicate by
+primary status URL across both direct and relay records, including receipts from
+before direct access worked. Each newly discovered post raises one notice;
+unambiguous global reset announcements also notify and use the normal pacing path.
+At most twenty new-post publications are attempted per run; failures retry.
 
 After inspecting the linked announcement and confirming that it resets global
 Codex limits, run this command as root on the collector host:
