@@ -7,6 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = (
+    "test_seerr.py",
     "test_shared_network_range.py",
     "test_t3code_podman_*.py",
     "test_ci_scheduling.py",

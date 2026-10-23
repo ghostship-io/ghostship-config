@@ -8,6 +8,7 @@ let
     . ${config.ghostship.selfHostedSecrets.projections.plex.path}
     . ${config.ghostship.selfHostedSecrets.projections.sonarr.path}
     . ${config.ghostship.selfHostedSecrets.projections.radarr.path}
+    . ${config.ghostship.selfHostedSecrets.projections.monitoring.path}
     set +a
     exec ${python}/bin/python ${./seerr-provision.py}
   '';
@@ -51,18 +52,20 @@ in
   };
   systemd.tmpfiles.rules = [ "d /srv/apps/seerr 0700 apps apps -" ];
   systemd.services.ghostship-seerr-provision = {
-    description = "Initialize Seerr integrations without changing media profiles";
+    description = "Reconcile Seerr integration profiles and notifications";
     requires = [
       "podman-seerr.service"
       "podman-plex.service"
       "podman-sonarr.service"
       "podman-radarr.service"
+      "podman-ntfy.service"
     ];
     after = [
       "podman-seerr.service"
       "podman-plex.service"
       "podman-sonarr.service"
       "podman-radarr.service"
+      "podman-ntfy.service"
     ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
@@ -70,6 +73,14 @@ in
       ExecStart = "${provision}/bin/ghostship-seerr-provision";
       TimeoutStartSec = "5min";
       UMask = "0077";
+    };
+  };
+  systemd.timers.ghostship-seerr-provision = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnUnitActiveSec = "15min";
+      RandomizedDelaySec = "1min";
     };
   };
 }
