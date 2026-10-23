@@ -11,7 +11,10 @@
 let
   cfg = config.ghostship.githubEngineering;
   system = pkgs.stdenv.hostPlatform.system;
-  github = (inputs.ghostship-private-agent.lib.mkPrivateIntegrations { inherit system; }).github;
+  runtimes = import ./agent-service-runtimes.nix { agent = inputs.ghostship-private-agent; inherit system; };
+  base = name: uid: import ./service-base-image.nix { inherit pkgs name uid; gid = "62032"; };
+  ingressImage = base "ghostship-github-ingress" "62030";
+  coordinatorImage = base "ghostship-github-coordinator" "62031";
   # Under /var/lib: tmpfiles refuses root-owned children of the apps-owned /srv/apps.
   root = "/var/lib/ghostship-github";
   network = "ghostship_github_net";
@@ -204,9 +207,13 @@ in
       requires = [ "init-ghostship-github-net.service" ];
     };
 
+    ghostship.containerRuntimes = {
+      ghostship-hooks.runtime = runtimes.hooks;
+      ghostship-github-coordinator.runtime = runtimes.coordinator;
+    };
     virtualisation.oci-containers.containers.ghostship-hooks = {
-      image = "ghostship-github-ingress:${github.ingressImage.imageTag}";
-      imageFile = github.ingressImage;
+      image = "ghostship-github-ingress:${ingressImage.imageTag}";
+      imageFile = ingressImage;
       pull = "never";
       user = "62030:62032";
       cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
@@ -266,9 +273,9 @@ in
     };
 
     virtualisation.oci-containers.containers.ghostship-github-coordinator = {
-      image = "ghostship-github-coordinator:${github.coordinatorImage.imageTag}";
+      image = "ghostship-github-coordinator:${coordinatorImage.imageTag}";
       autoStart = cfg.coordinatorAutoStart;
-      imageFile = github.coordinatorImage;
+      imageFile = coordinatorImage;
       pull = "never";
       user = "62031:62032";
       cmd = [ "--config" "/etc/ghostship-github/config.json" "--spool" "/spool" "--state" "/state"

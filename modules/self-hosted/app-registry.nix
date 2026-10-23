@@ -197,14 +197,34 @@ in
       }
     ];
     systemd.tmpfiles.rules = [ "d /var/lib/ghostship-dashboards 0700 root root -" ];
-    systemd.services.podman-homepage.preStart = lib.mkOrder 2000 ''
+    systemd.services.ghostship-homepage-config = {
+      description = "Reconcile dashboard configuration without restarting its container";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "podman-homepage.service" ];
+      serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+    };
+    systemd.services.ghostship-muximux-config = {
+      description = "Reconcile dashboard configuration without restarting its container";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "podman-muximux.service" ];
+      serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+    };
+    systemd.services.podman-homepage = {
+      wants = [ "ghostship-homepage-config.service" ];
+      after = [ "ghostship-homepage-config.service" ];
+    };
+    systemd.services.podman-muximux = {
+      wants = [ "ghostship-muximux-config.service" ];
+      after = [ "ghostship-muximux-config.service" ];
+    };
+    systemd.services.ghostship-homepage-config.script = lib.mkOrder 2000 ''
       ${dashboards}/bin/ghostship-dashboard-sync homepage /srv/apps/homepage/services.yaml \
         /var/lib/ghostship-dashboards/homepage.json \
         ${config.ghostship.selfHostedSecrets.projections.homepage.path}
       chown apps:apps /srv/apps/homepage/services.yaml
       chmod 600 /srv/apps/homepage/services.yaml
     '';
-    systemd.services.podman-muximux.preStart = lib.mkOrder 2000 ''
+    systemd.services.ghostship-muximux-config.script = lib.mkOrder 2000 ''
       ${dashboards}/bin/ghostship-dashboard-sync muximux /srv/apps/muximux/www/muximux/settings.ini.php \
         /var/lib/ghostship-dashboards/muximux.json
       chown apps:apps /srv/apps/muximux/www/muximux/settings.ini.php
