@@ -101,10 +101,12 @@ before running checks. These checks validate module assertions and derivation
 construction; target-host builds and live verification remain necessary for
 deployment.
 
-GitHub Actions runs this same command for PRs and pushes to `main`. A single
-Linux job evaluates both architectures without building their systems, and
-new pushes cancel superseded runs. Review CI and any Codex review comments
-before marking a draft PR ready. Leave merging to the user.
+Pull requests run `nix develop .#ci -c python3 scripts/check-unit.py`, workflow
+and shell lint, and the existing redacted Gitleaks source scan. The job has a
+four-minute budget. Main pushes retain `scripts/check`, all host evaluations,
+configuration builds and the same secret scan. T3 browser integration also
+runs after merge on main. Superseded PR runs are cancelled; main runs finish.
+Review the exact diff and unit results, record approval, then use `agent pr land`.
 
 ## Git access
 
