@@ -17,6 +17,13 @@ from pathlib import Path
 # Placeholder in a configuration template, and the setting that fills it.
 PLACEHOLDERS = {
     "@GHOSTSHIP_GITHUB_ACCOUNT@": "GHOSTSHIP_GITHUB_ACCOUNT",
+    "@GHOSTSHIP_GITHUB_USER_ID@": "GHOSTSHIP_GITHUB_USER_ID",
+    "@GHOSTSHIP_T3_ENVIRONMENT_ID@": "GHOSTSHIP_T3_ENVIRONMENT_ID",
+    "@GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID@": "GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID",
+    **{
+        f"@GHOSTSHIP_T3_PROJECT_{name}@": f"GHOSTSHIP_T3_PROJECT_{name}"
+        for name in ("CONFIG", "AGENT", "3DPRINTING", "ROMS", "XPLUS4", "NEWSLETTER", "ORCA")
+    },
     "@GHOSTSHIP_KEEP_AGENT_EMAIL@": "GHOSTSHIP_KEEP_AGENT_EMAIL",
     "@GHOSTSHIP_KEEP_PERSONAL_EMAIL@": "GHOSTSHIP_KEEP_PERSONAL_EMAIL",
     "@GHOSTSHIP_KUMA_USERNAME@": "GHOSTSHIP_KUMA_USERNAME",
@@ -60,6 +67,18 @@ def render(template: str, environ: dict | None = None) -> str:
     """A template with every placeholder it uses replaced by its value."""
     rendered = template
     for placeholder, value in identity(template, environ).items():
+        if placeholder == "@GHOSTSHIP_GITHUB_USER_ID@":
+            try:
+                number = int(value)
+            except ValueError:
+                number = 0
+            if not value.isascii() or not value.isdigit() or number <= 0:
+                raise MissingIdentity("GHOSTSHIP_GITHUB_USER_ID must be a positive integer")
+            token = json.dumps(placeholder)
+            if token not in rendered:
+                raise MissingIdentity("GHOSTSHIP_GITHUB_USER_ID must occupy an entire JSON value")
+            rendered = rendered.replace(token, str(number))
+            continue
         # The placeholder sits inside a JSON string, so the value is escaped
         # the way the surrounding document escapes it.
         escaped = json.dumps(value)[1:-1]

@@ -63,6 +63,46 @@ IDENTITY_FILE = "/etc/ghostship/owner-identity.env"
 
 
 class OwnerConfigRendererTests(unittest.TestCase):
+    def test_remaining_runtime_identifiers_are_rendered_with_their_json_types(self):
+        template = json.dumps({
+            "allowed_user_ids": ["@GHOSTSHIP_GITHUB_USER_ID@"],
+            "t3_environment_id": "@GHOSTSHIP_T3_ENVIRONMENT_ID@",
+            "base_url": "https://example.invalid/accounts/@GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID@/ai",
+            "project_id": "@GHOSTSHIP_T3_PROJECT_AGENT@",
+        })
+        values = {
+            "GHOSTSHIP_GITHUB_USER_ID": "7",
+            "GHOSTSHIP_T3_ENVIRONMENT_ID": "fixture-environment",
+            "GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID": "fixture-account",
+            "GHOSTSHIP_T3_PROJECT_AGENT": "fixture-project",
+        }
+        rendered = json.loads(renderer.render(template, values))
+        self.assertEqual(rendered, {
+            "allowed_user_ids": [7],
+            "t3_environment_id": "fixture-environment",
+            "base_url": "https://example.invalid/accounts/fixture-account/ai",
+            "project_id": "fixture-project",
+        })
+
+    def test_each_remaining_runtime_identifier_is_required_when_used(self):
+        names = ("GHOSTSHIP_GITHUB_USER_ID", "GHOSTSHIP_T3_ENVIRONMENT_ID",
+                 "GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID", "GHOSTSHIP_T3_PROJECT_AGENT",
+                 "GHOSTSHIP_T3_PROJECT_CONFIG", "GHOSTSHIP_T3_PROJECT_3DPRINTING",
+                 "GHOSTSHIP_T3_PROJECT_ROMS", "GHOSTSHIP_T3_PROJECT_XPLUS4",
+                 "GHOSTSHIP_T3_PROJECT_NEWSLETTER", "GHOSTSHIP_T3_PROJECT_ORCA")
+        for name in names:
+            with self.subTest(setting=name):
+                with self.assertRaises(renderer.MissingIdentity):
+                    renderer.render(json.dumps({"value": "@" + name + "@"}), {})
+
+    def test_invalid_numeric_owner_identity_is_rejected_without_its_value(self):
+        for value in ("0", "-1", "not-an-id", "1.5", '7", "injected": true'):
+            with self.subTest(case=value):
+                with self.assertRaises(renderer.MissingIdentity) as error:
+                    renderer.render('{"allowed_user_ids":["@GHOSTSHIP_GITHUB_USER_ID@"]}',
+                                    {"GHOSTSHIP_GITHUB_USER_ID": value})
+                self.assertNotIn(value, str(error.exception))
+
     def test_a_template_is_filled_from_the_environment(self):
         template = '{"username": "@GHOSTSHIP_KUMA_USERNAME@"}'
         rendered = renderer.render(template, {"GHOSTSHIP_KUMA_USERNAME": "operator"})
