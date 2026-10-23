@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.218] - 2026-10-23
+
+- Retain the MCP runtime's transitive Python helpers and sandbox-profile data in content-scoped sources.
+
+PR #384.
+
 ## [3.17.217] - 2026-10-23
 
 Show selected orchestrator and worker models per provider above provider usage, then a searchable model-quality table in the same card style. Default to active, available native models only; All models includes spent and unused routes. Collapse each model to its best measured effort, expand comparisons only when observed efforts differ, and hide columns with no evidence. Each selected model has one graph for its actual binding window, including five-hour windows. Exhausted provider choices stay visible in grey; positive short windows remain eligible and unpaced. Availability and live capacity order provider choices and the new-thread default, without fixed provider positions.
