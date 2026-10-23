@@ -11,7 +11,7 @@ records their source status. Hourly timer starts honor the locked cache deadline
 manual starts cannot bypass the backoff. A crash reserves an eight-hour delay.
 It never bypasses a wall or fetches a mirror outside Agent Desktop.
 
-The AI usage dashboard lists recorded announcements with their source links.
+The Providers page shows a confirmed or explicit Codex reset on the Codex card and lists every recorded announcement, with its source link, in its evidence row.
 A community relay is **announced (unverified)** even when it includes a precise
 time. It raises an operations notification and leaves pacing unchanged.
 Notifications retry on subsequent checker runs until publication succeeds;

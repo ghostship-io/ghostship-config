@@ -126,6 +126,15 @@ class ProvidersPageTests(unittest.TestCase):
                 if 'account!=' in query:
                     self.assertIn('account!="pi"', query)
 
+    def test_panel_styles_are_scoped_so_they_cannot_restyle_grafana(self):
+        # Dynamic text styles are injected into the whole page; short class names
+        # such as .bar or .w must only apply inside the panel's own container.
+        for panel_id in (210, 211):
+            css = re.sub(r'@(?:media|container)[^{]*\{', '', self.panels[panel_id]['options']['styles'])
+            for head in re.findall(r'(?:^|[}\n])\s*([^{}@]+)\{', css):
+                for selector in head.split(','):
+                    self.assertRegex(selector.strip(), r'^\.pool', selector)
+
     def test_t3_usage_comes_from_the_raw_buckets_and_follows_the_time_range(self):
         for panel_id in (210, 211):
             query = self.panels[panel_id]['targets'][0]['expr']
@@ -190,9 +199,10 @@ class ProviderPoolTests(unittest.TestCase):
         event = lambda confidence, reset=at: {'account': 'codex', 'field': 'announced', 'confidence': confidence,
                                                 'scope': 'codex', 'reset_at': reset, 'value': 1}
         card = self.pool(base + [event('confirmed')])['cards'][0]
-        self.assertEqual(card['event']['text'], 'Reset confirmed · 1 Jan 18:00 UTC')
+        self.assertEqual(card['event']['text'], 'Confirmed reset · 6h 0m')
+        self.assertEqual(card['event']['title'], 'Reset confirmed for 1 Jan 18:00 UTC')
         self.assertEqual(card['event']['brief'], 'reset in 6h 0m')
-        self.assertEqual(self.pool(base + [event('high')])['cards'][0]['event']['text'].split(' ·')[0], 'Reset announced')
+        self.assertEqual(self.pool(base + [event('high')])['cards'][0]['event']['text'].split(' ·')[0], 'Announced reset')
         for rows in (base + [event('low')], base + [event('confirmed', 'time needs confirmation')],
                      base + [event('confirmed', '2026-02-01T00:00:00Z')]):
             self.assertIsNone(self.pool(rows)['cards'][0]['event'])
@@ -234,7 +244,7 @@ class ProviderPoolTests(unittest.TestCase):
             {'provider': 'opencode', 'state': 'available', 'field': 'free_models', 'value': 0},
             {'provider': 'opencode', 'state': 'unavailable', 'field': 'free_models', 'value': 46}]
         card = self.pool(rows, self.free)['cards'][0]
-        self.assertEqual((card['head']['text'], card['head']['cls']), ('Blocked', 'spent'))
+        self.assertEqual((card['head']['text'], card['head']['cls']), ('Blocked', 'spent blocked'))
         self.assertTrue(card['blocked'])
         self.assertIsNone(card['overall'])
         self.assertEqual(card['models'], '46 models blocked')

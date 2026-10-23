@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # Height of the free selection lane in Grafana grid units; tune with the screenshots.
-FREE_LANE_HEIGHT = 14
+FREE_LANE_HEIGHT = 15
 FREE_QUALITY_HEIGHT = 16
 SRC = ROOT / "modules/self-hosted/siem/dashboards/paid-models.json"
 DST = ROOT / "modules/self-hosted/siem/dashboards/free-workers.json"
@@ -125,8 +125,8 @@ def generate():
                                     "providers with no available model stay as a grey card.")
         if panel.get("id") == 250:
             panel["gridPos"].update(y=FREE_LANE_HEIGHT + 1, h=FREE_QUALITY_HEIGHT)
-            panel["options"]["afterRender"] = panel["options"]["afterRender"].replace("?3:15", "?3:8")
-            if "?3:8" not in panel["options"]["afterRender"]:
+            panel["options"]["afterRender"] = panel["options"]["afterRender"].replace("?3:15", "?3:7")
+            if "?3:7" not in panel["options"]["afterRender"]:
                 raise ValueError("Paid models quality pager changed: cannot size the free page")
         panels.append(panel)
 
