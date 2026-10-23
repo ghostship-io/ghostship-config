@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.168] - 2026-10-23
+
+- Reconcile retained service account aliases and prevent an obsolete PAM home from breaking engine startup.
+
+PR #333.
+
 ## [3.17.167] - 2026-10-23
 
 - Make scripts/check a measured fast pre-merge gate and preserve full host and integration coverage nightly.
