@@ -583,3 +583,15 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   it is missing.
 - `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
   host integration. Remove it after Codex finishes integrating the host.
+
+### Private runtime identity settings
+
+`/etc/ghostship/owner-identity.env` supplies `GHOSTSHIP_GITHUB_USER_ID`
+(a positive integer), `GHOSTSHIP_T3_ENVIRONMENT_ID`,
+`GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID`, and `GHOSTSHIP_T3_PROJECT_` settings for
+`CONFIG`, `AGENT`, `3DPRINTING`, `ROMS`, `XPLUS4`, `NEWSLETTER`, and `ORCA`.
+Keep the file root-owned with mode 0600; populate these settings before
+activating the coordinator or inference bridge. The canonical owner-config
+renderer refuses a missing setting and preserves the numeric GitHub ID type.
+The inference bridge renders its provider template before handing the
+mode-0600 file to the container account. Values never belong in this tree.
