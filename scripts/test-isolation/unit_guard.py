@@ -9,7 +9,7 @@ import sys
 
 _installed = False
 _source = str(Path(__file__).resolve().parents[2])
-_forbidden = ('/var/lib', '/run', '/srv/apps', '/etc/ghostship')
+_forbidden = ('/var/lib', '/var/run', '/run', '/srv/apps', '/etc/ghostship')
 _network_commands = re.compile(r'^(curl|wget|ssh|scp|sftp|ghostship-notify|podman|docker(?:-compose)?|nix(?:-env|-instantiate)?|systemctl)$')
 
 
@@ -116,7 +116,8 @@ def install():
     parse_args = argparse.ArgumentParser.parse_args
     def isolated_args(parser, *args, **kwargs):
         for action in parser._actions:
-            if isinstance(action.default, str) and protected(action.default):
+            if (isinstance(action.default, str) and os.path.isabs(action.default)
+                    and protected(action.default, source_reads=True)):
                 action.default = str(root / 'defaults' / action.default.lstrip('/'))
         return parse_args(parser, *args, **kwargs)
     argparse.ArgumentParser.parse_args = isolated_args
