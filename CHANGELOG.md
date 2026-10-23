@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.138] - 2026-10-23
+
+- Allow the intentional SIEM URL credential fixture through the shared secret scan with a detector, value digest and path fingerprint in `.ghostship-secrets-ignore`. The exemption preserves the fixture and assertions, permits only this finding, and leaves privacy and commit identity checks active.
+
 ## [3.17.137] - 2026-10-23
 
 - ai-usage: every static route and every free provider's selection publishes its pace state, so a reader of those series no longer draws its own band. `ghostship_ai_static_route_pace_state{row,state}` holds one series per row of the owner's static worker table, and `ghostship_ai_free_provider_selection_pace_state{provider,state}` holds one per free provider. The state is the band of `value_policy.pace_state`: the left is the remaining ratio of the route, the expected left is that share minus the route's Paced Availability, and the band is read from the two, so left `0.4129` with a Paced Availability of `-0.033` reads `on_pace`, and left `0.9712` with `0.3306` reads `ahead`. A row or selection with no Paced Availability is `unknown`, one with nothing left is `spent`, and a row the snapshot does not carry is `unknown` rather than drawing a band. The modules call the value policy and never re-implement the band. This is the collector half; the Providers page keeps its own identical band until a separate change switches it to these series.
