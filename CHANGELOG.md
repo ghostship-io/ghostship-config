@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.141] - 2026-10-23
+
+- ai-usage: preserve structured causes from historical backfill and its corrections to inferred ledger verdicts. Explicit environment, brief and chief causes contribute to neither quality count; manual verdicts and fabrication evidence remain intact.
+
 ## [3.17.134] - 2026-10-23
 
 - ai-usage: the tiers are renamed for the redesigned pages. `bulk` is `worker`, `frontier` is `orchestrator`, and `free` and `3d` stay. For one release every published name keeps its old alias: `tiers`, `tier_winners`, `tier_members` and `coverage.tiers` carry `worker` beside `bulk` and `orchestrator` beside `frontier` with identical content, and every gauge with a tier label is published under both names. The alias set is one constant in the collector, so the next release deletes it in one place. The order of every tier is unchanged: the same candidates hold the same tier in the same order, and the page dashboard keeps reading the old names through the alias. Two member gauges are added for the model panes: `ghostship_ai_model_member_position{provider,model,tier}` is the 1-based position of every member of a tier, winners and non-winners, in the tier's own order, with the winners first in their winner order and an unavailable or spent member last, so a winner's member position is never after a non-winner's; and `ghostship_ai_model_reserved_for{provider,model,tier,role}` is 1 for a member whose provider is reserved for another workload in that tier, with the workload as the role (e.g. `review-roles`). A winner and a member therefore reach a model pane as rows: DeepSeek V4.1 Flash 1017 is a member card and Claude Sonnet is a reserved one. The collector HELP lines and the README name the new tiers and both gauges.
