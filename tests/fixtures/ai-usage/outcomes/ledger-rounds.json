@@ -1,0 +1,125 @@
+{
+  "schema": "ghostship.delegation.ledger/v1",
+  "columns": [
+    "model",
+    "task_type",
+    "verdict",
+    "verdict_source",
+    "cause",
+    "fabrication",
+    "started_at",
+    "round_id"
+  ],
+  "rounds": [
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-18T09:00:00Z",
+      "round_id": "r-1"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-18T11:00:00Z",
+      "round_id": "r-2"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-19T09:00:00Z",
+      "round_id": "r-3"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "reworked",
+      "verdict_source": "observed",
+      "cause": "the answer named a method that does not exist",
+      "fabrication": 0,
+      "started_at": "2026-10-19T11:00:00Z",
+      "round_id": "r-4"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "environment",
+      "verdict_source": "observed",
+      "cause": "the provider was unreachable",
+      "fabrication": 0,
+      "started_at": "2026-10-20T09:00:00Z",
+      "round_id": "r-5"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "manual",
+      "cause": "the owner accepted the answer",
+      "fabrication": 0,
+      "started_at": "2026-10-20T09:00:00Z",
+      "round_id": "m-1"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "research",
+      "verdict": "reworked",
+      "verdict_source": "observed",
+      "cause": "the first answer was wrong",
+      "fabrication": 0,
+      "started_at": "2026-10-20T10:00:00Z",
+      "round_id": "m-2"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "rejected",
+      "verdict_source": "observed",
+      "cause": "the answer invented an API",
+      "fabrication": 1,
+      "started_at": "2026-10-21T09:00:00Z",
+      "round_id": "g-1"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-22T09:00:00Z",
+      "round_id": "g-2"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "task_type": "research",
+      "verdict": "accepted",
+      "verdict_source": "observed",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-23T09:00:00Z",
+      "round_id": "g-3"
+    },
+    {
+      "model": "ollama-cloud/minimax-m3.1-flash",
+      "task_type": "implementation",
+      "verdict": "rejected",
+      "verdict_source": "observed",
+      "cause": "the answer named a method that does not exist",
+      "fabrication": 1,
+      "started_at": "2026-10-21T09:00:00Z",
+      "round_id": "x-1"
+    }
+  ]
+}
