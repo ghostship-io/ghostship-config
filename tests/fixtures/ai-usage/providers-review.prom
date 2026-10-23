@@ -223,8 +223,10 @@ ghostship_ai_model_info{provider="openrouter",model="gpt-oss-120b",name="GPT OSS
 # The free selection of every free provider at 01:10Z, as the collector
 # projects it from the routing snapshot: the model the provider selected for
 # the free tier, the basis of its capacity, the share of its window that is
-# left, the pace and the reset. A provider with no free winner keeps its row
-# with no model and no basis.
+# left, the pace and the reset. The live set is nineteen providers, eleven
+# with a model. A provider with no free winner keeps its row with basis
+# "none": the collector publishes it for the cards' free-models line, and the
+# Providers page leaves it out of the Free group.
 #
 # The free routes a provider holds apart from its paid allowance are counted
 # by state. A provider that holds no free route publishes no count at all, so
@@ -262,6 +264,10 @@ ghostship_ai_free_provider_selection_info{provider="ovh",model="mistral-small-3.
 ghostship_ai_free_provider_selection_remaining_ratio{provider="ovh"} 1.0
 ghostship_ai_free_provider_selection_info{provider="poolside",model="",display_name="",basis="none"} 1
 ghostship_ai_free_provider_selection_info{provider="requesty",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="upstage",model="solar-mini4",display_name="Solar Mini4",basis="learning"} 1
+ghostship_ai_free_provider_selection_remaining_ratio{provider="upstage"} 1.0
+ghostship_ai_free_provider_selection_info{provider="vercel",model="",display_name="",basis="none"} 1
+ghostship_ai_free_provider_selection_info{provider="zai",model="",display_name="",basis="none"} 1
 
 # The free routes of a provider, apart from its paid allowance.
 ghostship_ai_provider_free_models{provider="google",state="available"} 8

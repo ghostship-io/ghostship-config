@@ -24,7 +24,11 @@ listener and no new port: the service is a oneshot job that writes a file.
   writing, for a manual run. `--runtime-policy` is the runtime policy that
   carries the owner's static worker routes; the unit passes the pinned
   `ghostship-agent-policy` input's
-  `config/agents/runtime-policy.json`.
+  `config/agents/runtime-policy.json`. `--model-identities` is the model
+  identities beside that policy, `--delegation-ledger` the ledger of the
+  observed rounds and `--delegation-backfill` the rounds the ledger does not
+  carry. All four are read only, and a file that is missing is an empty
+  history.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
 * The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
@@ -548,6 +552,51 @@ collector publishes it as `ghostship_ai_account_window_rolling`, so the
 page can say 'rolling'. The mark is carried as the inference published it:
 a window of an inference that carries no mark publishes no rolling series.
 
+### The availability of an account
+
+An account whose limit was never seen used to reach the Providers page as a
+bare "learning window" chip: the page could not say whether the account
+could serve a request at all. The collector now publishes, per account,
+whether the account can serve right now, why it cannot when it cannot,
+whether its limit is unpublished or still being learned, and when that was
+observed. Everything is read from the routing snapshot, and nothing is
+recomputed.
+
+| Series | Value |
+| --- | --- |
+| `ghostship_ai_account_availability{account,state,basis,reason}` | 1 for every account: whether it can serve right now, with the reason it cannot when it cannot, and the basis of its limit |
+| `ghostship_ai_account_availability_check_timestamp_seconds{account}` | when the availability of the account was observed: the newest observation of the routes that were counted |
+
+The account is every key of `quota.accounts` and every provider of the
+candidates, so an account the snapshot knows only by its routes is published
+too, and every account holds exactly one series.
+
+The routes of an account that count are its free or promotional routes when
+it holds any, and all of its routes otherwise. A paid route never stands in
+for a free one, and a free route never stands in for a paid one: the
+OpenCode Go account is counted by its five free routes and not by the paid
+routes of the same subscription, and the check time of the account is the
+newest observation of those free routes alone.
+
+The state is `available` when one of the routes that count is available, and
+`unavailable` otherwise. The reason belongs to an account that cannot
+serve, and it is the reason its routes carry most often; a route that says
+nothing does not count against a route that says something. When no route
+says anything, a route that is in cooldown names the moment it cools down
+(`cooling down until 04:48 UTC`), and an account that holds no route at all
+says `no route available`. The reason is published exactly as it reads, and
+it is empty for an account that can serve: an available account has no
+reason to give.
+
+The basis says where the limit of the account comes from, and the three are
+never mixed:
+
+| Basis | What it means |
+| --- | --- |
+| `learning` | a route of the account never saw a limit failure, so the account is still learning its window |
+| `unpublished` | the account publishes no window with a number, so its limit is unknown and is never read as a zero |
+| `published` | the account publishes a window of its own |
+
 ### The static worker table
 
 While the routing switch is off, the selection in force is the owner's static
@@ -880,6 +929,77 @@ other member of the tiers they are reserved away from, and they are not
 used for that work at all while their provider has less than half of its
 capacity left. The reserve changes the order and the eligibility, never the
 value.
+
+### The trust of a model and the outcome it is worth
+
+The order of a tier is the trust of its routes first, and the value of a
+route second. The trust of a model is read for the task type of the tier it
+holds: `implementation` for the frontier, the bulk and the free tiers, and
+`cad-execution` for the 3D tier. The trust comes from the owner's runtime
+policy (`model_trust.entries`) and from the delegation ledger, and the worse
+of the two wins. The levels are `trusted`, `backup`, `untrusted` and
+`excluded`; a model that nothing speaks about is trusted, and an excluded
+level holds no tier at all.
+
+The order of a tier is then:
+
+* the trust of the route: a trusted route leads, a backup route follows, and
+  an untrusted route comes last with the reason it holds;
+* a route more than twenty points behind the line of its binding window
+  (`far_behind`) follows every route of its trust group that is not, whatever
+  the value of those routes: it goes to the back of the pool. An untrusted
+  route stays last, and a route that is merely behind keeps its place in the
+  value order;
+* a provider reserved for another workload (`provider_reservations`) joins
+  the backup group outside that workload's tier and follows every unreserved
+  route of it; its winner names the workload in `reserved_for`;
+* the 3D reserve, for the tiers a reserved model is held away from;
+* the bulk tier reads the published value, and a free route leads it while
+  its quality is within `0.10` of the best available route of its own
+  trust level, free or paid; the 3D tier is valued by its own 3D value under
+  the trust of the model;
+* the pace of the account window, and a route with no window has no pace: it
+  waits behind every route that has one.
+
+The pace state of a route is the band its Paced Availability falls in, the
+share left minus the expected share left of the most constraining window, in
+points, rounded to six decimals so that only the noise of the subtraction is
+removed (`100 * (0.50 - 0.55)` is `-5`). A window with nothing left is
+`spent` whatever its line; more than five points ahead of the line is
+`ahead`; between five points behind and five ahead is `on_pace`; between
+twenty points behind and five behind is `behind`; more than twenty points
+behind is `far_behind`; and a route with no window, or no line to compare it
+with, is `unknown`. The collector publishes the state as `pace_state` in the
+`capacity` of every candidate row, as `pace_state` of every winner, and as
+`ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`
+for every window of an account, so the Providers page colours amber and red
+by the collector's band instead of drawing its own.
+
+The published value of a route is the outcome-weighted value: the measured
+intelligence placed inside the range of the tier it competes in
+(`p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min)`), shrunk toward the rounds
+that were actually observed (`p = (k * p0 + s) / (k + n)`, with `k = 10`), and
+combined with the measured efficiency (`value = 0.70 * p + 0.30 * E`). The
+rounds n and s are the model's own outcomes: a round of the environment, or
+one whose cause is the `brief` or the `chief` reviewer, counts in neither. The
+trust scales it: an untrusted route keeps half of it. The Artificial
+Analysis value is published beside the published value, so the two cannot
+disagree about what the order was made of.
+
+The collector reads the trust and the outcomes from four files, and it never
+writes any of them: the model identities (`model-identities.json` beside the
+runtime policy), the runtime policy, the delegation ledger
+(`--delegation-ledger`) and its backfill (`--delegation-backfill`). A file
+that is missing, unreadable or empty is an empty history, and every model is
+trusted.
+
+* `ghostship_ai_model_trust_info{provider,model,tier,task_type,level,source,reason}`
+  - 1 for the trust of a model in a tier, with the level it holds, where the
+  level came from, and the reason it holds it.
+* `ghostship_ai_model_outcome{provider,model,tier,task_type,field}` - the
+  outcome of a model in a tier, field by field: `p0` the prior, `k` the
+  strength of the prior, `n` the observed rounds, `s` the accepted rounds,
+  and `p` the quality they produced.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
   best. Every ranked model keeps it, including the models that cannot be

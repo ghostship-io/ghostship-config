@@ -25,9 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import aa  # noqa: E402
 import aa_3d  # noqa: E402
+import account_availability as account_availability_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
+import outcomes as outcomes_module  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
 import published as published_module  # noqa: E402
@@ -104,6 +106,18 @@ AA_3D_CACHE_PATH = "/var/lib/ghostship-ai-usage/aa-3d.json"
 
 # The durable facts of the models, written by the daily procedure.
 FACTS_PATH = "/var/lib/ghostship-ai-usage/facts.json"
+
+# The model identities: which routes serve one model. The file sits beside
+# the runtime policy, and the collector reads it when it is there.
+MODEL_IDENTITIES_FILE = "model-identities.json"
+
+# The delegation ledger and its backfill. The ledger is a SQLite database
+# with the rounds that were observed, and the backfill carries the rounds
+# the ledger does not have. The collector opens the ledger read only and
+# never writes it.
+DELEGATION_DIR = f"{T3_HOME}/.local/state/ghostship-agent/delegation"
+DELEGATION_LEDGER_FILE = f"{DELEGATION_DIR}/ledger.sqlite3"
+DELEGATION_BACKFILL_FILE = f"{DELEGATION_DIR}/backfill.json"
 
 # Every account the dashboard covers, and where its readings come from.
 # A provider without a reader still gets a row, so nothing disappears.
@@ -218,6 +232,14 @@ METRIC_HELP = {
     ),
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
+    "ghostship_ai_model_trust_info": (
+        "The trust of a model for a task type, with the level it holds and "
+        "the reason it holds it."
+    ),
+    "ghostship_ai_model_outcome": (
+        "The measured outcome of a model for a task type: the prior p0, the "
+        "prior strength k, the observed rounds n and s, and the quality p."
+    ),
     "ghostship_ai_model_quality": "The quality score of a model.",
     "ghostship_ai_model_available": (
         "Whether a model can be used right now, with the reason it cannot."
@@ -366,6 +388,12 @@ METRIC_HELP = {
         "The share of an account window that an even spend would have left "
         "by now; the line of the bar."
     ),
+    "ghostship_ai_account_window_pace_state": (
+        "The band of an account window against its own even-spend line, in "
+        "the state label: ahead, on_pace, behind, far_behind, spent or "
+        "unknown. One series per window, with the labels of "
+        "ghostship_ai_account_window_remaining_ratio plus the state."
+    ),
     "ghostship_ai_account_window_reset_timestamp_seconds": (
         "When an account window resets."
     ),
@@ -385,6 +413,15 @@ METRIC_HELP = {
     ),
     "ghostship_ai_account_window_learning": (
         "One for an account that publishes no window of its own yet."
+    ),
+    "ghostship_ai_account_availability": (
+        "Whether an account can serve right now, with the reason it cannot "
+        "when it cannot, and the basis of its limit: learning, unpublished or "
+        "published."
+    ),
+    "ghostship_ai_account_availability_check_timestamp_seconds": (
+        "When the availability of an account was observed: the newest "
+        "observation of the routes that were counted."
     ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
@@ -1482,6 +1519,52 @@ def read_facts(facts_path: str | None) -> dict[str, Any]:
     return facts if isinstance(facts, dict) else {}
 
 
+def model_identities_path(explicit: str | None, runtime_policy: str | None) -> str:
+    """The model identities file: the one named, or the one beside the policy.
+
+    The runtime policy and the model identities ship together in the
+    owner's policy tree, so the default is the identities file in the
+    directory of the runtime policy. With neither, there is no file.
+    """
+    if explicit:
+        return str(explicit)
+    if runtime_policy:
+        return str(Path(runtime_policy).parent / MODEL_IDENTITIES_FILE)
+    return ""
+
+
+def read_outcomes(
+    *,
+    identities_path: str | None = None,
+    runtime_policy: str | None = None,
+    ledger: str | None = None,
+    backfill: str | None = None,
+) -> dict[str, Any]:
+    """The trust of the models and the rounds that were observed.
+
+    Four files are read, and none of them is written: the model
+    identities, the runtime policy that carries the owner's trust, the
+    delegation ledger, and its backfill.
+
+    Every reading is total. A file that is missing, unreadable or empty is
+    an empty history, and a model that nothing speaks about is trusted.
+    """
+    policy: dict[str, Any] = {}
+    if runtime_policy:
+        try:
+            document = json.loads(Path(runtime_policy).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            document = None
+        if isinstance(document, dict):
+            policy = document
+    return {
+        "identities": outcomes_module.load_identities(identities_path),
+        "policy": policy,
+        "rounds": outcomes_module.read_ledger(ledger),
+        "backfill": outcomes_module.load_backfill(backfill),
+    }
+
+
 def build_snapshot(
     results: list[SourceResult],
     ranked: list[Any],
@@ -1494,6 +1577,7 @@ def build_snapshot(
     aa_3d_cache: dict[str, Any] | None = None,
     free_models: set[tuple[str, str]] | None = None,
     promo_models: set[tuple[str, str]] | None = None,
+    outcomes: Mapping[str, Any] | None = None,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
@@ -1544,6 +1628,9 @@ def build_snapshot(
         inferred_windows=inferred_windows(
             context, _measured_window_keys(measured_windows or []), now
         ),
+        # The trust of the models and the rounds they were measured on.
+        # Without them every model is trusted and no round was observed.
+        outcomes=outcomes,
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
@@ -1727,6 +1814,64 @@ def feed_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
                 1.0,
             )
         )
+    return samples
+
+
+def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
+    """The trust of every model, and the outcomes it was measured on.
+
+    The trust is published per tier, because the trust of a model is read
+    for the task type of the tier it holds. The reason is published with
+    it, so a reader sees why a route is held back instead of only that it
+    is. The outcome is published as its own fields, so the prior, the
+    observed rounds and the quality can be read apart.
+    """
+    samples: list[Sample] = []
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        for tier, record in (row.get("trust") or {}).items():
+            if not isinstance(record, Mapping):
+                continue
+            samples.append(
+                (
+                    "ghostship_ai_model_trust_info",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "tier": str(tier),
+                        "task_type": str(record.get("task_type") or ""),
+                        "level": str(record.get("level") or "trusted"),
+                        "source": str(record.get("source") or "default"),
+                        "reason": str(record.get("reason") or ""),
+                    },
+                    1.0,
+                )
+            )
+        for tier, record in (row.get("outcome") or {}).items():
+            if not isinstance(record, Mapping):
+                continue
+            for field in ("p0", "k", "n", "s", "p"):
+                value = record.get(field)
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    continue
+                samples.append(
+                    (
+                        "ghostship_ai_model_outcome",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "tier": str(tier),
+                            "task_type": str(record.get("task_type") or ""),
+                            "field": field,
+                        },
+                        float(value),
+                    )
+                )
     return samples
 
 
@@ -1930,6 +2075,8 @@ def render(
         writer.add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
+    for name, labels, value in trust_samples(snapshot or {}):
+        writer.add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
         writer.add(name, labels, value)
     # The name the collector already publishes for a model, so a static row
@@ -1952,6 +2099,10 @@ def render(
     for name, labels, value in free_selection_module.samples(
         snapshot or {}, display_names
     ):
+        writer.add(name, labels, value)
+    # The availability of every account: whether it can serve right now, why
+    # not when it cannot, and where its limit comes from.
+    for name, labels, value in account_availability_module.samples(snapshot or {}, now):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -2085,6 +2236,31 @@ def main(argv: list[str] | None = None) -> int:
             "and says so; the rest of the collection is unaffected."
         ),
     )
+    parser.add_argument(
+        "--model-identities",
+        default="",
+        help=(
+            "The model identities: which routes serve one model. The "
+            "default is the model-identities.json beside the runtime "
+            "policy. A missing file is no identity at all."
+        ),
+    )
+    parser.add_argument(
+        "--delegation-ledger",
+        default=DELEGATION_LEDGER_FILE,
+        help=(
+            "The delegation ledger: the rounds that were observed. It is "
+            "opened read only, and a missing ledger is an empty history."
+        ),
+    )
+    parser.add_argument(
+        "--delegation-backfill",
+        default=DELEGATION_BACKFILL_FILE,
+        help=(
+            "The rounds the ledger does not carry, and the rounds whose "
+            "verdict it corrects. A missing file is no round at all."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -2106,6 +2282,16 @@ def main(argv: list[str] | None = None) -> int:
     for result in results:
         measured.extend(result.windows)
     catalog = catalog_module.Catalog.load(args.aa_catalog)
+    outcomes = read_outcomes(
+        # The model identities sit beside the runtime policy, unless the
+        # caller names another file.
+        identities_path=model_identities_path(
+            args.model_identities, args.runtime_policy
+        ),
+        runtime_policy=args.runtime_policy,
+        ledger=args.delegation_ledger,
+        backfill=args.delegation_backfill,
+    )
     snapshot = build_snapshot(
         results,
         context.get("ranked") or [],
@@ -2118,6 +2304,7 @@ def main(argv: list[str] | None = None) -> int:
         free_models=context.get("free_models") or set(),
         promo_models=context.get("promo_models") or set(),
         aa_3d_cache=aa_3d_cache,
+        outcomes=outcomes,
         routing_enabled=routing_enabled,
     )
     text = render(
