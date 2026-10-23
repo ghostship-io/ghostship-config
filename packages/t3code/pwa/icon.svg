@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#161616"/>
+  <!-- Keep the mark within Android's central maskable safe area. -->
+  <path fill="#fafafa" d="M124 172h124v38h-42v130h-40V210h-42zm142 0h122v36l-53 38h20c23 0 39 17 39 43v9c0 27-20 42-46 42h-84v-38h79c8 0 12-4 12-11v-3c0-7-4-11-12-11h-60v-34l53-35h-70z"/>
+</svg>
