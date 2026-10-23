@@ -58,6 +58,7 @@
     ./private-integrations.nix
     ./github-engineering.nix
     ./inference-bridge.nix
+    ./free-worker.nix
     ./t3code.nix
     ./t3code-hardening.nix
     ./t3code-podman.nix

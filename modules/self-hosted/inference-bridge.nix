@@ -8,7 +8,6 @@ let
   hostHome = "/srv/apps/t3code/home";
   containerHome = "/home/t3code";
   state = ".local/state/ghostship-free-inference-bridge";
-  fixture = ".local/state/ghostship/free-inference/public-fixture";
   endpoint = pkgs.writeText "inference-server.json" (builtins.toJSON {
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
@@ -22,32 +21,48 @@ let
     inherit lib pkgs;
     installer = managedInstall;
   };
+  maintenance = config.system.build.t3codeToolMaintenance;
+  toolUpdate = config.system.build.t3codeToolAutoUpdate;
+  toolUpdateOverride = pkgs.writeText "t3code-free-worker-tool-update.conf" ''
+    [Service]
+    ExecStart=
+    ExecStart=${toolUpdate}/bin/t3code-tool-auto-update
+  '';
   syncOverride = pkgs.writeText "t3code-ghostship-agent-sync-managed.conf" ''
     [Service]
     ExecStart=
     ExecStart=${sourceSync}/bin/t3code-install-ghostship-agent
   '';
-  poolConfig = ./inference-pool.json;
-  # The container bind-mounts the single file /run/ghostship-secrets/t3code.env; the projector
-  # replaces it by rename, so a running container keeps the old inode until it restarts
-  # (2026-10-18: new provider keys stayed invisible). The pool reads a copy in the container's
-  # own tmpfs /run instead, refreshed whenever the host projection changes.
-  hostProjection = "/run/ghostship-secrets/t3code.env";
-  projection = "/run/ghostship-free-inference/credentials.env";
-  writeProjection = pkgs.writeShellScript "ghostship-inference-credentials-write" ''
+  workerHome = "/home/worker";
+  workerData = "/srv/apps/ghostship-worker";
+  workerSocket = "/run/ghostship-worker/socket/inference.sock";
+  projection = "/run/ghostship-worker/secrets/credentials.env";
+  clientEndpoint = pkgs.writeText "t3-inference-server.json" (builtins.toJSON {
+    socket = "${containerHome}/${state}/socket/inference.sock";
+  });
+  disabledLocalPool = pkgs.writeText "t3-no-local-free-pool.json" (builtins.toJSON {
+    providers = { };
+    require_sandbox = true;
+  });
+  writeClient = pkgs.writeShellScript "ghostship-inference-client-write" ''
     set -eu
     umask 077
-    ${pkgs.coreutils}/bin/cat > ${projection}.new
-    ${pkgs.coreutils}/bin/mv -fT ${projection}.new ${projection}
+    install -d -m0755 /run/ghostship-integrations
+    cat > /run/ghostship-integrations/inference-token.new
+    chown 3000:62020 /run/ghostship-integrations/inference-token.new
+    chmod 0400 /run/ghostship-integrations/inference-token.new
+    mv -fT /run/ghostship-integrations/inference-token.new /run/ghostship-integrations/inference-token
+    install -m0444 ${clientEndpoint} /run/ghostship-integrations/inference-server.json.new
+    mv -fT /run/ghostship-integrations/inference-server.json.new /run/ghostship-integrations/inference-server.json
+    install -D -m0600 -o3000 -g3000 ${disabledLocalPool} ${containerHome}/.config/ghostship/free-inference.json
   '';
-  syncCredentials = pkgs.writeShellScript "ghostship-inference-credentials-sync" ''
+  isolateT3Models = pkgs.writeShellScript "t3-free-worker-model-scope" ''
     set -eu
-    ${pkgs.nix}/bin/nix copy --no-check-sigs --to local?root=/srv/apps/t3code/nix-root ${writeProjection}
-    ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
-      -d -m0750 -o3000 -g62020 ${builtins.dirOf projection}
-    ${pkgs.podman}/bin/podman exec -i --user 3000:62020 t3code ${writeProjection} < ${hostProjection}
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/opencode-model-catalog.py} \
+      --source ${containerHome}/.cache/opencode/models.json \
+      --config ${containerHome}/.config/opencode/opencode.jsonc \
+      --output ${containerHome}/.local/state/t3code-opencode/models.json
   '';
-  repositories = (builtins.fromJSON (builtins.readFile poolConfig)).repositories;
   publish = pkgs.writeShellScript "ghostship-inference-bridge-prepare" ''
     set -eu
     umask 077
@@ -65,21 +80,29 @@ let
       systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride}
+      --to local?root=/srv/apps/t3code/nix-root ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
-    ln -sfn ${broker} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/package
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
     ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
     ln -sfn ${syncOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync-override
-    ${syncCredentials}
+    ln -sfn ${writeClient} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/client-writer
+    ln -sfn ${isolateT3Models} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/model-scope
+    ln -sfn ${maintenance} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-maintenance
+    ln -sfn ${toolUpdate} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update
+    ln -sfn ${toolUpdateOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update-override
     install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
     ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
     # Override only the old image's scheduled installer, preserving its timer and repo sync.
     ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
       -D -m0644 ${syncOverride} \
       /run/systemd/system/t3code-ghostship-agent-sync.service.d/50-nixos-managed-installer.conf
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
+      -D -m0644 ${toolUpdateOverride} \
+      /run/systemd/system/t3code-tool-auto-update.service.d/50-nixos-free-worker.conf
     ${pkgs.podman}/bin/podman exec --user 0:0 t3code systemctl daemon-reload
+    ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
+      t3code ${maintenance}/bin/t3code-tool-maintenance --refresh-opencode-shim
     ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
       --env T3CODE_HOOK_SET=bootstrap.d t3code ${sourceSync}/bin/t3code-install-ghostship-agent
     install -d -m0750 -o3000 -g62020 ${hostHome}/${state} ${hostHome}/${state}/socket
@@ -90,50 +113,35 @@ let
     mv -fT /run/ghostship-integrations/inference-token.new /run/ghostship-integrations/inference-token
     install -m0444 ${endpoint} /run/ghostship-integrations/inference-server.json.new
     mv -fT /run/ghostship-integrations/inference-server.json.new /run/ghostship-integrations/inference-server.json
-    install -d -m0700 -o3000 -g3000 ${hostHome}/.config/ghostship
-    ${pkgs.python3}/bin/python3 ${./render-owner-config.py} ${poolConfig} ${hostHome}/.config/ghostship/free-inference.json.new
-    chown 3000:3000 ${hostHome}/.config/ghostship/free-inference.json.new
-    mv -fT ${hostHome}/.config/ghostship/free-inference.json.new ${hostHome}/.config/ghostship/free-inference.json
-    # Seed public toy code only on first setup; preserve an existing Git history.
-    if ! test -e ${hostHome}/${fixture}; then
-      install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/ghostship/free-inference
-      seed=$(mktemp -d ${hostHome}/${fixture}.seed.XXXXXX)
-      trap 'rm -rf "$seed"' EXIT
-      install -m0644 ${./inference-fixture/calc.py} "$seed/calc.py"
-      install -m0644 ${./inference-fixture/test_calc.py} "$seed/test_calc.py"
-      ${pkgs.git}/bin/git -C "$seed" -c init.defaultBranch=main init -q
-      ${pkgs.git}/bin/git -C "$seed" add calc.py test_calc.py
-      ${pkgs.git}/bin/git -C "$seed" -c user.name=Ghostship \
-        -c user.email=ghostship@localhost commit -qm 'Seed public synthetic inference fixture'
-      chown -R 3000:3000 "$seed"
-      mv -T --no-clobber "$seed" ${hostHome}/${fixture}
-    fi
-    test -e ${hostHome}/${fixture}/.git
+    # CLI and MCP share the authenticated proxy without adding mounts to T3.
+    ${pkgs.podman}/bin/podman exec -i --user 0:0 t3code ${writeClient} < ${token}
+    ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
+      t3code ${isolateT3Models}
   '';
 in
 {
   config = lib.mkIf cfg.enable {
     systemd.services.ghostship-inference-bridge = {
-      description = "Authenticated free inference broker in the existing T3 container";
+      description = "Authenticated free inference broker in the separate worker container";
       wantedBy = [ "multi-user.target" ];
-      after = [ "podman-t3code.service" ];
-      requires = [ "podman-t3code.service" ];
+      after = [ "podman-ghostship-worker.service" "podman-t3code.service" ];
+      requires = [ "podman-ghostship-worker.service" ];
       path = [ pkgs.coreutils ];
-      restartTriggers = [ config.age.secrets.inference-bridge-token.file poolConfig ];
+      restartTriggers = [ config.age.secrets.inference-bridge-token.file inputs.ghostship-private-agent ];
       serviceConfig = {
         EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
         ExecStartPre = publish;
         ExecStart = lib.escapeShellArgs ([
-          "${pkgs.podman}/bin/podman" "exec" "--user" "3000:62020"
-          "--env" "HOME=${containerHome}"
-          "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
-          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"
+          "--env" "HOME=${workerHome}"
+          "--env" "XDG_STATE_HOME=${workerHome}/.local/state"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${workerHome}/.config/ghostship/free-inference.json"
           "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
-          "t3code" "${broker}/bin/ghostship-free-inference-bridge"
-          "--token-file" "${containerHome}/${state}/token"
-          "--socket" "${containerHome}/${state}/socket/inference.sock"
+          "ghostship-worker" "${broker}/bin/ghostship-free-inference-bridge"
+          "--token-file" "/run/ghostship-worker/control/token"
+          "--socket" workerSocket
           "--socket-gid" "62020"
-        ] ++ lib.concatMap (repository: [ "--repository-root" repository ]) repositories);
+        ]);
         Restart = "on-failure";
         RestartSec = 10;
         # container setup may take up to its own 20-minute start timeout
@@ -146,20 +154,19 @@ in
     };
     # The scheduler owns execution; broker restarts cannot terminate model work.
     systemd.services.ghostship-inference-scheduler = {
-      description = "Durable free inference scheduler in the existing T3 container";
+      description = "Durable free inference scheduler in the separate worker container";
       wantedBy = [ "multi-user.target" ];
-      after = [ "podman-t3code.service" "ghostship-inference-bridge.service" ];
-      requires = [ "podman-t3code.service" ];
-      wants = [ "ghostship-inference-bridge.service" ];
+      after = [ "podman-ghostship-worker.service" "ghostship-free-worker-auth.service" ];
+      requires = [ "podman-ghostship-worker.service" "ghostship-free-worker-auth.service" ];
       serviceConfig = {
         ExecStart = lib.escapeShellArgs [
-          "${pkgs.podman}/bin/podman" "exec" "--user" "3000:62020"
-          "--env" "HOME=${containerHome}"
-          "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
-          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"
+          "--env" "HOME=${workerHome}"
+          "--env" "XDG_STATE_HOME=${workerHome}/.local/state"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${workerHome}/.config/ghostship/free-inference.json"
           "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
-          "t3code" "${scheduler}/bin/agent" "free-inference" "serve"
-          "--workers" "8" "--max-jobs" "8" "--poll-seconds" "60"
+          "ghostship-worker" "${scheduler}/bin/agent" "free-inference" "serve"
+          "--workers" "2" "--max-jobs" "4" "--poll-seconds" "30"
         ];
         Restart = "on-failure";
         RestartSec = 10;
@@ -167,25 +174,38 @@ in
         # Killing the host Podman attachment reports exit 1 even for an orderly
         # stop. Signal the container scheduler and await both processes instead;
         # genuine scheduler exit 1 must still fail and trigger monitoring.
-        ExecStop = "${pkgs.python3}/bin/python ${./inference-scheduler-stop.py} ${pkgs.podman}/bin/podman $MAINPID";
+        ExecStop = "${pkgs.python3}/bin/python ${./inference-scheduler-stop.py} ${pkgs.podman}/bin/podman $MAINPID ghostship-worker";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";
       };
     };
-    # Refresh the pool's copy whenever the host projection is replaced.
-    systemd.paths.ghostship-inference-credentials = {
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = hostProjection;
-    };
-    systemd.services.ghostship-inference-credentials = {
-      description = "Copy the current T3 credential projection to the free inference pool";
+    # Keep the existing mounted socket directory stable. The worker itself
+    # mounts only its own socket; it never receives the T3 home or auth store.
+    systemd.sockets.ghostship-inference-proxy = {
+      wantedBy = [ "sockets.target" ];
       after = [ "ghostship-inference-bridge.service" ];
-      requisite = [ "ghostship-inference-bridge.service" ];
+      requires = [ "ghostship-inference-bridge.service" ];
+      socketConfig = {
+        ListenStream = "${hostHome}/${state}/socket/inference.sock";
+        SocketMode = "0660";
+        SocketUser = "3000";
+        SocketGroup = "62020";
+        RemoveOnStop = true;
+      };
+    };
+    systemd.services.ghostship-inference-proxy = {
+      after = [ "ghostship-inference-bridge.service" ];
+      requires = [ "ghostship-inference-bridge.service" ];
       serviceConfig = {
-        Type = "oneshot";
-        ExecStart = syncCredentials;
-        UMask = "0077";
+        ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd ${workerData}/socket/inference.sock";
+        User = "62020";
+        Group = "62020";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        RestrictAddressFamilies = [ "AF_UNIX" ];
       };
     };
     virtualisation.oci-containers.containers.ghostship-private-integrations.volumes = [
@@ -193,7 +213,7 @@ in
     ];
     systemd.services.podman-ghostship-private-integrations = {
       after = [ "ghostship-inference-bridge.service" ];
-      wants = [ "ghostship-inference-bridge.service" ];
+      requires = [ "ghostship-free-worker-auth.service" ];
     };
   };
 }

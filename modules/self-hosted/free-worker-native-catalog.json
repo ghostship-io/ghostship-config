@@ -1,0 +1,63 @@
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "OpenCode",
+    "api": "https://opencode.ai/inference/openai/v1",
+    "npm": "@ai-sdk/openai-compatible",
+    "models": {
+      "deepseek-v4.1-flash-free": {
+        "id": "deepseek-v4.1-flash-free",
+        "name": "DeepSeek V4.1 Flash Free",
+        "description": "DeepSeek V4.1 Flash model for reasoning and agentic coding",
+        "family": "deepseek-flash",
+        "attachment": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "tool_call": true,
+        "interleaved": {
+          "field": "reasoning_content"
+        },
+        "structured_output": true,
+        "temperature": true,
+        "knowledge": "2025-05",
+        "release_date": "2026-09-10",
+        "last_updated": "2026-09-10",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 200000,
+          "output": 32000
+        },
+        "provider": {
+          "api": "https://opencode.ai/inference/openai/v1"
+        },
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0
+        },
+        "canonical_model_id": "deepseek/deepseek-v4.1-flash"
+      }
+    }
+  }
+}
