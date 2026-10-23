@@ -26,6 +26,8 @@ ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "c
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from metrics import ExactLabel  # noqa: E402
+
 
 def load(name, file):
     spec = importlib.util.spec_from_file_location(name, ROOT / file)
@@ -282,6 +284,103 @@ DISPLAY_NAMES = {
     ("nvidia", "nemotron-free"): "Nemotron Free",
 }
 
+# The names the collector publishes for the models of the free tier, in the
+# shape it publishes them: the model label holds the id the exposition
+# format allows, so a raw id that carries a "/" or an "@" is published
+# under its own form. The names are invented, and the ids are the public
+# ones of the providers.
+PUBLISHED_NAMES = [
+    (
+        "ghostship_ai_model_info",
+        {
+            "provider": "groq",
+            "model": "qwen_qwen3.8-27b",
+            "name": ExactLabel("Qwen3.8 27B"),
+        },
+        1.0,
+    ),
+    (
+        "ghostship_ai_model_info",
+        {
+            "provider": "openrouter",
+            "model": "thinkingmachines_inkling-small:free",
+            "name": ExactLabel("Inkling Small (free)"),
+        },
+        1.0,
+    ),
+    (
+        "ghostship_ai_model_info",
+        {
+            "provider": "cloudflare-workers-ai",
+            "model": "_cf_openai_gpt-oss-120b",
+            "name": ExactLabel("GPT-OSS 120B"),
+        },
+        1.0,
+    ),
+]
+
+# The free tier of the names: the model each provider selected, with the
+# raw id the provider gave. NVIDIA holds the same id as Groq and publishes
+# no name of its own, and Kilo holds a model that is published nowhere.
+NAME_SNAPSHOT = {
+    "candidates": [
+        free_candidate("groq", "qwen/qwen3.8-27b", True, capacity(basis="reported", remaining=0.8)),
+        free_candidate(
+            "openrouter",
+            "thinkingmachines/inkling-small:free",
+            True,
+            capacity(basis="reported", remaining=0.4),
+        ),
+        free_candidate(
+            "cloudflare-workers-ai",
+            "@cf/openai/gpt-oss-120b",
+            True,
+            capacity(basis="reported", remaining=0.9),
+        ),
+        free_candidate(
+            "nvidia",
+            "qwen/qwen3.8-27b",
+            True,
+            capacity(basis="reported", remaining=0.7),
+        ),
+        free_candidate(
+            "kilo",
+            "nvidia/nemotron-3.5-super-vl:free",
+            True,
+            capacity(basis="reported", remaining=0.6),
+        ),
+    ],
+    "tier_winners": {
+        "free": [
+            {"provider": "groq", "model": "qwen/qwen3.8-27b"},
+            {"provider": "openrouter", "model": "thinkingmachines/inkling-small:free"},
+            {"provider": "cloudflare-workers-ai", "model": "@cf/openai/gpt-oss-120b"},
+            {"provider": "nvidia", "model": "qwen/qwen3.8-27b"},
+            {"provider": "kilo", "model": "nvidia/nemotron-3.5-super-vl:free"},
+        ]
+    },
+    "quota": {"accounts": {}},
+}
+
+
+def published_names(samples):
+    """The display names, built the way the collector builds them.
+
+    The collector reads the name of every model from the series it
+    publishes for the model, and keys it by the provider and the model
+    label of that series.
+    """
+    names = {}
+    for name, labels, _value in samples:
+        if name != "ghostship_ai_model_info":
+            continue
+        provider = str(labels.get("provider") or "")
+        model = str(labels.get("model") or "")
+        text = str(labels.get("name") or "")
+        if provider and model and text:
+            names[(provider, model)] = text
+    return names
+
 
 def selection_rows(samples):
     """The selection of every free provider, by provider."""
@@ -453,6 +552,61 @@ class FreeSelectionTests(unittest.TestCase):
         )
 
 
+class FreeSelectionDisplayNameTests(unittest.TestCase):
+    """The name of the model a free provider selected.
+
+    The name is published with the model id the exposition format allows,
+    and the id a provider gave is not always one of them. The row of a
+    free provider carries the raw id, and it carries the name the
+    collector published for that model.
+    """
+
+    def samples(self, snapshot=None, names=None):
+        """The published samples, with the names the collector published."""
+        self.assertIsNotNone(
+            free_selection,
+            "the collector does not publish the free selection yet",
+        )
+        return free_selection.samples(
+            NAME_SNAPSHOT if snapshot is None else snapshot,
+            published_names(PUBLISHED_NAMES) if names is None else names,
+        )
+
+    def test_a_model_id_with_a_slash_carries_its_published_name(self):
+        """Groq's model is published under an id without its slash."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(rows["groq"]["display_name"], "Qwen3.8 27B")
+
+    def test_a_free_model_of_another_tier_carries_its_published_name(self):
+        """OpenRouter's free model keeps its own name."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(rows["openrouter"]["display_name"], "Inkling Small (free)")
+
+    def test_a_model_id_with_an_at_sign_carries_its_published_name(self):
+        """The Workers AI id starts with an "@"."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(rows["cloudflare-workers-ai"]["display_name"], "GPT-OSS 120B")
+
+    def test_a_model_without_a_published_name_falls_back_to_its_raw_id(self):
+        """Kilo's model is published nowhere, and the row says the id."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(
+            rows["kilo"]["display_name"], "nvidia/nemotron-3.5-super-vl:free"
+        )
+
+    def test_the_name_of_another_provider_is_never_used(self):
+        """NVIDIA holds Groq's model and publishes no name of its own."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(rows["nvidia"]["display_name"], "qwen/qwen3.8-27b")
+
+    def test_the_other_labels_of_the_row_are_unchanged(self):
+        """The name is the only label the fix touches."""
+        rows = selection_rows(self.samples())
+        self.assertEqual(rows["groq"]["provider"], "groq")
+        self.assertEqual(rows["groq"]["model"], "qwen/qwen3.8-27b")
+        self.assertEqual(rows["groq"]["basis"], "reported")
+
+
 class FreeSelectionWiringTests(unittest.TestCase):
     def test_the_collector_renders_the_free_selection(self):
         from metrics import SourceResult
@@ -479,6 +633,29 @@ class FreeSelectionWiringTests(unittest.TestCase):
         )
         self.assertIn(
             'ghostship_ai_free_provider_selection_remaining_ratio{provider="google"} 0.9712',
+            text,
+        )
+
+    def test_the_collector_renders_the_published_name_of_a_free_model(self):
+        """The name is read from the series the collector publishes."""
+        from metrics import SourceResult
+
+        result = SourceResult(
+            source="t3",
+            status="ok",
+            metrics=list(PUBLISHED_NAMES),
+        )
+        text = main.render([result], [], NOW, 0.0, NAME_SNAPSHOT)
+        self.assertIn(
+            'ghostship_ai_free_provider_selection_info{basis="reported",display_name="Qwen3.8 27B",model="qwen_qwen3.8-27b",provider="groq"} 1',
+            text,
+        )
+        self.assertIn(
+            'ghostship_ai_free_provider_selection_info{basis="reported",display_name="Inkling Small (free)",model="thinkingmachines_inkling-small:free",provider="openrouter"} 1',
+            text,
+        )
+        self.assertIn(
+            'ghostship_ai_free_provider_selection_info{basis="reported",display_name="GPT-OSS 120B",model="_cf_openai_gpt-oss-120b",provider="cloudflare-workers-ai"} 1',
             text,
         )
 
