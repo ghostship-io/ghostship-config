@@ -7,6 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = (
+    "test_seerr.py",
     "test_shared_network_range.py",
     "test_t3code_podman_*.py",
     "test_ci_scheduling.py",
@@ -35,6 +36,9 @@ TESTS = (
     "test_ghostship_notify.py",
     "test_ai_usage_collector.py",
     "test_ai_usage_ranking.py",
+    "test_ai_usage_model_selection.py",
+    "test_ai_usage_pools.py",
+    "test_ai_usage_short_windows.py",
     "test_ai_usage_outcome_value.py",
     "test_ai_usage_quality_score.py",
     "test_ai_usage_threed.py",

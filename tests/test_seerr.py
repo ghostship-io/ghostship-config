@@ -1,12 +1,18 @@
+import importlib.util
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 import requests
-from test_config import load
 
-seerr = load("seerr_provision", "modules/self-hosted/seerr-provision.py")
+spec = importlib.util.spec_from_file_location(
+    "seerr_provision",
+    Path(__file__).resolve().parents[1] / "modules/self-hosted/seerr-provision.py",
+)
+seerr = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(seerr)
 
 
 def response(data, status=200):
@@ -17,10 +23,141 @@ def response(data, status=200):
 
 
 class SeerrTests(unittest.TestCase):
-    def run_setup(self, sync_status, existing_enabled=True):
+    def test_reconcile_repairs_removed_profile_and_rotated_key_then_converges(self):
+        settings = {
+            "id": 0,
+            "name": "Ghostship radarr",
+            "hostname": "radarr",
+            "port": 7878,
+            "apiKey": "old",
+            "activeProfileId": 11,
+            "activeProfileName": "Optimal",
+            "activeDirectory": "/movies",
+            "isDefault": True,
+            "preventSearch": True,
+        }
+        calls = []
+
+        def api(method, path, data=None):
+            calls.append((method, path, data))
+            if method == "PUT":
+                # Released Seerr validates id as readOnly in request bodies.
+                if "id" in data:
+                    raise requests.HTTPError(
+                        "read-only property id", response=response({}, 400)
+                    )
+                settings.update(data)
+            return [dict(settings)] if method == "GET" else dict(settings)
+
+        desired = dict(settings, apiKey="current")
+        profiles = [{"id": 12, "name": "Optimal"}]
+        roots = [{"path": "/movies"}]
+        for _ in range(2):
+            seerr.reconcile_instance(api, "radarr", desired, profiles, roots)
+        self.assertEqual(settings["activeProfileId"], 12)
+        self.assertEqual(settings["apiKey"], "current")
+        self.assertTrue(settings["preventSearch"])
+        self.assertEqual(sum(method == "PUT" for method, *_ in calls), 1)
+
+    def test_reconcile_preserves_valid_custom_profile_and_refuses_missing_root(self):
+        current = {
+            "id": 0,
+            "hostname": "sonarr",
+            "port": 8989,
+            "name": "Ghostship sonarr",
+            "apiKey": "current",
+            "activeProfileId": 2,
+            "activeProfileName": "Custom",
+            "activeDirectory": "/tv",
+        }
+        api = Mock(return_value=[current])
+        seerr.reconcile_instance(
+            api,
+            "sonarr",
+            dict(current, activeProfileId=8),
+            [{"id": 2, "name": "Custom"}, {"id": 8, "name": "Optimal"}],
+            [{"path": "/tv"}],
+        )
+        self.assertEqual(api.call_count, 1)
+        with self.assertRaisesRegex(RuntimeError, "root"):
+            seerr.reconcile_instance(api, "sonarr", current, [], [])
+        self.assertFalse(any(call.args[0] != "GET" for call in api.call_args_list))
+
+    def test_reconcile_refuses_ambiguous_removed_profile_without_writes(self):
+        current = {
+            "id": 0,
+            "name": "Ghostship radarr",
+            "hostname": "radarr",
+            "port": 7878,
+            "apiKey": "current",
+            "activeProfileId": 11,
+            "activeProfileName": "Optimal",
+            "activeDirectory": "/movies",
+        }
+        api = Mock(return_value=[current])
+        with self.assertRaisesRegex(RuntimeError, "profile"):
+            seerr.reconcile_instance(
+                api,
+                "radarr",
+                current,
+                [{"id": 12, "name": "Optimal"}, {"id": 13, "name": "Optimal"}],
+                [{"path": "/movies"}],
+            )
+        self.assertEqual(api.call_count, 1)
+
+    def test_notification_setup_tests_credentials_and_reads_back_before_converging(
+        self,
+    ):
+        state = {"enabled": False, "types": 0, "options": {"topic": ""}}
+        calls = []
+
+        def api(method, path, data=None):
+            calls.append((method, path))
+            if method == "POST" and not path.endswith("/test"):
+                state.update(data)
+            return dict(state)
+
+        with patch.dict(seerr.os.environ, NTFY_PUBLISH_PASSWORD="test"):
+            seerr.reconcile_notifications(api)
+            seerr.reconcile_notifications(api)
+        self.assertTrue(state["enabled"])
+        self.assertTrue(state["options"]["authMethodUsernamePassword"])
+        self.assertEqual(state["options"]["username"], "publisher")
+        self.assertEqual(state["options"]["password"], "test")
+        self.assertEqual(
+            [path for method, path in calls if method == "POST"],
+            ["/settings/notifications/ntfy/test", "/settings/notifications/ntfy"],
+        )
+
+    def test_notification_auth_failure_does_not_save_settings(self):
+        api = Mock(side_effect=[{"options": {}}, requests.HTTPError("rejected")])
+        with (
+            patch.dict(seerr.os.environ, NTFY_PUBLISH_PASSWORD="test"),
+            self.assertRaises(requests.HTTPError),
+        ):
+            seerr.reconcile_notifications(api)
+        self.assertEqual(api.call_count, 2)
+        self.assertEqual(api.call_args.args[1], "/settings/notifications/ntfy/test")
+
+    def test_custom_notification_destination_is_preserved(self):
+        api = Mock(
+            return_value={
+                "enabled": True,
+                "options": {
+                    "url": "https://notify.example.invalid",
+                    "topic": "custom",
+                },
+            }
+        )
+        seerr.reconcile_notifications(api)
+        self.assertEqual(api.call_count, 1)
+
+    def run_setup(self, sync_status, existing_enabled=True, provisioned=False):
         calls = []
         marker = Mock()
-        marker.exists.return_value = False
+        marker.exists.return_value = provisioned
+        instances = {"sonarr": [], "radarr": []}
+        notifications = {"enabled": False, "types": 0, "options": {}}
         libraries = [
             {"id": "1", "type": "artist", "enabled": existing_enabled},
             {"id": "2", "type": "movie", "enabled": False},
@@ -43,7 +180,14 @@ class SeerrTests(unittest.TestCase):
                     [dict(item, enabled=item["id"] in enabled) for item in libraries]
                 )
             if method == "GET" and path in ("/settings/sonarr", "/settings/radarr"):
-                return response([])
+                return response(instances[path.rsplit("/", 1)[-1]])
+            if method == "POST" and path in ("/settings/sonarr", "/settings/radarr"):
+                instances[path.rsplit("/", 1)[-1]].append(dict(json, id=0))
+                return response(dict(json, id=0))
+            if path == "/settings/notifications/ntfy":
+                if method == "POST":
+                    notifications.update(json)
+                return response(notifications)
             return response({})
 
         def servarr(url, **kwargs):
@@ -63,6 +207,7 @@ class SeerrTests(unittest.TestCase):
                 SONARR_API_KEY="test",
                 RADARR_API_KEY="test",
                 PLEX_TOKEN="test",
+                NTFY_PUBLISH_PASSWORD="test",
             ),
         ):
             session.return_value.request.side_effect = dispatch
@@ -72,7 +217,10 @@ class SeerrTests(unittest.TestCase):
                 marker.touch.assert_not_called()
             else:
                 seerr.main()
-                marker.touch.assert_called_once()
+                if provisioned:
+                    marker.touch.assert_not_called()
+                else:
+                    marker.touch.assert_called_once()
         return calls
 
     def test_released_api_preserves_existing_library_on_sync_and_enable(self):
@@ -105,6 +253,17 @@ class SeerrTests(unittest.TestCase):
         self.assertFalse(
             any(
                 path in ("/settings/plex/library", "/settings/initialize")
+                for _, path, *_ in calls
+            )
+        )
+
+    def test_existing_marker_still_reconciles_without_resetting_login_policy(self):
+        calls = self.run_setup(200, provisioned=True)
+        self.assertTrue(any(path == "/auth/plex" for _, path, *_ in calls))
+        self.assertTrue(any(path == "/settings/radarr" for _, path, *_ in calls))
+        self.assertFalse(
+            any(
+                path in ("/settings/main", "/settings/initialize")
                 for _, path, *_ in calls
             )
         )

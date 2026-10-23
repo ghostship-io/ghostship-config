@@ -34,6 +34,28 @@ class RootfsSafety(unittest.TestCase):
             with self.assertRaises(ValueError):
                 rootfs.checked_source(str(source))
 
+    def test_reexec_alias_targets_only_a_seeded_closure(self):
+        # NixOS compiles this re-exec path into systemd even when ExecStart
+        # already uses an absolute store path. It must exist inside RootDirectory.
+        target = "/nix/store/fixture-systemd"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / target.lstrip("/")).mkdir(parents=True)
+            links = {"/run/current-system/systemd": target}
+            rootfs.install_symlinks(root, links, {target})
+            self.assertEqual(
+                (root / "run/current-system/systemd").readlink(), Path(target)
+            )
+        for links, closure in (
+            ({"/run/current-system/systemd": target}, set()),
+            ({"/run/current-system": target}, {target}),
+        ):
+            with (
+                tempfile.TemporaryDirectory() as temporary,
+                self.assertRaises(ValueError),
+            ):
+                rootfs.install_symlinks(Path(temporary), links, closure)
+
     def test_failed_mount_assembly_unmounts_partial_tree(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "root"

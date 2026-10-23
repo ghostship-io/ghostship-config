@@ -10,6 +10,8 @@ from datetime import datetime
 
 import value_policy
 import outcomes as outcomes_module
+import quota
+import pools
 from metrics import ExactLabel
 from typing import Any, Mapping
 
@@ -42,6 +44,18 @@ def _trust(row: Mapping[str, Any]) -> str:
     return max(levels or ["trusted"], key=lambda level: TRUST.get(level, 3))
 
 
+def quality_value(row: Mapping[str, Any]) -> float | None:
+    """Order by the posterior; the integer Quality score is display only."""
+    prior = number(row.get('quality_p0'))
+    if prior is not None:
+        try:
+            return value_policy.outcome_quality(prior, row.get('quality_n'), row.get('quality_s'))
+        except (ValueError, TypeError):
+            return None
+    score = number(row.get('quality_score'))
+    return None if score is None else score / 100
+
+
 def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) -> dict[str, Any] | None:
     """Display a long or quota limit; short windows only gate availability."""
     try:
@@ -53,7 +67,8 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
         kind = str(window.get("kind") or "").lower()
         duration = number(window.get("duration_seconds"))
         short = (any(token in kind for token in ("session", "hour", "daily", "minute"))
-                 or (kind == "inferred" and duration is not None and duration < 7 * 86400))
+                 or (duration is not None and duration < 7 * 86400
+                     and not any(token in kind for token in ("week", "month"))))
         long = (any(token in kind for token in ("week", "month", "quota", "credit"))
                 or (duration is not None and duration >= 7 * 86400))
         if short or not long:
@@ -63,7 +78,7 @@ def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) 
             continue
         seconds = number(window.get("seconds_to_reset"))
         expected = None
-        if duration is not None and duration >= 7 * 86400 and seconds is not None:
+        if quota.is_paced_window(window) and duration is not None and duration > 0 and seconds is not None:
             expected = min(1.0, max(0.0, seconds / duration))
         delta = None if expected is None else round(100 * (remaining - expected), 6)
         eligible.append({"kind": kind, "quota_id": window.get("quota_id"),
@@ -145,6 +160,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         reason = "quota_exhausted" if exhausted else str(
             (source.get("availability") or {}).get("reason") or "")
         quality = number(source.get("quality_score"))
+        posterior = quality_value(source)
         limit = limiting_window(source.get("windows") or [], snapshot.get("generated_at"))
         row = {
             "key": str(source.get("provider")) + ":" + str(source.get("model")),
@@ -160,10 +176,12 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "available": available, "state": "excluded" if level == "excluded" else "exhausted" if exhausted else (
                 "available" if available else "unavailable"),
             "reason": "model_excluded" if level == "excluded" else reason, "trust_level": level, "quality_score": quality,
+            "quality_p": posterior,
             "remaining_ratio": remaining, "limiting_window": limit,
             "pace_delta": limit.get("pace_delta") if limit else None,
             "pace_state": limit.get("pace_state") if limit else "unknown",
-            "pool": source.get("pool"),
+            "pool": source.get("pool") or pools.record(str(source.get("provider") or ""),
+                str(source.get("model") or ""), (source.get("access") or {}).get("billing") or ""),
         }
         # Orchestrator models can also be workers; the categories describe use,
         # not reservations. No review subscription is withheld from the owner.
@@ -178,25 +196,35 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     def order(row: Mapping[str, Any]) -> tuple:
         return (not row["available"], TRUST.get(row["trust_level"], 3),
                 row["pace_state"] == "far_behind",
-                -(row["quality_score"] if row["quality_score"] is not None else -1),
+                -(row["quality_p"] if row["quality_p"] is not None else -1),
                 -(row["pace_delta"] if row["pace_delta"] is not None else -2), row["key"])
     for category, rows in categories.items():
         # Free routes close to the best quality lead within their trust group.
         best = {}
         for row in rows:
-            if row["available"] and row["quality_score"] is not None:
-                best[row["trust_level"]] = max(best.get(row["trust_level"], 0), row["quality_score"])
+            if row["available"] and row["quality_p"] is not None:
+                best[row["trust_level"]] = max(best.get(row["trust_level"], 0), row["quality_p"])
         def rank(row):
             baseline = order(row)
-            free = (row["billing"] in ("free", "promotion") and row["quality_score"] is not None
-                    and row["quality_score"] >= best.get(row["trust_level"], 100) - 10)
+            free = (row["billing"] in ("free", "promotion") and row["quality_p"] is not None
+                    and row["quality_p"] >= best.get(row["trust_level"], 1) - value_policy.FREE_ROUTE_MARGIN)
             return (*baseline[:3], not free, *baseline[3:])
         rows.sort(key=rank)
         for index, row in enumerate(rows, 1):
             row["position"] = index
             provider = providers.setdefault(row["provider"], {
-                "orchestrator": [], "worker": [], "selected": {"orchestrator": None, "worker": None}})
+                "orchestrator": [], "worker": [], "selected": {"orchestrator": None, "worker": None}, 'pools': {}})
             provider[category].append(row)
+            row['provider_position'] = len(provider[category])
+            pool = row.get('pool') or {}
+            pool_id = str(pool.get('id') or row['provider'] + ':unknown')
+            group = provider['pools'].setdefault(pool_id, {'id': pool_id, 'label': pool.get('label'),
+                'parent': pool.get('parent'), 'basis': pool.get('basis') or 'unknown',
+                'orchestrator': [], 'worker': [], 'selected': {'orchestrator': None, 'worker': None}})
+            group[category].append(row)
+            row['pool_position'] = len(group[category])
+            if row['available'] and group['selected'][category] is None:
+                group['selected'][category] = row['native']
             if row["available"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
     return {"schema": SCHEMA, "generated_at": snapshot.get("generated_at"),
