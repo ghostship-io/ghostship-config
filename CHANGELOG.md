@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.104] - 2026-10-23
+
+- ai-usage: the collector can read the observed outcomes of the delegation rounds. A new module reads the rounds the ledger holds, per model and task type: the count of the rounds of work (n), the count of the accepted ones (s), the fabrications that were seen, and the trust of the model with the reason it holds. The identity of a route is one model on every provider: a route of an identity names the provider and the model, the normalized model is the id of an identity or the model of one of its routes, and the normalized model is the identity itself; a checkpoint tag such as `:1017` is kept, so a tagged model never pools with the untagged model of the same name. The ledger is opened read only, a backfill row replaces the verdict of the round it names unless the verdict of the ledger is a manual one, and the trust of a model is the worse of the level the owner's runtime policy gives it and the level the ledger gives it: a model is not trusted again until three accepted rounds follow its last fabrication. Nothing calls the module yet.
+
 ## [3.17.103] - 2026-10-23
 
 - The Providers page opens with the capacity cards: one card per provider, with a small icon and every capacity window the account has, and a chip for every provider that publishes no window of its own yet. The numbers of a card are the collector's account window gauges, read in one query, so the page never recomputes a window: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The pace of a row reads the difference between the share that is left and the share the window expects to be left, a window that is spent says so, and a window the provider did not report carries the tag that it was inferred. The card order, the names, the icons and the notes are the presentation the owner approved.
