@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.151] - 2026-10-23
+
+- Stage opt-in per-container network containment
+
+PR #242.
+
 ## [3.17.150] - 2026-10-23
 
 - T3: isolate development Docker and remove blanket runtime privileges
