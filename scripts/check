@@ -25,6 +25,10 @@ python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
+printf 'Checking the configuration drift check\n'
+python3 -m unittest discover -s tests -p test_configuration_drift.py
+nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
+
 printf 'Checking the kernel audit backlog limit\n'
 nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
 
@@ -36,10 +40,6 @@ python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 
 printf 'Checking the boot generation drift check\n'
 python3 -m unittest discover -s tests -p test_boot_generation_drift.py
-
-printf 'Checking the configuration drift check\n'
-python3 -m unittest discover -s tests -p test_configuration_drift.py
-nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
 
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
