@@ -1,8 +1,8 @@
 name: T3 Code browser
 on:
-  push:
-    branches: [main]
-    paths: ['packages/t3code/**', 'tests/t3code-*.cjs', 'flake.nix', 'flake.lock', '.github/workflows/t3code.yml']
+  schedule:
+    - cron: '47 5 * * *'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
