@@ -203,10 +203,7 @@ class ActivateHostTests(unittest.TestCase):
         self.environment["GHOSTSHIP_DEPLOY_HOLDER"] = "env-holder"
         result = self.run_helper("--toplevel", str(self.toplevel))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [
-            ["check", "--holder", "env-holder"],
-            ["release", "--holder", "env-holder"],
-        ])
+        self.assertEqual(self.slot_calls(), [["check", "--holder", "env-holder"]])
 
     def test_verify_only_releases_the_verified_generation(self):
         self.matching_generation("system-413-link")
@@ -249,10 +246,16 @@ class ActivateHostTests(unittest.TestCase):
         holder = "it's \"me\""
         result = self.run_helper("--toplevel", str(self.toplevel), "--holder", holder)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.slot_calls(), [
-            ["check", "--holder", holder],
-            ["release", "--holder", holder],
-        ])
+        self.assertEqual(self.slot_calls(), [["check", "--holder", holder]])
+
+    def test_an_activation_keeps_the_slot_held(self):
+        # The deploy's checks after the switch (T3 unchanged, the upgrade timer
+        # off) run inside the slot; only verify-only releases it.
+        self.matching_generation("system-413-link")
+        result = self.run_helper("--toplevel", str(self.toplevel), "--holder", "test-holder")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("release", [call[0] for call in self.slot_calls()])
+        self.assertIn("still holds the deploy slot", result.stdout)
 
 
 if __name__ == "__main__":
