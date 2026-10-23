@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.214] - 2026-10-23
+
+- Check reset announcements through the personal Desktop profile and retain a public relay with independent blocked status and source confidence.
+
+
+Rebased onto the corrected #379 isolation guard at 3f0cb133e28fb8fb59d3e7cdbd2ca2c3597ab824. The transport feature matches the approved c0283879 behavior; the new base retains main's non-fatal optional-cache handling. Land #379 first, then retarget this PR to main. The relay-list/dashboard/confirmation follow-up is separate in #383.
+
+PR #374.
+
 ## [3.17.213] - 2026-10-23
 
 - Keep fast tests off live host state and external services, with temporary collector state, stubbed notifications and a guard that rejects accidental access.
