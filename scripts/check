@@ -103,6 +103,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_inference.py
 python3 -m unittest discover -s tests -p test_ai_usage_inference_wiring.py
 python3 -m unittest discover -s tests -p test_ai_usage_inferred_publication.py
 python3 -m unittest discover -s tests -p test_ai_usage_outcomes.py
+python3 -m unittest discover -s tests -p test_ai_usage_free_selection.py
 python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
 
 printf 'Checking the agent desktop browser stage\n'

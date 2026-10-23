@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.106] - 2026-10-23
+## [3.17.107] - 2026-10-23
 
 - ai-usage: the collector can read the observed outcomes of the delegation rounds. A new module reads the rounds the ledger holds, per model and task type: the count of the rounds of work (n), the count of the accepted ones (s), the fabrications that were seen, and the trust of the model with the reason it holds. The identity of a route is one model on every provider: a route of an identity names the provider and the model, the normalized model is the id of an identity or the model of one of its routes, and the normalized model is the identity itself; a checkpoint tag such as `:1017` is kept, so a tagged model never pools with the untagged model of the same name. The ledger is opened read only, a backfill row replaces the verdict of the round it names unless the verdict of the ledger is a manual one, and the trust of a model is the worse of the level the owner's runtime policy gives it and the level the ledger gives it: a model is not trusted again until three accepted rounds follow its last fabrication. Nothing calls the module yet.
+
+## [3.17.106] - 2026-10-23
+
+- AI usage: the Providers page lists every free provider, the model it selected for the free tier, and the free routes it holds apart from its paid allowance. The monthly allowance of OpenCode Go is spent, and its free route still works, so the two are published apart. Everything is a projection of the routing snapshot, and nothing is recomputed: the selection is the provider's first entry in `tier_winners.free`, and the free routes are the candidates whose billing class is `free` or `promotion`, split by their own availability. The class alone decides, so a subscription route of a paid provider is never a free model. A provider whose account only learned its window is a free provider even when it holds no route, a provider with no free winner keeps its row with an empty model and no basis, and a paid provider has no row at all. The basis of a selection is the capacity of the winning route: reported, inferred or published, `learning` for a route that never saw a limit failure, and none when nothing was measured. The new series are `ghostship_ai_free_provider_selection_info`, `ghostship_ai_free_provider_selection_remaining_ratio`, `ghostship_ai_free_provider_selection_paced_availability`, `ghostship_ai_free_provider_selection_reset_timestamp_seconds` and `ghostship_ai_provider_free_models`.
 
 ## [3.17.105] - 2026-10-23
 
