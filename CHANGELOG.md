@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.129] - 2026-10-23
+## [3.17.130] - 2026-10-23
 
 - ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
+
+## [3.17.129] - 2026-10-23
+
+- ai-usage: a route more than twenty points behind the pace of its binding window goes to the back of the pool. The collector now publishes one pace state per route and per account window, and the Providers page reads it for amber (behind) and red (far_behind, spent) instead of drawing its own band. The state is the band of the Paced Availability of the most constraining window in points, the share left minus the expected share left, rounded to six decimals so that only the noise of the subtraction is removed (`100 * (0.50 - 0.55)` is `-5`): more than five points ahead is `ahead`, between five points behind and five ahead is `on_pace`, between twenty points behind and five behind is `behind`, more than twenty points behind is `far_behind`, a window with nothing left is `spent` whatever its line, and a route with no window or no line to compare it with is `unknown`. The order of every tier gains one element right after the trust group: a `far_behind` route follows every route of its trust group that is not, whatever the value of those routes. An untrusted route stays last, and a route that is merely behind keeps its place in the value order. The candidate row and the winner carry the state as `pace_state`, and every account window publishes `ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`, with the labels of the remaining-ratio series plus the state.
 
 ## [3.17.128] - 2026-10-23
 

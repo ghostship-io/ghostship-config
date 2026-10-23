@@ -792,8 +792,14 @@ class AccountWindowCheckTimeTests(unittest.TestCase):
         for name, labels, value in snapshot.account_window_samples(data):
             if name == "ghostship_ai_account_window_learning":
                 continue
+            labels = dict(labels)
+            if name == "ghostship_ai_account_window_pace_state":
+                # The state series carries the row's labels plus its one
+                # state label, and nothing else: the row joins on the rest.
+                self.assertIn("state", labels)
+                labels.pop("state")
             key = (labels["account"], labels["kind"], labels["quota_id"])
-            rows.setdefault(key, []).append(dict(labels))
+            rows.setdefault(key, []).append(labels)
         self.assertTrue(rows)
         for key, label_sets in rows.items():
             distinct = {
