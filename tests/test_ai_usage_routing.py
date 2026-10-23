@@ -28,6 +28,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from collector_fixture import state_args
 
 REPO = Path(__file__).resolve().parents[1]
 COLLECTOR = REPO / "modules/self-hosted/ai-usage/collector"
@@ -388,7 +389,7 @@ class RoutingSnapshotTests(unittest.TestCase):
             try:
                 with contextlib.redirect_stderr(io.StringIO()):
                     code = main_module.main(
-                        [
+                        state_args(root, [
                             "--output",
                             str(output),
                             "--state",
@@ -407,7 +408,7 @@ class RoutingSnapshotTests(unittest.TestCase):
                             str(NOW),
                             "--routing-enabled",
                             "true",
-                        ]
+                        ])
                     )
             finally:
                 main_module.collect = original
@@ -429,7 +430,7 @@ class RoutingSnapshotTests(unittest.TestCase):
             try:
                 with contextlib.redirect_stderr(io.StringIO()):
                     code = main_module.main(
-                        [
+                        state_args(root, [
                             "--output",
                             str(output),
                             "--state",
@@ -444,7 +445,7 @@ class RoutingSnapshotTests(unittest.TestCase):
                             "/dev/null",
                             "--now",
                             str(NOW),
-                        ]
+                        ])
                     )
             finally:
                 main_module.collect = original

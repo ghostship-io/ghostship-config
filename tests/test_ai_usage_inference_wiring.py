@@ -22,6 +22,9 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
+from unittest.mock import patch
+from collector_fixture import state_args
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -240,7 +243,8 @@ class WiringTestCase(unittest.TestCase):
             SourceResult(source="measured", status="ok", reason="ok", observed_at=now, windows=list(measured))
         ]
         return main.ranking_samples(
-            results, catalog_module.Catalog({}), context, now, t3_home=self.directory
+            results, catalog_module.Catalog({}), context, now, t3_home=self.directory,
+            t3_state=os.path.join(self.directory, 'absent-state.sqlite')
         )
 
     def sample(self, samples, name, provider=None, model=None):
@@ -728,8 +732,23 @@ class UnreadableTests(WiringTestCase):
         )
 
     def test_the_collector_exits_zero_without_the_records(self):
-        code = main.main(
-            [
+        original = main.collect
+        def collect(*args, **kwargs):
+            kwargs.update(t3_home=self.directory, secrets_env=os.path.join(self.directory, 'secrets.env'),
+                          pool_server=os.path.join(self.directory, 'pool.json'),
+                          pool_token=os.path.join(self.directory, 'pool-token'), pool_ledger=None,
+                          catalog_path=os.path.join(self.directory, 'catalog.json'),
+                          opencode_db=os.path.join(self.directory, 'absent.db'),
+                          t3_state=os.path.join(self.directory, 'state.sqlite'))
+            return original(*args, **kwargs)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(main, 'collect', side_effect=collect))
+            stack.enter_context(patch.object(main, 'collect_t3', return_value=[]))
+            stack.enter_context(patch.object(main.pool_module, 'collect', return_value=[]))
+            for provider in ('read_grok', 'read_opencode_go', 'read_antigravity', 'read_openrouter', 'read_ollama'):
+                stack.enter_context(patch.object(main.providers_module, provider,
+                    return_value=SourceResult(provider, 'unreadable')))
+            code = main.main(state_args(self.directory, [
                 "--stdout",
                 "--output",
                 os.path.join(self.directory, "ai-usage.prom"),
@@ -747,8 +766,7 @@ class UnreadableTests(WiringTestCase):
                 os.path.join(self.directory, "aa3d.json"),
                 "--now",
                 str(NOW),
-            ]
-        )
+            ]))
         self.assertEqual(code, 0)
 
 
