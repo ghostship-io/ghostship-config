@@ -52,15 +52,26 @@ CAPACITY_METRICS = {
     "ghostship_ai_account_window_rolling": "rolling",
     "ghostship_ai_account_window_order": "order",
     "ghostship_ai_account_window_learning": "learning",
+    # The free models of a provider, apart from its paid allowance.
+    "ghostship_ai_provider_free_models": "free_models",
 }
 
 # The content of the panel with the fixture, measured in Playwright at the
 # production font (Inter), with the panel's own styles and a phone of 390 px
 # and a desktop of 1600 px. A grid row of the dashboard is 37 px, so the
 # panel is tall enough for the taller of the two readings.
-CAPACITY_PHONE_HEIGHT = 1713
-CAPACITY_DESKTOP_HEIGHT = 577
+#
+# The free line of a card is part of the measurement: four cards of the live
+# set hold free models, and the line adds 84 px at 390 px.
+CAPACITY_PHONE_HEIGHT = 1798
+CAPACITY_DESKTOP_HEIGHT = 538
 CAPACITY_ROW_HEIGHT = 37
+
+# The content of the model selection panel, measured in Playwright the same
+# way with the headroom the panel is sized for: the five static rows, the
+# Free divider, and twenty free providers. The live set holds sixteen.
+SELECTION_PHONE_HEIGHT = 883
+SELECTION_DESKTOP_HEIGHT = 861
 
 # The moment the fixture was read. The resets of the fixture are counted
 # from it, so the worked cases are the rows of that moment.
@@ -247,15 +258,31 @@ def fixture_capacity_rows():
     return rows
 
 
-# The metrics of the static route table, and the field of a row each one
-# fills. The panel reads them in one query, and the field says which one a
-# row holds.
+# The metrics of the static route table and of the free selection under it,
+# and the field of a row each one fills. The panel reads them in one query,
+# and the field says which one a row holds.
 SELECTION_METRICS = {
     "ghostship_ai_static_route_info": "info",
     "ghostship_ai_static_route_remaining_ratio": "left",
     "ghostship_ai_static_route_paced_availability": "pace",
     "ghostship_ai_static_route_reset_timestamp_seconds": "reset",
+    # The free selection of every free provider, published by the collector.
+    "ghostship_ai_free_provider_selection_info": "free_info",
+    "ghostship_ai_free_provider_selection_remaining_ratio": "free_left",
+    "ghostship_ai_free_provider_selection_paced_availability": "free_pace",
+    "ghostship_ai_free_provider_selection_reset_timestamp_seconds": "free_reset",
+    "ghostship_ai_provider_free_models": "free_models",
 }
+
+# The metrics of the free selection alone. The page reads them; it never
+# computes a free row from the candidates or from the account windows.
+FREE_SELECTION_METRICS = (
+    "ghostship_ai_free_provider_selection_info",
+    "ghostship_ai_free_provider_selection_remaining_ratio",
+    "ghostship_ai_free_provider_selection_paced_availability",
+    "ghostship_ai_free_provider_selection_reset_timestamp_seconds",
+    "ghostship_ai_provider_free_models",
+)
 
 # The live static route table the owner approved: row, role, provider, model,
 # display name and the work the route is used for.
@@ -271,6 +298,48 @@ STATIC_ROUTES = (
      "Deploys (1st), Research (3rd)"),
     ("5", "Deploys", "ollama", "beam", "Beam 1.0 501B A23B", "Deploys (2nd)"),
 )
+
+# The live free selection under the static rows, at the moment of the
+# fixture: the provider, the name the cards read it by, the model the
+# provider selected for the free tier, the name of that model, and the Left
+# cell. The rows follow the capacity cards: the approved accounts first, then
+# the accounts the list does not name, by name.
+FREE_ROWS = (
+    ("opencode-go", "OpenCode Go", "beam-free", "Beam Free", "100%"),
+    ("openrouter", "OpenRouter", "gpt-oss-120b", "GPT OSS 120B",
+     "99% \u00b7 \u25cf on pace"),
+    ("cloudflare-workers-ai", "Cloudflare", "llama-3.3-70b-instruct",
+     "Llama 3.3 70B Instruct", "learning window"),
+    ("cohere", "Cohere", "", "", "no eligible free model"),
+    ("google", "Google", "gemma-3-27b", "Gemma 3 27B",
+     "97% \u00b7 \u25b2 33 ahead"),
+    ("groq", "Groq", "qwen3.8-27b", "Qwen3.8 27B", "learning window"),
+    ("inception", "Inception", "mercury-2", "Mercury 2", "learning window"),
+    ("kilo", "Kilo", "nemotron-3.5-super-vl", "Nemotron 3.5 Super VL",
+     "learning window"),
+    ("kilo-keyed", "Kilo (keyed)", "qwen3.8-27b", "Qwen3.8 27B",
+     "learning window"),
+    ("mistral", "Mistral", "", "", "no eligible free model"),
+    ("nvidia", "NVIDIA", "glm-5.3-flash", "GLM-5.3 Flash", "learning window"),
+    ("ovh", "OVH", "mistral-small-3.2", "Mistral Small 3.2",
+     "learning window"),
+    ("opencode", "OpenCode Zen", "", "", "no eligible free model"),
+    ("orcarouter", "Orcarouter", "", "", "no eligible free model"),
+    ("poolside", "Poolside", "", "", "no eligible free model"),
+    ("requesty", "Requesty", "", "", "no eligible free model"),
+)
+
+# The free models of every provider that holds a free route, by state, as the
+# collector counts them at the moment of the fixture. A provider that holds no
+# free route publishes no count, so its card carries no free line.
+FREE_MODEL_COUNTS = {
+    "google": (8, 0),
+    "kilo": (8, 4),
+    "nvidia": (15, 1),
+    "opencode-go": (2, 3),
+    "openrouter": (10, 10),
+    "requesty": (0, 7),
+}
 
 
 def labels_of(inner):
@@ -305,6 +374,21 @@ def fixture_selection_rows():
             field = "routing"
         rows.append({**labels_of(inner), "field": field, "value": float(value)})
     return rows
+
+
+def fixture_free_rows():
+    """The rows of the free selection, read from the committed fixture.
+
+    The panel reads the info series, the three capacity series and the count
+    of free models in the same query as the static routes, so a row is one
+    series and its field says which one it fills. The count carries the state
+    of the free route in the `state` label.
+    """
+    return [
+        row
+        for row in fixture_selection_rows()
+        if str(row.get("field") or "").startswith("free_")
+    ]
 
 
 def run_panel_helper(panel, expression, env=None):
@@ -1392,11 +1476,12 @@ class ProviderCapacityTests(unittest.TestCase):
 
         Measured in Playwright with the panel's own helpers, styles and the
         production font (Inter), at the widths the owner uses: the content is
-        1713 px tall at 390 px and 577 px at 1600 px. The taller reading is
-        rounded up to whole 37 px grid rows.
+        1798 px tall at 390 px and 538 px at 1600 px with the free line of
+        every card that holds free models. The taller reading is rounded up
+        to whole 37 px grid rows.
         """
         rows = math.ceil(CAPACITY_PHONE_HEIGHT / CAPACITY_ROW_HEIGHT)
-        self.assertEqual(rows, 47)
+        self.assertEqual(rows, 49)
         self.assertEqual(self.panel["gridPos"]["h"], rows)
         self.assertGreaterEqual(
             self.panel["gridPos"]["h"] * CAPACITY_ROW_HEIGHT,
@@ -1406,6 +1491,70 @@ class ProviderCapacityTests(unittest.TestCase):
             self.panel["gridPos"]["h"] * CAPACITY_ROW_HEIGHT,
             CAPACITY_DESKTOP_HEIGHT,
         )
+
+    # --- The free models of a card -------------------------------------------
+
+    def test_a_card_reads_the_free_models_apart_from_its_allowance(self):
+        """The free models of a card are the collector's own count."""
+        self.assertIn(
+            "ghostship_ai_provider_free_models", expressions(self.panel)
+        )
+        content = self.panel["options"]["content"]
+        self.assertIn('class="fr {{this.free.cls}}"', content)
+        self.assertIn("{{this.free.text}}", content)
+        styles = self.panel["options"].get("styles") or ""
+        # The line is green when a free model is available, grey otherwise.
+        self.assertIn(".capacity .fr {", styles)
+        self.assertIn(".capacity .fr.ok { color: #8fc98f; }", styles)
+
+    def test_a_card_with_available_free_models_says_available(self):
+        """OpenCode Go is the case: its monthly is spent, its free route works."""
+        monthly = self.window(self.card(self.cards(), "opencode-go"), "Monthly")
+        self.assertEqual(monthly["pct"], "0%")
+        self.assertEqual(monthly["fillClass"], "spent")
+        card = self.card(self.cards(), "opencode-go")
+        self.assertEqual(
+            card["free"], {"text": "Free models \u00b7 available \u00b7 2 models", "cls": "ok"}
+        )
+        # A provider whose free routes are all available counts the available
+        # ones, never the paid allowance.
+        google = self.card(self.cards(), "google")
+        self.assertEqual(
+            google["free"],
+            {"text": "Free models \u00b7 available \u00b7 8 models", "cls": "ok"},
+        )
+
+    def test_a_card_with_no_available_free_model_says_none_available(self):
+        """Requesty holds seven free routes and none of them is available."""
+        card = self.card(self.cards(), "requesty")
+        self.assertEqual(
+            card["free"],
+            {"text": "Free models \u00b7 none available \u00b7 7 models", "cls": ""},
+        )
+        # OpenRouter counts its available routes, not all of them.
+        openrouter = self.card(self.cards(), "openrouter")
+        self.assertEqual(
+            openrouter["free"],
+            {"text": "Free models \u00b7 available \u00b7 10 models", "cls": "ok"},
+        )
+
+    def test_an_account_with_no_free_model_has_no_free_line(self):
+        """A provider that publishes no free route has no free line at all."""
+        cards = self.cards()
+        for account in ("ollama", "claude", "codex", "opencode"):
+            self.assertIsNone(self.card(cards, account)["free"], account)
+
+    def test_the_free_line_is_sized_with_its_card(self):
+        """The free line is a line of its own in the card, in the card's font."""
+        styles = self.panel["options"].get("styles") or ""
+        rule = next(
+            declarations
+            for selector, declarations in css_rules(styles)
+            if selector == ".capacity .fr"
+        )
+        self.assertIn("grid-column: 1 / -1", rule)
+        self.assertIn("font-size: 10.5px", rule)
+        self.assertIn("white-space: nowrap", rule)
 
 
 class ModelSelectionTests(unittest.TestCase):
@@ -1449,6 +1598,37 @@ class ModelSelectionTests(unittest.TestCase):
             + "console.log(JSON.stringify([helpers.selectionChip(rows), helpers.selectionRouting(rows)]));"
         )
         return run_panel_helper(self.panel, expression)
+
+    def free(self, rows=None, now=CAPACITY_NOW):
+        """The divider and the free rows, as the helper of the panel builds them.
+
+        The helper reads the collector's free selection only: no candidate and
+        no account window is turned into a free row here.
+        """
+        self.assertIn(
+            "selectionFreeRows",
+            self.panel["options"]["helpers"],
+            "the panel has no helper for the free rows",
+        )
+        expression = (
+            "const rows = "
+            + json.dumps(self.rows if rows is None else rows)
+            + ";\n"
+            + "const now = "
+            + json.dumps(now)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.selectionFreeRows(rows, now)));"
+        )
+        return run_panel_helper(self.panel, expression)
+
+    def free_row(self, rows=None, now=CAPACITY_NOW, provider="opencode-go"):
+        """The free row of one provider, and the divider it follows."""
+        built = self.free(rows, now)
+        self.assertEqual(built[0].get("group"), "Free", "the free group has no divider")
+        for row in built[1:]:
+            if row["provider"] == provider:
+                return row
+        raise AssertionError(f"no free row for {provider!r}")
 
     def test_the_page_puts_the_selection_under_the_capacity_cards(self):
         """The owner reads the cards first, then the static table, then the rankings."""
@@ -1675,11 +1855,19 @@ class ModelSelectionTests(unittest.TestCase):
     def test_the_panel_is_tall_enough_for_its_rows(self):
         """The panel holds every row of the live table at either width.
 
-        Measured in Playwright with the panel's own styles and the five live
-        rows of the fixture: the content is 198 px tall at 390 px and 208 px
-        at 1600 px, and a grid row of the dashboard is 37 px.
+        Measured in Playwright with the panel's own styles, the production
+        font (Inter) and the headroom of twenty free providers: the content is
+        883 px tall at 390 px and 861 px at 1600 px, and a grid row of the
+        dashboard is 37 px. The live set holds sixteen free providers, so the
+        height keeps room for four more.
         """
-        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 208)
+        self.assertEqual(self.panel["gridPos"]["h"] * 37, 888)
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * 37, SELECTION_PHONE_HEIGHT
+        )
+        self.assertGreaterEqual(
+            self.panel["gridPos"]["h"] * 37, SELECTION_DESKTOP_HEIGHT
+        )
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
@@ -1694,6 +1882,224 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertAlmostEqual(rows[("3", "pace")], 0.012)
         self.assertAlmostEqual(rows[("4", "left")], 1.0)
         self.assertNotIn(("4", "pace"), rows)
+
+    # --- The free group under the static rows --------------------------------
+
+    def test_the_free_rows_read_the_collector_s_free_selection(self):
+        """Every number of a free row is a series the collector publishes.
+
+        The page never builds a free row from the candidates or from the
+        account windows: a row that is not published is not on the page.
+        """
+        expression = expressions(self.panel)
+        for metric in FREE_SELECTION_METRICS:
+            self.assertIn(metric, expression, metric)
+        self.assertIn("ghostship_ai_collection_duration_seconds", expression)
+        for metric in (
+            "ghostship_ai_model_winner_position",
+            "ghostship_ai_account_window_",
+            "ghostship_ai_model_capacity_",
+            "ghostship_ai_entitlement_",
+        ):
+            self.assertNotIn(metric, expression, metric)
+
+    def test_the_free_rows_follow_the_static_rows_behind_a_divider(self):
+        """The static rows come first, then one divider, then the free rows."""
+        content = self.panel["options"]["content"]
+        static = content.find("(selectionRows")
+        free = content.find("(selectionFreeRows")
+        self.assertGreaterEqual(static, 0, "the page has no static rows")
+        self.assertGreater(free, static, "the free rows are not under the static rows")
+        divider = re.search(r"<tr class=\"group\">.*?</tr>", content, re.S)
+        self.assertIsNotNone(divider, "the free group has no divider row")
+        row = divider.group(0)
+        # The divider spans the table without a colspan: a spanned cell would
+        # take the room the hidden columns leave on a narrow screen.
+        self.assertNotIn("colspan", row)
+        self.assertEqual(len(re.findall(r"<td[\s>]", row)), 5)
+        self.assertIn("Free", row)
+        self.assertIn('class="role"', row)
+        built = self.free()
+        self.assertEqual(built[0], {"group": "Free"})
+        self.assertEqual(
+            [row["role"] for row in built[1:]], ["Free"] * len(FREE_ROWS)
+        )
+        self.assertEqual([row["tag"] for row in built[1:]], [""] * len(FREE_ROWS))
+
+    def test_the_free_rows_are_in_the_order_of_the_capacity_cards(self):
+        """A free provider follows the cards: the approved accounts, then by name."""
+        built = self.free()
+        self.assertEqual(
+            [row["provider"] for row in built[1:]],
+            [row[0] for row in FREE_ROWS],
+        )
+        self.assertEqual(
+            [(row["providerName"], row["displayName"]) for row in built[1:]],
+            [(row[1], row[3]) for row in FREE_ROWS],
+        )
+
+    def test_an_opencode_go_free_route_reads_its_published_share(self):
+        """Beam Free is a route the provider publishes: 100%, with no pace."""
+        row = self.free_row(provider="opencode-go")
+        self.assertEqual(row["model"], "beam-free")
+        self.assertEqual(row["displayName"], "Beam Free")
+        self.assertEqual(row["basis"], "published")
+        self.assertEqual(row["leftPct"], "100%")
+        self.assertEqual(row["leftPace"], "")
+        self.assertEqual(row["leftClass"], "")
+        self.assertEqual(row["left"], "100%")
+
+    def test_a_google_inferred_selection_reads_its_points_ahead(self):
+        """97% with a Paced Availability of 33 points reads ahead of the pace."""
+        row = self.free_row(provider="google")
+        self.assertEqual(row["basis"], "inferred")
+        self.assertEqual(row["leftPct"], "97%")
+        self.assertEqual(row["leftPace"], "\u25b2 33 ahead")
+        self.assertEqual(row["leftClass"], "ahead")
+        self.assertEqual(row["left"], "97% \u00b7 \u25b2 33 ahead")
+
+    def test_a_learning_selection_reads_the_learning_window(self):
+        """An account that never saw a limit failure is learning its window."""
+        row = self.free_row(provider="nvidia")
+        self.assertEqual(row["basis"], "learning")
+        self.assertEqual(row["leftPct"], "")
+        self.assertEqual(row["leftPace"], "learning window")
+        self.assertEqual(row["leftClass"], "")
+        self.assertEqual(row["left"], "learning window")
+
+    def test_a_selection_with_no_eligible_model_says_so(self):
+        """A free provider with no winner reads one sentence, not a zero."""
+        row = self.free_row(provider="requesty")
+        self.assertEqual(row["basis"], "none")
+        self.assertEqual(row["model"], "")
+        self.assertEqual(row["leftPct"], "")
+        self.assertEqual(row["leftPace"], "no eligible free model")
+        self.assertEqual(row["left"], "no eligible free model")
+
+    def test_a_spent_selection_reads_spent_and_its_reset(self):
+        """A selection at zero reads spent, and its reset when it has one."""
+        now = CAPACITY_NOW / 1000
+
+        def spent(reset):
+            rows = [
+                {
+                    "provider": "google",
+                    "field": "free_info",
+                    "model": "gemma-3-27b",
+                    "display_name": "Gemma 3 27B",
+                    "basis": "inferred",
+                    "value": 1.0,
+                },
+                {"provider": "google", "field": "free_left", "value": 0.0},
+            ]
+            if reset is not None:
+                rows.append({"provider": "google", "field": "free_reset", "value": reset})
+            return self.free_row(rows, provider="google")
+
+        with_reset = spent(now + 4.4 * 86400)
+        self.assertEqual(
+            with_reset["left"], "0% \u00b7 \u2715 spent \u00b7 resets in 4.4d"
+        )
+        self.assertEqual(with_reset["leftPct"], "0%")
+        self.assertEqual(with_reset["leftPace"], "\u2715 spent \u00b7 resets in 4.4d")
+        self.assertEqual(with_reset["leftClass"], "spent")
+        without_reset = spent(None)
+        self.assertEqual(without_reset["left"], "0% \u00b7 \u2715 spent")
+        self.assertEqual(without_reset["leftPace"], "\u2715 spent")
+
+    def test_the_free_rows_name_their_provider_as_the_cards_do(self):
+        """The provider of a free row is the name and the icon of its card."""
+        capacity = section(self.page, "Provider capacity")
+        providers = [row[0] for row in FREE_ROWS]
+        cards = run_panel_helper(
+            capacity,
+            "const rows = "
+            + json.dumps(providers)
+            + ".map((account) => ({ account: account, kind: 'session', quota_id: 'q', "
+            "label: 'Session', evidence: 'provider_reported', field: 'left', value: 1 }));\n"
+            + "console.log(JSON.stringify(helpers.capacityCards(rows, 0)));",
+        )
+        by_provider = {card["account"]: card for card in cards}
+        selected = {row["provider"]: row for row in self.free()[1:]}
+        for provider, name, _model, _display, _left in FREE_ROWS:
+            card = by_provider[provider]
+            row = selected[provider]
+            self.assertEqual(row["providerName"], name, provider)
+            self.assertEqual(row["providerName"], card["name"], provider)
+            for key in ("icon", "background", "foreground"):
+                self.assertEqual(row[key], card[key], f"{provider} {key}")
+        # The account of the OpenCode API is read as its card reads it.
+        self.assertEqual(selected["opencode"]["providerName"], "OpenCode Zen")
+
+    def test_the_free_group_draws_no_bar(self):
+        """A free row is a row of the table: it has no bar and no track."""
+        content = self.panel["options"]["content"]
+        start = content.find("(selectionFreeRows")
+        self.assertGreaterEqual(start, 0, "the page has no free rows")
+        free = content[start:]
+        self.assertIn("<td", free)
+        for className in ('class="bar"', 'class="fill"', 'class="track"', 'class="mark"'):
+            self.assertNotIn(className, free, className)
+
+    def test_the_fixture_holds_the_live_free_selection(self):
+        """The fixture is the free selection of the live set, and the page reads it."""
+        rows = fixture_free_rows()
+        info = {
+            row["provider"]: row for row in rows if row["field"] == "free_info"
+        }
+        self.assertEqual(len(info), len(FREE_ROWS))
+        self.assertEqual(sorted(info), sorted(row[0] for row in FREE_ROWS))
+        expected = {
+            "opencode-go": ("beam-free", "published"),
+            "openrouter": ("gpt-oss-120b", "reported"),
+            "cloudflare-workers-ai": ("llama-3.3-70b-instruct", "learning"),
+            "cohere": ("", "none"),
+            "google": ("gemma-3-27b", "inferred"),
+            "groq": ("qwen3.8-27b", "learning"),
+            "inception": ("mercury-2", "learning"),
+            "kilo": ("nemotron-3.5-super-vl", "learning"),
+            "kilo-keyed": ("qwen3.8-27b", "learning"),
+            "mistral": ("", "none"),
+            "nvidia": ("glm-5.3-flash", "learning"),
+            "ovh": ("mistral-small-3.2", "learning"),
+            "opencode": ("", "none"),
+            "orcarouter": ("", "none"),
+            "poolside": ("", "none"),
+            "requesty": ("", "none"),
+        }
+        self.assertEqual(
+            {provider: (row["model"], row["basis"]) for provider, row in info.items()},
+            expected,
+        )
+        self.assertEqual(len(info), 16)  # the live set of the free providers
+
+        left = {
+            row["provider"]: row["value"]
+            for row in rows
+            if row["field"] == "free_left"
+        }
+        self.assertAlmostEqual(left["google"], 0.9712)
+        self.assertAlmostEqual(left["openrouter"], 0.992)
+        self.assertAlmostEqual(left["opencode-go"], 1.0)
+        pace = {
+            row["provider"]: row["value"]
+            for row in rows
+            if row["field"] == "free_pace"
+        }
+        self.assertAlmostEqual(pace["google"], 0.33)
+        self.assertAlmostEqual(pace["openrouter"], 0.041)
+        counts = {
+            (row["provider"], row["state"]): int(row["value"])
+            for row in rows
+            if row["field"] == "free_models"
+        }
+        for provider, (available, unavailable) in FREE_MODEL_COUNTS.items():
+            self.assertEqual(counts[(provider, "available")], available, provider)
+            self.assertEqual(counts[(provider, "unavailable")], unavailable, provider)
+        # A provider with no free route publishes no count at all.
+        self.assertEqual(
+            {provider for provider, _state in counts}, set(FREE_MODEL_COUNTS)
+        )
 
 
 @unittest.skipUnless(
@@ -1723,7 +2129,13 @@ class ModelSelectionStoreTests(unittest.TestCase):
         by_field = {}
         for row in rows:
             by_field.setdefault(row["metric"].get("field"), []).append(row)
-        self.assertEqual(set(by_field), {"info", "left", "pace", "reset", "routing"})
+        self.assertEqual(
+            set(by_field),
+            {
+                "info", "left", "pace", "reset", "routing",
+                "free_info", "free_left", "free_pace", "free_reset", "free_models",
+            },
+        )
         info = {row["metric"]["row"]: row["metric"] for row in by_field["info"]}
         self.assertEqual(sorted(info), ["1", "2", "3", "4", "5"])
         self.assertEqual(
@@ -1757,6 +2169,49 @@ class ModelSelectionStoreTests(unittest.TestCase):
         self.assertEqual(left["minimax-m3.1-flash"], "41% \u00b7 \u25cf on pace")
         self.assertEqual(left["gpt-6.1-sol"], "99% \u00b7 \u25cf on pace")
         self.assertEqual(left["beam-free"], "100%")
+
+    def test_the_query_returns_the_free_selection_of_every_free_provider(self):
+        """The same query returns the free selection the collector publishes."""
+        panel = section(self.page, "Model selection")
+        target = find_target(panel, "ghostship_ai_free_provider_selection_info")
+        rows = self.store.wait_for(target["expr"].replace("$provider", ".*"))
+        free = [
+            {**row["metric"], "value": float(row["value"][1])}
+            for row in rows
+            if str(row["metric"].get("field") or "").startswith("free_")
+        ]
+        providers = sorted(
+            row["provider"] for row in free if row["field"] == "free_info"
+        )
+        self.assertEqual(providers, sorted(row[0] for row in FREE_ROWS))
+        selection = {row["provider"]: row for row in free if row["field"] == "free_info"}
+        self.assertEqual(selection["opencode-go"]["model"], "beam-free")
+        self.assertEqual(selection["opencode-go"]["basis"], "published")
+        self.assertEqual(selection["google"]["basis"], "inferred")
+        self.assertEqual(selection["nvidia"]["basis"], "learning")
+        self.assertEqual(selection["requesty"]["basis"], "none")
+        counts = {
+            (row["provider"], row["state"]): int(row["value"])
+            for row in free
+            if row["field"] == "free_models"
+        }
+        self.assertEqual(counts[("opencode-go", "available")], 2)
+        self.assertEqual(counts[("requesty", "unavailable")], 7)
+        expression = (
+            "const rows = "
+            + json.dumps(free)
+            + ";\n"
+            + "const now = "
+            + json.dumps(CAPACITY_NOW)
+            + ";\n"
+            + "console.log(JSON.stringify(helpers.selectionFreeRows(rows, now)));"
+        )
+        built = run_panel_helper(panel, expression)
+        self.assertEqual(built[0], {"group": "Free"})
+        self.assertEqual(
+            [(row["provider"], row["left"]) for row in built[1:]],
+            [(row[0], row[4]) for row in FREE_ROWS],
+        )
 
 
 class VictoriaMetricsFixture:
@@ -2071,13 +2526,18 @@ class WorkedCasesTests(unittest.TestCase):
 
         The query reads every account window gauge in one go, so the rows
         are the windows of the twelve accounts that have one and the
-        seventeen accounts that are learning.
+        seventeen accounts that are learning, and the free models of the
+        providers that hold a free route.
         """
         panel = section(self.page, "Provider capacity")
         target = find_target(panel, "ghostship_ai_account_window_remaining_ratio")
         rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        windows = [
+            row for row in rows if row["metric"].get("field") != "free_models"
+        ]
+        free = [row for row in rows if row["metric"].get("field") == "free_models"]
         self.assertEqual(
-            {row["metric"].get("field") for row in rows},
+            {row["metric"].get("field") for row in windows},
             {
                 "left",
                 "expected",
@@ -2088,9 +2548,19 @@ class WorkedCasesTests(unittest.TestCase):
                 "learning",
             },
         )
-        accounts = {row["metric"].get("account") for row in rows}
+        accounts = {row["metric"].get("account") for row in windows}
         self.assertEqual(len(accounts), 29)
-        self.assertEqual(len(rows), 122)
+        self.assertEqual(len(windows), 122)
+        # The count of the free routes, by state, for the six providers that
+        # hold one.
+        self.assertEqual(
+            {(row["metric"]["provider"], row["metric"]["state"]) for row in free},
+            {
+                (provider, state)
+                for provider in FREE_MODEL_COUNTS
+                for state in ("available", "unavailable")
+            },
+        )
 
     def test_the_worked_rows_are_the_rows_the_store_returns(self):
         """The cards of the page are the windows the store holds."""
