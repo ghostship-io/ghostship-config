@@ -9,12 +9,24 @@ import math
 from datetime import datetime
 
 import value_policy
+import outcomes as outcomes_module
 from metrics import ExactLabel
 from typing import Any, Mapping
 
 CATEGORIES = ("orchestrator", "worker")
 SCHEMA = "ghostship.model-selection/v1"
 TRUST = {"trusted": 0, "backup": 1, "untrusted": 2, "excluded": 3}
+
+
+def policy_ready(evidence: Mapping[str, Any]) -> bool:
+    policy = evidence.get('policy') or {}
+    declared = {record.get('id') for record in evidence.get('identities') or []
+                if isinstance(record, Mapping)}
+    exclusions = {entry.get('model') for entry in (policy.get('model_trust') or {}).get('entries') or []
+                  if entry.get('level') == 'excluded'}
+    return (bool(declared) and exclusions <= declared
+            and (policy.get('model_selection') or {}).get('categories') == list(CATEGORIES)
+            and bool((policy.get('roles') or {}).get('orchestrator')))
 
 
 def number(value: Any) -> float | None:
@@ -97,7 +109,8 @@ def native_options(descriptors: list[Mapping[str, Any]], preferred: str = 'high'
             options.append({'id': 'serviceTier', 'value': 'standard'})
     return options
 
-def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]]) -> dict[str, Any]:
+def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
+          *, evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Publish eligible sets and each provider's best available model.
 
     Every available member of the sets is a managed favorite. The owner picks
@@ -107,6 +120,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]]) ->
     orchestrator_ids = {(entry.get("instance_id"), entry.get("model")) for entry in orchestrator}
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
+    trust_cache = {}
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
         instance, model = native.get("provider_instance_id"), native.get("model_id")
@@ -115,6 +129,14 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]]) ->
         effort = effort_options(descriptors) if mapped else []
         options = native_options(descriptors) if mapped else []
         level = _trust(source)
+        if evidence is not None:
+            identity = outcomes_module.identity_of(str(source.get('provider') or ''),
+                                                   str(source.get('model') or ''), evidence.get('identities'))
+            if identity not in trust_cache:
+                trust_cache[identity] = outcomes_module.trust_for(
+                    identity, 'implementation', evidence.get('policy'), evidence.get('rounds'),
+                    evidence.get('backfill'), evidence.get('identities'))
+            level = trust_cache[identity]['level']
         capacity = source.get("capacity") or {}
         remaining = number(capacity.get("remaining_ratio"))
         exhausted = source.get("quota_state") == "exhausted" or remaining == 0
