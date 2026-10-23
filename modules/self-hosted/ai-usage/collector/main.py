@@ -40,6 +40,7 @@ import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import reset_overrides  # noqa: E402
+import announced_resets  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import static_routes as static_routes_module  # noqa: E402
@@ -696,7 +697,9 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             )
         ]
     try:
-        with T3Client(base_url, token, timeout=20) as client:
+        # Historical usage scans can exceed twenty seconds on the live server.
+        # Keep the transport default (sixty seconds), bounded per request.
+        with T3Client(base_url, token, timeout=60) as client:
             return t3source.collect(client, now, catalog=catalog, context=context)
     except (T3Error, OSError) as error:
         return [
@@ -1676,8 +1679,6 @@ def build_snapshot(
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
-    measured_windows = [window for window in measured_windows or ()
-                        if pools.visible_window(str(window.get('provider') or ''), window)]
     sources = []
     for result in results:
         observed = result.observed_at
@@ -1734,11 +1735,16 @@ def build_snapshot(
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
+        snapshot["announced_resets"] = context.get("announced_resets") or {
+            "schema": 1, "status": "not_checked", "announcements": []}
         quota_block = snapshot.setdefault("quota", {})
         if isinstance(quota_block, dict):
             quota_block["entitlements"] = quota_module.entitlements(
                 measured_windows or [], now
             )
+            for entry in quota_block['entitlements']:
+                if pools.not_used_window(str(entry.get('provider') or ''), entry):
+                    entry['not_used'] = True
     if isinstance(snapshot, dict):
         policy = (outcomes or {}).get("policy") or {}
         orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
@@ -1766,6 +1772,7 @@ def collect(
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
     custom_resets: list[dict[str, Any]] | None = None,
+    announcements: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
     """Run every source and return the results, the extra samples, and the context."""
     moment = wall_clock() if now is None else now
@@ -1815,6 +1822,8 @@ def collect(
         routes=routes,
     )
     results.extend(inferred.results)
+    context["announced_resets"] = announcements or {"schema": 1, "status": "not_checked", "announcements": []}
+    reset_overrides.apply(results, announced_resets.overrides(results, context["announced_resets"], moment), moment)
     reset_overrides.apply(results, custom_resets or [], moment)
     context["inferred_capacity"] = inferred.capacities
     context["inferred_retirements"] = dict(inferred.retirements)
@@ -2157,8 +2166,15 @@ def render(
     writer = MetricWriter()
 
     def add(name, labels, value):
-        if pools.visible_window(str(labels.get('provider') or ''), labels):
-            writer.add(name, labels, value)
+        provider = str(labels.get('provider') or labels.get('account') or '')
+        if pools.not_used_window(provider, labels):
+            usage = name.startswith(('ghostship_ai_quota_', 'ghostship_ai_account_window_'))
+            if not usage or ('pace' in name and not name.endswith('_pace_state')) or 'expected_' in name:
+                return
+            labels = {**labels, 'not_used': 'true'}
+            if name.endswith('_pace_state'):
+                labels['state'] = 'not_used'
+        writer.add(name, labels, value)
 
     for name, help_text in METRIC_HELP.items():
         writer.declare(name, "gauge", help_text)
@@ -2253,8 +2269,6 @@ def render(
     measured: list[dict[str, Any]] = []
     for result in results:
         measured.extend(result.windows)
-    measured = [window for window in measured
-                if pools.visible_window(str(window.get('provider') or ''), window)]
     for name, labels, value in quota_module.quota_pace_samples(measured, now):
         add(name, labels, value)
     for name, labels, value in quota_module.entitlement_samples(measured, now):
@@ -2415,6 +2429,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Synchronize managed model favorites and the worker default through authenticated RPC.")
     parser.add_argument("--custom-resets", default="/var/lib/ghostship-ai-usage/custom-resets.json",
                         help="Owner overrides; published explicitly as custom resets.")
+    parser.add_argument("--announced-resets", default=announced_resets.PATH,
+                        help="Public announcements recorded by the bounded Desktop check.")
     parser.add_argument("--picker-state", default="/var/lib/ghostship-ai-usage/picker.json",
                         help="Ownership journal for managed T3 model favorites.")
     args = parser.parse_args(argv)
@@ -2434,6 +2450,7 @@ def main(argv: list[str] | None = None) -> int:
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
         custom_resets=reset_overrides.load(args.custom_resets),
+        announcements=announced_resets.load(args.announced_resets),
     )
     duration = time.monotonic() - started
     measured: list[dict[str, Any]] = []
