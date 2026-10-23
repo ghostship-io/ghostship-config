@@ -428,9 +428,7 @@ Registry-labeled applications keep native Podman automatic updates with health
 readiness and rollback. Database digests require review. Recyclarr stays on
 supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
-refresh. The two WSL hosts and `chill-penguin` run `system.autoUpgrade` nightly from GitHub
-`main`; `chill-penguin` adds `--impure` so pure evaluation cannot silently drop
-its Asahi peripheral firmware. The T3 Code container is never restarted by the
+refresh. Host changes follow the gated deployment procedure below. The T3 Code container is never restarted by the
 switch; its image change waits for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
 switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a

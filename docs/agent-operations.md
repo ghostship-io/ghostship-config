@@ -21,19 +21,12 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- In worktrees, work on a named branch and open a GitHub PR before returning to
-  the user. Push the branch, open the PR as draft/WIP, treat GitHub Actions as
-  the primary branch/feature validation path, set up GitHub CI tests for GitHub
-  repos when absent or insufficient, optimize CI to conserve free-plan minutes,
-  configure workflows to cancel superseded runs so only the latest push per
-  branch continues, review and resolve or explicitly reject Codex comments,
-  resolve failing CI and merge conflicts, then mark the PR ready/non-WIP before
-  handoff when it is ready for the user to merge. Leave PR merges to the user.
+- Work on a named branch, run focused fast unit tests, get one quick review,
+  then land with `agent pr land` and deploy your finished work. Frontier
+  self-review counts; other models need a frontier review. Follow the current
+  agent engineering policy and report completion or blockers to its orchestrator.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
-- The old repo-managed shared skill inventory is retired; do not restore
-  `home/config/skills/{codex-queue,github-pr-workflow,nix,python,skill-creator,ssh,wsl2}`
-  inventory unless the skill model is explicitly revisited.
 - Develop hosts rely on the installed global `skills` CLI and linked local
   Ghostship workflow skills under `home/config/skills/ghostship-*`.
 - The global `skills` CLI uses
@@ -159,21 +152,11 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 - For prompt-driven remote work, start the command in detached tmux and drive it
   with `capture-pane` plus `send-keys`. Do not use blocking top-level SSH TTY
   sessions for agent workflows.
-- If a remote deployment reaches a built system path but activation fails,
-  apply the generation directly with
-  `/nix/store/<system>/bin/switch-to-configuration switch`.
-- This repo deploys through Git on the host. Do not ask the user to validate
-  host-side changes until the required repo edits are committed and available to
-  the host checkout.
-- Preferred `chill-penguin` deploy flow:
-  local `git push origin main`;
-  remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
-  remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `scripts/activate-host --toplevel ./result`.
-  `scripts/activate-host` sets the system profile before the switch and
-  verifies that `/run/current-system` and the system profile name the same
-  generation. A bare `switch-to-configuration switch` does not record the
-  system generation, and a reboot then reverts to the profile's generation.
+- Deploy merged configuration with `agent deploy run`. Use `--agent-rev REV`
+  to pin and deploy a changed agent revision. The command serializes switches,
+  builds the committed revision, checks dry-activation, records the generation
+  and verifies live health. Fix a failed gate rather than bypassing it with a
+  direct switch. Preserve active T3 sessions; do not force a busy restart.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
