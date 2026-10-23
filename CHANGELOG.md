@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.102] - 2026-10-23
+
+- ai-usage: a Requesty request counts toward its learned limit. OpenCode records the request as "vendor/model", while the collector's route is the model alone, so every such event was unmatched and dropped, and the limit failures of the route never reached the inference. The matching now falls back to the model alone when the whole id is unknown, exactly and folded, within the same provider: the prefix is never taken from another provider, never added, and only one segment of it is ever stripped.
+
 ## [3.17.101] - 2026-10-22
 
 - AI usage collector: the owner's static model selection is published for the Providers page. While routing is off, the selection in force is `worker_routes.entries` of the runtime policy, and the collector now reads it through `--runtime-policy` and publishes one row per model: the role the table gives it (Bulk 1, Bulk 2, Large, Deploys, Research), every entry that names it with the route's place in that entry, and the share left, the Paced Availability and the reset the routing snapshot already measured for that route. A model listed twice is one row and a model outside the table has none; a route the snapshot does not carry keeps its row with no capacity; a missing or unreadable policy publishes no rows and `ghostship_ai_static_route_policy_ok 0` while everything else is still written. The policy has its own flake input, `ghostship-agent-policy`, so the T3 Code input and its lock entry are unchanged.
