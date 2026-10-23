@@ -150,6 +150,70 @@
       }
     },
     {
+      "id": 206,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Model selection",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 90,
+        "w": 24,
+        "h": 6
+      },
+      "description": "The owner's static selection, shown while the routing is off and kept for reference while it is on: one row per route of the policy, in the collector's row order. The role, the model and its tag, the provider with the icon of its capacity card, the work the route is used for, and the share of its binding window that is left with the Paced Availability beside it. A route the snapshot does not carry has no reading, never a zero.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (row, role, provider, model, display_name, used_for, field) (\n          label_replace((ghostship_ai_static_route_info{provider=~\"$provider\"} and (timestamp(ghostship_ai_static_route_info{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"field\", \"info\", \"\", \"\")\n          or label_replace((ghostship_ai_static_route_remaining_ratio and (timestamp(ghostship_ai_static_route_remaining_ratio) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"field\", \"left\", \"\", \"\")\n          or label_replace((ghostship_ai_static_route_paced_availability and (timestamp(ghostship_ai_static_route_paced_availability) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"field\", \"pace\", \"\", \"\")\n          or label_replace((ghostship_ai_static_route_reset_timestamp_seconds and (timestamp(ghostship_ai_static_route_reset_timestamp_seconds) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)), \"field\", \"reset\", \"\", \"\")\n          or label_replace(ghostship_ai_routing_enabled, \"field\", \"routing\", \"\", \"\")\n        )",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{role}} \u00b7 {{model}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "value"
+            },
+            "indexByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div class=\"routes\"><div class=\"hdr\"><h2>Model selection</h2><span class=\"chip {{#if (eq (selectionRouting data) 1)}}on{{else}}static{{/if}}\">{{selectionChip data}}</span></div><table><thead><tr><th class=\"role\">Role</th><th>Model</th><th class=\"hide-sm\">Provider</th><th class=\"hide-sm\">Used for</th><th class=\"left\">Left</th></tr></thead><tbody>{{#each (selectionRows data (variable \"__to\"))}}<tr><td class=\"role\">{{role}}</td><td><div class=\"mrow\"><span class=\"ico\" style=\"background:{{background}};color:{{foreground}}\">{{icon}}</span><span class=\"mn\">{{displayName}}</span>{{#if tag}}<span class=\"tag bulk\">{{tag}}</span>{{/if}}</div></td><td class=\"hide-sm\">{{providerName}}</td><td class=\"hide-sm used\">{{usedFor}}</td><td class=\"left {{leftClass}}\">{{left}}</td></tr>{{/each}}</tbody></table></div>",
+        "defaultContent": "<div class=\"routes\"><div class=\"hdr\"><h2>Model selection</h2><span class=\"chip static\">Static table \u00b7 routing OFF</span></div><p class=\"note\">The collector publishes no static route yet.</p></div>",
+        "editor": {
+          "format": "none",
+          "language": "handlebars"
+        },
+        "editors": [],
+        "externalStyles": "",
+        "contentPartials": [],
+        "helpers": "// The static route table of the Providers page.\n//\n// One row per route of the owner's static selection, in the collector's row\n// order. The names and the icons of a provider are the ones the capacity\n// cards above the table read; the left cell is the share of the binding\n// window that is left, with the pace beside it.\nconst ROUTE_PROVIDERS = [\n  { account: 'claude', name: 'Claude', icon: '\\u2733', background: '#d97757', foreground: '#fff' },\n  { account: 'codex', name: 'Codex', icon: '\\u229b', background: '#e8e8e8', foreground: '#111' },\n  { account: 'ollama', name: 'Ollama', icon: '\\u25c9', background: '#f2f2f2', foreground: '#111' },\n  { account: 'opencode-go', name: 'OpenCode Go', icon: '{}', background: '#2b2f3a', foreground: '#7dd3fc' },\n  { account: 'antigravity', name: 'Antigravity', icon: 'A', background: 'linear-gradient(135deg,#4f8cff,#c86bfa)', foreground: '#fff' },\n  { account: 'grok', name: 'Grok', icon: '\\u2298', background: '#000', foreground: '#fff' },\n  { account: 'openrouter', name: 'OpenRouter', icon: '\\u21c4', background: '#6466f1', foreground: '#fff' },\n];\n\n// The name a provider is read by, when the approved list does not name it.\nconst ROUTE_NAMES = {\n  'cloudflare-workers-ai': 'Cloudflare',\n  'cohere': 'Cohere',\n  'google': 'Google',\n  'groq': 'Groq',\n  'inception': 'Inception',\n  'kilo': 'Kilo',\n  'kilo-keyed': 'Kilo (keyed)',\n  'mistral': 'Mistral',\n  'nvidia': 'NVIDIA',\n  'orcarouter': 'Orcarouter',\n  'ovh': 'OVH',\n  'pi': 'Pi',\n  'poolside': 'Poolside',\n  'requesty': 'Requesty',\n  'upstage': 'Upstage',\n  'vercel': 'Vercel',\n  'zai': 'Zai',\n};\n\n// The number a row holds, or nothing when the row holds no number.\nfunction routeNumber(value) {\n  if (value === null || value === undefined || value === '') { return null; }\n  const number = Number(value);\n  return isFinite(number) ? number : null;\n}\n\n// The name, the icon and the colours a provider is read by.\nfunction routeIdentity(provider) {\n  const approved = ROUTE_PROVIDERS.find((entry) => entry.account === provider);\n  if (approved) {\n    return {\n      name: approved.name,\n      icon: approved.icon,\n      background: approved.background,\n      foreground: approved.foreground,\n    };\n  }\n  const name = ROUTE_NAMES[provider] || String(provider || '').split(/[-_\\s]+/).filter(Boolean)\n    .map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');\n  return { name: name, icon: name.charAt(0).toUpperCase(), background: '#2b2f3a', foreground: '#fff' };\n}\n\n// The routes of the page and the routing state, read out of the rows.\nfunction routeRead(rows) {\n  const routes = new Map();\n  let routing = null;\n  for (const row of rows || []) {\n    const value = routeNumber(row.value);\n    if (row.field === 'routing') {\n      if (value !== null) { routing = value; }\n      continue;\n    }\n    const key = String(row.row === null || row.row === undefined ? '' : row.row);\n    if (!key) { continue; }\n    let entry = routes.get(key);\n    if (!entry) {\n      entry = {\n        row: key,\n        role: '',\n        provider: '',\n        model: '',\n        displayName: '',\n        usedFor: '',\n        left: null,\n        pace: null,\n        reset: null,\n      };\n      routes.set(key, entry);\n    }\n    if (row.field === 'info') {\n      entry.role = row.role || '';\n      entry.provider = row.provider || '';\n      entry.model = row.model || '';\n      entry.displayName = row.display_name || row.model || '';\n      entry.usedFor = row.used_for || '';\n    } else if (row.field === 'left') { entry.left = value; }\n    else if (row.field === 'pace') { entry.pace = value; }\n    else if (row.field === 'reset') { entry.reset = value; }\n  }\n  return { routes: Array.from(routes.values()), routing: routing };\n}\n\n// How long a route has left before its window resets.\nfunction routeRelative(reset, now) {\n  if (reset === null) { return ''; }\n  const seconds = reset - now;\n  if (seconds <= 0) { return '0m'; }\n  const hours = seconds / 3600;\n  if (hours < 1) { return Math.round(seconds / 60) + 'm'; }\n  if (hours < 48) { return Math.floor(hours) + 'h ' + Math.round((hours % 1) * 60) + 'm'; }\n  return (hours / 24).toFixed(1) + 'd';\n}\n\n// The pace of a route: how far it is from the share it expects to be left.\nfunction routePace(left, pace, reset, now) {\n  if (left === null) { return { text: 'no reading', cls: '' }; }\n  if (left <= 0) {\n    const relative = routeRelative(reset, now);\n    return {\n      text: '\\u2715 spent' + (relative ? ' \\u00b7 resets in ' + relative : ''),\n      cls: 'spent',\n    };\n  }\n  if (pace === null) { return { text: '', cls: '' }; }\n  const points = Math.round(100 * pace);\n  if (points > 10) { return { text: '\\u25b2 ' + points + ' ahead', cls: 'ahead' }; }\n  if (points < -10) { return { text: '\\u25bc ' + (-points) + ' behind', cls: 'behind' }; }\n  return { text: '\\u25cf on pace', cls: '' };\n}\n\ncontext.handlebars.registerHelper('selectionRows', function (rows, now) {\n  const read = routeRead(rows);\n  const moment = routeNumber(now);\n  const seconds = moment === null ? 0 : moment / 1000;\n  return read.routes\n    .map((entry) => ({ entry: entry, number: routeNumber(entry.row) }))\n    .sort((first, second) => {\n      if (first.number === null || second.number === null) { return 0; }\n      return first.number - second.number;\n    })\n    .map((item) => {\n      const entry = item.entry;\n      const identity = routeIdentity(entry.provider);\n      const pace = routePace(entry.left, entry.pace, entry.reset, seconds);\n      const percent = entry.left === null ? '' : String(Math.round(100 * entry.left)) + '%';\n      return {\n        row: entry.row,\n        role: entry.role,\n        model: entry.model,\n        displayName: entry.displayName || entry.model,\n        provider: entry.provider,\n        providerName: identity.name,\n        icon: identity.icon,\n        background: identity.background,\n        foreground: identity.foreground,\n        usedFor: entry.usedFor,\n        tag: /^Bulk \\d+$/.test(entry.role) ? 'bulk' : '',\n        left: pace.text ? (percent ? percent + ' \\u00b7 ' + pace.text : pace.text) : percent,\n        leftClass: pace.cls,\n      };\n    });\n});\n\ncontext.handlebars.registerHelper('selectionRouting', function (rows) {\n  const routing = routeRead(rows).routing;\n  return routing === null ? 0 : (routing ? 1 : 0);\n});\n\ncontext.handlebars.registerHelper('selectionChip', function (rows) {\n  const routing = routeRead(rows).routing;\n  return routing ? 'Routing ON \\u00b7 static table shown for reference'\n    : 'Static table \\u00b7 routing OFF';\n});\n",
+        "renderMode": "allRows",
+        "status": "",
+        "styles": "\n.routes { font-size: 13px; width: 100%; }\n.routes .hdr { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }\n.routes .hdr h2 { font-size: 16px; margin: 0; font-weight: 600; }\n.routes .chip { font-size: 11px; border: 1px solid #6b6f7a; border-radius: 999px; padding: 2px 8px; color: #c9ccd3; white-space: nowrap; }\n.routes .chip.static { border-color: #5b9bd5; color: #9cc3ea; }\n.routes .chip.on { border-color: #8fc98f; color: #8fc98f; }\n.routes table { width: 100%; border-collapse: collapse; font-size: 13px; }\n.routes th { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; opacity: 0.7; text-align: left; padding: 4px 8px; border-bottom: 1px solid rgba(127,127,127,0.35); }\n.routes td { padding: 7px 8px; border-bottom: 1px solid rgba(127,127,127,0.25); vertical-align: middle; }\n.routes .role { width: 72px; white-space: nowrap; }\n.routes .mrow { display: flex; align-items: center; gap: 8px; min-width: 0; }\n.routes .ico { width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex: none; }\n.routes .mn { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.routes .tag { font-size: 10px; border-radius: 4px; padding: 1px 6px; margin-left: 6px; background: #1f3a55; color: #9cc3ea; white-space: nowrap; }\n.routes .used { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.routes .left { width: 172px; white-space: nowrap; font-variant-numeric: tabular-nums; }\n.routes .left.spent { color: #d9534f; }\n.routes .left.ahead { color: #8fc98f; }\n.routes .left.behind { color: #e0a03a; }\n.routes .note { font-size: 11px; color: #8b8f99; margin: 6px 0 0; }\n@media (max-width: 520px) { .hide-sm { display: none; } .routes table { table-layout: fixed; } .routes .role { width: 58px; } .tag { display: none; } .routes .mn { font-size: 12px; } .routes td { padding: 5px 4px; } .routes th { padding: 3px 4px; } .routes .left { width: 132px; } }\n",
+        "wrap": false
+      }
+    },
+    {
       "id": 201,
       "type": "marcusolsson-dynamictext-panel",
       "title": "Bulk \u00b7 who gets the next coding job",
@@ -159,7 +223,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 90,
+        "y": 96,
         "w": 24,
         "h": 10
       },
@@ -614,7 +678,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 100,
+        "y": 106,
         "w": 24,
         "h": 19
       },
@@ -1025,7 +1089,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 119,
+        "y": 125,
         "w": 24,
         "h": 6
       },
@@ -1399,7 +1463,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 125,
+        "y": 131,
         "w": 24,
         "h": 11
       },
@@ -1789,356 +1853,12 @@
       }
     },
     {
-      "id": 205,
-      "type": "marcusolsson-dynamictext-panel",
-      "title": "Providers",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "victoriametrics"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 136,
-        "w": 24,
-        "h": 16
-      },
-      "description": "Every provider the dashboard covers. The lowest applicable window decides the capacity, the Paced Availability of that window is the pace of the provider, and the accounts that are spent or that publish no window come last.",
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider) ((max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (0 * (max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (max by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")))) or on(provider) (max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider) (min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))))) - 1000000 * (max by (provider) ((max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")) == bool 0)) or on(provider) (0 * (max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (max by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")))) or on(provider) (max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider) (min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))))) - 2000000 * ((max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) unless on(provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))) or on(provider) (0 * (max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (max by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")))) or on(provider) (max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider) (min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))))))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "clamp_max(clamp_min(max by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))) - max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), 0), 1)",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "E",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "abs(round(100 * max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "F",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "3 * (round(100 * max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) >= bool 5) + 1 * (round(100 * max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) <= bool -5) + 2 * (abs(round(100 * max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) < bool 5)",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "G",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(count by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))) or on(provider, model) (0 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "H",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(count by (provider) (max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider, model) (0 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "I",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "(max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")) == bool 0)",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "J",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "2 * ((count by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))) or on(provider, model) (0 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) == bool 1) * ((max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")) or on(provider, model) (-1 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) < bool 0.15) + ((count by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\"))) or on(provider, model) (0 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) == bool 1) * ((max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")) or on(provider, model) (-1 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) >= bool 0.15) * ((max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")) or on(provider, model) (-1 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) < bool 0.5)",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "K",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) unless on(provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "L",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) * 1000",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "M",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "N",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "max by (provider, providerName) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace((max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (max by (provider) (max by (provider, binding) (label_replace(label_replace(label_replace(label_replace(((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"binding\", \"5-hour\", \"binding\", \"^5_hour$\"), \"binding\", \"prepaid balance\", \"binding\", \"^prepaid_balance$\"), \"binding\", \"unlimited\", \"binding\", \"^free-unlimited$\"), \"binding\", \"promotion\", \"binding\", \"^unlimited__limited-time_promotion_$\")))) or on(provider) (max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider) (min by (provider) ((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))), \"providerName\", \"Claude\", \"provider\", \"^claude$\"), \"providerName\", \"Codex\", \"provider\", \"^codex$\"), \"providerName\", \"Antigravity\", \"provider\", \"^antigravity$\"), \"providerName\", \"OpenCode Go\", \"provider\", \"^opencode-go$\"), \"providerName\", \"OpenCode\", \"provider\", \"^opencode$\"), \"providerName\", \"Ollama\", \"provider\", \"^ollama$\"), \"providerName\", \"Grok\", \"provider\", \"^grok$\"), \"providerName\", \"Groq\", \"provider\", \"^groq$\"), \"providerName\", \"NVIDIA\", \"provider\", \"^nvidia$\"), \"providerName\", \"Google\", \"provider\", \"^google$\"), \"providerName\", \"OpenRouter\", \"provider\", \"^openrouter$\"), \"providerName\", \"Cursor\", \"provider\", \"^cursor$\"), \"providerName\", \"Kilo\", \"provider\", \"^kilo$\"), \"providerName\", \"Kilo (keyed)\", \"provider\", \"^kilo-keyed$\"), \"providerName\", \"Cloudflare\", \"provider\", \"^cloudflare-workers-ai$\"), \"providerName\", \"Requesty\", \"provider\", \"^requesty$\"), \"providerName\", \"Upstage\", \"provider\", \"^upstage$\"), \"providerName\", \"Inception\", \"provider\", \"^inception$\"), \"providerName\", \"OVH\", \"provider\", \"^ovh$\"), \"providerName\", \"DeepSeek\", \"provider\", \"^deepseek$\"), \"providerName\", \"Moonshot\", \"provider\", \"^moonshot$\"))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "Value #A": "order",
-              "Value #B": "left",
-              "Value #C": "pace",
-              "Value #D": "expected",
-              "Value #E": "points",
-              "Value #F": "kind",
-              "Value #G": "hasCap",
-              "Value #H": "hasPace",
-              "Value #I": "out",
-              "Value #J": "colourBand",
-              "Value #K": "unknown",
-              "Value #L": "resetsAt",
-              "Value #M": "providerSet",
-              "Value #N": "providerNameValue"
-            },
-            "indexByName": {}
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "sort": [
-              {
-                "field": "order",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "left"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "expected"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "left"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "expected"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "binding"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "string"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "afterRender": "",
-        "content": "<div class=\"section\"><p class=\"sub\">Lowest window decides. Sorted by Paced Availability; exhausted and unknown last.</p><table><thead><tr><th>Provider</th><th class=\"cap\">Capacity left</th><th class=\"pace\">Pace</th><th class=\"hide-sm\">Binding window</th></tr></thead><tbody>{{#each data}}<tr class=\"{{#if out}}dim{{/if}}\"><td class=\"name\">{{#if providerName}}{{providerName}}{{else}}{{provider}}{{/if}}</td><td class=\"cap\">{{#if (eq basis \"published\")}}<span class=\"unk\">Unlimited \u00b7 promotion</span>{{else}}{{#if (eq state \"no_failure\")}}<span class=\"unk\">No limit seen</span>{{else}}{{#if (eq state \"exhausted\")}}<span class=\"unk\">\u2715 out{{#if resetsAt}} \u00b7 resets {{utcClock resetsAt}} UTC{{/if}}</span>{{else}}{{#if hasCap}}<div class=\"barrow\"><div class=\"bar\"><div class=\"track\"><div class=\"fill{{#if (eq colourBand 2)}} destructive{{else}}{{#if (eq colourBand 1)}} warning{{/if}}{{/if}}\" style=\"width:{{left}}\"></div></div>{{#if hasPace}}<div class=\"mark\" style=\"left:{{expected}}\"></div>{{/if}}</div><span class=\"pct\">{{left}}</span></div>{{else}}<span class=\"unk\" title=\"Limits unknown \u00b7 the provider publishes no window\">Limits unknown \u00b7 the provider publishes no window</span>{{/if}}{{/if}}{{/if}}{{/if}}</td><td class=\"pace\">{{#if out}}<span class=\"out\">\u2715 {{#if binding}}{{binding}}{{else}}spent{{/if}}</span>{{else}}{{#if hasPace}}{{#if (eq kind 3)}}<span class=\"ok\">\u25b2 {{points}}</span>{{else}}{{#if (eq kind 1)}}<span class=\"bad\">\u25bc {{points}}</span>{{else}}<span class=\"na\">\u25cf 0</span>{{/if}}{{/if}}{{else}}<span class=\"na\">no window</span>{{/if}}{{/if}}</td><td class=\"why hide-sm\">{{#if binding}}{{binding}}{{else}}\u2013{{/if}}{{#if resetsAt}} \u00b7 resets {{utcClock resetsAt}} UTC{{/if}}</td></tr>{{/each}}</tbody></table></div>",
-        "defaultContent": "<div class=\"section\"><p class=\"unk\">No route of this tier is measured.</p></div>",
-        "editor": {
-          "format": "none",
-          "language": "handlebars"
-        },
-        "editors": [],
-        "externalStyles": [],
-        "contentPartials": [],
-        "helpers": "context.handlebars.registerHelper('utcClock', function (value) {\n  // A reset time as HH:MM in UTC. The value is epoch seconds or milliseconds;\n  // only a number is formatted here, and no label text is read.\n  let number = Number(value);\n  if (!isFinite(number)) { return ''; }\n  if (number < 1e11) { number = number * 1000; }\n  const moment = new Date(number);\n  const pad = (n) => String(n).padStart(2, '0');\n  return pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n});\n",
-        "renderMode": "allRows",
-        "status": "",
-        "styles": "\n.section { font-size: 13px; width: 100%; }\n.sub { font-size: 12px; opacity: 0.7; margin: 0 0 8px; }\ntable { width: 100%; border-collapse: collapse; font-size: 13px; }\nth { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; opacity: 0.7; text-align: left; padding: 4px 8px; border-bottom: 1px solid rgba(127,127,127,0.35); }\ntd { padding: 7px 8px; border-bottom: 1px solid rgba(127,127,127,0.25); vertical-align: middle; }\ntr.dim td { opacity: 0.5; }\n.rank { width: 22px; opacity: 0.7; font-variant-numeric: tabular-nums; }\n.role { width: 64px; }\n.name { font-weight: 600; }\n.prov { font-size: 12px; opacity: 0.7; }\n.cap { width: 34%; }\n.barrow { display: flex; align-items: center; gap: 8px; }\n.bar { position: relative; flex: 1; height: 8px; min-width: 60px; }\n.track { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 4px; background: rgba(127,127,127,0.28); overflow: hidden; }\n.fill { height: 100%; border-radius: 4px; background: #3b82f6; }\n.fill.warning { background: #d97706; }\n.fill.destructive { background: #dc2626; }\n.mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #e5e7eb; }\n.pct { width: 42px; text-align: right; font-variant-numeric: tabular-nums; }\n.unk { opacity: 0.75; font-style: italic; }\n.pace { white-space: nowrap; font-variant-numeric: tabular-nums; }\n.pace .ok { color: #2f9e44; }\n.pace .bad { color: #e8590c; }\n.pace .out { color: #e03131; }\n.pace .na { opacity: 0.7; }\n.score { white-space: nowrap; font-variant-numeric: tabular-nums; }\n.tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(127,127,127,0.22); margin-left: 6px; white-space: nowrap; }\n.why { font-size: 12px; opacity: 0.7; }\n.narrow { display: none; }\n@media (max-width: 520px) { .hide-sm { display: none; } table { table-layout: fixed; } .cap { width: 26%; } .bar { min-width: 28px; } .name, .prov { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .name { font-size: 12px; } .tag { display: none; } .unk { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } td { padding: 5px 4px; } th { padding: 3px 4px; } .pct { width: 32px; } .rank { width: 20px; } .role { width: 56px; } .pace { width: 84px; white-space: nowrap; overflow: hidden; } .word { display: none; } .narrow { display: inline; } }\n",
-        "wrap": true
-      }
-    },
-    {
       "id": 46,
       "type": "row",
       "title": "Why this order \u00b7 ${allowance:text}  (per-window % left, expected-left marker, Paced Availability)",
       "gridPos": {
         "x": 0,
-        "y": 152,
+        "y": 142,
         "w": 24,
         "h": 1
       },
@@ -2585,7 +2305,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 153,
+        "y": 143,
         "w": 24,
         "h": 1
       },
@@ -3322,7 +3042,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 154,
+        "y": 144,
         "w": 24,
         "h": 1
       },
@@ -4915,7 +4635,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 155,
+        "y": 145,
         "w": 24,
         "h": 1
       },
@@ -5956,7 +5676,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 156,
+        "y": 146,
         "w": 24,
         "h": 1
       },
@@ -6508,7 +6228,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 157,
+        "y": 147,
         "w": 24,
         "h": 1
       },
@@ -7224,7 +6944,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 158,
+        "y": 148,
         "w": 24,
         "h": 1
       },
