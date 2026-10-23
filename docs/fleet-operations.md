@@ -865,3 +865,13 @@ provisioned dashboards are in its unified `resource` table, so an empty legacy
 `dashboard` table does not prove provisioning failed. A `fields` pipe must keep
 `_time` and `_msg`, otherwise the datasource cannot give the panel a row time or
 a line.
+
+### CI runner cache
+
+Repository-scoped ephemeral `ghostship-fast` runners execute trusted agent,
+config and CAD pull requests. Forks require review and transfer to an owned branch
+before execution. The host's Nix store and private per-repository download caches
+persist; job workspaces reset. The upstream NixOS runner sandbox hides the
+registration PAT and host homes, runs jobs as a dynamic user without root or
+Podman access, and applies CPU, memory and task limits. Hosted integration stays
+manual on main. PR gates are not repeated on main pushes.
