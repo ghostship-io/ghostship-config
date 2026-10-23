@@ -93,6 +93,26 @@ capabilities, seccomp, SSH/config drift, persistence and authentication anomalie
 Use existing notification helpers/owners for security delivery. Investigate
 possible intrusions under the SIEM campaign rules before changing detections.
 
+Use `agent capabilities search 'SIEM investigation' --json` to discover the
+read-only investigation owner, then `agent siem` for alert evidence:
+
+- `agent siem sensitive-reads --at "$timestamp"` categorizes sensitive file
+  reads, recorded process ancestry and unit roles around the alert.
+- `agent siem unit-session --unit "$unit" --at "$timestamp"` correlates the
+  unit's PAM, session and audit records. Use the unit from protected host
+  evidence or runtime configuration; output aliases are per-call roles.
+- `agent siem container-health` checks Podman call timeouts, current runtime
+  lock waits and snapshot age without calling the possibly stalled runtime.
+- `agent siem query --query "$logsql" --start "$start" --end "$end"` runs a
+  free LogsQL investigation in an explicit bounded window.
+
+Default output gives categories, counts and verdict hints; `--json` adds
+redacted detail. Queries and raw evidence stay on the host; even arbitrary
+query field names and values become role aliases. Narrow windows when a row
+or detail budget is reached. Distinguish absent evidence, retention gaps and
+bounded samples from clean results. PAM success alone does not prove a read
+legitimate, and one fresh snapshot does not establish sustained recovery.
+
 ## Completion
 
 Include a public-safe checkpoint in the orchestrator report: checked
