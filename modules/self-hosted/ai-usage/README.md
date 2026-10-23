@@ -1458,20 +1458,26 @@ overrides fail visibly. Keep owner-specific reset times in runtime state.
 ### Announced resets
 
 `ghostship-ai-usage-announcements` checks the public Codex announcement profile
-through the personal identity's Agent Desktop browser tools, at most once per
-eight hours (including retries and manual service starts). It owns and closes
-one browser lease. A sign-in wall or challenge records `blocked`; the check
+through the personal identity's persistent Agent Desktop browser profile hourly,
+reading at most twenty visible recent posts without scrolling. It owns and closes
+one browser lease. A sign-in wall or challenge records `blocked`, sends one
+operations notice per blocked episode, and backs off to eight hours. Successful
+reads restore hourly checks. A locked cache deadline covers timer/manual starts
+and reserves eight hours before browsing in case of a crash. The check
 does not bypass it or use mirrors. Transport failures record `unavailable`.
 The scheduled checker connects to the deployed MCP over one stdio session,
 using its existing Desktop configuration and lease ownership. It does not run
 a second local browser backend or copy Desktop credentials into T3.
 
 When X is blocked, the same check searches the OpenAI community announcements
-category for reset topics and reads at most three matching topics. Each topic
+category for reset topics at most once per eight hours and reads at most three
+matching topics. Each topic
 has its own blocked/unavailable status. A readable relay never clears the
 primary source's blocked status. The dashboard shows community relays as
 `announced (unverified)` with a source link, and an operations notice asks for
-confirmation. A root operator can confirm global Codex scope and an explicit
+confirmation. Notice receipts and publisher deduplication use the primary status
+URL, so a relay followed by direct discovery sends one notice. Explicit global
+reset posts also notify. A root operator can confirm global Codex scope and an explicit
 future time using `ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE`.
 Confirmed records survive later rediscovery and then use the normal announced
 reset path. See [confirmation and operations](../../../docs/ai-usage-announcements.md).

@@ -17,7 +17,8 @@ from zoneinfo import ZoneInfo
 SOURCE = "https://x.com/thsottiaux"
 RELAY = "https://community.openai.com/search?q=reset%20%23announcements%20order%3Alatest"
 PATH = "/var/lib/ghostship-ai-usage/announced-resets.json"
-INTERVAL = 8 * 3600
+INTERVAL = 3600
+BACKOFF = 8 * 3600
 POST_URL = re.compile(r"https://x\.com/thsottiaux/status/\d+$")
 TOPIC_URL = re.compile(r"https://community\.openai\.com/t/[a-zA-Z0-9_-]+/\d+(?:/\d+)?(?:#announcement-\d+)?$")
 GLOBAL_CODEX = re.compile(
@@ -158,34 +159,77 @@ def samples(document):
         }, 1.0
 
 
+def primary_blocked(document):
+    return any(row.get("source_url") == SOURCE and row.get("status") == "blocked"
+               for row in document.get("sources", []))
+
+
+def due(document, now):
+    deadline = document.get("next_check_at", document.get("checked_at", 0) +
+                            (BACKOFF if primary_blocked(document) else INTERVAL))
+    return now >= deadline
+
+
+def notice_url(entry):
+    """Relays and direct discoveries acknowledge the same primary status URL."""
+    url = str(entry.get("source_url", ""))
+    if POST_URL.fullmatch(url):
+        return url
+    if TOPIC_URL.fullmatch(url):
+        primary = str(entry.get("primary_source_url", ""))
+        return primary if POST_URL.fullmatch(primary) else url
+    return None
+
+
 def notify_pending(document, command, now):
-    """Retry failed notices; persist success and let the publisher dedupe crash retries."""
-    attempts = 0
-    for entry in reversed(document.get("announcements", [])[-100:]):
-        url = str(entry.get("source_url", ""))
-        if entry.get("confidence") != "low" or entry.get("notice_sent_at"):
-            continue
-        if not (POST_URL.fullmatch(url) or TOPIC_URL.fullmatch(url)):
-            continue
-        if attempts >= 3:
-            break
-        attempts += 1
-        key = "codex-reset-" + hashlib.sha256(url.encode()).hexdigest()[:24]
+    """Retry failures and share durable receipts across primary/relay aliases."""
+    def publish(key, title, body):
         try:
             result = subprocess.run([command, "--topic", "operations", "--priority", "3",
-                "--source", "ai-usage", "--dedupe", key,
-                "--title", "Codex reset announcement needs confirmation",
-                "announced (unverified)\n" + url + "\nConfirm the global Codex scope and reset time before pacing changes."],
-                check=False, timeout=30, capture_output=True)
-            if result.returncode == 0:
-                entry["notice_sent_at"] = now
+                "--source", "ai-usage", "--dedupe", key, "--title", title, body],
+                check=False, timeout=10, capture_output=True)
+            return result.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
-            pass
+            return False
+
+    if primary_blocked(document) and not document.get("blocked_notice_sent_at"):
+        since = document.setdefault("blocked_since", document.get("checked_at", now))
+        key = "codex-reset-blocked-" + hashlib.sha256(str(since).encode()).hexdigest()[:24]
+        if publish(key, "Codex announcement monitoring blocked",
+                   SOURCE + "\nX showed a sign-in wall or challenge. Monitoring stopped; "
+                   "the next read is in eight hours. Please check the personal Desktop profile."):
+            document["blocked_notice_sent_at"] = now
+
+    records = document.get("announcements", [])[-100:]
+    receipts = {notice_url(entry): entry["notice_sent_at"] for entry in records
+                if notice_url(entry) and entry.get("notice_sent_at")}
+    attempted = set()
+    for entry in reversed(records):
+        url = notice_url(entry)
+        if not url or entry.get("confidence") not in {"low", "high", "confirmed"}:
+            continue
+        if url in receipts:
+            entry.setdefault("notice_sent_at", receipts[url])
+            continue
+        if url in attempted or len(attempted) >= 20:
+            continue
+        attempted.add(url)
+        key = "codex-reset-" + hashlib.sha256(url.encode()).hexdigest()[:24]
+        low = entry["confidence"] == "low"
+        title = "Codex reset announcement needs confirmation" if low else "Codex reset announced"
+        body = ("announced (unverified)\n" if low else "announced reset\n") + entry["source_url"]
+        if url != entry["source_url"]:
+            body += "\n" + url
+        if low:
+            body += "\nConfirm the global Codex scope and reset time before pacing changes."
+        if publish(key, title, body):
+            entry["notice_sent_at"] = now
+            receipts[url] = now
     return document
 
 
 EXTRACT = r"""(() => ({
- blocked: /log in or sign up|sign in to|captcha|verify you are human/i.test(document.body.innerText),
+ blocked: /log in or sign up|sign in to|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
  posts: [...document.querySelectorAll('article')].slice(0, 20).map(a => ({
    text: a.querySelector('[data-testid="tweetText"]')?.innerText || '',
    url: a.querySelector('a:has(time)')?.href || '',
@@ -214,7 +258,7 @@ SEARCH_EXTRACT = r"""(() => ({
 
 def check(document, call, now):
     """One lease, three relay topics at most, and no wall bypass or HTTP mirrors."""
-    if now - document.get("checked_at", 0) < INTERVAL:
+    if not due(document, now):
         return document
     updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE,
                "identity": "personal", "sources": []}
@@ -253,6 +297,15 @@ def check(document, call, now):
                 remember(entry)
         updated["status"] = "blocked" if page["blocked"] else "ok"
         if page["blocked"]:
+            updated.setdefault("blocked_since", now)
+        else:
+            updated.pop("blocked_since", None)
+            updated.pop("blocked_notice_sent_at", None)
+        # Relay discovery stays at eight hours, independently of hourly X reads.
+        relay_checked = document.get("relay_checked_at", max((entry.get("observed_at", 0)
+            for entry in records.values() if TOPIC_URL.fullmatch(entry["source_url"])), default=0))
+        if page["blocked"] and now - relay_checked >= BACKOFF:
+            updated["relay_checked_at"] = now
             search = read(RELAY, '.fps-result', SEARCH_EXTRACT)
             if not search["blocked"]:
                 updated["status"] = "partial"
@@ -273,6 +326,7 @@ def check(document, call, now):
     except (OSError, ValueError, KeyError, TypeError):
         updated["status"] = "unavailable"
     finally:
+        updated["next_check_at"] = now + (BACKOFF if primary_blocked(updated) else INTERVAL)
         updated["announcements"] = list(records.values())[-100:]
         if window:
             try:
@@ -333,7 +387,8 @@ def desktop_check(document, command, now):
             finally:
                 future.cancel()
     except Exception:
-        return {**document, "checked_at": now, "identity": "personal", "status": "unavailable"}
+        return {**document, "checked_at": now, "identity": "personal", "status": "unavailable",
+                "next_check_at": now + (BACKOFF if primary_blocked(document) else INTERVAL)}
 
 
 def main():
@@ -364,10 +419,11 @@ def main():
                 parser.error(str(error))
             print("confirmed; the next collector run applies the announced reset")
             return
-        if now - document.get("checked_at", 0) >= INTERVAL:
+        if due(document, now):
             # Reserve the check durably before browsing: a crash must not
             # turn service retries into repeated checks of the public site.
-            save({**document, "checked_at": now, "status": "checking", "source_url": SOURCE})
+            save({**document, "checked_at": now, "status": "checking", "source_url": SOURCE,
+                  "next_check_at": now + BACKOFF})
             document = desktop_check(document, args.command, now)
             save(document)
         if args.notify_command:
