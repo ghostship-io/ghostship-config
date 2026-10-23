@@ -124,6 +124,25 @@ def native_options(descriptors: list[Mapping[str, Any]], preferred: str = 'high'
             options.append({'id': 'serviceTier', 'value': 'standard'})
     return options
 
+def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The preference used by picker defaults, pools and dashboard ranks."""
+    best = {}
+    for row in rows:
+        if row['available'] and row['quality_p'] is not None:
+            level = row['trust_level']
+            best[level] = max(best.get(level, 0), row['quality_p'])
+
+    def rank(row):
+        quality = row['quality_p']
+        free = (row['billing'] in ('free', 'promotion') and quality is not None
+                and quality >= best.get(row['trust_level'], 1) - value_policy.FREE_ROUTE_MARGIN)
+        return (not row['available'], TRUST.get(row['trust_level'], 3),
+                row['pace_state'] == 'far_behind', not free,
+                -(quality if quality is not None else -1),
+                -(row['pace_delta'] if row['pace_delta'] is not None else -2), row['key'])
+    return sorted(rows, key=rank)
+
+
 def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
           *, evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Publish eligible sets and each provider's best available model.
@@ -193,23 +212,9 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                              **({'options': review_options} if review_options else {})}
             categories["orchestrator"].append({**row, 'native': review_native,
                                                'effort': review_effort[0] if review_effort else None})
-    def order(row: Mapping[str, Any]) -> tuple:
-        return (not row["available"], TRUST.get(row["trust_level"], 3),
-                row["pace_state"] == "far_behind",
-                -(row["quality_p"] if row["quality_p"] is not None else -1),
-                -(row["pace_delta"] if row["pace_delta"] is not None else -2), row["key"])
     for category, rows in categories.items():
-        # Free routes close to the best quality lead within their trust group.
-        best = {}
-        for row in rows:
-            if row["available"] and row["quality_p"] is not None:
-                best[row["trust_level"]] = max(best.get(row["trust_level"], 0), row["quality_p"])
-        def rank(row):
-            baseline = order(row)
-            free = (row["billing"] in ("free", "promotion") and row["quality_p"] is not None
-                    and row["quality_p"] >= best.get(row["trust_level"], 1) - value_policy.FREE_ROUTE_MARGIN)
-            return (*baseline[:3], not free, *baseline[3:])
-        rows.sort(key=rank)
+        rows[:] = ordered(rows)
+        native_providers, native_pools = {}, {}
         for index, row in enumerate(rows, 1):
             row["position"] = index
             provider = providers.setdefault(row["provider"], {
@@ -223,6 +228,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 'orchestrator': [], 'worker': [], 'selected': {'orchestrator': None, 'worker': None}})
             group[category].append(row)
             row['pool_position'] = len(group[category])
+            if row['picker_eligible']:
+                native_providers[row['provider']] = native_providers.get(row['provider'], 0) + 1
+                native_pools[pool_id] = native_pools.get(pool_id, 0) + 1
+                row['picker_provider_position'] = native_providers[row['provider']]
+                row['picker_pool_position'] = native_pools[pool_id]
             if row['available'] and group['selected'][category] is None:
                 group['selected'][category] = row['native']
             if row["available"] and provider["selected"][category] is None:
@@ -236,15 +246,44 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
 
 
 def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:
+    """Project canonical choices without re-ranking or inventing readings."""
     values = []
     for category in CATEGORIES:
         for row in selection.get(category) or []:
-            labels = {"category": category, "provider": row["provider"], "model": row["model"],
-                      "display_name": ExactLabel(row["display_name"]), "state": row["state"],
-                      "picker_eligible": "true" if row["picker_eligible"] else "false",
-                      "trust": row["trust_level"]}
-            values.append(("ghostship_ai_picker_model_info", labels, 1.0))
-            values.append(("ghostship_ai_picker_model_position", labels, float(row["position"])))
-            if row.get("quality_score") is not None:
-                values.append(("ghostship_ai_picker_model_quality", labels, row["quality_score"]))
+            pool = row.get('pool') or {}
+            limit = row.get('limiting_window') or {}
+            effort = row.get('effort') or {}
+            labels = {'category': category, 'provider': row['provider'], 'model': ExactLabel(row['model']),
+                      'display_name': ExactLabel(row['display_name']), 'state': row['state'],
+                      'picker_eligible': 'true' if row['picker_eligible'] else 'false',
+                      'trust': row['trust_level'], 'pool': ExactLabel(str(pool.get('id') or '')),
+                      'pool_label': ExactLabel(str(pool.get('label') or 'Unknown pool')),
+                      'billing': row.get('billing') or 'unknown',
+                      'reason': ExactLabel(str(row.get('reason') or '')),
+                      'window': str(limit.get('kind') or ''),
+                      'quota_id': str(limit.get('quota_id') or ''),
+                      'pace_state': str(limit.get('pace_state') or 'unknown'),
+                      'reset_source': str(limit.get('reset_source') or 'provider'),
+                      'effort': str(effort.get('value') or ''),
+                      'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown'))}
+            numbers = {'info': 1.0, 'position': row['position'],
+                       'provider_position': row.get('picker_provider_position', row.get('provider_position')),
+                       'pool_position': row.get('picker_pool_position', row.get('pool_position')),
+                       'quality': row.get('quality_score'),
+                       'default': float(category == 'worker' and row.get('native') is not None
+                                        and row.get('native') == selection.get('default_worker')),
+                       'quality_rounds': row.get('quality_n'),
+                       'quality_accepted': row.get('quality_s'),
+                       'remaining_ratio': limit.get('remaining_ratio'),
+                       'pace_delta': limit.get('pace_delta')}
+            if limit.get('reset_at'):
+                try:
+                    numbers['reset_timestamp_seconds'] = datetime.fromisoformat(
+                        str(limit['reset_at']).replace('Z', '+00:00')).timestamp()
+                except (ValueError, OverflowError):
+                    pass
+            for field, value in numbers.items():
+                finite = number(value)
+                if finite is not None:
+                    values.append(('ghostship_ai_picker_model_' + field, dict(labels), finite))
     return values
