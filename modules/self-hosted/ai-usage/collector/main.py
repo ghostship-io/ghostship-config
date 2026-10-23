@@ -252,6 +252,14 @@ METRIC_HELP = {
         "prior strength k, the observed rounds n and s, and the quality p."
     ),
     "ghostship_ai_model_quality": "The quality score of a model.",
+    "ghostship_ai_model_quality_score": (
+        "The display quality score of a model: one integer 0..100 per model, "
+        "comparable across every tier, with the basis it was built from."
+    ),
+    "ghostship_ai_model_quality_rounds": (
+        "The observed rounds behind a model's display quality score, summed "
+        "over every task type: n the rounds and s the accepted ones."
+    ),
     "ghostship_ai_model_available": (
         "Whether a model can be used right now, with the reason it cannot."
     ),
@@ -1918,6 +1926,31 @@ def trust_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
                             "task_type": str(record.get("task_type") or ""),
                             "field": field,
                         },
+                        float(value),
+                    )
+                )
+        # The display score is one number per model, so neither series
+        # carries a tier: every page reads the same score of the same model.
+        score = row.get("quality_score")
+        if isinstance(score, (int, float)) and not isinstance(score, bool):
+            samples.append(
+                (
+                    "ghostship_ai_model_quality_score",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "basis": str(row.get("quality_basis") or ""),
+                    },
+                    float(score),
+                )
+            )
+        for field in ("n", "s"):
+            value = row.get(f"quality_{field}")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_quality_rounds",
+                        {"provider": provider, "model": model, "field": field},
                         float(value),
                     )
                 )
