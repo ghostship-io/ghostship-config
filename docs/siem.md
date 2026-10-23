@@ -107,6 +107,14 @@ Journal events add `unit`, `container`, `ident`, `transport`, `pid`, `uid`,
 
 ## Querying
 
+For investigations from the agent environment, use `agent siem sensitive-reads`,
+`agent siem unit-session --unit "$unit" --at "$timestamp"`,
+`agent siem container-health`, or `agent siem query --query "$logsql" --start
+"$start" --end "$end"`. The command runs against these host read paths and
+returns categories and role-redacted detail (`--json`), keeping raw evidence
+on the host. See the [daily procedure](security-daily.md) for interpretation
+and coverage limits. Use the direct host API below only for host-local analysis.
+
 From root SSH on `chill-penguin` (LogsQL):
 
 ```sh

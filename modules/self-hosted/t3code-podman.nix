@@ -27,8 +27,8 @@ let
       runtime = "crun";
       runtimes.crun = [ "${pkgs.crun}/bin/crun" ];
       helper_binaries_dir = [
-        "${pkgs.netavark}/bin"
-        "${pkgs.aardvark-dns}/bin"
+        "${pkgs.podman}/libexec/podman"
+        "${pkgs.podman.passthru.helpersBin}/bin"
       ];
     };
     network = {
@@ -95,6 +95,7 @@ let
     After=dbus.socket
     [Service]
     Type=exec
+    ExecStartPre=${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/check-helpers.py} ${containersConfig}
     ExecStartPre=${pkgs.coreutils}/bin/mkdir -p ${runtime}/podman
     StandardOutput=inherit
     StandardError=inherit

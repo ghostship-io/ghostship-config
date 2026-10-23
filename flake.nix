@@ -5,14 +5,14 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/9300a35946151575a6ab089a0c483701f3c5bca1";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/5b865b9462ae2a5b9e49823675e62aee3b2d1f81";
 
     # The owner's runtime policy, read by the AI usage collector for the
-    # static worker table that governs while routing is off. It is a plain
+    # model-selection identities and trust evidence. It is a plain
     # source tree, not a flake, and it has its own pin: the T3 Code input
     # above is built and must not move with it.
     ghostship-agent-policy = {
-      url = "github:ghostship-io/ghostship-agent/5381c0156b441aa3e6ce039e7e8e3768bcac68a8";
+      url = "github:ghostship-io/ghostship-agent/47f78347334618c111d89dc16edd869c82eb4edc";
       flake = false;
     };
 

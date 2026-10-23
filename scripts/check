@@ -37,7 +37,8 @@ apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
 printf 'Checking shared network allocation admission\n'
 nix eval --impure --json --file tests/shared-network.nix >/dev/null
 python3 -m unittest discover -s tests -p test_shared_network_range.py
-nix build --no-link .#nixosConfigurations.chill-penguin.config.system.build.sharedNetworkIPAMRegression
+check_system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+nix build --no-link ".#checks.${check_system}.podman-ipam"
 
 printf 'Checking the container containment policy model and module\n'
 nix eval --impure --json --file tests/container-isolation.nix >/dev/null

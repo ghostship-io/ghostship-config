@@ -129,6 +129,14 @@ def last_json_object(text):
     return {}
 
 
+def published_tcp_port(output):
+    try:
+        port = int(output.strip().rsplit(":", 1)[-1])
+    except ValueError:
+        return None
+    return port if 1024 <= port <= 65535 else None
+
+
 def project_networks(command, project):
     """Return the compose project's own networks and their address pools."""
     details = {}
@@ -536,8 +544,8 @@ def main():
                 detail = published.stdout.strip()
                 if not detail:
                     detail = published.stderr[-600:] or up.stderr[-600:]
-                if published.returncode == 0 and published.stdout.strip():
-                    port = int(published.stdout.strip().rsplit(":", 1)[1])
+                port = published_tcp_port(published.stdout)
+                if published.returncode == 0 and port is not None:
                     for _ in range(30):
                         try:
                             with urllib.request.urlopen(

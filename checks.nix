@@ -1,5 +1,10 @@
-{ pkgs, self, agentSource }:
+{
+  pkgs,
+  self,
+  agentSource,
+}:
 let
+  securityPkgs = pkgs.extend (import ./packages/security-fixes).overlay;
   antigravityPkgs = import pkgs.path {
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfreePredicate = pkg: pkgs.lib.getName pkg == "antigravity-acp";
@@ -24,9 +29,9 @@ let
   # The switch restarts every unit with restartIfChanged. The T3 Code
   # container must never be one of them: an activation that interrupts an
   # active session breaks the work in flight.
-  t3codeRestartedBySwitch = builtins.filter
-    (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}.restartIfChanged)
-    (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
+  t3codeRestartedBySwitch = builtins.filter (
+    name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}.restartIfChanged
+  ) (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codeImageSeedsRetention = pkgs.lib.hasInfix "t3code-retention" t3codeImagePreStart;
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
@@ -35,6 +40,7 @@ in
 {
   antigravity-native-loader =
     (antigravityPkgs.callPackage ./packages/t3code/antigravity-acp.nix { }).tests.native-loader;
+  podman-ipam = import ./packages/podman-network/regression.nix { pkgs = securityPkgs; };
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"
