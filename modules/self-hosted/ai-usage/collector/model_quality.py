@@ -142,13 +142,63 @@ def choose(candidate: Mapping[str, Any], preferred: list[dict]) -> dict | None:
     rows = [row for row in candidate.get("quality_evidence") or [] if row["selectable"]]
     if not rows:
         return None
+    # An unmeasured effort must not erase established results for the model.
+    qualified = [row for row in rows if row['n'] >= MIN_OUTCOMES]
+    rows = qualified or rows
     wanted = str(preferred[0]["value"]).lower() if preferred else "default"
     return min(rows, key=lambda row: (row["overall"] is None, -(row["overall"] or 0),
+                                     (row['seconds_per_pass'] if row['seconds_per_pass'] is not None else
+                                      row['median_seconds'] if row['median_seconds'] is not None else math.inf)
+                                     if row['passed'] else math.inf,
                                      row["effort"] != wanted, row["effort"]))
 
 
+def annotate(quality: dict, selection: Mapping[str, Any]) -> None:
+    """Publish active membership and one ranked representative per model."""
+    active, preferred, selected = set(), {}, set()
+    for category in ('worker','orchestrator'):
+        for row in selection.get(category) or []:
+            key = (row['provider'],row['model'])
+            evidence = row.get('quality_evidence')
+            if evidence is not None:
+                preferred.setdefault(key,evidence)
+            if (row['available'] and row['selection_eligible'] and row['picker_eligible']
+                    and row['trust_level'] not in ('excluded','untrusted')
+                    and row.get('billing') not in ('free','promotion')):
+                active.add(key)
+            chosen = ((selection.get('providers') or {}).get(row['provider']) or {}).get('selected') or {}
+            if row.get('native') is not None and row['native'] == chosen.get(category):
+                selected.add(key)
+    groups = defaultdict(list)
+    for row in quality.get('rows') or []:
+        groups[(row['provider'],row['model'])].append(row)
+    models = []
+    for key, rows in groups.items():
+        usable = [row for row in rows if row['selectable']] or rows
+        measured = [row for row in usable if row['n']]
+        qualified = [row for row in measured if row['n'] >= MIN_OUTCOMES]
+        pool = qualified or measured or usable
+        representative = preferred.get(key)
+        if representative is None or representative not in pool:
+            representative = min(pool,
+                key=lambda row:(row['overall'] is None,-(row['overall'] or 0),-row['n'],
+                                row['median_seconds'] if row['median_seconds'] is not None else math.inf,row['effort']))
+        for row in rows:
+            row.update(active=key in active, model_selected=key in selected,
+                       representative=row is representative)
+        models.append(representative)
+    models.sort(key=lambda row:(row['overall'] is None,-(row['overall'] or 0),row['provider'],row['model']))
+    active_rank = 0
+    for rank, representative in enumerate(models,1):
+        if representative['active']:
+            active_rank += 1
+        for row in groups[(representative['provider'],representative['model'])]:
+            row.update(model_rank=rank,active_rank=active_rank if representative['active'] else None)
+
+
 FIELDS = ("overall", "aa", "observed", "observed_weight", "n", "passed", "rank", "merged", "merge_n",
-          "median_seconds", "seconds_per_pass", "tokens_per_pass", "quota_per_pass", "review_findings", "date")
+          "median_seconds", "seconds_per_pass", "tokens_per_pass", "quota_per_pass", "review_findings", "date",
+          "active", "model_selected", "representative", "model_rank", "active_rank")
 
 
 def samples(quality: Mapping[str, Any]) -> list:
@@ -160,7 +210,8 @@ def samples(quality: Mapping[str, Any]) -> list:
                       evidence_state=str(quality.get("state") or "no_evidence"))
         values.append(("ghostship_ai_quality_info", labels, 1.0))
         for field in FIELDS:
-            value = number(row.get(field))
+            raw = row.get(field)
+            value = float(raw) if isinstance(raw,bool) else number(raw)
             if value is not None:
                 values.append(("ghostship_ai_quality_" + field, dict(labels), value))
     return values

@@ -1493,8 +1493,9 @@ The `model_quality` snapshot is the canonical score used by the provider
 selection and its dashboard. Each exact model and actual supported effort has
 separate evidence; dated model builds are never collapsed. The prior is the
 public Artificial Analysis intelligence index, clamped to 0–100, with its
-source URL and fetch date. A dated last-good public prior remains visible with a stale label when the daily pull fails; it is never represented as a fresh reading. Incompatible feed versions and missing AA stay unknown. The daily refresh uses
-a 24-hour threshold, independently of the collector's 36-hour reading grace.
+source URL and fetch date. A dated last-good public prior remains visible with a stale label when the daily pull fails; it is never represented as a fresh reading. Incompatible feed versions and missing AA stay unknown. The scheduled pull refreshes once per UTC calendar day, independently of the
+collector's 36-hour reading grace. Daily intelligence collection uses the public
+boards directly; optional individual-page cost enrichment does not delay it.
 
 Shared `ghostship_t3.models.read_evidence` supplies independently verified bench
 and work records from `GHOSTSHIP_MODEL_EVIDENCE_PATH`. Missing producer/store
@@ -1505,6 +1506,12 @@ tasks in `n`. Below five verified outcomes it is provisional and has no weight.
 Thereafter `w = (n - 4) / (n + 6)` and
 `overall = (1 - w) * AA + w * observed`; observed becomes the majority at 15.
 Without AA, five outcomes are required for an observed-only overall score.
+
+The default table contains one row per model in the active, available native
+selection pool. All models includes spent and unused models. Efforts collapse
+to the best measured setting, with a comparison only when observed effort
+results differ; columns without evidence are omitted. Unmeasured efforts cannot
+erase established outcomes once a supported effort has five verified samples.
 
 The table publishes overall, AA, observed, sample count, pass/merge counts,
 median time, total time/tokens per passed task and evidence source/date. Unknown

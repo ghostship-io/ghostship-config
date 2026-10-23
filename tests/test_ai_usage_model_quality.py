@@ -119,6 +119,29 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(chosen['quality_s'],30)
         self.assertAlmostEqual(chosen['quality_score'],quality.blend(70,30,30)['overall'])
 
+    def test_unmeasured_effort_cannot_hide_enough_observed_failures(self):
+        row=candidate(aa=90)
+        quality.build([row],rounds(n=30,passed=False),NOW)
+        chosen=quality.choose(row,[{'id':'effort','value':'high'}])
+        self.assertEqual(chosen['effort'],'low')
+        self.assertLess(chosen['overall'],30)
+
+    def test_model_summary_marks_active_pool_and_keeps_spent_models_for_all_toggle(self):
+        active=candidate('active')
+        spent=candidate('spent')
+        spent['capacity']['remaining_ratio']=0
+        rows=[active,spent]
+        result=quality.build(rows,rounds('active',n=5)+rounds('active','high',n=6),NOW)
+        selected=selection.build({'candidates':rows},[])
+        quality.annotate(result,selected)
+        active_rows=[r for r in result['rows'] if r['active']]
+        self.assertEqual({r['model'] for r in active_rows},{'active'})
+        self.assertEqual(sum(r['representative'] for r in active_rows),1)
+        representative=next(r for r in active_rows if r['representative'])
+        self.assertEqual(representative['effort'],selected['worker'][0]['effort']['value'])
+        self.assertEqual(representative['active_rank'],1)
+        self.assertEqual(sum(r['representative'] for r in result['rows']),2)
+
     def test_boolean_effort_remains_a_native_boolean_for_review_and_work(self):
         row=candidate()
         row['native']['options']=[{'id':'thinking','type':'boolean'}]
@@ -139,7 +162,7 @@ class QualityTests(unittest.TestCase):
         untyped=next(r for r in dated if r['effort']=='default')
         self.assertEqual((high['n'],high['passed'],low['n']),(5,0,0))
         self.assertFalse(untyped['selectable'])
-        self.assertEqual(quality.choose(rows[0],[{'id':'effort','value':'high'}])['effort'],'low')
+        self.assertEqual(quality.choose(rows[0],[{'id':'effort','value':'high'}])['effort'],'high')
 
     def test_dedup_dates_failures_and_missing_measurements(self):
         rows=[candidate()]
