@@ -813,5 +813,92 @@ class TheSpanOfAnOpenEpisode(unittest.TestCase):
             self.assertIsNone(result.window, model)
 
 
+class TheWindowThatRolledOver(unittest.TestCase):
+    """A refusal spends its learned window only until that window resets.
+
+    The record is the reproduce one: a completed episode learns the one hour
+    window, and the refusal at 3800 opens an episode that never recovered.
+    The windows tile from the start of the open episode, so the refusal
+    spends the window that holds it and the route is available again once
+    that window has rolled over.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "m", DAY0 + 0.0, usage=100.0),
+            event("acme", "m", DAY0 + 600.0, outcome="limit"),
+            event("acme", "m", DAY0 + 3600.0, usage=0.0),
+            event("acme", "m", DAY0 + 3700.0, usage=100.0),
+            event("acme", "m", DAY0 + 3800.0, outcome="limit"),
+        ]
+
+    def capacity(self, now, events=None):
+        results = inference.infer_capacity(events or self.events, now)
+        return results[("acme", "m")]
+
+    def test_the_refusal_spends_its_window(self):
+        result = self.capacity(DAY0 + 5500.0)
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, DAY0 + 7300.0)
+
+    def test_the_rolled_window_is_available_again(self):
+        result = self.capacity(DAY0 + 7900.0)
+        self.assertEqual(result.state, "in_window")
+        self.assertEqual(result.left, 1.0)
+        self.assertEqual(result.start_at, DAY0 + 7300.0)
+        self.assertEqual(result.reset_at, DAY0 + 10900.0)
+
+    def test_a_later_roll_starts_a_later_window(self):
+        result = self.capacity(DAY0 + 15100.0)
+        self.assertEqual(result.state, "in_window")
+        self.assertEqual(result.left, 1.0)
+        self.assertEqual(result.start_at, DAY0 + 14500.0)
+        self.assertEqual(result.reset_at, DAY0 + 18100.0)
+
+    def test_a_refusal_in_the_new_window_spends_it(self):
+        events = list(self.events) + [
+            event("acme", "m", DAY0 + 8000.0, outcome="limit")
+        ]
+        result = self.capacity(DAY0 + 8100.0, events)
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, DAY0 + 10900.0)
+
+    def test_before_the_window_ends_the_route_is_never_available(self):
+        for now in (DAY0 + 3800.0, DAY0 + 5500.0, DAY0 + 7299.0):
+            result = self.capacity(now)
+            self.assertNotEqual(result.state, "in_window", now)
+            self.assertEqual(result.left, 0.0, now)
+
+
+class RefusalWithoutALearnedWindow(unittest.TestCase):
+    """A refusal with no completed episode has no window to roll over."""
+
+    def test_any_reading_is_spent_without_a_reset(self):
+        events = [
+            event("acme", "m", DAY0 + 0.0, usage=100.0),
+            event("acme", "m", DAY0 + 600.0, outcome="limit"),
+        ]
+        for now in (DAY0 + 600.0, DAY0 + 100000.0):
+            result = inference.infer_capacity(events, now)[("acme", "m")]
+            self.assertEqual(result.state, "exhausted", now)
+            self.assertEqual(result.left, 0.0, now)
+            self.assertIsNone(result.reset_at, now)
+
+
+class NeverRefused(unittest.TestCase):
+    """A route with no refusal keeps all of its allowance."""
+
+    def test_the_state_is_no_failure(self):
+        events = [
+            event("acme", "m", DAY0 + 0.0, usage=100.0),
+            event("acme", "m", DAY0 + 60.0, usage=100.0),
+        ]
+        result = inference.infer_capacity(events, DAY0 + 120.0)[("acme", "m")]
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
