@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.120] - 2026-10-23
+## [3.17.121] - 2026-10-23
 
 - AI usage: a free provider and a static route carry the name of their model. The name of a model is published with the model id the exposition format allows, and the id a provider gave is not always one of them: a slash and an at sign are not. The free selection and the static table looked the name up by the raw id of the route, so six of the nineteen free rows of the Providers page read a raw id where the collector publishes a name, and the Groq, OpenRouter, NVIDIA and Cloudflare Workers AI models of the free tier read 'qwen/qwen3.8-27b', 'thinkingmachines/inkling-small:free' and '@cf/openai/gpt-oss-120b' instead of 'Qwen3.8 27B', 'Inkling Small (free)' and 'GPT-OSS 120B'. The name is looked up by the id of the route first, and by the published form of that id after it. The provider is part of the key, so the name of another provider's model is never used, a model that is published nowhere still falls back to its own id, and no other label of a row changes.
+
+## [3.17.120] - 2026-10-23
+
+- ai-usage: a free pool route the pool parked says why it is unusable. The routing snapshot rebuilt `availability.reason` from the quota windows alone, so a pool route the pool reports as unavailable read `available: false` with an empty reason whenever the quota of its account was available; the live pool providers held 23 such candidates. The ranking already knows that the pool parked the route, and the snapshot now reads that judgement: a route whose pool cooldown has not run out says "cooling down in the free pool until <the moment the cooldown ends>", and a route without a cooldown says "the free pool does not offer the route for development work". The pool publishes no reason of its own, so those two cases are the whole of it. The availability state, `available`, `quota_state` and the capacity are unchanged, and so is every other reason.
 
 ## [3.17.119] - 2026-10-23
 
