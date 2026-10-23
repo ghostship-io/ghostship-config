@@ -796,6 +796,7 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
     def test_an_expired_or_stale_reading_is_not_current_capacity(self):
         expired = "llama-3.3-70b-versatile"
         stale = self.MODEL
+        fresh = "fresh-model"
         status = {
             "quota_observations": [
                 observation(
@@ -808,19 +809,28 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
                     observed=1000.0,
                     rpd={"limit": 100, "remaining": 50, "reset": "1h"},
                 ),
+                observation(
+                    fresh,
+                    observed=2000.0,
+                    rpd={"limit": 100, "remaining": 50, "reset": "1h"},
+                ),
             ]
         }
-        # The first window refilled at 1002, and the second reading is 1801
-        # seconds old: neither is current headroom or a lockout.
+        # The first window refilled at 1002, the second reading is 1801
+        # seconds old, and the third is fresh: only the third is current
+        # capacity.
         result = self.collect(status, now=2801.0)
-        self.assertEqual(result.windows, [])
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [(fresh, "rpd")],
+        )
         self.assertTrue(
             [
                 name
                 for name, _labels, _value in result.metrics
                 if name == "ghostship_ai_pool_quota_amount"
             ],
-            "the observation stays a diagnostic",
+            "the observations stay diagnostics",
         )
 
     def test_pool_admission_caps_are_not_provider_capacity(self):
@@ -840,8 +850,24 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
                 }
             }
         }
-        result = self.collect({}, catalog=catalog)
-        self.assertEqual(result.windows, [])
+        # With no observation, the configured caps publish no window at all.
+        self.assertEqual(self.collect({}, catalog=catalog).windows, [])
+        # With an observation, only the reported window is capacity; the
+        # configured caps stay local admission metrics.
+        status = {
+            "quota_observations": [
+                observation(
+                    self.MODEL,
+                    observed=1000.0,
+                    rpd={"limit": 100, "remaining": 50, "reset": "1m"},
+                )
+            ]
+        }
+        result = self.collect(status, catalog=catalog)
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [(self.MODEL, "rpd")],
+        )
         self.assertTrue(
             [
                 labels
@@ -886,8 +912,18 @@ class ReportedHeaderCapacityTests(unittest.TestCase):
         )
         missing["observed_at"] = None
         observations.append(missing)
+        observations.append(
+            observation(
+                "valid-model",
+                observed=1000.0,
+                rpd={"limit": 100, "remaining": 25, "reset": "1m"},
+            )
+        )
         result = self.collect({"quota_observations": observations})
-        self.assertEqual(result.windows, [])
+        self.assertEqual(
+            [(window["model"], window["quotaId"]) for window in result.windows],
+            [("valid-model", "rpd")],
+        )
 
 
 if __name__ == "__main__":
