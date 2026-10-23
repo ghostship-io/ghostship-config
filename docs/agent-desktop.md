@@ -124,11 +124,15 @@ outside the s6-rc `user` bundle, so s6 supervises them in the down state:
   120 s (`CHROME_LEASE_SLACK_SECONDS`), it closes a window only if the
   recorded target still belongs to it. A stale record cannot authorize a
   reused window id. Dedicated descendant popup windows are included;
-  human windows and unexpired recorded windows are protected.
+  human windows and unexpired recorded windows are protected. For one rollout
+  release, an existing schema-1 record and matching anchor URL retain their
+  old lease expiry behavior; idle checks also preserve those pages.
 - **Work tabs:** a claim creates its window only at the first real URL.
   Later tabs open from a verified work tab in an isolated JavaScript world,
   with placement verified afterwards; mismatch closes the new target and
-  fails. Closing the final work tab ends the claim; defaults reopen lazily.
+  fails. Closing the final work tab leaves an explicit claim unbound until
+  its normal expiry; the same bearer creates a new window on navigation.
+  Default claims end and reopen lazily.
 - **Idle stop:** `svc-agent-desktop-chrome-idle` samples `/json/list` every
   60 s (`CHROME_IDLE_CHECK_SECONDS`). After lease reaping, only a profile
   with no page targets can stop after 600 s (`CHROME_IDLE_TIMEOUT_SECONDS`).
