@@ -18,6 +18,7 @@ import snapshot
 from metrics import SourceResult
 
 URL = announcements.SOURCE + "/status/1234567890"
+TOPIC = "https://community.openai.com/t/reset-announcement/12345"
 NOW = datetime.fromisoformat("2030-07-01T12:00:00+00:00").timestamp()
 
 
@@ -134,9 +135,10 @@ class AnnouncedResetTests(unittest.TestCase):
             if kw.get("action") == "open":
                 return {"window_id": "lease"}
             if op == "browser.op":
-                primary = kw["steps"][0]["url"] == announcements.SOURCE
-                return {"extracts": {"announcements": {"blocked": primary,
-                                                        "posts": [] if primary else [post()]}}}
+                url = kw["steps"][0]["url"]
+                return {"extracts": {"announcements": {"blocked": url == announcements.SOURCE,
+                    "topics": [TOPIC] if url == announcements.RELAY else [],
+                    "posts": [post()] if url == TOPIC else []}}}
             return {}
         result = announcements.check({"schema": 1, "announcements": []}, call, NOW)
         self.assertEqual(result["status"], "partial")
@@ -144,9 +146,9 @@ class AnnouncedResetTests(unittest.TestCase):
         self.assertEqual(result["sources"][1]["status"], "ok")
         self.assertEqual(result["announcements"][0]["confidence"], "low")
         self.assertEqual(result["announcements"][0]["primary_source_url"], URL)
-        self.assertTrue(result["announcements"][0]["source_url"].startswith(announcements.RELAY))
+        self.assertTrue(result["announcements"][0]["source_url"].startswith(TOPIC))
         self.assertEqual(announcements.overrides([], result, NOW), [])
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 5)
 
     def test_unavailable_desktop_records_fixed_status(self):
         def call(*args, **kwargs):
@@ -166,6 +168,118 @@ class AnnouncedResetTests(unittest.TestCase):
         second = announcements.check(first, call, NOW + announcements.INTERVAL)
         self.assertEqual(len(second["announcements"]), 1)
         self.assertEqual(second["status"], "ok")
+
+
+class RelayConfirmationTests(unittest.TestCase):
+    def document(self):
+        entry = announcements.parse(post())
+        entry.update(source_url=TOPIC + '#announcement-1234567890', primary_source_url=URL,
+                     confidence='low', reason='community_relay', observed_at=NOW)
+        return {'schema': 1, 'status': 'partial', 'checked_at': NOW, 'announcements': [entry]}
+
+    def test_unverified_relay_is_published_with_link_before_confirmation_changes_pace(self):
+        document = self.document()
+        measured = {'provider': 'codex', 'quotaId': 'weekly', 'kind': 'weekly',
+                    'usedRatio': .5, 'resetEpoch': NOW + 600000,
+                    'durationSeconds': 604800, 'observedAtEpoch': NOW}
+        results = [SourceResult('t3', 'ok', windows=[measured.copy()])]
+        self.assertEqual(announcements.overrides(results, document, NOW), [])
+        text = main.render([], [], NOW, 0, {'announced_resets': document})
+        self.assertIn('label="announced (unverified)"', text)
+        self.assertIn(document['announcements'][0]['source_url'], text)
+        self.assertIn('ghostship_ai_announced_reset_info', text)
+        dashboard = json.loads((Path(__file__).resolve().parents[1] /
+            'modules/self-hosted/siem/dashboards/ai-usage.json').read_text())
+        panel = next(item for item in dashboard['panels'] if item['id'] == 202)
+        self.assertIn('ghostship_ai_announced_reset_info', panel['targets'][0]['expr'])
+        self.assertTrue(panel['options']['enablePagination'])
+        link = panel['fieldConfig']['overrides'][0]['properties'][0]['value'][0]
+        self.assertEqual(link['url'], '${__value.raw}')
+        before = model_selection.limiting_window([snapshot._window_record(measured, NOW)], '2030-07-01T12:00:00Z')
+        announcements.confirm(document, document['announcements'][0]['source_url'], '2030-07-01T17:00:00Z', NOW)
+        reset_overrides.apply(results, announcements.overrides(results, document, NOW), NOW)
+        published = main.build_snapshot(results, [], {'announced_resets': document}, NOW,
+            measured_windows=results[0].windows, catalog=main.catalog_module.Catalog({}))
+        window = published['quota']['accounts']['codex'][0]
+        self.assertEqual(window['reset_at'], '2030-07-01T17:00:00Z')
+        self.assertEqual(window['reset_label'], 'announced reset')
+        after = model_selection.limiting_window([window], '2030-07-01T12:00:00Z')
+        self.assertNotEqual(after['pace_state'], before['pace_state'])
+        self.assertEqual(after['pace_state'], 'ahead')
+        self.assertEqual(results[0].windows[0]['usedRatio'], .5)
+        self.assertEqual(announcements.overrides(results, document, NOW + 18001), [])
+
+    def test_confirmation_is_explicit_bounded_and_requires_a_recorded_source(self):
+        for reset in ('2030-07-01T17:00:00', '2030-06-30T17:00:00Z', '2030-08-01T17:00:00Z', 'unknown'):
+            with self.subTest(reset=reset), self.assertRaises(ValueError):
+                announcements.confirm(self.document(), TOPIC + '#announcement-1234567890', reset, NOW)
+        with self.assertRaises(ValueError):
+            announcements.confirm(self.document(), TOPIC + '#announcement-999', '2030-07-01T17:00:00Z', NOW)
+
+    def test_confirmation_cli_writes_the_shared_cache_without_browsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'announcements.json'
+            document = self.document()
+            path.write_text(json.dumps(document))
+            argv = ['announced-resets', '--output', str(path), '--confirm',
+                    document['announcements'][0]['source_url'], '--reset-at', '2030-07-01T17:00:00Z']
+            with patch.object(sys, 'argv', argv), patch.object(announcements.os, 'geteuid', return_value=0), \
+                 patch.object(announcements.time, 'time', return_value=NOW), \
+                 patch.object(announcements, 'desktop_check') as desktop:
+                announcements.main()
+                desktop.assert_not_called()
+            self.assertEqual(json.loads(path.read_text())['announcements'][0]['confidence'], 'confirmed')
+            with patch.object(sys, 'argv', argv), patch.object(announcements.os, 'geteuid', return_value=1000), \
+                 self.assertRaises(SystemExit):
+                announcements.main()
+
+    def test_notice_retries_failure_and_is_not_repeated_after_success(self):
+        document = self.document()
+        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=1)) as publish:
+            announcements.notify_pending(document, 'fixture-notify', NOW)
+            self.assertNotIn('notice_sent_at', document['announcements'][0])
+            self.assertIn(document['announcements'][0]['source_url'], publish.call_args.args[0][-1])
+        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
+            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
+            announcements.notify_pending(document, 'fixture-notify', NOW + 2)
+            self.assertEqual(publish.call_count, 1)
+        self.assertEqual(announcements.overrides([], document, NOW), [])
+
+    def test_search_is_bounded_and_topic_walls_are_recorded_without_following_untrusted_links(self):
+        visited = []
+        topics = [TOPIC + str(index) for index in range(5)]
+        def call(op, **kwargs):
+            if kwargs.get('action') == 'open':
+                return {'window_id': 'lease'}
+            if op == 'browser.op':
+                url = kwargs['steps'][0]['url']
+                visited.append(url)
+                data = {'blocked': url != announcements.RELAY, 'posts': []}
+                if url == announcements.RELAY:
+                    data['topics'] = ['https://example.invalid/reset', *topics]
+                return {'extracts': {'announcements': data}}
+            return {}
+        result = announcements.check({'schema': 1, 'announcements': []}, call, NOW)
+        self.assertEqual(visited, [announcements.SOURCE, announcements.RELAY, *topics[:3]])
+        self.assertTrue(all(row['status'] == 'blocked' for row in result['sources'][2:]))
+        self.assertEqual(result['announcements'], [])
+
+    def test_rediscovery_preserves_confirmation_and_successful_notice(self):
+        document = self.document()
+        url = document['announcements'][0]['source_url']
+        announcements.confirm(document, url, '2030-07-01T17:00:00Z', NOW)
+        document['announcements'][0]['notice_sent_at'] = NOW
+        def call(op, **kwargs):
+            if kwargs.get('action') == 'open':
+                return {'window_id': 'lease'}
+            if op == 'browser.op':
+                current = kwargs['steps'][0]['url']
+                return {'extracts': {'announcements': {'blocked': current == announcements.SOURCE,
+                    'topics': [TOPIC], 'posts': [post()] if current == TOPIC else []}}}
+            return {}
+        result = announcements.check(document, call, NOW + announcements.INTERVAL)
+        self.assertEqual(result['announcements'][0]['confidence'], 'confirmed')
+        self.assertEqual(result['announcements'][0]['notice_sent_at'], NOW)
 
 
 if __name__ == "__main__":
