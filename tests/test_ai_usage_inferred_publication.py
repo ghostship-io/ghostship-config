@@ -339,6 +339,49 @@ class AccountSectionTests(PublicationTestCase):
         )
 
 
+class RollingWindowTests(PublicationTestCase):
+    """A window shorter than the collector's own run interval has no reset.
+
+    The collector reads the request record every five minutes, so a window
+    that ends inside that interval is already over by the time the reading
+    is published. The account record of such a window carries no reset at
+    all, and the window it was published from says that it rolls.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # The reader knows the provider, so the events are emitted, and the
+        # model id is an invented one.
+        self.routes = [("groq", "example-groq-a")]
+        # A route that is refused twice inside a minute, and used again
+        # after every refusal: the inference reads a one minute window.
+        self.records = [
+            record(at(14, 0), provider="groq", model="example-groq-a", usage=100),
+            record(at(14, 0.5), provider="groq", model="example-groq-a", limit=True),
+            record(at(14, 1), provider="groq", model="example-groq-a", usage=0),
+            record(at(14, 1.5), provider="groq", model="example-groq-a", usage=100),
+            record(at(14, 2), provider="groq", model="example-groq-a", limit=True),
+            record(at(14, 2.5), provider="groq", model="example-groq-a", usage=0),
+            record(at(14, 3), provider="groq", model="example-groq-a", usage=10),
+        ]
+
+    def test_the_account_record_of_a_minute_window_has_no_reset(self):
+        inferred = self.infer(self.records, self.routes)
+        _samples, ranked = self.rank(inferred, self.routes)
+        snapshot = self.snapshot(inferred, self.routes, ranked)
+        records = snapshot["quota"]["accounts"]["groq"]
+        self.assertEqual(len(records), 1)
+        found = records[0]
+        self.assertEqual(found["quota_id"], "inferred:1m")
+        # The window has no fixed reset: the instant the inference
+        # measured is already past when the reading is published.
+        self.assertIsNone(found["reset_at"])
+        self.assertIsNone(found["seconds_to_reset"])
+        self.assertEqual(found["duration_seconds"], 60)
+        # The window the record was published from says that it rolls.
+        self.assertTrue(ranked[0].capacity_inference["rolling"])
+
+
 class ProviderKeyTests(PublicationTestCase):
     """A no-failure capacity never occupies the provider key."""
 
