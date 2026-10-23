@@ -161,7 +161,7 @@
         "x": 0,
         "y": 94,
         "w": 24,
-        "h": 40
+        "h": 30
       },
       "description": "The owner's static selection, shown while the routing is off and kept for reference while it is on: one row per route of the policy, in the collector's row order, and under a Free divider one row per free provider with the model it selected for the free tier. The role, the model and its tag, the provider with the icon of its capacity card, the work the route is used for, and the share of its binding window that is left with the collector's Paced Availability beside it. A route the snapshot does not carry has no reading, never a zero; a free provider that is still learning its window says so, and a provider the routing gave no free-tier winner is not listed at all: it comes back by itself once it has one.",
       "targets": [
@@ -224,7 +224,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 134,
+        "y": 124,
         "w": 24,
         "h": 10
       },
@@ -679,7 +679,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 144,
+        "y": 134,
         "w": 24,
         "h": 19
       },
@@ -1090,7 +1090,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 163,
+        "y": 153,
         "w": 24,
         "h": 6
       },
@@ -1464,7 +1464,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 169,
+        "y": 159,
         "w": 24,
         "h": 11
       },
@@ -1859,7 +1859,7 @@
       "title": "Why this order \u00b7 ${allowance:text}  (per-window % left, expected-left marker, Paced Availability)",
       "gridPos": {
         "x": 0,
-        "y": 180,
+        "y": 170,
         "w": 24,
         "h": 1
       },
@@ -2306,7 +2306,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 181,
+        "y": 171,
         "w": 24,
         "h": 1
       },
@@ -3043,7 +3043,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 182,
+        "y": 172,
         "w": 24,
         "h": 1
       },
@@ -4636,7 +4636,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 183,
+        "y": 173,
         "w": 24,
         "h": 1
       },
@@ -5677,7 +5677,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 184,
+        "y": 174,
         "w": 24,
         "h": 1
       },
@@ -6229,7 +6229,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 185,
+        "y": 175,
         "w": 24,
         "h": 1
       },
@@ -6945,7 +6945,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 186,
+        "y": 176,
         "w": 24,
         "h": 1
       },
