@@ -129,7 +129,7 @@ let
     mv -fT /run/ghostship-integrations/inference-token.new /run/ghostship-integrations/inference-token
     install -m0444 ${endpoint} /run/ghostship-integrations/inference-server.json.new
     mv -fT /run/ghostship-integrations/inference-server.json.new /run/ghostship-integrations/inference-server.json
-    # CLI and MCP share the authenticated proxy without adding mounts to T3.
+    # CLI and MCP use authenticated sockets without adding mounts to T3.
     ${pkgs.podman}/bin/podman exec -i --user 0:0 t3code ${writeClient} < ${token}
     ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
       t3code ${isolateT3Models}
@@ -196,7 +196,7 @@ in
         UMask = "0077";
       };
     };
-    # Keep the existing mounted socket directory stable. The worker itself
+    # Keep the existing T3 client socket directory stable. The worker itself
     # mounts only its own socket; it never receives the T3 home or auth store.
     systemd.sockets.ghostship-inference-proxy = {
       wantedBy = [ "sockets.target" ];
@@ -223,7 +223,9 @@ in
       };
     };
     virtualisation.oci-containers.containers.ghostship-private-integrations.volumes = [
-      "${hostHome}/${state}/socket:/run/ghostship-integrations/inference-socket:ro"
+      # T3 reconciles ownership recursively under its home. MCP must use the
+      # worker-owned socket so that reconciliation cannot remove its group access.
+      "${workerData}/socket:/run/ghostship-integrations/inference-socket:ro"
     ];
     systemd.services.podman-ghostship-private-integrations = {
       after = [ "ghostship-inference-bridge.service" ];
