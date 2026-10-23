@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.115] - 2026-10-23
+## [3.17.116] - 2026-10-23
 
 - flake: the AI usage collector's policy input moves to ghostship-agent 5381c015. The runtime policy there declares `model_trust`, the owner's trust levels: Beam is untrusted for implementation, Gemini 3.8 Flash for implementation and CAD execution, and Claude Haiku 5.5 and GPT-6 Luna are backup. `model-identities.json` declares the routes of those models, and DeepSeek V4.1 Flash 1017 is its own model. The static worker table now routes narrow implementation to DeepSeek V4.1 Flash 1017 first. The T3 Code agent input is unchanged.
+
+## [3.17.115] - 2026-10-23
+
+- ai-usage: a published window series carries a quota id of its own. The card of a provider keys its rows by the account, the kind and the quota id, so a provider that publishes one quota id for several model families drew one row of the card for all of them: the Antigravity account publishes 'quotaInfo' for the Gemini, the Claude and the GPT models, and the card showed one of the three. The scope of the window is named after the id when the id does not name it already, so the quota of the Gemini models is 'quotaInfo@gemini' and a window of two families is 'quotaInfo@claude+gpt'. A window whose id names its scope keeps it: '3p-5h' names the Claude and the GPT models of the third-party group, and 'seven_day_fable' names the Fable models of the Claude account. A window of the whole account keeps its id, an inferred window keeps the name of the window it was learned over, and the account records of the routing snapshot keep the quota id of the provider.
 
 ## [3.17.114] - 2026-10-23
 
