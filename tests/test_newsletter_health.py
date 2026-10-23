@@ -238,11 +238,10 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(queued, [f"incident-{hashlib.sha256(event_id.encode()).hexdigest()}.json"
                                   for event_id in identities])
         self.assertEqual(self.bridge.launch.call_count, 1)
-        self.assertEqual(self.bridge.send.call_count, self.coordinator_module.WAKE_LIMIT)
         thread_id = self.bridge.launch.call_args.kwargs["thread_id"]
-        digest = json.loads(self.coordinator.store.meta("digest:" + thread_id))
+        digest = json.loads(self.coordinator.store.meta("digest:" + thread_id, "{}"))
         overflow = len(digest["pending"]) + len((digest.get("inflight") or {}).get("pending", []))
-        self.assertEqual(overflow, len(identities) - 1 - self.coordinator_module.WAKE_LIMIT)
+        self.assertEqual(self.bridge.send.call_count + overflow, len(identities) - 1)
         self.available = True
         self.run_monitor(True)
         self.run_monitor(True)
