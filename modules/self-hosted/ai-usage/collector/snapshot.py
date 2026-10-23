@@ -58,6 +58,7 @@ from typing import Any, Iterable, Mapping
 import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
+import outcomes as outcomes_module
 import quota as quota_module
 import ranking as ranking_module
 import usage_inference
@@ -114,6 +115,25 @@ ROLE_DELEGATE = "delegate"
 
 # The tiers the snapshot reports, in the order the dashboard reads them.
 TIER_NAMES = ("frontier", "bulk", "free", "3d")
+
+# The task type of every tier. The trust of a model is read for the task
+# type of the tier it holds, and the outcomes of a model are the rounds of
+# that task type: the work of the frontier, the bulk and the free tiers is
+# implementation work, and the work of the 3D tier is CAD execution.
+TIER_TASK_TYPES = {
+    "frontier": "implementation",
+    "bulk": "implementation",
+    "free": "implementation",
+    "3d": "cad-execution",
+}
+
+# The provider reservations of the runtime policy name a T3 Code provider
+# instance; the collector names the same provider by its account. A route of
+# a reserved provider is not a worker of the tiers outside its workload: it
+# follows every unreserved route of its trust group, and it says why.
+RESERVATION_PROVIDERS = {"claudeAgent": "claude", "codex": "codex", "grok": "grok"}
+RESERVATION_TIERS = {"review-roles": ("frontier",), "3d": ("3d",)}
+RESERVATION_IN_FORCE = ("active", "interim")
 
 # The visible label of a window whose state the provider publishes rather
 # than reports. The OpenCode Go documentation lists the free routes as
@@ -2456,29 +2476,109 @@ def _winners(
                 )
             return (1, 0.0, 0.0, -strength, row["provider"], row["model"])
 
-        if tier == "free":
-            ordered = sorted(chosen.values(), key=_free_key)
-        else:
-            ordered = sorted(
-                chosen.values(),
-                key=lambda row: (
-                    # A model reserved for the 3D tier comes last in the tiers
-                    # it is reserved away from. The reserve changes the order,
-                    # never the value.
-                    1 if (row.get("reserve") or {}).get("3d") else 0,
-                    -(_pace_of(row) if _pace_of(row) is not None else 0.0),
+        # The best quality of every trust level of the tier, over every
+        # route that holds it, free or paid. A free route leads while it is
+        # within the margin of the best available model of its own trust
+        # level: it costs nothing, so being close is enough, and among the
+        # free routes that lead the published value decides.
+        best_quality: dict[str, float] = {}
+        if tier == "bulk":
+            for key in members:
+                row = by_key.get(key)
+                if row is None or not _holds_the_tier(row, tier):
+                    continue
+                quality = _outcome_quality(row, tier)
+                if quality is None:
+                    continue
+                level = _trust_level(row, tier)
+                if level not in best_quality or quality > best_quality[level]:
+                    best_quality[level] = quality
+
+        def _free_leads(row: dict[str, Any]) -> int:
+            """Zero when a free route leads its trust level, one otherwise."""
+            if tier != "bulk" or not _is_free_route(row):
+                return 1
+            quality = _outcome_quality(row, tier)
+            if quality is None:
+                return 1
+            best = best_quality.get(_trust_level(row, tier))
+            if best is None:
+                return 1
+            return 0 if value_policy.free_route_leads(quality, best) else 1
+
+        def _pace_key(row: dict[str, Any]) -> tuple:
+            """The order of the pace: a known pace first, then the pace.
+
+            A route with no window has no pace. It is not a pace of zero:
+            an unknown pace waits behind every route that has one.
+            """
+            pace = _pace_of(row)
+            if pace is None:
+                return (1, 0.0)
+            return (0, -pace)
+
+        def _reserve_key(row: dict[str, Any]) -> int:
+            """One for a model that is reserved for the 3D tier."""
+            return 1 if (row.get("reserve") or {}).get("3d") else 0
+
+        def _tier_key(row: dict[str, Any]) -> tuple:
+            """The order of one tier.
+
+            The trust of the route comes first: a trusted route leads, a
+            backup route follows, and an untrusted route comes last with
+            its reason. A model reserved for the 3D tier follows the other
+            members of the tiers it is reserved away from. The bulk tier
+            then reads the published value, and a free route that is close
+            enough to the best route of its trust level leads it.
+            """
+            trust = value_policy.trust_rank(_trust_level(row, tier))
+            # A route of a provider reserved for another workload is not a
+            # worker of this tier: it joins the backup group and follows
+            # every unreserved route of it. An untrusted route stays last.
+            reserved = 1 if _reserved_for(row, tier) else 0
+            if reserved and trust < value_policy.trust_rank("backup"):
+                trust = value_policy.trust_rank("backup")
+            if tier == "free":
+                # The free tier keeps the order it had: the band, the
+                # headroom and the last use.
+                return (trust, reserved, _free_key(row))
+            if tier == "bulk":
+                published = _published_value_for(row, tier)
+                return (
+                    trust,
+                    reserved,
+                    _reserve_key(row),
+                    _free_leads(row),
+                    -(published if published is not None else 0.0),
+                    _pace_key(row),
                     row["provider"],
                     row["model"],
-                ),
+                )
+            return (
+                trust,
+                reserved,
+                _reserve_key(row),
+                _pace_key(row),
+                row["provider"],
+                row["model"],
             )
+
+        ordered = sorted(chosen.values(), key=_tier_key)
         winners[tier] = []
         for row in ordered:
+            trust = _trust_record(row, tier)
+            outcome = _outcome_record(row, tier)
+            published = _published_value_for(row, tier)
             winner = {
                 "provider": row["provider"],
                 "model": row["model"],
                 "key": _key(row["provider"], row["model"]),
                 "tier": tier,
-                "value": (row.get("value") or {}).get("value"),
+                # The published value: the outcome-weighted value under the
+                # trust of the model. The Artificial Analysis value it was
+                # built from is published beside it.
+                "value": published,
+                "value_aa": (row.get("value") or {}).get("value"),
                 "strength": (row.get("value") or {}).get("strength"),
                 "strength_source": (row.get("value") or {}).get("strength_source"),
                 "relative_cost": (row.get("value") or {}).get("relative_cost"),
@@ -2495,13 +2595,30 @@ def _winners(
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
+                # The trust of the route, and the reason it holds, so a
+                # reader sees why an untrusted route is where it is.
+                "trust_level": str(trust.get("level") or "trusted"),
+                "trust_reason": str(trust.get("reason") or ""),
+                "trust_source": str(trust.get("source") or "default"),
+                "trust_task_type": str(trust.get("task_type") or ""),
+                # The workload the provider is reserved for, when this tier
+                # is outside it: the route is shown, and it is not a worker.
+                "reserved_for": _reserved_for(row, tier),
+                # The outcome the published value was built from.
+                "outcome": {
+                    "p0": outcome.get("p0"),
+                    "n": outcome.get("n"),
+                    "s": outcome.get("s"),
+                    "p": outcome.get("p"),
+                },
                 # The access of the winner, with the billing class. A
                 # consumer that picks a route reads the same access record
                 # the candidate row carries.
                 "access": dict(row.get("access") or {}),
                 "reason": (
                     "the best eligible model of this provider for this tier, "
-                    "ordered by the pace of the account window"
+                    "ordered by the trust of the route and then by the pace "
+                    "of the account window"
                 ),
             }
             if tier == "free":
@@ -2780,6 +2897,264 @@ def _frontier_workhorse(model: str, workhorses: Any = None) -> bool:
     return str(model or "").strip().lower() in wanted
 
 
+# -- the trust and the outcomes of a model --------------------------------
+
+
+class _Trust:
+    """The trust and the observed outcomes of the models, read once.
+
+    The trust of a model and the rounds it was measured on are read once
+    per identity and task type, not once per row: two routes of one
+    identity are one model, and they are counted once.
+
+    Everything is total. A missing file is an empty history, a model
+    without a policy entry and without a fabrication is trusted, and a
+    model without a round keeps the prior of its intelligence.
+    """
+
+    def __init__(self, outcomes: Mapping[str, Any] | None = None) -> None:
+        source = outcomes if isinstance(outcomes, Mapping) else {}
+        self.identities = source.get("identities")
+        self.policy = source.get("policy")
+        self.rounds = source.get("rounds")
+        self.backfill = source.get("backfill")
+        self._counts: dict[tuple[str, str], dict[str, Any]] | None = None
+        self._levels: dict[tuple[str, str], dict[str, Any]] = {}
+        self._identities: dict[tuple[str, str], str] = {}
+        self.reservations: dict[str, str] = {}
+        policy = self.policy if isinstance(self.policy, Mapping) else {}
+        for entry in policy.get("provider_reservations") or ():
+            if not isinstance(entry, Mapping):
+                continue
+            if str(entry.get("status") or "") not in RESERVATION_IN_FORCE:
+                continue
+            provider = RESERVATION_PROVIDERS.get(str(entry.get("provider") or ""))
+            if provider:
+                self.reservations[provider] = str(entry.get("workload") or "")
+
+    def reserved_for(self, provider: str, tier: str) -> str:
+        """The workload a provider is reserved for, outside that workload's tiers."""
+        workload = self.reservations.get(str(provider or ""), "")
+        if not workload or tier in RESERVATION_TIERS.get(workload, ()):
+            return ""
+        return workload
+
+    def identity(self, provider: str, model: str) -> str:
+        """The identity of a route: the model it serves."""
+        key = (str(provider or ""), str(model or ""))
+        if key not in self._identities:
+            self._identities[key] = outcomes_module.identity_of(
+                key[0], key[1], self.identities
+            )
+        return self._identities[key]
+
+    def counts(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """The observed rounds of every model and task type."""
+        if self._counts is None:
+            self._counts = outcomes_module.outcome_counts(
+                self.rounds, self.backfill, self.identities
+            )
+        return self._counts
+
+    def observed(self, identity: str, task_type: str) -> tuple[int, int]:
+        """The rounds and the accepted rounds of a model and task type."""
+        entry = self.counts().get((identity, task_type)) or {}
+        rounds = entry.get("n")
+        accepted = entry.get("s")
+        return (
+            int(rounds) if isinstance(rounds, (int, float)) else 0,
+            int(accepted) if isinstance(accepted, (int, float)) else 0,
+        )
+
+    def trust(self, identity: str, task_type: str) -> dict[str, Any]:
+        """The trust of a model for a task type, and the reason it holds."""
+        key = (str(identity or ""), str(task_type or ""))
+        if key not in self._levels:
+            self._levels[key] = outcomes_module.trust_for(
+                key[0],
+                key[1],
+                self.policy,
+                self.rounds,
+                self.backfill,
+                self.identities,
+            )
+        return self._levels[key]
+
+
+def _trust_record(row: Mapping[str, Any], tier: str) -> dict[str, Any]:
+    """The trust of a row for a tier, as it is published."""
+    record = (row.get("trust") or {}).get(tier)
+    return dict(record) if isinstance(record, Mapping) else {}
+
+
+def _trust_level(row: Mapping[str, Any], tier: str) -> str:
+    """The trust level of a row for a tier.
+
+    A row that holds no trust record is trusted: the policy grants no
+    penalty to a route nobody has judged.
+    """
+    level = str(_trust_record(row, tier).get("level") or "").strip().lower()
+    if level not in value_policy.TRUST_LEVELS:
+        return "trusted"
+    return level
+
+
+def _outcome_record(row: Mapping[str, Any], tier: str) -> dict[str, Any]:
+    """The outcome record of a row for a tier, as it is published."""
+    record = (row.get("outcome") or {}).get(tier)
+    return dict(record) if isinstance(record, Mapping) else {}
+
+
+def _reserved_for(row: Mapping[str, Any], tier: str) -> str:
+    """The workload the provider of a row is reserved for, in this tier."""
+    return str((row.get("reservation") or {}).get(tier) or "")
+
+
+def _published_value_for(row: Mapping[str, Any], tier: str) -> float | None:
+    """The published value of a row for a tier: its value under its trust."""
+    value = _outcome_record(row, tier).get("published")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _outcome_quality(row: Mapping[str, Any], tier: str) -> float | None:
+    """The outcome quality p of a row for a tier, when it is known."""
+    quality = _outcome_record(row, tier).get("p")
+    if isinstance(quality, (int, float)) and not isinstance(quality, bool):
+        return float(quality)
+    return None
+
+
+def _is_free_route(row: Mapping[str, Any]) -> bool:
+    """True when a route costs nothing: its billing class says so."""
+    access = row.get("access") or {}
+    billing = str(access.get("billing") or "") if isinstance(access, Mapping) else ""
+    return billing == BILLING_FREE
+
+
+def _intelligence_of(row: Mapping[str, Any]) -> float | None:
+    """The measured Artificial Analysis intelligence index of a row."""
+    value = (row.get("value") or {}).get("strength")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _efficiency_of(row: Mapping[str, Any]) -> float | None:
+    """The efficiency of the measured cost per task of a row."""
+    components = (row.get("value") or {}).get("components") or {}
+    cost = (components.get("cost_per_task") or {}).get("value")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        return float(cost)
+    return None
+
+
+def _fill_trust(candidates: list[dict[str, Any]], trust: _Trust) -> None:
+    """The trust and the outcome of every row, for every tier it holds.
+
+    The trust of a model is the trust the owner's policy gives it, and the
+    trust the ledger's own rule gives it: the worse of the two. The
+    outcome of a model is its measured intelligence inside its tier, shrunk
+    toward the rounds that were actually observed, combined with the
+    measured efficiency, and scaled by the trust of the model.
+    """
+    for row in candidates:
+        row["trust"] = {}
+        row["outcome"] = {}
+        row["reservation"] = {
+            tier: trust.reserved_for(str(row.get("provider") or ""), tier)
+            for tier in TIER_NAMES
+        }
+    # The trust of every row, for every tier it is a member of. The trust
+    # of a tier decides whether the row may hold it at all: an excluded
+    # level never holds a tier.
+    for row in candidates:
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        identity = trust.identity(provider, model)
+        for tier in row.get("tiers") or []:
+            task_type = TIER_TASK_TYPES.get(str(tier), "implementation")
+            entry = trust.trust(identity, task_type)
+            level = str(entry.get("level") or "trusted").strip().lower()
+            if level not in value_policy.TRUST_LEVELS:
+                level = "trusted"
+            row["trust"][tier] = {
+                "level": level,
+                "reason": str(entry.get("reason") or ""),
+                "evidence": entry.get("evidence") or {},
+                "source": str(entry.get("source") or "default"),
+                "task_type": task_type,
+            }
+    # The outcome of every row, per tier. The range of the tier is the
+    # range of the models that hold it: the prior places a model inside
+    # the tier it competes in.
+    for tier in TIER_NAMES:
+        task_type = TIER_TASK_TYPES.get(tier, "implementation")
+        holders = [
+            row
+            for row in candidates
+            if tier in (row.get("tiers") or []) and _holds_the_tier(row, tier)
+        ]
+        strengths = [
+            strength
+            for strength in (_intelligence_of(row) for row in holders)
+            if strength is not None
+        ]
+        i_min = min(strengths) if strengths else None
+        i_max = max(strengths) if strengths else None
+        for row in candidates:
+            if tier not in (row.get("tiers") or []):
+                continue
+            identity = trust.identity(
+                str(row.get("provider") or ""), str(row.get("model") or "")
+            )
+            level = _trust_level(row, tier)
+            intelligence = _intelligence_of(row)
+            p0 = value_policy.outcome_prior(intelligence, i_min, i_max)
+            rounds, accepted = trust.observed(identity, task_type)
+            try:
+                quality = value_policy.outcome_quality(p0, rounds, accepted)
+            except ValueError:
+                # A count that cannot exist is not a quality: the value of
+                # the row stays unknown rather than invented.
+                quality = None
+            efficiency = _efficiency_of(row)
+            if tier == "3d":
+                # The 3D tier is valued by its own measure: the intelligence,
+                # the measured AA-3D capability and the cost. The outcome of
+                # the model is published beside it, and its trust scales it.
+                three_d = (row.get("value_3d") or {}).get("value")
+                value = (
+                    float(three_d)
+                    if isinstance(three_d, (int, float)) and not isinstance(three_d, bool)
+                    else None
+                )
+            else:
+                value = (
+                    value_policy.outcome_value(quality, efficiency)
+                    if quality is not None
+                    else None
+                )
+            published = value_policy.trust_adjusted_value(value, level)
+            row["outcome"][tier] = {
+                "identity": identity,
+                "task_type": task_type,
+                "intelligence": intelligence,
+                "i_min": i_min,
+                "i_max": i_max,
+                "p0": p0,
+                "k": value_policy.OUTCOME_PRIOR_STRENGTH,
+                "n": rounds,
+                "s": accepted,
+                "p": quality,
+                "value": value,
+                # The published value: the outcome value under the trust of
+                # the model. An untrusted route keeps half of it.
+                "published": published,
+            }
+
+
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     """True when a model may hold a rank in a tier.
 
@@ -2832,21 +3207,35 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
 
 
 def _winner_key(row: dict[str, Any], tier: str = "") -> tuple:
-    """The order of the candidates of one provider: value, then quality.
+    """The order of the candidates of one provider: trust, then value.
 
-    The 3D tier is ordered by the 3D value: the intelligence, the measured
-    AA-3D capability and the cost, with the weights of the policy. The
-    ordinary value is not a substitute for it, and it does not replace it
-    either.
+    The trust of a route comes first: a trusted route of a provider is
+    used before a backup one, and an untrusted one is used last. Inside
+    one trust level the published value decides, and the published value
+    is the outcome-weighted value under that trust.
+
+    The 3D tier keeps its own value as the last tiebreak, so the measured
+    AA-3D capability still separates two routes of one trust level and
+    one published value.
     """
-    if tier == "3d":
-        value = (row.get("value_3d") or {}).get("value")
-    else:
-        value = (row.get("value") or {}).get("value")
-    quality = (row.get("quality") or {}).get("value")
+    level = _trust_level(row, tier)
+    published = _published_value_for(row, tier)
+    three_d = (row.get("value_3d") or {}).get("value") if tier == "3d" else None
+    if published is None:
+        # A route whose published value is unknown keeps the value it had:
+        # the Artificial Analysis value, and the 3D value in the 3D tier.
+        if tier == "3d" and isinstance(three_d, (int, float)) and not isinstance(three_d, bool):
+            published = float(three_d)
+        else:
+            value = (row.get("value") or {}).get("value")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                published = float(value)
     return (
-        float(value) if isinstance(value, (int, float)) else 0.0,
-        float(quality) if isinstance(quality, (int, float)) else 0.0,
+        # The lowest trust rank is the best: the key is negated, because
+        # the winner of a provider is the largest key.
+        -value_policy.trust_rank(level),
+        published if published is not None else 0.0,
+        float(three_d) if isinstance(three_d, (int, float)) and not isinstance(three_d, bool) else 0.0,
         str(row.get("model") or ""),
     )
 
@@ -2863,11 +3252,15 @@ def _holds_the_tier(row: Mapping[str, Any], tier: str) -> bool:
     """True when a route may hold a rank in a tier.
 
     A route that is not available, that waits for its evaluation, or that
-    the tier does not permit never holds a rank.
+    the tier does not permit never holds a rank. A route the owner's policy
+    excludes never holds one either: an excluded trust level holds no tier
+    at all.
     """
     if (row.get("availability") or {}).get("state") != "available":
         return False
     if (row.get("admission") or {}).get("state") != "settled":
+        return False
+    if _trust_level(row, tier) == "excluded":
         return False
     return _eligible_for_tier(row, tier)
 
@@ -2921,10 +3314,18 @@ def build_snapshot(
     promo_models: Iterable[Any] | None = None,
     pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     inferred_windows: Iterable[Mapping[str, Any]] | None = None,
+    outcomes: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
-    """Build the routing snapshot from the ranked models and the readings."""
+    """Build the routing snapshot from the ranked models and the readings.
+
+    The `outcomes` mapping carries the trust and the observed outcomes of
+    the models: the `identities` of the models, the owner's `policy` of
+    trust, the `rounds` of the ledger and the `backfill` of the rounds it
+    does not carry. It is optional: without it every model is trusted and
+    no round was observed.
+    """
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
     for record in free_models or ():
@@ -3135,6 +3536,10 @@ def build_snapshot(
             ),
         )
     _calibrate_values(candidates)
+    # The trust of every model, and the outcome its published value is
+    # built from. Both are read before the tiers are ordered, so a trusted
+    # route leads a tier and an untrusted one comes last with its reason.
+    _fill_trust(candidates, _Trust(outcomes))
     winners, tier_coverage = _winners(candidates, tiers, aa_cache=aa_cache)
     pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
