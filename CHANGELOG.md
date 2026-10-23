@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.190] - 2026-10-23
+
+- Revert #354: T3 stable image broke T3 (owner rolled back)
+
+PR #355.
+
 ## [3.17.189] - 2026-10-23
 
 - Restore normal GitHub coordinator startup on activation and boot.
