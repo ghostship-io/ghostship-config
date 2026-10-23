@@ -32,10 +32,16 @@ in
     export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     exec ${coordinator.coordinatorPython}/bin/python3 -B -m ghostship_github.coordinator "$@"
   '';
-  integrations = start "integrations" ''
-    export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    exec ${pkgs.python3.withPackages (ps: [ ps.mcp ps.jsonschema ps.pypdf ps.websockets ps.pillow (import (privateSource + "/lib/python-wyze.nix") ps) ])}/bin/python3 \
-      ${privateSource}/tools/python/ghostship_mcp/supervisor.py \
-      ${private.relay}/bin/tunnel-client ${private.runtime}/bin/ghostship-mcp ${private.sharedSocket} "$@"
-  '';
+  integrations = pkgs.symlinkJoin {
+    name = "ghostship-integrations-entrypoint";
+    paths = [
+      private.runtime
+      (start "integrations" ''
+        export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+        exec ${pkgs.python3.withPackages (ps: [ ps.mcp ps.jsonschema ps.pypdf ps.websockets ps.pillow (import (privateSource + "/lib/python-wyze.nix") ps) ])}/bin/python3 \
+          ${privateSource}/tools/python/ghostship_mcp/supervisor.py \
+          ${private.relay}/bin/tunnel-client ${private.runtime}/bin/ghostship-mcp ${private.sharedSocket} "$@"
+      '')
+    ];
+  };
 }
