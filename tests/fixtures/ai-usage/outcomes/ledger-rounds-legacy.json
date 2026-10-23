@@ -1,0 +1,32 @@
+{
+  "schema": "ghostship.delegation.ledger/v1",
+  "columns": [
+    "model",
+    "task_type",
+    "verdict",
+    "cause",
+    "fabrication",
+    "started_at",
+    "round_id"
+  ],
+  "rounds": [
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "accepted",
+      "cause": "",
+      "fabrication": 0,
+      "started_at": "2026-10-18T09:00:00Z",
+      "round_id": "l-1"
+    },
+    {
+      "model": "ollama/beam",
+      "task_type": "implementation",
+      "verdict": "reworked",
+      "cause": "the answer was wrong",
+      "fabrication": 0,
+      "started_at": "2026-10-18T11:00:00Z",
+      "round_id": "l-2"
+    }
+  ]
+}

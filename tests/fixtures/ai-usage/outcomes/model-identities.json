@@ -1,0 +1,42 @@
+{
+  "schema": "ghostship.model-identities/v1",
+  "identities": [
+    {
+      "id": "deepseek-v4.1-flash-1017",
+      "model": "deepseek-v4.1-flash:1017",
+      "routes": [
+        "ollama-cloud/deepseek-v4.1-flash:1017"
+      ]
+    },
+    {
+      "id": "minimax-m3.1-flash",
+      "model": "minimax-m3.1-flash",
+      "routes": [
+        "opencode-go/minimax-m3.1-flash",
+        "opencode-go/minimax-m3.1-flash-free",
+        "openrouter/minimax/minimax-m3.1-flash:free"
+      ]
+    },
+    {
+      "id": "beam",
+      "model": "beam",
+      "routes": [
+        "ollama/beam"
+      ]
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "model": "claude-haiku-5-5",
+      "routes": [
+        "anthropic/claude-haiku-5-5"
+      ]
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "model": "gemini-3.8-flash",
+      "routes": [
+        "google/gemini-3.8-flash"
+      ]
+    }
+  ]
+}
