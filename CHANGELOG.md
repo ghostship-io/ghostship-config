@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.203] - 2026-10-23
+
+- Give CI job-start hooks the shell suffix required by the runner.
+
+PR #368.
+
 ## [3.17.202] - 2026-10-23
 
 - Refuse foreign PR source at host-owned CI runner admission before checkout.
