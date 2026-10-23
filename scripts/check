@@ -37,6 +37,10 @@ python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 printf 'Checking the boot generation drift check\n'
 python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 
+printf 'Checking the configuration drift check\n'
+python3 -m unittest discover -s tests -p test_configuration_drift.py
+nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
+
 printf 'Checking the merge freeze status\n'
 python3 -m unittest discover -s tests -p test_freeze_status.py
 
