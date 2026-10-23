@@ -67,10 +67,10 @@ symlink safety, forwarding and candidate-manager ownership. Nix tests evaluate
 actual units, ID collision refusal, resources, mounts and hardened argv admission.
 
 Integration acceptance remains separate from these fast checks. No prior engine
-workflow result establishes Podman compatibility. Before deployment, prove
+workflow result establishes Podman compatibility. After landing and deploying the
+host engine, verify
 build/run, Compose DNS and isolation, named-volume recreation, bind ownership,
-TTY, published high TCP, cgroup limits and network denial in the reviewed target
-candidate. Network denial requires a fresh positive control for each canary.
+TTY, published high TCP, cgroup limits and network denial with disposable objects. Network denial requires a fresh positive control for each canary.
 Production common-parent placement/stress proof is a separate gate.
 
 For a disposable engine candidate, build `tests/t3code-podman-candidate.nix` and

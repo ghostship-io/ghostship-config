@@ -240,7 +240,9 @@ let
     if [ "$1" = start ]; then
       ${pkgs.nix}/bin/nix copy --no-check-sigs --to 'local?root=/srv/apps/t3code/nix-root' ${cfg.runtimePackage}
       ${pkgs.nix}/bin/nix-store --store 'local?root=/srv/apps/t3code/nix-root' \
-        --add-root /srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-${builtins.baseNameOf cfg.runtimePackage} \
+        --add-root /srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-${
+          if cfg.candidate then "candidate" else "production"
+        } \
         --realise ${cfg.runtimePackage} >/dev/null
     fi
     exec ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} "$1" ${root} ${spec}

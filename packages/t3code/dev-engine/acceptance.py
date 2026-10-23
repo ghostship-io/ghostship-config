@@ -151,11 +151,11 @@ def project_networks(command, project):
             continue
         for row in rows:
             details[name] = {
-                "driver": row.get("Driver", ""),
+                "driver": row.get("driver", ""),
                 "subnets": [
-                    entry["Subnet"]
-                    for entry in row.get("IPAM", {}).get("Config", [])
-                    if "Subnet" in entry
+                    entry["subnet"]
+                    for entry in row.get("subnets", [])
+                    if "subnet" in entry
                 ],
             }
     return details
