@@ -6,7 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { chromium, devices } = require(process.env.PLAYWRIGHT_MODULE);
-const { createProxy } = require(path.join(process.env.GHOSTSHIP_TEST_AGENT_SOURCE, "packages/t3code/access-proxy.cjs"));
+const { createProxy } = require("../packages/t3code/access-proxy.cjs");
 
 test("Android Chrome recognizes authenticated installation and reconnects without stale data", { timeout: 60000 }, async (t) => {
   let release = 1;

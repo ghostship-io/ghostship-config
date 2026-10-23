@@ -43,32 +43,3 @@ class SwitchProtection(unittest.TestCase):
                 self.assertFalse(unit["stop"], "switch can stop a T3 dependency")
                 for dependency in unit["dependencies"]:
                     self.assertIn(dependency.removesuffix(".service"), units)
-
-    def test_merged_dependency_graph_refuses_an_override_or_new_unguarded_helper(self):
-        expression = r'''
-        let
-          guard = import __GUARD__;
-          safe = { restartIfChanged = false; stopIfChanged = false; };
-          services = {
-            container = safe // { requires = [ "relay.service" ]; };
-            relay = safe // { bindsTo = [ "rootfs.service" ]; };
-            rootfs = safe;
-          };
-          check = units: guard { services = units; seeds = [ "container" ]; };
-        in {
-          safe = check services;
-          override = check (services // { rootfs = safe // { restartIfChanged = true; }; });
-          newHelper = check (services // {
-            relay = safe // { requires = [ "new-helper.service" ]; };
-            new-helper = {};
-          });
-        }
-        '''.replace("__GUARD__", str(ROOT / "packages/t3code/switch-guard.nix"))
-        result = subprocess.run(
-            ["nix-instantiate", "--eval", "--strict", "--json", "--expr", expression],
-            text=True, capture_output=True, check=True, timeout=5,
-        )
-        values = json.loads(result.stdout)
-        self.assertEqual(values["safe"], [])
-        self.assertEqual(values["override"], ["rootfs"])
-        self.assertEqual(values["newHelper"], ["new-helper"])

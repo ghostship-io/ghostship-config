@@ -13,10 +13,7 @@ deployer = load("t3code_deploy_when_idle", "packages/t3code/deploy-when-idle.py"
 
 class TestLiveActivityProbeGate(unittest.TestCase):
     def test_missing_v1_database_still_runs_real_probe_and_blocks(self):
-        source = os.environ.get("GHOSTSHIP_TEST_AGENT_SOURCE")
-        if not source:
-            self.skipTest("requires the pinned agent source, supplied by config-tests")
-        probe = Path(source) / "packages/t3code/activity-probe/t3code-activity-probe.sh"
+        probe = Path(__file__).resolve().parents[1] / "packages/t3code/activity-probe/t3code-activity-probe.sh"
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             state = home / "state.sqlite"

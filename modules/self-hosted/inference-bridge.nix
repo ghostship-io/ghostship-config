@@ -26,7 +26,7 @@ let
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
       --tools-package ${tools.default} --refresh --managed-only "$@"
   '';
-  sourceSync = import "${inputs.ghostship-private-agent}/packages/t3code/source-sync.nix" {
+  sourceSync = import ../../packages/t3code/source-sync.nix {
     inherit lib pkgs;
     installer = managedInstall;
   };
@@ -67,7 +67,7 @@ let
   '';
   isolateT3Models = pkgs.writeShellScript "t3-free-worker-model-scope" ''
     set -eu
-    exec ${pkgs.python3}/bin/python3 ${inputs.ghostship-private-agent}/packages/t3code/opencode-model-catalog.py \
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/opencode-model-catalog.py} \
       --source ${containerHome}/.cache/opencode/models.json \
       --config ${containerHome}/.config/opencode/opencode.jsonc \
       --output ${containerHome}/.local/state/t3code-opencode/models.json
@@ -119,8 +119,6 @@ let
       t3code ${maintenance}/bin/t3code-tool-maintenance --refresh-opencode-shim
     ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
       --env T3CODE_HOOK_SET=bootstrap.d t3code ${sourceSync}/bin/t3code-install-ghostship-agent
-    ${pkgs.podman}/bin/podman exec --user 0:0 t3code \
-      ${containerHome}/.local/state/ghostship-t3-tools/current/bin/t3code-refresh-runtime-services
     install -d -m0750 -o3000 -g62020 ${hostHome}/${state} ${hostHome}/${state}/socket
     install -d -m0750 -o0 -g62020 /run/ghostship-integrations /run/ghostship-integrations/inference-socket
     install -m0600 -o3000 -g62020 ${token} ${hostHome}/${state}/token.new
