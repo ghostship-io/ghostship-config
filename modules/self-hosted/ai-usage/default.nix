@@ -7,7 +7,7 @@
 # already exists - T3 Code's own read-only RPC surface, the provider APIs T3
 # Code does not read, the free inference pool, and the public model catalog.
 # The contract, every metric name and label, is in README.md.
-{ config, lib, pkgs, ... } @ args:
+{ config, lib, options, pkgs, ... } @ args:
 let
   cfg = config.ghostship.aiUsage;
   # The container home the provider credentials, the model catalog and the
@@ -85,6 +85,10 @@ let
   # decides. Routing stays off until the owner turns it on, so a consumer
   # that ignores the switch still sees it off.
   routingEnabled = if cfg.routing.enabled then "true" else "false";
+  # Every NixOS host declares systemd.paths. A standalone evaluation that
+  # stubs only a part of the systemd option tree may not, and the path unit
+  # is then simply not part of that partial tree.
+  pathsDeclared = (options ? systemd) && (options.systemd ? paths);
 in
 {
   options.ghostship.aiUsage.routing.enabled = lib.mkOption {
@@ -98,169 +102,172 @@ in
     '';
   };
 
-  config = {
-    systemd.services.ghostship-ai-usage = {
-      description = "Collect AI provider usage, limits, and free models for Prometheus";
-      after = [ "network-online.target" "podman.socket" ];
-      wants = [ "network-online.target" "podman.socket" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}";
-        # The collector finds the T3 Code container's address with the Podman
-        # CLI. The CLI must not open the container storage (ProtectSystem makes
-        # it read-only), so it asks the Podman API socket instead.
-        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ];
-        # The T3 usage summary pages over 30 days and the free pool catalog is
-        # paged; a few minutes is the honest bound.
-        TimeoutStartSec = "5min";
-        # Root, because the provider credentials it reads are root-owned. The
-        # unit holds no capabilities, so it opens only what root may open: a
-        # credential that only its own uid may read needs a root-owned
-        # projection, not a capability.
-        UMask = "0077";
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        RestrictNamespaces = true;
-        RestrictSUIDSGID = true;
-        LockPersonality = true;
-        MemoryDenyWriteExecute = true;
-        SystemCallArchitectures = "native";
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
-        # Only the textfile and the ranking state are writable.
-        ReadWritePaths = [
-          textfileDir
-          stateDir
-          # The two runtime projections, and nothing else in those directories.
-          "/run/ghostship-github"
-          "/run/ghostship-integrations"
-        ];
-        # The container home, the published integration files (the T3 endpoint,
-        # the session token, the pool socket and token) and the projected
-        # provider secrets are read, never written.
-        ReadOnlyPaths = [
-          t3Home
-          "/etc/containers/networks"
-          "-/run/ghostship-secrets"
-        ];
-        # The bounds keep a mistake in the collector from taking the host
-        # with it.
-        MemoryMax = "512M";
-        MemoryHigh = "384M";
-        CPUQuota = "50%";
-        TasksMax = 32;
-        # The blast radius, stated plainly: the collector runs as root and
-        # keeps CAP_DAC_OVERRIDE, because the credentials it must read belong
-        # to other users (the mode 0600 files of the container user, the mode
-        # 0400 token of the free inference bridge). CAP_DAC_OVERRIDE lets root
-        # read any file, and the unit may write the whole of the state
-        # directory and the two runtime integration directories, so this is a
-        # root equivalent, not a confined reader. Every other capability is
-        # dropped, there is no listener, and the collector only ever issues
-        # reads and the three atomic writes. Do not read "it only issues GET"
-        # as confinement: the honest answer is that the hardening here is the
-        # read only code, the fixed paths, and the absence of a listener.
-        CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
-        AmbientCapabilities = "";
+  config = lib.mkMerge [
+    {
+      systemd.services.ghostship-ai-usage = {
+        description = "Collect AI provider usage, limits, and free models for Prometheus";
+        after = [ "network-online.target" "podman.socket" ];
+        wants = [ "network-online.target" "podman.socket" ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled}${policyArg}";
+          # The collector finds the T3 Code container's address with the Podman
+          # CLI. The CLI must not open the container storage (ProtectSystem makes
+          # it read-only), so it asks the Podman API socket instead.
+          Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock" ];
+          # The T3 usage summary pages over 30 days and the free pool catalog is
+          # paged; a few minutes is the honest bound.
+          TimeoutStartSec = "5min";
+          # Root, because the provider credentials it reads are root-owned. The
+          # unit holds no capabilities, so it opens only what root may open: a
+          # credential that only its own uid may read needs a root-owned
+          # projection, not a capability.
+          UMask = "0077";
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectControlGroups = true;
+          RestrictNamespaces = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          SystemCallArchitectures = "native";
+          RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+          # Only the textfile and the ranking state are writable.
+          ReadWritePaths = [
+            textfileDir
+            stateDir
+            # The two runtime projections, and nothing else in those directories.
+            "/run/ghostship-github"
+            "/run/ghostship-integrations"
+          ];
+          # The container home, the published integration files (the T3 endpoint,
+          # the session token, the pool socket and token) and the projected
+          # provider secrets are read, never written.
+          ReadOnlyPaths = [
+            t3Home
+            "/etc/containers/networks"
+            "-/run/ghostship-secrets"
+          ];
+          # The bounds keep a mistake in the collector from taking the host
+          # with it.
+          MemoryMax = "512M";
+          MemoryHigh = "384M";
+          CPUQuota = "50%";
+          TasksMax = 32;
+          # The blast radius, stated plainly: the collector runs as root and
+          # keeps CAP_DAC_OVERRIDE, because the credentials it must read belong
+          # to other users (the mode 0600 files of the container user, the mode
+          # 0400 token of the free inference bridge). CAP_DAC_OVERRIDE lets root
+          # read any file, and the unit may write the whole of the state
+          # directory and the two runtime integration directories, so this is a
+          # root equivalent, not a confined reader. Every other capability is
+          # dropped, there is no listener, and the collector only ever issues
+          # reads and the three atomic writes. Do not read "it only issues GET"
+          # as confinement: the honest answer is that the hardening here is the
+          # read only code, the fixed paths, and the absence of a listener.
+          CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
+          AmbientCapabilities = "";
+        };
       };
-    };
 
-    systemd.timers.ghostship-ai-usage = {
-      description = "Refresh the AI usage metrics every five minutes";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "2min";
-        OnUnitActiveSec = "5min";
-        AccuracySec = "1s";
-        # A missed run is not caught up: the next one reads the current state.
-        Persistent = false;
+      systemd.timers.ghostship-ai-usage = {
+        description = "Refresh the AI usage metrics every five minutes";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2min";
+          OnUnitActiveSec = "5min";
+          AccuracySec = "1s";
+          # A missed run is not caught up: the next one reads the current state.
+          Persistent = false;
+        };
       };
-    };
 
-    # The Artificial Analysis quality feed is read from the public pages, once
-    # a day. There is no key and no account: the pull reads public pages with
-    # ordinary GETs, and it keeps the last good snapshot when a page is
-    # blocked. The collector only reads the cache the pull wrote.
-    systemd.services.ghostship-ai-usage-feed = {
-      description = "Pull the Artificial Analysis public pages into the quality cache";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/aa_pull.py --output ${aaCache} --aa3d-output ${aa3dCache} --catalog ${modelCatalog} --model-pages";
-        TimeoutStartSec = "10min";
-        UMask = "0077";
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        RestrictNamespaces = true;
-        RestrictSUIDSGID = true;
-        LockPersonality = true;
-        MemoryDenyWriteExecute = true;
-        SystemCallArchitectures = "native";
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
-        # Only the quality cache is written.
-        ReadWritePaths = [
-          stateDir
-        ];
-        MemoryMax = "512M";
-        MemoryHigh = "384M";
-        CPUQuota = "50%";
-        TasksMax = 32;
-        CapabilityBoundingSet = [ ];
-        AmbientCapabilities = "";
+      # The Artificial Analysis quality feed is read from the public pages, once
+      # a day. There is no key and no account: the pull reads public pages with
+      # ordinary GETs, and it keeps the last good snapshot when a page is
+      # blocked. The collector only reads the cache the pull wrote.
+      systemd.services.ghostship-ai-usage-feed = {
+        description = "Pull the Artificial Analysis public pages into the quality cache";
+        after = [ "network-online.target" ];
+        wants = [ "network-online.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${python}/bin/python3 ${collector}/collector/aa_pull.py --output ${aaCache} --aa3d-output ${aa3dCache} --catalog ${modelCatalog} --model-pages";
+          TimeoutStartSec = "10min";
+          UMask = "0077";
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectControlGroups = true;
+          RestrictNamespaces = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          SystemCallArchitectures = "native";
+          RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+          # Only the quality cache is written.
+          ReadWritePaths = [
+            stateDir
+          ];
+          MemoryMax = "512M";
+          MemoryHigh = "384M";
+          CPUQuota = "50%";
+          TasksMax = 32;
+          CapabilityBoundingSet = [ ];
+          AmbientCapabilities = "";
+        };
       };
-    };
 
-    systemd.timers.ghostship-ai-usage-feed = {
-      description = "Pull the Artificial Analysis public pages once a day";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "5min";
-        OnCalendar = "*-*-* 04:17:00";
-        AccuracySec = "5min";
-        # A missed pull is not caught up: the next one reads the current pages.
-        Persistent = false;
+      systemd.timers.ghostship-ai-usage-feed = {
+        description = "Pull the Artificial Analysis public pages once a day";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "5min";
+          OnCalendar = "*-*-* 04:17:00";
+          AccuracySec = "5min";
+          # A missed pull is not caught up: the next one reads the current pages.
+          Persistent = false;
+        };
       };
-    };
 
+      systemd.tmpfiles.rules = [
+        "d ${textfileDir} 0755 root root -"
+        # The directory holds the ranking state and the routing snapshot. The
+        # snapshot is read by the consumer, so the directory is readable but
+        # only the producer writes it.
+        "d ${stateDir} 0755 root root -"
+      ];
+    }
     # The container does not mount the host integration directories. Copy the
     # routing snapshot into its own tmpfs whenever the collector replaces the
     # MCP projection, so a consumer there reads the same bytes as the host.
-    systemd.paths.ghostship-ai-usage-t3-projection = {
-      description = "Copy the routing snapshot into the T3 Code container";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig.PathChanged = mcpProjection;
-    };
-
-    systemd.services.ghostship-ai-usage-t3-projection = {
-      description = "Write the routing snapshot into the T3 Code container's /run";
-      # The container must already be running. `requisite` fails the copy when
-      # it is not, and never starts, stops or recreates it.
-      after = [ "podman-t3code.service" ];
-      requisite = [ "podman-t3code.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = syncT3Projection;
-        NoNewPrivileges = true;
-        UMask = "0022";
+    (lib.optionalAttrs pathsDeclared {
+      systemd.paths.ghostship-ai-usage-t3-projection = {
+        description = "Copy the routing snapshot into the T3 Code container";
+        wantedBy = [ "multi-user.target" ];
+        pathConfig.PathChanged = mcpProjection;
       };
-    };
 
-    systemd.tmpfiles.rules = [
-      "d ${textfileDir} 0755 root root -"
-      # The directory holds the ranking state and the routing snapshot. The
-      # snapshot is read by the consumer, so the directory is readable but
-      # only the producer writes it.
-      "d ${stateDir} 0755 root root -"
-    ];
-  };
+      systemd.services.ghostship-ai-usage-t3-projection = {
+        description = "Write the routing snapshot into the T3 Code container's /run";
+        # The container must already be running. `requisite` fails the copy
+        # when it is not, and never starts, stops or recreates it.
+        after = [ "podman-t3code.service" ];
+        requisite = [ "podman-t3code.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = syncT3Projection;
+          NoNewPrivileges = true;
+          UMask = "0022";
+        };
+      };
+    })
+  ];
 }
