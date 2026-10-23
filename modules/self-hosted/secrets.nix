@@ -31,7 +31,7 @@ let
     // lib.optionalAttrs (meta ? group) { group = meta.group; }
     // lib.optionalAttrs (meta ? mode) { mode = meta.mode; };
 
-  projectionRenderer = pkgs.writeTextFile {
+  mkProjectionRenderer = names: pkgs.writeTextFile {
     name = "ghostship-secret-project";
     destination = "/bin/ghostship-secret-project";
     executable = true;
@@ -51,7 +51,11 @@ let
           builtins.toJSON {
             units = lib.mapAttrs (name: _: {
               path = (builtins.getAttr name config.age.secrets).path;
-            }) unitCatalog;
+            }) (lib.filterAttrs (name: _: builtins.elem name (
+              lib.concatMap (projection: lib.concatMap (field:
+                lib.optional (field ? unit) field.unit
+              ) (builtins.attrValues projectionCatalog.${projection}.fields)) names
+            )) unitCatalog);
             projections = lib.mapAttrs (
               name: meta:
               meta
@@ -59,7 +63,7 @@ let
                 path = "${projectionDir}/" + meta.fileName;
                 containerPath = "${projectionDir}/" + meta.fileName + ".container";
               }
-            ) projectionCatalog;
+            ) (lib.getAttrs names projectionCatalog);
           }
         )
       })
@@ -67,6 +71,7 @@ let
       ${builtins.readFile ./secret-project.py}
     '';
   };
+  projectionRenderer = mkProjectionRenderer (builtins.attrNames projectionCatalog);
 in
 {
   options.ghostship.secretProjections = lib.mkOption {
@@ -113,6 +118,9 @@ in
         }
       ) projectionCatalog;
       render = projectionRenderer;
+      # A container unit depends only on its own projection, so an unrelated
+      # secret/catalog addition cannot change its preStart derivation.
+      renderFor = name: mkProjectionRenderer [ name ];
     };
 
     systemd.tmpfiles.rules = [

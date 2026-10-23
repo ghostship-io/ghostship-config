@@ -7,7 +7,7 @@
 
 let
   bazarr-secrets = config.ghostship.selfHostedSecrets.projections.bazarr.path;
-  render-bazarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project bazarr";
+  render-bazarr-secrets = "${config.ghostship.selfHostedSecrets.renderFor "bazarr"}/bin/ghostship-secret-project bazarr";
 in
 {
   ghostship.apps.bazarr = {

@@ -8,7 +8,7 @@
 let
   cloudflared-secrets = config.ghostship.selfHostedSecrets.projections.cloudflared.path;
   cloudflared-runtime-env = config.ghostship.selfHostedSecrets.projections."cloudflared-runtime".path;
-  render-cloudflared-runtime = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project cloudflared-runtime";
+  render-cloudflared-runtime = "${config.ghostship.selfHostedSecrets.renderFor "cloudflared-runtime"}/bin/ghostship-secret-project cloudflared-runtime";
 in
 
 {

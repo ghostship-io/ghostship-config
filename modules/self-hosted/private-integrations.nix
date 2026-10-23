@@ -214,10 +214,10 @@ let
 
   render = pkgs.writeShellScript "ghostship-private-relay-render" ''
     set -eu
-    ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
-    for projection in ${lib.escapeShellArgs (builtins.attrNames serviceProjections)}; do
-      ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project "$projection"
-    done
+    ${config.ghostship.selfHostedSecrets.renderFor "ghostship-relay"}/bin/ghostship-secret-project ghostship-relay
+    ${lib.concatMapStringsSep "\n" (name:
+      "${config.ghostship.selfHostedSecrets.renderFor name}/bin/ghostship-secret-project ${lib.escapeShellArg name}"
+    ) (builtins.attrNames serviceProjections)}
     ${pkgs.python3}/bin/python3 ${renderSeerr} ${serviceSecretsDir}/seerr.env
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
