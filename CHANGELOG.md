@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.17.216] - 2026-10-23
+
+Enforce runtime policy provider roles and excluded quota pools throughout model selection. A review-only provider has no worker rows, worker choice or default. Unused pools have no selection candidates. Their measured usage windows remain visible in grey, labelled not used, and supply neither pacing nor provider capacity. Remove Pi from dashboard queries.
+
+Publish explicit native role exclusions, including candidates filtered before canonical selection, so the reconciler removes formerly managed worker favorites during partial reads. Restrictions have one declarative source in agent #241. Deployment requires that merge and the policy-input pin update here.
+
+Validation: 24 selection tests, 14 snapshot tests, 19 page tests and six pool tests pass. Coverage preserves review authority and Gemini; spent unused windows remain grey without pace ticks; unused weekly limits cannot bind provider capacity; native cleanup survives candidate exclusion. Privacy/security and whitespace pass.
+
+Reconciled current main after #379: use the deployed `not_used` metric label, preserve unused-window rendering against a later spent state, and retain native removal identities even when ranking already omitted those routes. Focused selection (24), snapshot (14), page (20), pool (6), and unused-pool (5) tests pass. The new exact head requires renewed review.
+
+PR #372.
+
 ## [3.17.215] - 2026-10-23
 
 - Discover reset relays from community announcement search, show unverified items and source links, notify for confirmation, and apply confirmed resets to capacity pacing.
