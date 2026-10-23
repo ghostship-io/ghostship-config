@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.17.168] - 2026-10-23
+
+- Reconcile retained service account aliases and prevent an obsolete PAM home from breaking engine startup.
+
+PR #333.
+
+## [3.17.167] - 2026-10-23
+
+- Make scripts/check a measured fast pre-merge gate and preserve full host and integration coverage nightly.
+- Enforce module duration budgets and fast-check execution context.
+
+PR #332.
+
 ## [3.17.166] - 2026-10-23
 
 - Add the separate public free-worker Podman runtime and declarative Zen/Go OAuth separation without replacing T3.
