@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.225] - 2026-10-23
+
+Keep MCP free-inference transport independent of coding-home ownership changes.
+
+PR #390.
+
 ## [3.17.224] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 3d9046bd; the lock's narHash is the `nix flake prefetch` hash of that revision.
