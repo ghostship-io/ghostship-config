@@ -296,7 +296,14 @@ class ThreeDAdmissionTests(unittest.TestCase):
         self.assertEqual(row["aa"]["indices"]["intelligence"], 51.8)
         three_d_entry = [entry for entry in data["tier_winners"].get("3d", [])]
         self.assertTrue(three_d_entry)
-        self.assertEqual(three_d_entry[0]["value"], row["value"]["value"])
+        # The winner of the 3D tier publishes the 3D value (intelligence, the
+        # AA-3D Elo and the cost) under the trust of the model, never the
+        # general value; the general Artificial Analysis value is beside it.
+        self.assertEqual(three_d_entry[0]["value_aa"], row["value"]["value"])
+        self.assertEqual(three_d_entry[0]["value"], row["value_3d"]["value"])
+        self.assertEqual(
+            three_d_entry[0]["value"], row["outcome"]["3d"]["published"]
+        )
 
     def test_a_text_only_record_can_never_be_ranked_for_3d(self):
         models = visual_model("ollama", "beam")
