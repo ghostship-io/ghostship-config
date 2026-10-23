@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.17.217] - 2026-10-23
+
+Show selected orchestrator and worker models per provider above provider usage, then a searchable model-quality table in the same card style. Default to active, available native models only; All models includes spent and unused routes. Collapse each model to its best measured effort, expand comparisons only when observed efforts differ, and hide columns with no evidence. Each selected model has one graph for its actual binding window, including five-hour windows. Exhausted provider choices stay visible in grey; positive short windows remain eligible and unpaced. Availability and live capacity order provider choices and the new-thread default, without fixed provider positions.
+
+Start overall quality from the exact model's public Artificial Analysis index on a 0–100 scale. Preserve source/date and visibly label a last-good stale prior. Show independently verified bench/work outcomes per actual native effort separately. After five outcomes, blend with weight `(n - 4) / (n + 6)`; failures count, observed becomes the majority at 15. That unrounded overall chooses the provider's model and supported effort, shared with the picker and CLI consumers. Input/output/cache prices must each stay within the reference worker's published price.
+
+Pin and reuse #251’s `ghostship_t3.models.read_evidence` and its shared private store. Missing or unavailable evidence explicitly says no evidence yet; unknown review findings and task-attributed quota remain unmeasured. Shared pool usage is never mislabeled as task cost. The table includes samples, pass/merge counts, time and tokens per passed task, source and date, with pagination. Established outcomes cannot be masked by an unmeasured effort retaining its prior. Free models retain their separate dashboard.
+
+Refresh AA once per UTC calendar day, so neither the collector’s 36-hour grace nor a late manual pull suppresses tomorrow’s scheduled snapshot. The daily unit reads the public boards without slow optional per-model cost enrichment; the observed read-only board path returned 275 records in 2.4 seconds. The actual cache now has a current-day fetch date. Also attach fresh account/family quota readings to untiered native models so a missing benchmark rank cannot hide a real capacity limit.
+
+Validation: 123 focused quality/selection, snapshot, page, public-pull and AA-normalization unit tests pass; exact outcome/effort changes reach the real collector entrypoint and emitted metrics. Regression coverage pins the blend, dated-build separation, costs, native boolean effort, family-scoped five-hour positive/spent behavior, no Pi, grey unused windows, colour bands and one graph per card. Fresh desktop and phone component previews use actual collector data, today’s AA cache and imported benchmark records, rendered from repository templates. Default view has six currently eligible models, All models has 156; no inactive routes appear in the default view. Filtering, evidence-dependent columns and effort expansion work at 1600 and 390 pixels, with no viewport overflow or JavaScript errors. These previews are distinct from deployed acceptance. Shared evidence producer and final live desktop/phone verification follow their deployment; this PR does not claim invented benchmark scores.
+
+Depends on #372. The policy-only input pins the reviewed #251 merge; the platform/T3 build input is unchanged. The CLI owner is separately removing its competing benchmark reorder so `pick` consumes this canonical result. Real-work export #226 remains an upstream source dependency.
+
+PR #381.
+
 ## [3.17.216] - 2026-10-23
 
 Enforce runtime policy provider roles and excluded quota pools throughout model selection. A review-only provider has no worker rows, worker choice or default. Unused pools have no selection candidates. Their measured usage windows remain visible in grey, labelled not used, and supply neither pacing nor provider capacity. Remove Pi from dashboard queries.
