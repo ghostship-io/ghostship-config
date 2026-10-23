@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.127] - 2026-10-23
+## [3.17.128] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
+
+## [3.17.127] - 2026-10-23
+
+- host activation: `scripts/activate-host` holds the deploy slot for the whole deploy. An activation without a holder exits 3 before `nix-env` or the switch and names `agent deploy slot acquire`; a check that names another holder exits 3 with the slot tool's output, and a missing tool or a check error exits 1 with nothing activated. The holder comes from `--holder NAME` or `GHOSTSHIP_DEPLOY_HOLDER`, and reaches the slot tool as one argument. The slot stays held after the switch, so the deploy's own checks run inside it. `--verify-only --holder NAME` verifies the generation once more and releases the slot, with `--generation N` read from the system profile link name (`system-413-link` -> 413), or without it when the link names no generation; a refused release exits 3 with the tool's output. `--verify-only` without a holder never calls the slot tool.
 
 ## [3.17.126] - 2026-10-23
 
