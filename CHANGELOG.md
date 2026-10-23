@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.196] - 2026-10-23
+
+- Activate the approved per-provider selected-model favorites reconciler in the AI usage collector.
+
+PR #362.
+
 ## [3.17.195] - 2026-10-23
 
 - Flake: pin ghostship-private-agent to 5705dd2f; the lock's narHash is the `nix flake prefetch` hash of that revision.
