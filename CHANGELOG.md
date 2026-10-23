@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.198] - 2026-10-23
+
+- Add independent bounded T3 recovery advice and guarded remedies.
+- Distinguish authenticated app/database stalls from proxy failures; stalled apps receive advice only.
+
+PR #307.
+
 ## [3.17.197] - 2026-10-23
 
 - Use cached PR gates once and keep complete integration manual on main.
