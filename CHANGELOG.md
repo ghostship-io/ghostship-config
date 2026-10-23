@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.106] - 2026-10-23
+## [3.17.107] - 2026-10-23
 
 - ai-usage: a learned window that ends inside the collector's own run interval is published as a rolling window. The collector reads the request record every five minutes, so the instant the inference measured was already past by the time the reading was published, and the Providers page showed "resets in 0m" for a window of a minute. A window shorter than five minutes keeps its length and carries no fixed reset now, and the inference behind it says that it rolls. A window of an hour and longer keeps the reset it was measured with, an exhausted short window has no reset either, and a route that was never refused is unchanged.
+
+## [3.17.106] - 2026-10-23
+
+- AI usage: the Providers page lists every free provider, the model it selected for the free tier, and the free routes it holds apart from its paid allowance. The monthly allowance of OpenCode Go is spent, and its free route still works, so the two are published apart. Everything is a projection of the routing snapshot, and nothing is recomputed: the selection is the provider's first entry in `tier_winners.free`, and the free routes are the candidates whose billing class is `free` or `promotion`, split by their own availability. The class alone decides, so a subscription route of a paid provider is never a free model. A provider whose account only learned its window is a free provider even when it holds no route, a provider with no free winner keeps its row with an empty model and no basis, and a paid provider has no row at all. The basis of a selection is the capacity of the winning route: reported, inferred or published, `learning` for a route that never saw a limit failure, and none when nothing was measured. The new series are `ghostship_ai_free_provider_selection_info`, `ghostship_ai_free_provider_selection_remaining_ratio`, `ghostship_ai_free_provider_selection_paced_availability`, `ghostship_ai_free_provider_selection_reset_timestamp_seconds` and `ghostship_ai_provider_free_models`.
 
 ## [3.17.105] - 2026-10-23
 

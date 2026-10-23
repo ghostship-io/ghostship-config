@@ -576,6 +576,52 @@ route, never measured again:
 A model is one row even when several entries name it, and a model that is not
 in `worker_routes` has no row.
 
+### The free providers
+
+The page lists every free provider: the model the provider selected for the
+free tier, and the free routes it holds apart from its paid allowance. The
+OpenCode Go case needs both: the monthly allowance of the account is spent,
+and the free route of the provider still works.
+
+Everything here is a projection of the routing snapshot, and nothing is
+recomputed.
+
+A provider is a free provider when it holds a free route, or when every
+window of its account was inferred. An account that only learned its window
+is a free account, and it is listed even when no route of it is in the
+inventory. A route is free when its billing class says so: `free` for a
+dedicated free route, `promotion` for a paid provider's route that costs
+nothing right now. The class alone decides, and the access kind of a route
+never does, so a subscription route of a paid provider is never a free model.
+
+The selection of a provider is the provider's first entry in
+`tier_winners.free`, in the order of the tier. The basis of the selection is
+the capacity of the winning route, read from the candidate of that route:
+
+* `ghostship_ai_free_provider_selection_info{provider,model,display_name,basis}`
+  - 1 for every free provider. `display_name` is the name the collector
+  already publishes for the model, falling back to the model id. `basis` is
+  `reported` for a reading the provider reported, `inferred` for an inference
+  from the limit failures of the route, `published` for a statement the
+  provider publishes, `learning` for a route that never saw a limit failure,
+  and `none` for a provider with no free winner.
+* `ghostship_ai_free_provider_selection_remaining_ratio{provider}` - the
+  candidate's `capacity.remaining_ratio`. An unknown capacity publishes no
+  series, never a zero.
+* `ghostship_ai_free_provider_selection_paced_availability{provider}` - the
+  candidate's `capacity.pace_delta`, the same number the page calls the Paced
+  Availability.
+* `ghostship_ai_free_provider_selection_reset_timestamp_seconds{provider}` -
+  the `capacity.capacity_binding.reset_at` of the candidate, in epoch
+  seconds.
+* `ghostship_ai_provider_free_models{provider,state}` - the free routes of
+  the provider, counted. `state` is `available` or `unavailable`, and the
+  count is the candidate's own `available`. A provider that holds no free
+  route publishes no count.
+
+A provider with no free winner keeps its row with an empty model and no
+basis. A paid provider has no row at all.
+
 ### Source health
 
 * `ghostship_ai_source_success{source,provider}` - 1 when the source read
