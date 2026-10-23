@@ -19,9 +19,6 @@ in
   # worker table (worker_routes in ghostship-agent's runtime policy) governs
   # until the owner approves the selection framework.
   ghostship.aiUsage.routing.enabled = false;
-  # Held off by the owner until the coordinator replay fix is deployed and
-  # passes a backlog replay.
-  ghostship.githubEngineering.coordinatorAutoStart = false;
   ghostship.newsletterHealth.enable = true;
   ghostship.bootGenerationDrift.enable = true;
   ghostship.configurationDrift.enable = true;
