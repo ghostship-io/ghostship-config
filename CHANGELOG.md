@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.200] - 2026-10-23
+
+Use the managed worker executable when validating Console OAuth migration.
+
+PR #364.
+
 ## [3.17.199] - 2026-10-23
 
 - Honor exact configured worker builds and select Ollama's dated DeepSeek Flash 1017 build without mixing alias evidence.
