@@ -34,6 +34,14 @@ python3 -m unittest discover -s tests -p 'test_t3code_podman_*.py'
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/apparmor/t3code.profile
 
+printf 'Checking the container containment policy model and module\n'
+nix eval --impure --json --file tests/container-isolation.nix >/dev/null
+python3 tests/check_container_isolation.py selftest >/dev/null
+
+printf 'Checking the configuration drift check\n'
+python3 -m unittest discover -s tests -p test_configuration_drift.py
+nix eval --impure --json --file tests/configuration-drift.nix >/dev/null
+
 printf 'Checking the kernel audit backlog limit\n'
 nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
 
@@ -48,9 +56,6 @@ python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 
 printf 'Checking the host activation helper\n'
 python3 -m unittest discover -s tests -p test_activate_host.py
-
-printf 'Checking the deploy slot\n'
-python3 -m unittest discover -s tests -p test_deploy_slot.py
 
 printf 'Checking the agent pin against a regression\n'
 python3 scripts/check-agent-pin.py

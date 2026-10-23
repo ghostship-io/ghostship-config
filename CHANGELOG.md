@@ -1,14 +1,63 @@
 # Changelog
 
+## [3.17.151] - 2026-10-23
+
+- Stage opt-in per-container network containment
+
+PR #242.
+
+## [3.17.150] - 2026-10-23
+
+- T3: isolate development Docker and remove blanket runtime privileges
+
+PR #246.
+
+## [3.17.149] - 2026-10-23
+
+- Flake: pin ghostship-private-agent to 7a022352; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #313.
+
+## [3.17.148] - 2026-10-23
+
+- Deploy: `agent deploy run` replaces the deploy slot. `scripts/deploy-slot` is removed, and `scripts/activate-host` no longer takes `--holder`; rollout step 3 points to the command.
+
+
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+PR #312.
+
+## [3.17.147] - 2026-10-23
+
+- Keep account and deployment identifiers in runtime settings
+
+PR #245.
+
+## [3.17.146] - 2026-10-23
+
+- Run fast PR checks and host integration on main
+
+PR #311.
+
+## [3.17.145] - 2026-10-23
+
+- Remove per-PR version bumps from configuration instructions and the weekly input-refresh workflow.
+- Record review and land finished changes through `agent pr land`, using the pinned identity-safe local merge and release tool.
+
+PR #310.
+
+## [3.17.144] - 2026-10-23
+
+- chill-penguin: pin `ghostship-private-agent` to `f9779033` (agent 0.44.0). It activates the owner's engineering policy: frontier models self-review and land their own work, subagents serve reviews and public-safe free-tier background tasks only, one orchestrator owns the work queue, and threads report only to it. The generated agent instructions (CLAUDE.md/AGENTS.md) carry the new rules after this switch.
+
+## [3.17.143] - 2026-10-23
+
+- ai-usage: the free pool's Groq capacity is the rate limits Groq itself reports, per model. A `quota_observations` reading whose scope is `model_in_organization` becomes a measured window of that model through `SourceResult.windows`: `rpd` is the daily window (86400 seconds) and `tpm` the minute window (60 seconds), with the used share `1 - remaining / limit`, the reset `observed_at` plus the duration Groq reported, the basis `provider_reported`, and the model as the explicit scope. A limit that is not a finite number above zero, a non-finite, boolean or out-of-range remaining count, an unknown unit or scope, a malformed reset such as `2s garbage`, a non-finite parsed duration or reset epoch, an integer too large for a float, and a missing reset or observation give no measured capacity; a window that has already refilled or whose observation is older than the 1800-second quota freshness bound is not current headroom or a lockout. The existing diagnostic series are unchanged, except that the observation's limit now keeps its reported `scope="model"` and a diagnostic value too large to render is skipped instead of crashing the run. No window is filed for the whole Groq account, so a spent model does not lock out its siblings, and the pool's own admission caps remain local `ghostship_ai_pool_limit` series rather than provider capacity.
+
 ## [3.17.142] - 2026-10-23
 
-- Integrate the reviewed runtime-identity privacy migration and register the opt-in T3 profile with the current AppArmor parser check.
-- Refuse noncanonical hardened runtime option tokens so label values cannot hide the required cgroup-parent or PID-limit flags. Actual module regressions reproduce both failures before the guard.
-- Stage opt-in T3 runtime confinement, a peer-checked Docker API relay and aggregate resource ceilings. Candidate workflow acceptance passed; production enablement remains gated.
-- Pin Nix 2.34.9 and Podman 5.8.8 security fixes, register their evaluation checks and record the real sandboxed Nix build results. The configured Podman wrapper also passed its bounded host build and packaged-consumer readback; service-continuity review remains required before activation.
-- Persist the kernel module autoload containment and the daily advisory/update procedure. Containment remains distinct from a patched running kernel.
-- The runtime hardening branch is merged onto the current `main`, which had moved on since the branch was published. The hardening release notes carried the same version number as a released entry of `main`, so they move to this version, above the released ones, and the entries of the merged `main` keep their own numbers.
-- The Nix overlay's fallback-path check passes again. The upstream check compared the fallback paths of the nixpkgs input with the version of `nixVersions.stable`, and it could never pass against a pinned input, because it reads a file of the input and compares it with the release this repository pins. A test that is red by construction is a permanent failure for every consumer that builds the package set, and the upstream guarantee it stood for was inverted for this repository. The check keeps its slot and now proves what decides the difference: the fallback paths either name the installed Nix, or nothing in the input's NixOS modules reads them, so the difference cannot reach a runtime consumer. It fails when a reader appears, and it still prints the paths that are not up to date on every run, so the drift stays visible. The file belongs to the input, so the repair is the input's to make.
+- change control: the deployment host no longer upgrades itself. `chill-penguin` sets `myOptions.autoUpgrade.enable = false`, so `system.autoUpgrade` is false and no `nixos-upgrade` service or timer is rendered; the two WSL hosts keep their unattended upgrade. The replacement is the daily, read-only `ghostship-configuration-drift` timer and service. It reads the running revision from the running system (`nixos-version --configuration-revision`, recorded from `system.configurationRevision = self.rev`) rather than from the checkout or the evaluated candidate, fetches the public source into a private bare cache under `/var/lib/ghostship-configuration-drift`, and reports two security alerts through `ghostship-notify`: a generation mismatch between `/run/current-system` and `/nix/var/nix/profiles/system` immediately, and a running revision that has stayed behind main for more than 86400 seconds (86400 does not alert, 86401 does). The ntfy URL comes from the root container snapshot `/run/ghostship-podman/containers.json` (300-second maximum age), never from the Podman API, so the hardened unit needs no container storage access. Main advancing keeps the first observation; convergence or a new running revision clears it. A missing or dirty revision, a failed fetch, a missing symlink or unrelated histories is an explicit nonzero error, never health, and a failed delivery returns nonzero so the next run retries. The service mounts the host read-only, keeps no capability and writes only its `StateDirectory` and the notifier's state inside it. `docs/configuration-drift.md` describes the check and the response.
 
 ## [3.17.141] - 2026-10-23
 

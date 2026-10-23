@@ -441,8 +441,13 @@ Fleet checks after review when needed.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
-3. `chill-penguin` applies merged main automatically overnight. To deploy
-   sooner, pull merged main and switch natively with `--impure`.
+3. Deploy `chill-penguin` with `agent deploy run` (ghostship-agent
+   `docs/deploy.md`) from the thread that merged the work. It holds a host
+   `flock` for the whole run, builds `github:ghostship-io/ghostship-config/<sha>`
+   with `--impure` so the system records its revision, passes the dry-activate
+   gates, sets the profile, switches, verifies, and checks T3 Code, container
+   health, failed units and the upgrade timer. `--agent-rev REV` pins the
+   private agent first. The unattended upgrade is off on this host.
 4. Check failed units, container health, NAS mounts, configuration file modes,
    secret-dependent integrations, and active agent sessions.
 5. Verify automatic Cloudflare reconciliation, then validate Google browser login and Android
@@ -464,7 +469,8 @@ profile first, switches, and then verifies that the running system and the
 system profile name the same store path.
 
 ```bash
-# From the built checkout in the server's root shell.
+# By hand, from the built checkout in the server's root shell; `agent deploy
+# run` does the same and more.
 nixos-rebuild build --impure --flake .#chill-penguin
 scripts/activate-host --toplevel ./result
 ```
