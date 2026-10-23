@@ -98,6 +98,17 @@ NOT_OFFERED_DEPRECATED_REASON = (
     "not offered by the T3 instance (deprecated in the catalog)"
 )
 
+# Why a route the free pool parked is unusable. The pool marks a route
+# unavailable for a future cooldown, or when the account's policy does not
+# let it serve development work, and it publishes no reason of its own. The
+# snapshot names the two cases: a route whose cooldown has not run out yet
+# says when it cools down, and a route without one says that the pool does
+# not offer it. A reader never sees a parked route with an empty reason.
+POOL_COOLDOWN_REASON = "cooling down in the free pool until {cooldown}"
+POOL_NOT_OFFERED_REASON = (
+    "the free pool does not offer the route for development work"
+)
+
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
@@ -732,6 +743,28 @@ def _not_offered_reason(catalog: Any, provider: str, model: str) -> str:
     return NOT_OFFERED_REASON
 
 
+def _pool_parked_reason(
+    evidence: Mapping[str, Any] | None, now: float
+) -> str:
+    """Why a route the free pool parked is unusable, in words.
+
+    The pool publishes no reason of its own: it says a route is unavailable,
+    and it publishes the moment the route cools down. A cooldown that has
+    not run out yet names the moment it ends, and a route without one is not
+    offered for development work.
+    """
+    cooldown = None
+    if isinstance(evidence, Mapping):
+        value = evidence.get("cooldown_until")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            cooldown = float(value)
+    if cooldown is not None and cooldown > now:
+        moment = _iso(cooldown)
+        if moment:
+            return POOL_COOLDOWN_REASON.format(cooldown=moment)
+    return POOL_NOT_OFFERED_REASON
+
+
 def _candidate(
     provider: str,
     model: str,
@@ -743,6 +776,7 @@ def _candidate(
     free_set: set[tuple[str, str]] | None = None,
     promo_set: set[tuple[str, str]] | None = None,
     catalog: Any = None,
+    pool_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -755,6 +789,7 @@ def _candidate(
     expires_in: float | None = None
     available = False
     not_offered = False
+    parked = False
     settled = True
     pending_reason = ""
     used_tokens = 0.0
@@ -786,6 +821,13 @@ def _candidate(
         not_offered = not_offered or (
             str(getattr(entry, "availability_reason", "") or "")
             == ranking_module.REASON_NOT_OFFERED
+        )
+        # The ranking decides that the free pool parked the route; the
+        # snapshot keeps that judgement so the published reason can say it
+        # instead of rebuilding an empty one from the windows.
+        parked = parked or (
+            str(getattr(entry, "availability_reason", "") or "")
+            == ranking_module.REASON_ROUTE_PARKED
         )
         settled = bool(entry.settled)
         pending_reason = entry.pending_reason
@@ -881,15 +923,23 @@ def _candidate(
                 str(observed_failure.get("label") or "")
                 if observed_failure
                 else (
-                    "every applicable window has headroom"
-                    if available and capacity_measured
+                    # The pool parked the route. The pool publishes no
+                    # reason of its own, so the snapshot names the two
+                    # cases: a cooldown that has not run out, and a route
+                    # the pool does not offer for development work.
+                    _pool_parked_reason(pool_evidence, now)
+                    if parked
                     else (
-                        "a window is spent"
-                        if quota_state == QUOTA_EXHAUSTED
+                        "every applicable window has headroom"
+                        if available and capacity_measured
                         else (
-                            _not_offered_reason(catalog, provider, model)
-                            if not_offered
-                            else unknown_reason
+                            "a window is spent"
+                            if quota_state == QUOTA_EXHAUSTED
+                            else (
+                                _not_offered_reason(catalog, provider, model)
+                                if not_offered
+                                else unknown_reason
+                            )
                         )
                     )
                 )
@@ -3348,6 +3398,7 @@ def build_snapshot(
             free_set,
             promo_set,
             catalog,
+            (pool_evidence or {}).get((provider, model)),
         )
         row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
