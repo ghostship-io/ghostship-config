@@ -1,42 +1,53 @@
 {
   "schema": "ghostship.model-identities/v1",
-  "identities": [
-    {
-      "id": "deepseek-v4.1-flash-1017",
-      "model": "deepseek-v4.1-flash:1017",
+  "models": {
+    "minimax-m3.1-flash": {
+      "label": "MiniMax M3.1 Flash",
+      "routes": [
+        "opencode-go/minimax-m3.1-flash-free",
+        "ollama-cloud/minimax-m3.1-flash",
+        "openrouter/minimax/minimax-m3.1-flash:free"
+      ]
+    },
+    "deepseek-v4.1-flash-1017": {
+      "label": "DeepSeek V4.1 Flash 1017",
       "routes": [
         "ollama-cloud/deepseek-v4.1-flash:1017"
       ]
     },
-    {
-      "id": "minimax-m3.1-flash",
-      "model": "minimax-m3.1-flash",
+    "deepseek-v4.1-flash": {
+      "label": "DeepSeek V4.1 Flash",
       "routes": [
-        "opencode-go/minimax-m3.1-flash",
-        "opencode-go/minimax-m3.1-flash-free",
-        "openrouter/minimax/minimax-m3.1-flash:free"
+        "ollama-cloud/deepseek-v4.1-flash",
+        "opencode-go/deepseek-v4.1-flash"
       ]
     },
-    {
-      "id": "beam",
-      "model": "beam",
+    "beam": {
+      "label": "Beam",
       "routes": [
-        "ollama/beam"
+        "opencode-go/beam-free",
+        "ollama-cloud/beam"
       ]
     },
-    {
-      "id": "claude-haiku-5-5",
-      "model": "claude-haiku-5-5",
+    "gemini-3.8-flash": {
+      "label": "Gemini 3.8 Flash",
       "routes": [
-        "anthropic/claude-haiku-5-5"
+        "antigravity/gemini-3.8-flash"
       ]
     },
-    {
-      "id": "gemini-3.8-flash",
-      "model": "gemini-3.8-flash",
+    "claude-haiku-5-5": {
+      "label": "Claude Haiku 5.5",
       "routes": [
-        "google/gemini-3.8-flash"
+        "claudeAgent/claude-haiku-5-5",
+        "opencode-go/claude-haiku-5-5"
+      ]
+    },
+    "gpt-6-luna": {
+      "label": "GPT-6 Luna",
+      "routes": [
+        "codex/gpt-6-luna",
+        "opencode-go/gpt-6-luna"
       ]
     }
-  ]
+  }
 }
