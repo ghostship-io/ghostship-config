@@ -1,7 +1,9 @@
 """Announcement evidence must change effective reset and pace without inventing usage."""
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
+from types import SimpleNamespace
+import asyncio
 import tempfile
 import json
 from datetime import datetime
@@ -35,13 +37,13 @@ class AnnouncedResetTests(unittest.TestCase):
             path = Path(directory) / "announcements.json"
             with patch.object(sys, "argv", ["announced-resets", "--output", str(path), "desktop"]), \
                     patch.object(announcements.time, "time", return_value=NOW), \
-                    patch.object(announcements, "cli_call", side_effect=KeyboardInterrupt):
+                    patch.object(announcements, "desktop_check", side_effect=KeyboardInterrupt):
                 with self.assertRaises(KeyboardInterrupt):
                     announcements.main()
             document = json.loads(path.read_text())
             self.assertEqual(document["status"], "checking")
             self.assertEqual(document["checked_at"], NOW)
-            with patch.object(announcements, "cli_call") as call:
+            with patch.object(announcements, "mcp_call") as call:
                 self.assertEqual(announcements.check(document, call, NOW + 1), document)
                 call.assert_not_called()
 
@@ -107,7 +109,44 @@ class AnnouncedResetTests(unittest.TestCase):
         self.assertEqual(result["announcements"], document["announcements"])
         self.assertEqual(calls[-1], ("browser.window", {"action": "close", "window_id": "lease"}))
         self.assertEqual(announcements.check(result, call, NOW + 100), result)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(result["sources"], [{"source_url": announcements.SOURCE, "status": "blocked"},
+                                            {"source_url": announcements.RELAY, "status": "blocked"}])
+
+    def test_personal_profile_is_explicit_in_desktop_calls(self):
+        session = SimpleNamespace(call_tool=AsyncMock(return_value=SimpleNamespace(
+            structuredContent={"outcome": "success", "data": {"window_id": "lease"}})))
+        value = asyncio.run(announcements.mcp_call(session, "browser.window", {"action": "open"}))
+        self.assertEqual(value, {"window_id": "lease"})
+        self.assertEqual(session.call_tool.call_args.args[0], "browser_window")
+        self.assertEqual(session.call_tool.call_args.args[1]["identity"], "personal")
+
+    def test_outer_runtime_success_does_not_hide_unavailable_desktop(self):
+        session = SimpleNamespace(call_tool=AsyncMock(return_value=SimpleNamespace(
+            structuredContent={"outcome": "success", "data": {"outcome": "unavailable", "data": {}}})))
+        with self.assertRaises(ValueError):
+            asyncio.run(announcements.mcp_call(session, "browser.window", {"action": "open"}))
+
+    def test_readable_relay_keeps_primary_blocked_and_never_grants_capacity(self):
+        calls = []
+        def call(op, **kw):
+            calls.append((op, kw))
+            if kw.get("action") == "open":
+                return {"window_id": "lease"}
+            if op == "browser.op":
+                primary = kw["steps"][0]["url"] == announcements.SOURCE
+                return {"extracts": {"announcements": {"blocked": primary,
+                                                        "posts": [] if primary else [post()]}}}
+            return {}
+        result = announcements.check({"schema": 1, "announcements": []}, call, NOW)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["sources"][0]["status"], "blocked")
+        self.assertEqual(result["sources"][1]["status"], "ok")
+        self.assertEqual(result["announcements"][0]["confidence"], "low")
+        self.assertEqual(result["announcements"][0]["primary_source_url"], URL)
+        self.assertTrue(result["announcements"][0]["source_url"].startswith(announcements.RELAY))
+        self.assertEqual(announcements.overrides([], result, NOW), [])
+        self.assertEqual(len(calls), 4)
 
     def test_unavailable_desktop_records_fixed_status(self):
         def call(*args, **kwargs):

@@ -5,7 +5,6 @@ import argparse
 import fcntl
 import json
 import re
-import subprocess
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,6 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SOURCE = "https://x.com/thsottiaux"
+RELAY = "https://community.openai.com/t/another-reset-day-18-of-28-days-of-quality-of-life-improvements-and-or-a-full-reset/1403525"
 PATH = "/var/lib/ghostship-ai-usage/announced-resets.json"
 INTERVAL = 8 * 3600
 POST_URL = re.compile(r"https://x\.com/thsottiaux/status/\d+$")
@@ -116,12 +116,22 @@ EXTRACT = r"""(() => ({
  }))
 }))()"""
 
+RELAY_EXTRACT = r"""(() => ({
+ blocked: /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText),
+ posts: [...document.querySelectorAll('.cooked a[href*="x.com/thsottiaux/status/"]')].slice(-40).map(a => ({
+   text: a.innerText || a.closest('p')?.innerText || '',
+   url: a.href.split('?')[0],
+   published_at: ''
+ }))
+}))()"""
+
 
 def check(document, call, now):
     """One lease, no wall bypass, no independent HTTP fetches or search mirrors."""
     if now - document.get("checked_at", 0) < INTERVAL:
         return document
-    updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE}
+    updated = {**document, "schema": 1, "checked_at": now, "source_url": SOURCE,
+               "identity": "personal", "sources": [{"source_url": SOURCE, "status": "unavailable"}]}
     window = None
     try:
         window = call("browser.window", action="open")["window_id"]
@@ -131,51 +141,106 @@ def check(document, call, now):
                 "!!document.querySelector('article') || /log in or sign up|sign in to|captcha|verify you are human/i.test(document.body.innerText)"}},
             {"action": "extract", "name": "announcements", "js": EXTRACT},
         ])["extracts"]["announcements"]
-        if page["blocked"]:
-            updated["status"] = "blocked"
-            return updated
+        updated["sources"] = [{"source_url": SOURCE, "status": "blocked" if page["blocked"] else "ok"}]
         records = {entry["source_url"]: entry for entry in document["announcements"]}
-        for post in page["posts"]:
+        for post in [] if page["blocked"] else page["posts"]:
             entry = parse(post)
             if entry:
                 records[entry["source_url"]] = {**entry, "observed_at": now}
-        updated.update(status="ok", announcements=list(records.values())[-100:])
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        if page["blocked"]:
+            updated["status"] = "blocked"
+            updated["sources"].append({"source_url": RELAY, "status": "unavailable"})
+            relay = call("browser.op", window_id=window, steps=[
+                {"action": "navigate", "url": RELAY},
+                {"action": "wait", "timeout": 15, "condition": {"js":
+                    "!!document.querySelector('.cooked') || /sign in to continue|log in to continue|captcha|verify you are human/i.test(document.body.innerText)"}},
+                {"action": "extract", "name": "announcements", "js": RELAY_EXTRACT},
+            ])["extracts"]["announcements"]
+            updated["sources"][-1]["status"] = "blocked" if relay["blocked"] else "ok"
+            if not relay["blocked"]:
+                for post in relay["posts"]:
+                    entry = parse(post)
+                    if entry:
+                        # This is a community relay on OpenAI's site, not a
+                        # statement authored by OpenAI. Keep provenance and
+                        # never promote it to a confirmed scheduled reset.
+                        entry.update(primary_source_url=entry["source_url"],
+                                     source_url=RELAY + "#announcement-" + entry["source_url"].rsplit('/', 1)[-1],
+                                     confidence="low", reason="community_relay", observed_at=now)
+                        records[entry["source_url"]] = entry
+                updated["status"] = "partial"
+        else:
+            updated["status"] = "ok"
+        updated["announcements"] = list(records.values())[-100:]
+    except (OSError, ValueError, KeyError, TypeError):
         updated["status"] = "unavailable"
     finally:
         if window:
             try:
                 call("browser.window", action="close", window_id=window)
-            except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            except (OSError, ValueError, KeyError):
                 updated["status"] = "unavailable"
     return updated
 
 
-def cli_call(prefix, operation, **kwargs):
-    command = [*prefix, operation, "--identity", "agent", "--json",
-               "--idempotency-key", str(uuid.uuid4())]
-    for key, value in kwargs.items():
-        command += ["--" + key.replace("_", "-"), json.dumps(value) if isinstance(value, list) else value]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=90, check=True)
-    envelope = json.loads(result.stdout)
-    # A pending job is not page evidence. Finish it before extracting anything.
+async def mcp_call(session, operation, kwargs):
+    result = await session.call_tool(operation.replace('.', '_'), {
+        "identity": "personal", "idempotency_key": str(uuid.uuid4()), **kwargs})
+    envelope = result.structuredContent
+    if envelope is None:
+        envelope = json.loads(next(block.text for block in result.content if block.type == "text"))
     for _ in range(3):
         if envelope.get("outcome") != "running":
             break
-        pending = subprocess.run([*prefix, "runtime.job_status", "--job-id", envelope["job_id"],
-                                  "--wait-s", "45", "--json"],
-                                 capture_output=True, text=True, timeout=60, check=True)
-        envelope = json.loads(pending.stdout)
+        pending = await session.call_tool("jobs", {"op": "status", "job_id": envelope["job_id"], "wait_s": 45})
+        envelope = pending.structuredContent
+        if envelope is None:
+            envelope = json.loads(next(block.text for block in pending.content if block.type == "text"))
         envelope = envelope.get("data", {}).get("result") or envelope
+    # Runtime wrappers can enclose the actual browser outcome. An outer
+    # success with inner unavailable is not a working Desktop connection.
+    if isinstance(envelope.get("data"), dict) and "outcome" in envelope["data"]:
+        envelope = envelope["data"]
     if envelope.get("outcome") != "success":
         raise ValueError("desktop unavailable")
     return envelope["data"]
 
 
+def desktop_check(document, command, now):
+    # One persistent session uses the deployed backend's Desktop settings and
+    # lease owner. No SSH credentials are copied into T3 or this service.
+    import anyio
+    from anyio.from_thread import start_blocking_portal
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    async def connect(*, task_status):
+        async with stdio_client(StdioServerParameters(command=command[0], args=command[1:])) as streams:
+            async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=90)) as session:
+                await session.initialize()
+                task_status.started(session)
+                await anyio.sleep_forever()
+
+    try:
+        with start_blocking_portal() as portal:
+            future, session = portal.start_task(connect)
+            try:
+                def call(op, **kwargs):
+                    try:
+                        return portal.call(mcp_call, session, op, kwargs)
+                    except Exception:
+                        raise ValueError("desktop unavailable") from None
+                return check(document, call, now)
+            finally:
+                future.cancel()
+    except Exception:
+        return {**document, "checked_at": now, "identity": "personal", "status": "unavailable"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=PATH)
-    parser.add_argument("command", nargs="+", help="Desktop capability CLI and optional command prefix")
+    parser.add_argument("command", nargs="+", help="Deployed MCP stdio connection command")
     args = parser.parse_args()
     path = Path(args.output)
     def save(document):
@@ -190,7 +255,7 @@ def main():
             # Reserve the check durably before browsing: a crash must not
             # turn service retries into repeated checks of the public site.
             save({**document, "checked_at": now, "status": "checking", "source_url": SOURCE})
-            document = check(document, lambda op, **kw: cli_call(args.command, op, **kw), now)
+            document = desktop_check(document, args.command, now)
             save(document)
     print(document["status"])
 

@@ -2,17 +2,18 @@
 { pkgs, ... }:
 let
   desktop = pkgs.writeShellScript "ai-usage-announcement-desktop" ''
-    exec ${pkgs.podman}/bin/podman exec --user 3000:3000 \
-      --env HOME=/home/t3code t3code /home/t3code/.local/bin/ghostship-cap "$@"
+    exec ${pkgs.podman}/bin/podman exec -i ghostship-private-integrations \
+      /bin/ghostship-mcp ghostship
   '';
+  python = pkgs.python3.withPackages (ps: [ ps.mcp ]);
 in
 {
   systemd.services.ghostship-ai-usage-announcements = {
     description = "Check public Codex reset announcements through Agent Desktop";
-    after = [ "network-online.target" "podman-t3code.service" ];
+    after = [ "network-online.target" "podman-ghostship-private-integrations.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.python3}/bin/python3 ${./collector/announced_resets.py} ${desktop}";
+      ExecStart = "${python}/bin/python3 ${./collector/announced_resets.py} ${desktop}";
       TimeoutStartSec = "10min";
       UMask = "0077";
       NoNewPrivileges = true;
