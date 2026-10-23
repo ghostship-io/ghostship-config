@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -101,7 +102,10 @@ class FlowTests(unittest.TestCase):
             flows.main([])
         finally:
             flows.report = original
-        self.assertEqual(seen, [("report", True, 3.0, "/x"), ("report", False, 0, "/var/lib/ghostship-security/flows.json")])
+        default = "/var/lib/ghostship-security/flows.json"
+        if os.environ.get('GHOSTSHIP_UNIT_ROOT'):
+            default = str(Path(os.environ['GHOSTSHIP_UNIT_ROOT']) / 'defaults' / default.lstrip('/'))
+        self.assertEqual(seen, [("report", True, 3.0, "/x"), ("report", False, 0, default)])
 
     def test_accepted_sets_record_verdicts(self):
         state = {"edges": {}, "elements": {}}

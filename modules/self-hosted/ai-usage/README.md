@@ -1103,7 +1103,7 @@ intelligence placed inside the range of the tier it competes in
 that were actually observed (`p = (k * p0 + s) / (k + n)`, with `k = 10`), and
 combined with the measured efficiency (`value = 0.70 * p + 0.30 * E`). The
 rounds n and s are the model's own outcomes: a round of the environment, or
-one whose cause is the `brief` or the `chief` reviewer, counts in neither. The
+one whose cause is the `brief` or the reviewer, counts in neither. The
 trust scales it: an untrusted route keeps half of it. The Artificial
 Analysis value is published beside the published value, so the two cannot
 disagree about what the order was made of.
@@ -1469,6 +1469,48 @@ time remain provider measurements. Published windows and selection limits say
 `reset_source: custom` and `reset_label: custom reset`, retain
 `provider_reset_at`, and use the effective reset for pace. Invalid or duplicate
 overrides fail visibly. Keep owner-specific reset times in runtime state.
+
+### Announced resets
+
+`ghostship-ai-usage-announcements` checks the public Codex announcement profile
+through the personal identity's Agent Desktop browser tools, at most once per
+eight hours (including retries and manual service starts). It owns and closes
+one browser lease. A sign-in wall or challenge records `blocked`; the check
+does not bypass it or use mirrors. Transport failures record `unavailable`.
+The scheduled checker connects to the deployed MCP over one stdio session,
+using its existing Desktop configuration and lease ownership. It does not run
+a second local browser backend or copy Desktop credentials into T3.
+
+When X is blocked, the same check searches the OpenAI community announcements
+category for reset topics and reads at most three matching topics. Each topic
+has its own blocked/unavailable status. A readable relay never clears the
+primary source's blocked status. The dashboard shows community relays as
+`announced (unverified)` with a source link, and an operations notice asks for
+confirmation. A root operator can confirm global Codex scope and an explicit
+future time using `ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE`.
+Confirmed records survive later rediscovery and then use the normal announced
+reset path. See [confirmation and operations](../../../docs/ai-usage-announcements.md).
+Neither profile sign-ins nor private account details are stored in the cache.
+
+The separate runtime cache, `--announced-resets` (default
+`/var/lib/ghostship-ai-usage/announced-resets.json`), records reset time, scope,
+source post URL, confidence and observation time. The published routing snapshot
+includes this cache as `announced_resets`, including blocked-check status. Page
+prose is never stored. Repeated post URLs update one record; up to 100 records
+are retained and a failed check preserves previous announcements.
+
+Automatic application requires an explicit global Codex reset with a dated PT time.
+Operator-confirmed announcements use the explicitly supplied timezone-qualified time. Dates may
+be ISO dates or `today`/`tomorrow` relative to the post's publication date in
+Pacific time. PT observes daylight saving; contradictory PST/PDT is rejected.
+Vague timing, deadlines, banked resets, unclear scope and other authors remain
+ineligible until explicitly confirmed. Announcements change neither usage nor freshness and never grant
+capacity after the announced time. Future announcements within seven days use
+the existing custom-reset application path; owner overrides take precedence.
+Published quota windows, selection limits and dashboard metric labels say
+`reset_source: announced` and `reset_label: announced reset`, retain the provider
+reset, and pace against the announced reset. The collector reads the cache on
+its usual five-minute cadence; it never browses or restarts T3.
 
 ### Exact worker builds
 

@@ -35,10 +35,12 @@ import outcomes as outcomes_module  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
 import published as published_module  # noqa: E402
+import pools  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import reset_overrides  # noqa: E402
+import announced_resets  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import static_routes as static_routes_module  # noqa: E402
@@ -532,6 +534,7 @@ for field, description in {
 }.items():
     METRIC_HELP['ghostship_ai_picker_model_' + field] = description
 
+METRIC_HELP['ghostship_ai_announced_reset_info'] = 'Recorded public reset announcement, including unverified relays awaiting confirmation.'
 GAUGE_METRICS = tuple(METRIC_HELP)
 
 # How many dropped series a run names. A run that drops a handful of series
@@ -1733,11 +1736,16 @@ def build_snapshot(
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
+        snapshot["announced_resets"] = context.get("announced_resets") or {
+            "schema": 1, "status": "not_checked", "announcements": []}
         quota_block = snapshot.setdefault("quota", {})
         if isinstance(quota_block, dict):
             quota_block["entitlements"] = quota_module.entitlements(
                 measured_windows or [], now
             )
+            for entry in quota_block['entitlements']:
+                if pools.not_used_window(str(entry.get('provider') or ''), entry):
+                    entry['not_used'] = True
     if isinstance(snapshot, dict):
         policy = (outcomes or {}).get("policy") or {}
         orchestrators = (policy.get("roles") or {}).get("orchestrator") or []
@@ -1765,6 +1773,7 @@ def collect(
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
     custom_resets: list[dict[str, Any]] | None = None,
+    announcements: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
     """Run every source and return the results, the extra samples, and the context."""
     moment = wall_clock() if now is None else now
@@ -1814,6 +1823,8 @@ def collect(
         routes=routes,
     )
     results.extend(inferred.results)
+    context["announced_resets"] = announcements or {"schema": 1, "status": "not_checked", "announcements": []}
+    reset_overrides.apply(results, announced_resets.overrides(results, context["announced_resets"], moment), moment)
     reset_overrides.apply(results, custom_resets or [], moment)
     context["inferred_capacity"] = inferred.capacities
     context["inferred_retirements"] = dict(inferred.retirements)
@@ -2154,16 +2165,28 @@ def render(
     runtime_policy: str | None = None,
 ) -> str:
     writer = MetricWriter()
+
+    def add(name, labels, value):
+        provider = str(labels.get('provider') or labels.get('account') or '')
+        if pools.not_used_window(provider, labels):
+            usage = name.startswith(('ghostship_ai_quota_', 'ghostship_ai_account_window_'))
+            if not usage or ('pace' in name and not name.endswith('_pace_state')) or 'expected_' in name:
+                return
+            labels = {**labels, 'not_used': 'true'}
+            if name.endswith('_pace_state'):
+                labels['state'] = 'not_used'
+        writer.add(name, labels, value)
+
     for name, help_text in METRIC_HELP.items():
         writer.declare(name, "gauge", help_text)
     for result in results:
         provider = result.source
-        writer.add(
+        add(
             "ghostship_ai_source_success",
             {"source": result.source, "provider": provider},
             1.0 if result.ok else 0.0,
         )
-        writer.add(
+        add(
             "ghostship_ai_source_status",
             {
                 "source": result.source,
@@ -2174,47 +2197,49 @@ def render(
             1.0,
         )
         if result.observed_at is not None:
-            writer.add(
+            add(
                 "ghostship_ai_source_observed_timestamp_seconds",
                 {"source": result.source, "provider": provider},
                 result.observed_at,
             )
-        writer.add(
+        add(
             "ghostship_ai_source_duration_seconds",
             {"source": result.source, "provider": provider},
             result.duration_s,
         )
         if result.ok:
-            writer.add(
+            add(
                 "ghostship_ai_source_last_success_timestamp_seconds",
                 {"source": result.source, "provider": provider},
                 now,
             )
     for provider, source in COVERAGE:
-        writer.add(
+        add(
             "ghostship_ai_provider_coverage",
             {"provider": provider, "source": source},
             1.0,
         )
     for result in results:
         for name, labels, value in result.metrics:
-            writer.add(name, labels, value)
+            add(name, labels, value)
     for name, labels, value in extra:
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in model_selection.samples((snapshot or {}).get("model_selection") or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
+    for name, labels, value in announced_resets.samples((snapshot or {}).get("announced_resets") or {}):
+        add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in snapshot_module.account_window_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in trust_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The name the collector already publishes for a model, so a static row
     # says what the model is. The row falls back to the model id.
     display_names: dict[tuple[str, str], str] = {}
@@ -2229,32 +2254,32 @@ def render(
     for name, labels, value in static_routes_module.samples(
         runtime_policy, snapshot or {}, display_names
     ):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The free selection of every free provider, and the free models it
     # holds, read from the same snapshot.
     for name, labels, value in free_selection_module.samples(
         snapshot or {}, display_names
     ):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The availability of every account: whether it can serve right now, why
     # not when it cannot, and where its limit comes from.
     for name, labels, value in account_availability_module.samples(snapshot or {}, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     # The place every card takes on the Providers page. The page draws the
     # cards in this order, and the order is the owner's.
     for name, labels, value in card_order_module.samples(snapshot or {}):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
         measured.extend(result.windows)
     for name, labels, value in quota_module.quota_pace_samples(measured, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in quota_module.entitlement_samples(measured, now):
-        writer.add(name, labels, value)
+        add(name, labels, value)
     for name, labels, value in quota_module.entitlement_display_samples(measured, now):
-        writer.add(name, labels, value)
-    writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
-    writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
+        add(name, labels, value)
+    add("ghostship_ai_collection_timestamp_seconds", {}, now)
+    add("ghostship_ai_collection_duration_seconds", {}, duration)
     # A series is published once. A repeat is dropped and counted, and the
     # count is published, so a duplicate never passes unnoticed. The run
     # names every series it dropped, so the emitter that published a series
@@ -2268,12 +2293,12 @@ def render(
     unnamed = len(writer.dropped) - MAX_NAMED_DUPLICATE_SERIES
     if unnamed > 0:
         log(f"and {unnamed} more")
-    writer.add(
+    add(
         "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
     )
     # The owner's routing switch, published as it is. The gauge carries no
     # label: the switch is one switch for the whole snapshot.
-    writer.add(
+    add(
         "ghostship_ai_routing_enabled",
         {},
         1.0 if ((snapshot or {}).get("routing") or {}).get("enabled") else 0.0,
@@ -2407,6 +2432,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Synchronize managed model favorites and the worker default through authenticated RPC.")
     parser.add_argument("--custom-resets", default="/var/lib/ghostship-ai-usage/custom-resets.json",
                         help="Owner overrides; published explicitly as custom resets.")
+    parser.add_argument("--announced-resets", default=announced_resets.PATH,
+                        help="Public announcements recorded by the bounded Desktop check.")
     parser.add_argument("--picker-state", default="/var/lib/ghostship-ai-usage/picker.json",
                         help="Ownership journal for managed T3 model favorites.")
     args = parser.parse_args(argv)
@@ -2426,6 +2453,7 @@ def main(argv: list[str] | None = None) -> int:
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
         custom_resets=reset_overrides.load(args.custom_resets),
+        announcements=announced_resets.load(args.announced_resets),
     )
     duration = time.monotonic() - started
     measured: list[dict[str, Any]] = []

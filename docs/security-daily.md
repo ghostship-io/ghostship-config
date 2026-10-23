@@ -4,8 +4,8 @@ Each daily check starts in a fresh session and finishes after one bounded run.
 Discover the current orchestrator and its unfinished-work checklist before acting.
 Read this procedure, the installed `ghostship-engineering` skill and current
 `routing-policy.md`; each run must discover its own source and live state without
-relying on an earlier session. Reconcile existing findings and feature ownership
-before starting a fix. Send findings and concrete blockers to the orchestrator,
+relying on an earlier session. Reconcile existing findings before starting a fix. Send findings and concrete
+blockers to the orchestrator,
 which assigns follow-up work. The daily session has no permanent ownership.
 
 The orchestrator manages the single daily security task. Inspect its existing
@@ -38,9 +38,8 @@ permanent security thread. Keep private security evidence off free-tier workers.
    reproducible candidates and compare source/patch identity. Run fast unit
    regressions before merge; integration checks run in GitHub after merge.
    Stage new Nix files before evaluation. Use the landing tool for release
-   metadata. Frontier authors self-review the exact diff; worker changes need
-   one frontier review. Record that revision with `agent review approve`, then
-   use `agent pr land`. Review affected consumers, privacy, test quality and
+   metadata. Workers implement; the orchestrator reviews each diff. Record that
+   revision with `agent review approve`, then use `agent pr land`. Review affected consumers, privacy, test quality and
    deployment impact. A patch-identity marker is not an executed vulnerability
    regression. Keep production exploit execution out of the procedure.
 4. Before application, inspect the complete activation/unit diff and existing

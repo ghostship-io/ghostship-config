@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 import sys
+from collector_fixture import state_args
 
 PATH = Path(__file__).resolve().parents[1] / 'modules/self-hosted/ai-usage/collector/model_selection.py'
 sys.path.insert(0, str(PATH.parent))
@@ -252,9 +253,9 @@ class SelectionTests(unittest.TestCase):
             with patch.object(main,'collect',return_value=([],[],{})), \
                  patch.object(main,'read_outcomes',return_value=evidence), \
                  patch.object(main,'log'):
-                self.assertEqual(main.main(['--model-selection-preferences',str(prefs),
+                self.assertEqual(main.main(state_args(root, ['--model-selection-preferences',str(prefs),
                     '--output',str(root/'metrics.prom'),'--snapshot',str(root/'routing.json'),
-                    '--aa-catalog',str(root/'missing-catalog.json'),'--now','1000']),0)
+                    '--aa-catalog',str(root/'missing-catalog.json'),'--now','1000'])),0)
             published = json.loads((root/'routing.json').read_text())
             self.assertEqual(published['model_selection']['worker_builds'],builds)
             prefs.write_text('{}')

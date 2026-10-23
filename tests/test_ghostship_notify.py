@@ -4,9 +4,7 @@ import json
 import os
 import stat
 import tempfile
-import threading
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -16,20 +14,33 @@ notify = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(notify)
 
 
-class Ntfy(BaseHTTPRequestHandler):
-    received: list = []
-    status = 200
-
-    def do_POST(self):
-        Ntfy.received.append((self.headers["Authorization"], json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
-        self.send_response(Ntfy.status)
-        self.end_headers()
-
-    def log_message(self, *args):
-        pass
-
-
 class NotifyTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        secret = root / 'monitoring.env'
+        secret.write_text("NTFY_PUBLISH_PASSWORD='pw'\n")
+        self.received = []
+        self.status = 200
+        for name, value in (('STATE_DIR', root / 'state'), ('SECRETS', str(secret)),
+                            ('INCIDENTS', str(root / 'incidents'))):
+            patcher = mock.patch.object(notify, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        server = mock.patch.object(notify, 'server', return_value='https://ntfy.invalid')
+        server.start()
+        self.addCleanup(server.stop)
+        transport = mock.patch.object(notify.urllib.request, 'urlopen', side_effect=self.publish)
+        transport.start()
+        self.addCleanup(transport.stop)
+
+    def publish(self, request, **_kwargs):
+        self.received.append((request.get_header('Authorization'), json.loads(request.data)))
+        if self.status != 200:
+            raise notify.urllib.error.HTTPError(request.full_url, self.status, 'fixture failure', {}, None)
+        return mock.MagicMock()
+
     def test_incident_only_requires_durable_spool_and_retries_with_same_event_identity(self):
         """An unavailable spool or failed fsync must never acknowledge the handoff."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -61,44 +72,33 @@ class NotifyTests(unittest.TestCase):
                 self.assertEqual(list(spool.glob("*.tmp")), [])
 
     def test_dedupe_publishes_each_state_once_and_retries_after_a_failed_publish(self):
-        server = HTTPServer(("127.0.0.1", 0), Ntfy)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.shutdown)
         with tempfile.TemporaryDirectory() as tmp:
             secrets = Path(tmp) / "monitoring.env"
             secrets.write_text("NTFY_PUBLISH_PASSWORD='pw'\n")
             notify.SECRETS, notify.STATE_DIR = str(secrets), Path(tmp) / "state"
-            os.environ["GHOSTSHIP_NOTIFY_URL"] = f"http://127.0.0.1:{server.server_port}"
-            self.addCleanup(os.environ.pop, "GHOSTSHIP_NOTIFY_URL")
             base = ["--topic", "security", "--priority", "4", "--source", "sshd", "--dedupe", "k", "--title", "t"]
-            Ntfy.received.clear()
-            Ntfy.status = 500
+            self.status = 500
             self.assertEqual(notify.main(base + ["m"]), 1)
-            Ntfy.status = 200
+            self.status = 200
             for argv in (base, base, base + ["--state", "resolved"]):
                 self.assertEqual(notify.main(argv + ["m"]), 0)
-            self.assertEqual([b["tags"][:2] for _, b in Ntfy.received],
+            self.assertEqual([b["tags"][:2] for _, b in self.received],
                              [["sshd", "firing"], ["sshd", "firing"], ["sshd", "resolved"]])
-            self.assertEqual(Ntfy.received[-1][1]["topic"], "security")
-            self.assertTrue(Ntfy.received[-1][0].startswith("Basic "))
+            self.assertEqual(self.received[-1][1]["topic"], "security")
+            self.assertTrue(self.received[-1][0].startswith("Basic "))
 
     def test_incident_reaches_the_coordinator_spool_even_when_ntfy_is_down(self):
         """Defect: an ntfy outage drops the repair handoff, or a resolved alert starts a repair thread."""
-        server = HTTPServer(("127.0.0.1", 0), Ntfy)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.shutdown)
         with tempfile.TemporaryDirectory() as tmp:
             secrets, spool = Path(tmp) / "monitoring.env", Path(tmp) / "incidents"
             secrets.write_text("NTFY_PUBLISH_PASSWORD='pw'\n")
             spool.mkdir()
             notify.SECRETS, notify.STATE_DIR, notify.INCIDENTS = str(secrets), Path(tmp) / "state", str(spool)
-            os.environ["GHOSTSHIP_NOTIFY_URL"] = f"http://127.0.0.1:{server.server_port}"
-            self.addCleanup(os.environ.pop, "GHOSTSHIP_NOTIFY_URL")
             base = ["--topic", "operations", "--source", "systemd", "--incident", "--dedupe", "x.service",
                     "--title", "Service x.service failed"]
-            Ntfy.status = 500
+            self.status = 500
             self.assertEqual(notify.main(base + ["exit 1"]), 1)
-            Ntfy.status = 200
+            self.status = 200
             self.assertEqual(notify.main(base + ["--state", "resolved", "ok"]), 0)
             (queued,) = [json.loads(path.read_text()) for path in spool.iterdir()]
             self.assertEqual((queued["key"], queued["title"], queued["message"]),
