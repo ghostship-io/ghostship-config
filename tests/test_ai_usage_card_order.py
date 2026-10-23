@@ -280,15 +280,15 @@ class CardOrderWiringTests(unittest.TestCase):
     def test_the_collector_publishes_the_card_order(self):
         text = main.render([], [], NOW, 0.0, SNAPSHOT)
         self.assertIn(
-            'ghostship_ai_account_card_order{account="claude"} 1',
+            'ghostship_ai_account_card_order{account="claude",scope="free"} 1',
             text,
         )
         self.assertIn(
-            'ghostship_ai_account_card_order{account="openrouter"} 7',
+            'ghostship_ai_account_card_order{account="openrouter",scope="free"} 7',
             text,
         )
         self.assertIn(
-            'ghostship_ai_account_card_order{account="zai"} 11',
+            'ghostship_ai_account_card_order{account="zai",scope="free"} 11',
             text,
         )
 
@@ -307,6 +307,48 @@ class CardOrderWiringTests(unittest.TestCase):
             key = (name.strip(), labels.partition("}")[0])
             self.assertNotIn(key, seen, f"the file holds {key} twice")
             seen.add(key)
+
+
+class CardScopeTests(unittest.TestCase):
+    def scopes(self, snapshot):
+        return {
+            labels["account"]: labels.get("scope")
+            for name, labels, value in card_order.samples(snapshot)
+            if name == "ghostship_ai_account_card_order"
+        }
+
+    def test_one_native_candidate_keeps_a_mixed_account_on_t3(self):
+        snapshot = {
+            "candidates": [
+                {"provider": "opencode-go", "native": {"mapped": False}},
+                {"provider": "opencode-go", "native": {"mapped": True}},
+                {"provider": "pi", "native": {"mapped": True}},
+            ]
+        }
+        self.assertEqual(self.scopes(snapshot), {"opencode-go": "t3", "pi": "t3"})
+
+    def test_unmapped_and_window_only_accounts_belong_to_free(self):
+        snapshot = {
+            "quota": {"accounts": {"opencode": []}},
+            "candidates": [{"provider": "kilo", "native": {"mapped": False}}],
+        }
+        self.assertEqual(self.scopes(snapshot), {"kilo": "free", "opencode": "free"})
+
+    def test_scope_tracks_native_mapping_without_provider_exceptions(self):
+        route = {"provider": "openrouter", "native": {"mapped": True}}
+        snapshot = {"candidates": [route]}
+        self.assertEqual(self.scopes(snapshot), {"openrouter": "t3"})
+        route["native"]["mapped"] = False
+        self.assertEqual(self.scopes(snapshot), {"openrouter": "free"})
+
+    def test_scope_keeps_exactly_one_series_at_the_existing_position(self):
+        snapshot = live_snapshot()
+        before = card_order.positions(snapshot)
+        snapshot["candidates"].append({"provider": "claude", "native": {"mapped": True}})
+        samples = card_order.samples(snapshot)
+        self.assertEqual(len(samples), len(before))
+        self.assertEqual(positions(samples), dict(before))
+        self.assertEqual(self.scopes(snapshot)["claude"], "t3")
 
 
 if __name__ == "__main__":
