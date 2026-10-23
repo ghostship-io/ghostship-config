@@ -125,6 +125,44 @@ def build(entries, native=None, sources=None, aa_cache=None):
 
 
 class SnapshotContractTests(unittest.TestCase):
+    def test_policy_excluded_pool_has_no_candidates_but_retains_unused_windows(self):
+        rows = [Ranked(provider='antigravity', model=model, tier='worker')
+                for model in ('claude-opus-5-5','gpt-6.1-sol','gemini-4-argon')]
+        windows = [{'provider':'antigravity','quota_id':quota,'kind':kind,
+                    'usedRatio':.3,'resetEpoch':NOW+HOUR,'durationSeconds':7*86400,'observedAtEpoch':NOW,'appliesTo':scope}
+                   for quota,kind,scope in (('3p-5h','session',['claude','gpt']),
+                                           ('3p-weekly','weekly',['claude','gpt']),
+                                           ('gemini-5h','session',['gemini']))]
+        rows += [Ranked(provider='claude',model='claude-opus-5-5',tier='worker'),
+                 Ranked(provider='claude',model='claude-fable-5',tier='worker')]
+        windows += [{'provider':'claude','quotaId':quota,'kind':'weekly','usedRatio':used,
+                     'resetEpoch':NOW+HOUR,'durationSeconds':7*86400,'observedAtEpoch':NOW,'appliesTo':scope}
+                    for quota,used,scope in (('seven_day',.1,[]),('seven_day_fable',1,['fable']))]
+        result = snapshot.build_snapshot(now=NOW, sources=[], ranked=rows,
+            native_models={('claude','claude-fable-5'):{'providerInstance':'claudeAgent','modelId':'claude-fable-5'}},
+            measured_windows=windows,
+            outcomes={'policy':{'model_selection':{'excluded_pools':['antigravity:3p','claude:fable']}}})
+        self.assertEqual({row['model'] for row in result['candidates']}, {'gemini-4-argon','claude-opus-5-5'})
+        import model_selection
+        canonical=model_selection.build(result,[],evidence={'policy':{'model_selection':{'excluded_pools':['antigravity:3p','claude:fable']}}})
+        self.assertIn({'instanceId':'claudeAgent','model':'claude-fable-5'},
+                      [row['native'] for row in canonical['role_exclusions']])
+        accounts = result['quota']['accounts']['antigravity']
+        self.assertEqual({row['quota_id'] for row in accounts}, {'3p-5h','3p-weekly','gemini-5h'})
+        self.assertTrue(all(row.get('not_used') for row in accounts if row['quota_id'].startswith('3p-')))
+        fable=next(row for row in result['quota']['accounts']['claude'] if row['quota_id']=='seven_day_fable')
+        self.assertTrue(fable['not_used'])
+        self.assertEqual(result['quota']['provider_capacity']['claude']['remaining_ratio'],.9)
+        rendered = list(snapshot.account_window_samples(result))
+        self.assertTrue(rendered)
+        unused = [(name,labels,value) for name,labels,value in rendered if '3p-' in labels.get('quota_id','')]
+        self.assertTrue(unused)
+        self.assertTrue(all(labels.get('not_used')=='true' for _,labels,_ in unused))
+        self.assertTrue(any(name.endswith('remaining_ratio') and value==.7 for name,_,value in unused))
+        self.assertFalse(any('expected_remaining' in name or 'pace_delta' in name for name,_,_ in unused))
+        self.assertTrue(all(labels['state']=='not_used' for name,labels,_ in unused if name.endswith('pace_state')))
+
+
     def test_the_header_carries_the_version_and_the_freshness(self):
         data = build([Ranked()])
         self.assertEqual(data["schema_version"], 1)

@@ -31,6 +31,30 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(value['orchestrator'][0]['native'], value['default_worker'])
         self.assertEqual(value['worker'][0]['native'], value['default_worker'])
 
+    def test_provider_role_policy_keeps_review_authority_without_workers(self):
+        rows = [candidate('review-only','opus',80), candidate('review-only','fable',99),
+                candidate('codex','reviewer',85)]
+        evidence = {'policy': {'model_selection': {'provider_roles': {'review-only':['orchestrator']}}}}
+        reviews = [{'instance_id':'review-only','model':'opus'}, {'instance_id':'codex','model':'reviewer'}]
+        result = selection.build({'candidates':rows},reviews,evidence=evidence)
+        group = result['providers']['review-only']
+        self.assertEqual(group['worker'], [])
+        self.assertIsNone(group['selected']['worker'])
+        self.assertEqual(group['selected']['orchestrator']['model'], 'opus')
+        self.assertEqual(result['default_worker']['model'], 'reviewer')
+        self.assertFalse(any(row['provider']=='review-only' for row in result['worker']))
+        self.assertEqual({row['native']['model'] for row in result['role_exclusions']}, {'opus','fable'})
+        for pool in group['pools'].values():
+            self.assertEqual(pool['worker'], [])
+            self.assertIsNone(pool['selected']['worker'])
+
+    def test_excluded_pool_keeps_the_other_provider_pool(self):
+        rows = [candidate('antigravity', model) for model in ('claude-opus-5-5','gpt-6.1-sol','gemini-4-argon')]
+        result = selection.build({'candidates':rows}, [], evidence={
+            'policy':{'model_selection':{'excluded_pools':['antigravity:3p']}}})
+        self.assertEqual([row['model'] for row in result['worker']], ['gemini-4-argon'])
+        self.assertEqual(set(result['providers']['antigravity']['pools']), {'antigravity:gemini'})
+
     def test_effort_comes_from_each_native_models_supported_choices(self):
         for identifier, choices, expected, review_expected in (
             ('reasoningEffort', ['high', 'low', 'ultra', 'max'], 'high', 'high'),

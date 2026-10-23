@@ -46,6 +46,16 @@ def policy_ready(evidence: Mapping[str, Any]) -> bool:
                 if isinstance(record, Mapping)}
     exclusions = {entry.get('model') for entry in (policy.get('model_trust') or {}).get('entries') or []
                   if entry.get('level') == 'excluded'}
+    roles = (policy.get('model_selection') or {}).get('provider_roles', {})
+    if not isinstance(roles, Mapping) or any(
+            not isinstance(provider, str) or not provider or not isinstance(categories, list)
+            or not categories or any(category not in CATEGORIES for category in categories)
+            for provider, categories in roles.items()):
+        return False
+    excluded_pools = (policy.get('model_selection') or {}).get('excluded_pools', [])
+    if (not isinstance(excluded_pools, list) or
+            any(not isinstance(pool, str) or not pool for pool in excluded_pools)):
+        return False
     return (bool(declared) and exclusions <= declared
             and (policy.get('model_selection') or {}).get('categories') == list(CATEGORIES)
             and bool((policy.get('roles') or {}).get('orchestrator')))
@@ -175,6 +185,9 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
     trust_cache = {}
+    role_exclusions = list(snapshot.get("selection_exclusions") or [])
+    excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
+    provider_roles = (((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("provider_roles") or {}
     worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
@@ -227,10 +240,20 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "pool": source.get("pool") or pools.record(str(source.get("provider") or ""),
                 str(source.get("model") or ""), (source.get("access") or {}).get("billing") or ""),
         }
+        if row['pool']['id'] in excluded_pools:
+            if mapped:
+                role_exclusions.extend({'provider':row['provider'], 'native':row['native'],
+                                        'category':category, 'reason':'pool_excluded'} for category in CATEGORIES)
+            continue
         # Orchestrator models can also be workers; the categories describe use,
         # not reservations. No review subscription is withheld from the owner.
-        categories["worker"].append(row)
-        if mapped and (instance, model) in orchestrator_ids:
+        allowed = provider_roles.get(row['provider'], CATEGORIES)
+        if "worker" in allowed:
+            categories["worker"].append(row)
+        elif mapped:
+            role_exclusions.append({'provider':row['provider'], 'native':row['native'],
+                                    'category':'worker', 'reason':'provider_role_policy'})
+        if mapped and "orchestrator" in allowed and (instance, model) in orchestrator_ids:
             review_effort = effort_options(descriptors, preferred='medium')
             review_options = native_options(descriptors, preferred='medium')
             review_native = {'instanceId': str(instance), 'model': str(model),
@@ -265,7 +288,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     return {"schema": SCHEMA, "generated_at": snapshot.get("generated_at"),
             "partial": bool(snapshot.get("partial", False)),
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
-            "providers": providers, "worker_builds": dict(worker_builds), **categories,
+            "providers": providers, "worker_builds": dict(worker_builds),
+            "role_exclusions": role_exclusions, **categories,
             "default_worker": next((row["native"] for row in categories["worker"]
                                     if row["available"] and row["picker_eligible"] and row["selection_eligible"]), None)}
 
