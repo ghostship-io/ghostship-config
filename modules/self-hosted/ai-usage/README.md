@@ -1123,6 +1123,15 @@ anything that has to choose a model, and it is written atomically, so a
 reader never sees half of it. The producer writes it; a consumer only reads
 it. The file holds no service, no database, and no listener.
 
+The same bytes are published to `/run/ghostship-integrations/model-routing.json`
+for the MCP. The T3 Code container does not mount that directory, so the path
+unit `ghostship-ai-usage-t3-projection.path` refreshes a copy into the
+container's own tmpfs at `/run/ghostship-model-routing/model-routing.json`
+every time the collector publishes, by rename. Consumers inside the container
+read `/run/ghostship-model-routing/model-routing.json` and nothing else; the
+copy is written by the host side, read only by its consumers, and the
+container is never started, stopped or recreated for it.
+
 The contract, version 1:
 
 | Field | Meaning |
