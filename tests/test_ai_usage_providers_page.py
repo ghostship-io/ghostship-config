@@ -69,11 +69,13 @@ CAPACITY_ROW_HEIGHT = 37
 
 # The content of the model selection panel, measured in Playwright the same
 # way with the headroom the panel is sized for: the five static rows, the
-# Free divider, and twenty-four free providers. The live set holds sixteen.
-# The content is measured inside the panel body, which is the grid height
-# less the panel's title bar of 26 px.
-SELECTION_PHONE_HEIGHT = 1440
-SELECTION_DESKTOP_HEIGHT = 1096
+# Free divider, and sixteen free providers that hold a winner. The live set
+# of generation 412 publishes nineteen free providers, eleven of them with a
+# model; the eight with basis "none" are not rows. The content is measured
+# inside the panel body, which is the grid height less the panel's title bar
+# of 26 px.
+SELECTION_PHONE_HEIGHT = 1049
+SELECTION_DESKTOP_HEIGHT = 820
 SELECTION_PANEL_HEADER = 26
 
 # The moment the fixture was read. The resets of the fixture are counted
@@ -1949,22 +1951,23 @@ class ModelSelectionTests(unittest.TestCase):
         """The panel holds every row at either width, with no inner scroll.
 
         Measured in Playwright with the panel's own helpers and styles, the
-        production font (Inter) and the headroom of twenty-four free
-        providers: the content is 1440 px tall at 358 px and 1096 px at
-        1568 px. A grid row of the dashboard is 37 px, and the panel's title
-        bar takes 26 px of it, so the body is the height less 26. The live
-        set holds sixteen free providers, so the height keeps room for eight
-        more.
+        production font (Inter) and the headroom of sixteen free providers
+        that hold a winner: the content is 1049 px tall at 358 px and 820 px
+        at 1568 px. A grid row of the dashboard is 37 px, and the panel's
+        title bar takes 26 px of it, so the body is the height less 26. The
+        live set of generation 412 lists eleven free rows, so the height
+        keeps room for five more and leaves 264 px empty at 1568 px.
         """
         rows = math.ceil(
             (max(SELECTION_PHONE_HEIGHT, SELECTION_DESKTOP_HEIGHT) + SELECTION_PANEL_HEADER)
             / 37
         )
-        self.assertEqual(rows, 40)
+        self.assertEqual(rows, 30)
         self.assertEqual(self.panel["gridPos"]["h"], rows)
         body = self.panel["gridPos"]["h"] * 37 - SELECTION_PANEL_HEADER
         self.assertGreaterEqual(body, SELECTION_PHONE_HEIGHT)
         self.assertGreaterEqual(body, SELECTION_DESKTOP_HEIGHT)
+        self.assertEqual(body - SELECTION_DESKTOP_HEIGHT, 264)
 
     def test_the_fixture_routes_have_no_numbers_the_store_disagrees_with(self):
         """The fixture is the live table, and the page reads it, not a copy."""
