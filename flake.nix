@@ -8,11 +8,11 @@
     ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/5d5bcc6cd2fc4cb97f1e5a0295fec6e26aea9e9f";
 
     # The owner's runtime policy, read by the AI usage collector for the
-    # static worker table that governs while routing is off. It is a plain
+    # model-selection identities and trust evidence. It is a plain
     # source tree, not a flake, and it has its own pin: the T3 Code input
     # above is built and must not move with it.
     ghostship-agent-policy = {
-      url = "github:ghostship-io/ghostship-agent/5381c0156b441aa3e6ce039e7e8e3768bcac68a8";
+      url = "github:ghostship-io/ghostship-agent/28c31383cd9436a625c7fef317c255acd7ffcc36";
       flake = false;
     };
 
