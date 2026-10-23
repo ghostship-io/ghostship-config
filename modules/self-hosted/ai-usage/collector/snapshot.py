@@ -1040,7 +1040,8 @@ def _candidate(
         if failure:
             observed_failure = dict(failure)
     for window in raw_windows:
-        record = _window_record(window, now)
+        record = (_inferred_window_record(window, now, getattr(window, "applies_to", ()))
+                  if getattr(window, "inference", None) else _window_record(window, now))
         if record not in windows:
             windows.append(record)
     if pace is None and raw_windows:
@@ -3741,15 +3742,10 @@ def build_snapshot(
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
         if account:
-            # The measured windows are published once per account, not once
-            # per model of that account.
-            windows = row.get("windows") or []
-            known = accounts.setdefault(account, [])
-            for window in windows:
-                if window not in known:
-                    known.append(window)
+            # Account windows already came from the scoped source records.
+            # A candidate's applied copy must not add unscoped duplicates.
+            accounts.setdefault(account, [])
             row["quotaRef"] = f"accounts/{account}"
-        row.pop("quotaWindows", None)
         if row["admission"]["state"] == "pending":
             pending.append(
                 {
