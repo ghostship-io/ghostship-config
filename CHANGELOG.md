@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.226] - 2026-10-23
+
+- Monitor primary reset announcements hourly, with eight-hour wall backoff and one blocked notice per episode.
+- Reuse notice receipts across relay and primary post URLs to prevent duplicate notifications.
+
+PR #392.
+
 ## [3.17.225] - 2026-10-23
 
 Keep MCP free-inference transport independent of coding-home ownership changes.
