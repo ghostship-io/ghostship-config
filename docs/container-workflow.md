@@ -107,6 +107,7 @@ four-minute budget. Main pushes retain `scripts/check`, all host evaluations,
 configuration builds and the same secret scan. T3 browser integration also
 runs after merge on main. Superseded PR runs are cancelled; main runs finish.
 Review the exact diff and unit results, record approval, then use `agent pr land`.
+Frontier authors self-review; other models need one frontier review.
 
 ## Git access
 
@@ -122,8 +123,10 @@ git ls-remote origin HEAD
 ```
 
 Keep an existing SSH remote if its key is available. Use a named branch or
-worktree, verify and commit changes, push, and open a draft PR. The repo's
-`VERSION` and `CHANGELOG.md` track workflow changes as patch releases.
+worktree, verify and commit changes, push, and open a PR. Keep `VERSION` and
+`CHANGELOG.md` out of its diff: `agent pr land` publishes the release on main.
+Write release notes in the PR body under `## Changelog`; patch is the default,
+with `Release: minor` or `Release: major` selecting a larger bump.
 
 ## Remote deployment
 
@@ -235,7 +238,7 @@ The result must be `0`. If SSH access or Git push is unavailable, fix that
 access before deployment. Do not substitute container-local activation or copy
 uncommitted files onto the host.
 
-After the user merges the PR, make sure the intended commit is on
+After landing the PR, make sure the intended commit is on
 `origin/main`. For an authorized deployment, use `ssh chill-penguin` and the
 host checkout at `/home/nixos/nixos-config` to run these commands as root:
 
