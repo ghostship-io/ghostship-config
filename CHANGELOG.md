@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.129] - 2026-10-23
+
+- ai-usage: a route more than twenty points behind the pace of its binding window goes to the back of the pool. The collector now publishes one pace state per route and per account window, and the Providers page reads it for amber (behind) and red (far_behind, spent) instead of drawing its own band. The state is the band of the Paced Availability of the most constraining window in points, the share left minus the expected share left, rounded to six decimals so that only the noise of the subtraction is removed (`100 * (0.50 - 0.55)` is `-5`): more than five points ahead is `ahead`, between five points behind and five ahead is `on_pace`, between twenty points behind and five behind is `behind`, more than twenty points behind is `far_behind`, a window with nothing left is `spent` whatever its line, and a route with no window or no line to compare it with is `unknown`. The order of every tier gains one element right after the trust group: a `far_behind` route follows every route of its trust group that is not, whatever the value of those routes. An untrusted route stays last, and a route that is merely behind keeps its place in the value order. The candidate row and the winner carry the state as `pace_state`, and every account window publishes `ghostship_ai_account_window_pace_state{account,kind,quota_id,label,evidence,state}`, with the labels of the remaining-ratio series plus the state.
+
 ## [3.17.128] - 2026-10-23
 
 - ai-usage: a round the lead caused is not the model's outcome. A ledger round whose cause is `brief` or `chief` is counted by neither n nor s, exactly like a round of the environment, so the quality p reads only the outcomes the model caused (owner rule, 2026-10-23). A backfill row records no cause, and its summary is never read as one.
