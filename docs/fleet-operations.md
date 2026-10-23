@@ -43,6 +43,22 @@ Media/download files live on the NAS, while app databases and settings
 live locally. The backup repository covers local service state, not a second
 copy of the bulk media library.
 
+The shared bridge reserves low addresses for static assignments and allocates
+ordinary endpoints from its explicit lease range. The common module checks the
+native OCI network fields and canonical Podman argv for overlap. Split argv is
+refused. The pinned allocator clamps a persisted cursor into the current range,
+including its exhaustion sentinel; changing configuration alone is insufficient.
+
+`shared-network-range.service` updates only the root-owned network JSON's lease
+range under Netavark's POSIX lock. Its atomic replacement invalidates the network
+metadata cache. It preserves the bridge, network identity and existing leases,
+and never reads or changes the IPAM database. The init unit is kept running on
+switch because containers require it. Hash-checked rollback receipts stay under
+`/var/lib/ghostship/network-policy`; invoke the service's generated command with
+`--rollback RECEIPT` only if its current hash still matches that receipt. After a
+switch, verify a real disposable endpoint's allocation and unchanged T3 identity;
+existing endpoints keep their addresses. No live shared bridge recreation.
+
 ## Audit findings and changes
 
 Apple Silicon support remains pinned to the compatible revision. Newer upstream

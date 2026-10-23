@@ -6,6 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = (
+    "test_shared_network_range.py",
     "test_apparmor_profile_paths.py",
     "test_apparmor_review.py",
     "test_cloudflare_access.py",
