@@ -263,6 +263,60 @@ and complete its Google sign-in; T3's ACP login does not authenticate the CLI.
 For scripted tasks, use `agy -p "your task"`. The ARM64 CLI launcher was verified
 on Chill Penguin; authenticated execution requires the separate CLI login.
 
+## Command Code GOAT ACP provider
+
+The image installs `command-code` **1.88.0** from the committed npm lock under
+`packages/t3code/command-code/`. The installer verifies the exact upstream
+SHA-512 integrity and requires Node >=22 (the managed tools supply Node 24).
+`npm ci --ignore-scripts` pins transitive packages too. Native self-updates and
+remote catalog changes are disabled; changing the pin or paid allowlist needs
+a reviewed configuration change. Installation is atomic and retries reuse the
+completed release. T3's startup installs the managed `cmd` entry and merges only
+the `commandCode` provider instance before the server reads its settings.
+
+The instance uses T3's [local ACP command support](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-acp.md)
+with `cmd acp`. Command Code's [native ACP server](https://commandcode.ai/docs/acp)
+owns the agent loop, tools and model options. A local stream guard exposes four
+reviewed paid GOAT models initially: DeepSeek V4 Flash, GLM-5.2, MiniMax M2.7 and
+Kimi K2.5. It filters both model catalogs and rejects other model selections,
+unknown configuration changes, session import/resume, and slash commands that
+could bypass the picker. Use T3's model and mode controls. Native permission
+requests and tool results still pass through ACP.
+
+Every native process receives `CMD_ZDR=1`. Command Code's [ZDR contract](https://commandcode.ai/docs/resources/zdr)
+requires a ZDR-capable upstream or fails the request; it must never fall back
+to retained processing. An approved model with no ZDR capacity therefore fails.
+Free models are excluded even on a paid account. The
+[privacy policy](https://commandcode.ai/privacy) (checked 2026-10-23) permits up
+to 30 days of request-content retention by default and sharing free-model
+sessions with training partners. It describes no training of its own foundation
+models on source code; default retention includes abuse review. The
+[terms](https://commandcode.ai/terms) reserve monitoring rights and require rights
+to submit inputs; no general ban on private code was found. With ZDR, request
+content is processed transiently and only operational metadata remains. There
+is no separate blanket promise excluding human review in the default terms.
+
+Authentication uses **native `cmd login` only**, as the T3 user. The CLI manages
+`~/.commandcode/auth.json`; agents must not read, copy or print its token.
+`HOME=/home/t3code` is the writable persisted home bind in `t3code.nix`, so this
+file survives image replacement and container restart. It is never baked into
+the image. Startup preserves native authentication state; the fast tests cover
+the bind, HOME, absence of image credentials and preservation across reinstalls.
+The managed entry forwards `cmd login` directly to the native CLI for the owner
+to complete its browser/device flow. It also supports `cmd --version`.
+
+After exact-head review, use a candidate container to verify CLI startup and
+ACP initialization without login; these checks do **not** establish account,
+model, or inference availability. After deployment and the owner's native
+login, verify T3 lists the paid models and answers a trivial public prompt with
+ZDR enforced. Follow the candidate receipt and guarded deployment workflow.
+
+For later usage integration, the vendor's [usage documentation](https://commandcode.ai/docs/resources/usage-limits)
+names native `/usage` meters for balance and 5-hour/weekly caps and resets;
+Studio Usage reports request cost and tokens. ACP reports per-session usage.
+No machine-readable account-quota endpoint or local quota file is verified by
+this integration. Collection and dashboards are separate work.
+
 ## Grok Build CLI and T3 provider
 
 Run `python3 packages/t3code/setup-grok.py` to install the official

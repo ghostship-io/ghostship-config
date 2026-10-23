@@ -1,0 +1,10 @@
+{
+  "checked": "2026-10-23",
+  "source": "https://commandcode.ai/docs/plans/goat",
+  "models": [
+    "deepseek/deepseek-v4-flash",
+    "zai-org/glm-5.2",
+    "minimaxai/minimax-m2.7",
+    "moonshotai/kimi-k2.5"
+  ]
+}

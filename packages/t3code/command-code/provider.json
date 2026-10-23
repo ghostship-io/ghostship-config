@@ -1,0 +1,14 @@
+{
+  "driver": "acpRegistry",
+  "displayName": "Command Code GOAT (ZDR)",
+  "enabled": true,
+  "environment": [
+    { "name": "CMD_ZDR", "value": "1" }
+  ],
+  "config": {
+    "source": "local",
+    "commandPath": "cmd",
+    "commandArgs": ["acp"],
+    "customModels": []
+  }
+}
