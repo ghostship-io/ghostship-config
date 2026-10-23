@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.133] - 2026-10-23
+
+- ai-usage: one display quality score per model, so the orchestrator panes, the workers, the 3D pane and the free pane all read the same comparable number. The prior is global (`p0 = 0.5 + 0.4 * (I - I_min_all) / (I_max_all - I_min_all)`, min and max over every ranked candidate with a known index, across every tier; `0.5` without an index) and the counts are the rounds of every task type of the model identity, summed. The score is `round(100 * (k * p0 + s) / (k + n))` with `k = 10`, an integer 0 to 100, and its basis is published with it: `AA + outcomes`, `AA only`, `outcomes + default prior` or `default prior`. Every candidate row and every winner gains `quality_score`, `quality_p0`, `quality_n`, `quality_s` and `quality_basis`. The new series are `ghostship_ai_model_quality_score{provider,model,basis}` and `ghostship_ai_model_quality_rounds{provider,model,field}`; neither carries a tier, because the score is one number per model. The tier order is unchanged: the per-tier outcome still orders a tier, and the display score is published beside it.
+
 ## [3.17.132] - 2026-10-23
 
 - Merge freeze: main can require a `ghostship/freeze` commit status, so a freeze set with `agent freeze set` refuses every merge, including `gh pr merge`, `--admin`, the merge API and the web button, not only `agent pr land`. The new `Merge freeze` workflow marks each pull request head from the repository variable `GHOSTSHIP_FREEZE` through `scripts/freeze-status`: success when no freeze runs or it has expired, failure while it runs, and failure for a record it cannot read. It runs as `pull_request_target`, so a pull request cannot mark itself unfrozen. `docs/fleet-operations.md` names the commands, the one-time protection and the marked-tip force-push a history rewrite needs.
