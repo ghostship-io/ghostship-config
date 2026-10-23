@@ -836,6 +836,10 @@ let
     #!/usr/bin/env sh
     set -eu
     ${sourceHmSessionVarsIfPresent}
+    # T3 uses the Go Console OAuth login. Zen/free models and their login live
+    # only in ghostship-worker; stale legacy API keys must not override OAuth.
+    unset OPENCODE_API_KEY OPENCODE_GO_API_KEY
+    export OPENCODE_DISABLE_FREE_MODELS=1
     # Bun warns when both are set; FORCE_COLOR wins, so drop the ignored NO_COLOR.
     if [ -n "\''${FORCE_COLOR:-}" ] && [ -n "\''${NO_COLOR:-}" ]; then
       unset NO_COLOR
