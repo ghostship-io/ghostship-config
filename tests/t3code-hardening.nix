@@ -10,7 +10,7 @@ let
   runtime = candidate.virtualisation.oci-containers.containers.t3code;
   has = value: builtins.elem value runtime.extraOptions;
   service = candidate.systemd.services.podman-t3code;
-  engineUid = toString candidate.ghostship.t3codeDocker.uid;
+  engineUid = toString candidate.ghostship.t3codePodman.uid;
   engineSlice = "user-${engineUid}.slice";
   engineManager = "user@${engineUid}";
   engineService = candidate.systemd.services.${engineManager};
@@ -41,11 +41,15 @@ let
       runtime.extraOptions ++ options
     );
   };
-  hiddenOption = prefix: failures {
-    virtualisation.oci-containers.containers.t3code.extraOptions = lib.mkForce (
-      lib.concatMap (option: lib.optional (lib.hasPrefix prefix option) "--label" ++ [ option ]) runtime.extraOptions
-    );
-  };
+  hiddenOption =
+    prefix:
+    failures {
+      virtualisation.oci-containers.containers.t3code.extraOptions = lib.mkForce (
+        lib.concatMap (
+          option: lib.optional (lib.hasPrefix prefix option) "--label" ++ [ option ]
+        ) runtime.extraOptions
+      );
+    };
   conflictingParent = failures (withOptions [ "--cgroup-parent=other.slice" ]);
   conflictingPidsLimit = failures (withOptions [ "--pids-limit=-1" ]);
   splitParent = failures (withOptions [
@@ -77,7 +81,7 @@ let
 in
 assert rejects "canonical --flag=value" (hiddenOption "--cgroup-parent=");
 assert rejects "canonical --flag=value" (hiddenOption "--pids-limit=");
-# A hardened candidate must not recover blanket host privileges through Docker
+# A hardened candidate must not recover blanket host privileges through the development engine
 # or an alternate runtime flag. The accepted root-SSH administration path stays.
 assert !(has "--privileged");
 assert !(has "--cap-add=SYS_ADMIN");
@@ -87,7 +91,8 @@ assert has "--cap-drop=ALL";
 assert !(has "--security-opt=seccomp=unconfined");
 assert has "--security-opt=apparmor=ghostship-t3code";
 assert builtins.elem "t3code" candidate.ghostship.security.host_ssh_clients;
-assert builtins.elem "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw" runtime.volumes;
+assert builtins.elem "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw"
+  runtime.volumes;
 assert !(lib.any (mount: lib.hasInfix ":/var/lib/docker:" mount) runtime.volumes);
 assert !(lib.any (mount: lib.hasInfix ":/mnt/share:" mount) runtime.volumes);
 assert builtins.elem "/mnt/share/Library/ROMS:/mnt/share/Library/ROMS:ro,nosuid,nodev"
@@ -95,7 +100,7 @@ assert builtins.elem "/mnt/share/Library/ROMS:/mnt/share/Library/ROMS:ro,nosuid,
 # Preparing or activating the candidate must preserve the current session.
 assert service.restartIfChanged == false;
 assert service.stopIfChanged == false;
-# The engine manager stays in the slice Moby hardcodes; the shared slice is the
+# The engine manager stays in its standard user slice; the shared slice is the
 # only parent that can hold the engine and the outer T3 container together.
 assert !(engineService.serviceConfig ? Slice);
 assert service.serviceConfig.Slice == engineSlice;
@@ -111,9 +116,9 @@ assert !(has "--pids-limit=-1");
 # The container is a sibling of the engine's delegated subtree, never a child.
 assert lib.all (option: !(lib.hasPrefix "--cgroup-parent=user@" option)) runtime.extraOptions;
 # The engine keeps its own bounds; the aggregate limit only adds a shared cap.
-assert engineService.serviceConfig.MemoryMax == candidate.ghostship.t3codeDocker.memoryMax;
-assert engineService.serviceConfig.CPUQuota == candidate.ghostship.t3codeDocker.cpuQuota;
-assert engineService.serviceConfig.TasksMax == candidate.ghostship.t3codeDocker.tasksMax;
+assert engineService.serviceConfig.MemoryMax == candidate.ghostship.t3codePodman.memoryMax;
+assert engineService.serviceConfig.CPUQuota == candidate.ghostship.t3codePodman.cpuQuota;
+assert engineService.serviceConfig.TasksMax == candidate.ghostship.t3codePodman.tasksMax;
 # The module assertions must all hold for this candidate.
 assert failingAssertions == [ ];
 # A conflicting parent, a conflicting task bound, and an aggregate ceiling
@@ -132,7 +137,8 @@ assert rejects "exactly one canonical --pids-limit" barePidsLimit;
 assert rejects "reserved supervisory tasks" noSupervisoryHeadroom;
 # The legacy platform keeps its unbounded container and no shared slice.
 assert !(legacy.systemd.slices ? "user-${engineUid}");
-assert !(legacy.systemd.services ? engineManager);
+assert builtins.hasAttr engineManager legacy.systemd.services;
+assert legacy.ghostship.t3codePodman.enable;
 assert (legacy.systemd.services.podman-t3code.serviceConfig.Slice or null) == null;
 assert legacyHas "--pids-limit=-1";
 assert !(legacyHas "--cgroup-parent=${engineSlice}");

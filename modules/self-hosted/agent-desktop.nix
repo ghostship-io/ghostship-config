@@ -150,7 +150,6 @@ in
       # timezone checks stay coherent; update if the host's uplink changes.
       TZ = "Pacific/Honolulu";
       TITLE = "Ghostship Desktop";
-      START_DOCKER = "false";
       PELORUS = "true";
       # Selkies serves under /desktop/; the agent viewer owns the site root
       # (nginx-agents-patch.py writes the same prefix into nginx).

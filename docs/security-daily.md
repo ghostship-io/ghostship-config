@@ -13,7 +13,7 @@ current orchestrator.
    active container IDs/start times, package derivations and image digests.
    Inspect host and container update timers, their effective commands, last
    results and owners. Include Nix clients **and running daemons**, Podman,
-   OCI runtimes, containerd/Docker, kernel modules, public-facing applications,
+   OCI runtimes, Podman/crun, kernel modules, public-facing applications,
    Agent Desktop/browser, provider tools and model refresh. Reuse the configured
    host auto-upgrade, Podman auto-update, desktop canary updater, T3 tool/provider
    maintenance and model refresh owners. Record failed or unknown coverage;
