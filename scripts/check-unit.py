@@ -29,6 +29,7 @@ TESTS = (
     "test_container_restarts.py",
     "test_container_image_identity.py",
     "test_container_runtime_identity.py",
+    "test_mcp_runtime_entrypoint.py",
     "test_t3code_image_identity.py",
     "test_t3code_source_sync.py",
     "test_t3code_restart_guard.py",
