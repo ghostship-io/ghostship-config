@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.222] - 2026-10-23
+
+Label an empty reset-announcement table as “No reset announcement events yet”. Use an absent-series presentation row only when the announcement metric is absent. Actual event rows, source URLs, confidence, scope and reset times remain unchanged; no reset event or pacing input is fabricated. Preserve panel202 and all other IDs.
+
+Validation:27focused page unit tests pass; privacy/security and whitespace pass. The final live page walk checks the empty label after deployment.
+
+PR #389.
+
 ## [3.17.221] - 2026-10-23
 
 Restore the live model-quality table when Grafana HTML sanitization removes form controls. Build only fixed trusted search, toggle, pager and effort buttons through the panel's DOM hook, scope it to the plugin-provided panel element, and disconnect the resize observer on unmount. Keep Grafana sanitization enabled and preserve every panel ID. Scores, ranking and selection are unchanged.
