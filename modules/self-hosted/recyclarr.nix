@@ -7,7 +7,7 @@
 
 let
   recyclarr-secrets = config.ghostship.selfHostedSecrets.projections.recyclarr.path;
-  render-recyclarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project recyclarr";
+  render-recyclarr-secrets = "${config.ghostship.selfHostedSecrets.renderFor "recyclarr"}/bin/ghostship-secret-project recyclarr";
 in
 {
   ghostship.apps.recyclarr = {
