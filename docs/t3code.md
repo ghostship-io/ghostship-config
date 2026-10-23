@@ -1,12 +1,11 @@
 # T3 Code
 
-T3 Code runs in a persistent systemd container with an independent Nix store.
-`packages/t3code/image.nix` alone defines its image: base packages, boot units and
-image parameters. Host switches, agent pins and tooling changes preserve the
-container; only an image change queues replacement after sustained idle.
-Ghostship-agent owns and refreshes tools, CLIs and skills in the persistent home.
-T3 app releases update there too, restarting only the app when idle. Provider
-CLI and skill updates do not queue an app or container restart.
+T3 Code runs at `https://t3code.ghostship.io` on `chill-penguin`. The repo builds
+`localhost/ghostship-t3code:t3code-runtime` with a systemd platform: UID/GID
+3000, persistent user services, rootless Podman development engine, Nix, build tools, Git/GitHub
+CLI, and Cloudflared Quick Tunnels. The access gateway
+listens on `t3code:3773` inside `ghostship_net`; the T3 backend listens only on
+container loopback port `3774`. No host ports are published.
 
 For the staged unprivileged runtime and separate development Podman engine, use
 the [hardening acceptance workflow](t3code-hardening.md). Root SSH administration
@@ -48,7 +47,7 @@ The container re-creates its `40-ghostship-agent-install` hook in each of
 `bootstrap.d`, `before-t3code.d`, `doctor.d`, and `after-update.d`. Other executable
 hooks in `~/.t3code-container/hooks/` are preserved and run in filename order as
 the `t3code` user. `before-t3code.d` runs on every server start, including restarts
-after app updates. Hook failures are logged and do not prevent web access.
+after tool updates. Hook failures are logged and do not prevent web access.
 Custom projects can install their own executable hooks in these directories.
 
 The home, hook files, tool wrappers, and independent Nix store persist across
@@ -112,7 +111,7 @@ offline updater probe fails closed when the account is absent. The separate
 `-32000` "Authentication required" reply means the profile has no `auth.type` or
 the Google account is not signed in yet; it is not an account-mapping problem.
 
-The managed Ghostship package includes Google's `1.1.1` ACP release with SHA-256 verification as a
+The image includes Google's `1.1.1` ACP release with SHA-256 verification as a
 fallback. Google's ACP server aborts natively on Asahi's 16 KB memory pages, so
 on ARM64 it stays on the x86_64 archive under container-local QEMU, whose x86
 guest supplies the required 4 KB pages. The `localharness_external` helper is a
@@ -129,7 +128,7 @@ atomically switches the persistent `current` link. A failed download or protocol
 check keeps the previous release. Releases live under
 `~/.local/share/t3code-tools/antigravity`; the harness wrapper refuses to emulate
 and falls back to the bundled native binary when a staged runtime harness is not
-ARM64. T3's managed binary path stays in `~/.local/bin` across updates.
+ARM64. T3's binary path stays `/bin/agy_acp_server.par` across updates.
 
 Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md),
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),
@@ -244,7 +243,7 @@ URLs when artwork changes so Chrome can update installed icons.
 ## Antigravity terminal CLI
 
 `agy` is the official Antigravity terminal CLI, separate from T3's ACP provider.
-Install it with the updater in `ghostship-agent/packages/t3code/update-agy.py`. This also installs
+Install it with `python3 packages/t3code/update-agy.py`. This also installs
 persistent bootstrap and after-update hooks. The executable lives at
 `~/.local/bin/agy` in the persistent container home. Bootstrap
 and the four-hour tool updater check Google's platform manifest, verify its
@@ -343,25 +342,35 @@ Deploy merged changes with `agent deploy run`; `--agent-rev REV` pins an agent
 revision first. Its gates preserve busy T3 sessions, record the generation and
 verify live health. Image updates wait for idle when a restart is needed.
 
-The four-hour timer checks official T3 standalone releases and provider registry
-versions. It verifies T3's SHA-256 checksum, executable version, web client and
-runtime dependencies before selecting a versioned directory. Earlier releases
-remain available to running servers. An interrupted promotion is reconciled on
-retry; a persistent activation marker queues only an idle app restart. Failed
-downloads or probes preserve the selected release and report maintenance failure.
-Provider installs still verify their exact registry manifest versions.
+The four-hour tool timer resolves the current registry version online before it
+updates T3, Codex, and Claude, then verifies the installed package manifest
+matches that exact version. T3 installs into a versioned directory and keeps
+earlier releases so an update cannot remove the web assets used by a running
+server. It installs and verifies the matching native package even when npm
+skips optional dependencies. A persistent activation marker queues the next idle
+restart if maintenance is run manually. The next server start uses the new
+release. A lookup, install, or verification failure is reported as maintenance
+failure instead of silently accepting stale tooling.
 It also updates OpenCode and Antigravity when the database reports no pending or
 running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
 activity defers maintenance and recovery. Deferred tool checks retry on the
 one-minute maintenance timer once work becomes idle. Each provider update is
 attempted even if another fails. Cursor reads the release pinned by its
-installer and downloads only when that release is not already active. Only a changed T3 app release queues a server restart after sustained idle.
-Provider tools, settings, skills and Ghostship package updates take effect on
-their next invocation without an app or container restart.
+installer and downloads only when that release is not already active. Changed provider tools or T3 settings queue a
+server restart, which waits for T3 to become idle. Ghostship tool package
+changes do not: its command wrappers load the new package on every invocation.
 
-The `~/.local/bin/t3` wrapper keeps its Nix library environment and resolves the
-selected standalone release through the persistent `current` link. App updates
-change that link and restart only the app after sustained idle.
+Upstream 0.1.1 uses standalone release archives; its old
+`@t3code/t3-linux-arm64@0.1.1` npm payload is not published. The container's
+current npm-based updater still needs that packaging migration. A manual
+upgrade can use the official architecture-specific archive and `SHA256SUMS`,
+retain the extracted version under `~/.t3/runtime/versions/`, and keep the
+existing library-setting `~/.local/bin/t3` wrapper. Register the versioned
+launcher's path in `~/.t3/runtime/launchers` for upstream update discovery.
+Stage and verify before an authorized application restart; keep the container
+running. A detached host-side systemd activation must invoke NixOS's Bash by
+absolute path and provide its command PATH; `/usr/bin/env bash` can fail before
+the update starts.
 
 T3 shows a provider "Update available" notice when the npm registry's `latest`
 tag is newer than the installed Codex, Claude, OpenCode or Grok version. The
@@ -369,7 +378,7 @@ ten-minute `t3code-provider-update-watch.timer` reads those same registry
 entries and the installed manifests, and starts the tool updater once for each
 newly published version. The updater keeps its idle and OpenCode process
 guards. T3 re-probes provider versions every five minutes, so the notice clears
-after installation without an app restart. If an update stays
+after installation without waiting for the queued restart. If an update stays
 blocked, the watcher does not retrigger for the same version; the four-hour
 timer keeps retrying. Watcher output goes to the tool update log.
 
@@ -386,12 +395,14 @@ threads are kept). Archive and delete go through T3's orchestration API; pinned
 `t3code-retention --dry-run`.
 
 The container's isolated Nix store at `/srv/apps/t3code/nix-root/nix` is
-garbage-collected daily on the host. The base image closure and the pinned
-Ghostship tooling payload have separate roots. The managed release resolver
-also roots newer packages built in the container; all executable helpers must
-remain reachable through one of those roots.
+garbage-collected daily on the host. GC roots only the paths in the image
+contents (`t3codeImageContents`), which `podman-t3code` seeds and symlinks under
+the store's `gcroots` on every start. Every binary a container unit can start
+must be in that list, or a GC deletes it and the unit fails to exec with no log
+line; `t3code-retention` was the missing entry that let OpenCode's event log
+grow to 10 GiB.
 
-The managed tooling package includes OpenSSL as well as the CA bundle because Cursor's Node runtime
+The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
 Container health reports web/server failures as unhealthy. The server monitor
 restarts only after work is idle; provider authentication failures do not
@@ -421,8 +432,8 @@ running provider session, no user message in 15 minutes, no thread activity in
 monitor) started in the last 12 hours. Background tasks outlive the turn that
 started them, so a settled turn alone does not prove idle. Orchestrator V2 keeps
 that V1 database after switching to `statev2.sqlite`; its stale projections
-cannot establish idle. The probe uses the V2 adapter when that state exists,
-including active runs, subagents and pending launches. Missing state
+cannot establish idle. Until a V2 adapter is verified, the probe returns unknown
+when V2 state exists, and automatic updates and restarts defer. Missing state
 also returns unknown. The deployer leaves a
 unit that is starting or stopping alone; only a stopped or failed unit is
 started without the idle gate. The deployer holds the container's tool-maintenance lock
@@ -456,5 +467,5 @@ image (no account or project access):
 
 ```sh
 podman run --rm -i --network none --user 3000:3000 --entrypoint /bin/python \
-  localhost/ghostship-t3code:t3code-runtime - < ../ghostship-agent/packages/t3code/acp-smoke.py
+  localhost/ghostship-t3code:t3code-runtime - < tests/t3code-acp-smoke.py
 ```
