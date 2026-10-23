@@ -120,6 +120,7 @@ let
         pkgs.getent
       ]
     }
+    Environment=HOME=${state}/home
     Environment=CONTAINERS_CONF=${containersConfig}
     Environment=CONTAINERS_STORAGE_CONF=${storageConfig}
     Environment=CONTAINERS_REGISTRIES_CONF=${registriesConfig}
@@ -458,6 +459,14 @@ in
           }
         ];
         ghostship.security.socket_mount_allow = [ "/run/t3code-podman/podman.sock" ];
+        system.activationScripts.t3code-podman-identity = {
+          deps = [ "users" ];
+          text = ''
+            ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/reconcile-account.py} \
+              --name ${user} --uid ${uid} --home ${state}/home \
+              --userdel ${pkgs.shadow}/bin/userdel --groupdel ${pkgs.shadow}/bin/groupdel
+          '';
+        };
         users.groups.${user}.gid = cfg.uid;
         users.users.${user} = {
           isSystemUser = true;
