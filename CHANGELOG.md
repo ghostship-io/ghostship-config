@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.215] - 2026-10-23
+
+- Discover reset relays from community announcement search, show unverified items and source links, notify for confirmation, and apply confirmed resets to capacity pacing.
+
+PR #383.
+
 ## [3.17.214] - 2026-10-23
 
 - Check reset announcements through the personal Desktop profile and retain a public relay with independent blocked status and source confidence.
