@@ -1,8 +1,16 @@
 # Changelog
 
-## [3.17.135] - 2026-10-23
+## [3.17.137] - 2026-10-23
 
 - ai-usage: publish `scope="t3"|"free"` on account card order from the live catalog mapping. Dashboard consumers can split provider cards without a provider list; positions stay unchanged.
+
+## [3.17.136] - 2026-10-23
+
+- Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.
+
+## [3.17.135] - 2026-10-23
+
+- t3: OpenRouter leaves T3 Code (owner request: "we should remove openrouter from t3"). The trimmed OpenCode catalog no longer carries the `openrouter` provider at all, so T3's model list and configuration stop offering it, and a pinned default or small model cannot keep an OpenRouter model in the list. A configured `enabled_providers` loses `openrouter`, `provider.openrouter` is removed, and a `model` or `small_model` naming it is repointed to `ollama-cloud/deepseek-v4.1-flash` and `ollama-cloud/minimax-m3.1-flash`. The config is rewritten only when something changes, atomically and mode 0600; a missing config or one that is not JSON is left untouched with one log line and a zero exit. The free-inference pool is unchanged: it reads the untrimmed models.dev cache and keeps its OpenRouter credential.
 
 ## [3.17.134] - 2026-10-23
 
