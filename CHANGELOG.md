@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.137] - 2026-10-23
+
+- Read coordinator account, environment and repository project identifiers and the provider account identifier from private runtime settings. Reuse the existing owner-config renderer, preserve JSON types and fail on missing values; keep source import and revision guards unchanged.
+
 ## [3.17.136] - 2026-10-23
 
 - Remove obsolete repository merge-blocking controls and their workflow, check script, tests and operating instructions. Keep deployment serialization through the deploy slot.
