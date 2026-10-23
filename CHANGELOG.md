@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.115] - 2026-10-23
+
+- flake: the AI usage collector's policy input moves to ghostship-agent 5381c015. The runtime policy there declares `model_trust`, the owner's trust levels: Beam is untrusted for implementation, Gemini 3.8 Flash for implementation and CAD execution, and Claude Haiku 5.5 and GPT-6 Luna are backup. `model-identities.json` declares the routes of those models, and DeepSeek V4.1 Flash 1017 is its own model. The static worker table now routes narrow implementation to DeepSeek V4.1 Flash 1017 first. The T3 Code agent input is unchanged.
+
 ## [3.17.114] - 2026-10-23
 
 - ai-usage: the collector can read the observed outcomes of the delegation rounds. A new module reads the rounds the ledger holds, per model and task type: the count of the rounds of work (n), the count of the accepted ones (s), the fabrications that were seen, and the trust of the model with the reason it holds. The model identities are read from the `models` map of `model-identities.json`, where every key is the id of a model and every entry holds its label and its routes. The identity of a route is one model on every provider: a route of an identity names the provider and the model, the normalized model is the id of an identity or the model of one of its routes, and the normalized model is the identity itself; a checkpoint tag such as `:1017` is kept, so a tagged model never pools with the untagged model of the same name. The ledger is opened read only, a backfill row replaces the verdict of the round it names unless the verdict of the ledger is a manual one, and the trust of a model is the worse of the level the owner's runtime policy gives it and the level the ledger gives it: a model is not trusted again until three accepted rounds follow its last fabrication. Nothing calls the module yet.
