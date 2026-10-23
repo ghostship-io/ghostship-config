@@ -501,6 +501,24 @@ class ProvidersPageTests(unittest.TestCase):
                 overlap = x1 < x2 + w2 and x2 < x1 + w1 and y1 < y2 + h2 and y2 < y1 + h1
                 self.assertFalse(overlap, f"{t1!r} overlaps {t2!r}")
 
+    def test_every_business_text_panel_has_the_options_the_plugin_maps(self):
+        """Live, Model selection read "An unexpected error happened".
+
+        Business Text 6.3.0 calls `.map` on externalStyles, editors and
+        contentPartials, so an empty string in place of a list throws
+        "e.externalStyles.map is not a function" and the whole panel fails.
+        Its queries are read as one table, as every other section's are.
+        """
+        for panel, _collapsed in panels(self.page):
+            if panel.get("type") != "marcusolsson-dynamictext-panel":
+                continue
+            name = panel.get("title") or panel.get("id")
+            for option in ("externalStyles", "editors", "contentPartials"):
+                self.assertIsInstance(panel["options"].get(option), list, f"{name}: {option}")
+            for target in panel.get("targets") or []:
+                if target.get("expr"):
+                    self.assertEqual(target.get("format"), "table", f"{name}: {target.get('refId')}")
+
     def test_the_sections_are_in_the_owner_s_order(self):
         """The owner reads the page from the top: Bulk, Free, Frontier, 3D, Providers."""
         titles = [
