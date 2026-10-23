@@ -273,7 +273,8 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         ),
         "reset_at": _iso(reset_value) if reset_value is not None else None,
         "reset_source": str(_get("reset_source", "resetSource", default="provider")),
-        "reset_label": ("custom reset" if _get("reset_source", "resetSource") == "custom" else "reset"),
+        "reset_label": {"custom": "custom reset", "announced": "announced reset"}.get(
+            _get("reset_source", "resetSource"), "reset"),
         "provider_reset_at": _iso(_finite(_get("provider_reset_epoch", "providerResetEpoch")))
             if _finite(_get("provider_reset_epoch", "providerResetEpoch")) is not None else None,
         "seconds_to_reset": (
@@ -4515,8 +4516,8 @@ def account_window_samples(
             if str(window.get("evidence") or "") == "inferred":
                 scope = ()
             label = _window_label(kind, quota_id, siblings.get(kind, []))
-            if window.get("reset_source") == "custom":
-                label += " · custom reset"
+            if window.get("reset_source") in {"custom", "announced"}:
+                label += " · " + window["reset_label"]
             labels = {
                 "account": account,
                 "kind": kind,
