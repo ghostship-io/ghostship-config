@@ -21,12 +21,14 @@ import sys
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "collector"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from metrics import ExactLabel  # noqa: E402
+import value_policy  # noqa: E402
 
 
 def load(name, file):
@@ -607,6 +609,115 @@ class FreeSelectionDisplayNameTests(unittest.TestCase):
         self.assertEqual(rows["groq"]["basis"], "reported")
 
 
+class FreeSelectionPaceStateTests(unittest.TestCase):
+    """The pace state of a free provider's selection.
+
+    The selection's left is the remaining ratio of the winning route, and
+    its expected left is that share minus the Paced Availability of the
+    route. The state is the band the value policy reads from the two; this
+    module never draws a band of its own. One series is published per free
+    provider.
+    """
+
+    def state_samples(self, provider, capacity, winner=True):
+        snapshot = {
+            "candidates": [free_candidate(provider, "model", True, capacity)],
+            "tier_winners": (
+                {"free": [{"provider": provider, "model": "model"}]}
+                if winner
+                else {"free": []}
+            ),
+            "quota": {"accounts": {}},
+        }
+        self.assertIsNotNone(
+            free_selection,
+            "the collector does not publish the free selection yet",
+        )
+        samples = free_selection.samples(snapshot, {})
+        return [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_free_provider_selection_pace_state"
+        ]
+
+    def state_of(self, provider, capacity):
+        states = self.state_samples(provider, capacity)
+        self.assertEqual(
+            len(states), 1, "a provider publishes exactly one pace state"
+        )
+        labels, value = states[0]
+        self.assertEqual(labels["provider"], provider)
+        self.assertEqual(value, 1.0)
+        return labels["state"]
+
+    def test_the_google_selection_ahead_of_its_line_is_ahead(self):
+        self.assertEqual(
+            self.state_of(
+                "google", {"remaining_ratio": 0.9712, "pace_delta": 0.3306}
+            ),
+            "ahead",
+        )
+
+    def test_a_selection_with_nothing_left_is_spent(self):
+        self.assertEqual(
+            self.state_of("worn", {"remaining_ratio": 0.0, "pace_delta": 0.0123}),
+            "spent",
+        )
+
+    def test_a_selection_with_no_paced_availability_is_unknown(self):
+        self.assertEqual(self.state_of("bare", {"remaining_ratio": 0.5}), "unknown")
+
+    def test_a_selection_with_no_capacity_is_unknown(self):
+        self.assertEqual(self.state_of("bare", {}), "unknown")
+
+    def test_a_provider_with_no_winner_is_unknown(self):
+        states = self.state_samples("bare", {}, winner=False)
+        self.assertEqual(len(states), 1)
+        self.assertEqual(states[0][0]["state"], "unknown")
+
+    def test_every_provider_has_exactly_one_state_series(self):
+        self.assertIsNotNone(
+            free_selection,
+            "the collector does not publish the free selection yet",
+        )
+        samples = free_selection.samples(SNAPSHOT, DISPLAY_NAMES)
+        rows = selection_rows(samples)
+        states = [
+            labels
+            for name, labels, _value in samples
+            if name == "ghostship_ai_free_provider_selection_pace_state"
+        ]
+        self.assertEqual(
+            sorted(labels["provider"] for labels in states), sorted(rows)
+        )
+        by_provider_state = {
+            labels["provider"]: labels["state"] for labels in states
+        }
+        self.assertEqual(by_provider_state["google"], "on_pace")
+        self.assertEqual(by_provider_state["requesty"], "unknown")
+
+    def test_the_band_is_the_value_policy_s(self):
+        """The module delegates the band; it does not re-implement it."""
+        calls = []
+
+        def recorded(left, expected):
+            calls.append((left, expected))
+            return "far_behind"
+
+        self.assertIsNotNone(
+            free_selection,
+            "the collector does not publish the free selection yet",
+        )
+        with mock.patch.object(value_policy, "pace_state", recorded):
+            state = self.state_of(
+                "google", {"remaining_ratio": 0.3, "pace_delta": -0.1}
+            )
+        self.assertEqual(state, "far_behind")
+        self.assertEqual(len(calls), 1)
+        self.assertAlmostEqual(calls[0][0], 0.3)
+        self.assertAlmostEqual(calls[0][1], 0.4)
+
+
 class FreeSelectionWiringTests(unittest.TestCase):
     def test_the_collector_renders_the_free_selection(self):
         from metrics import SourceResult
@@ -665,10 +776,27 @@ class FreeSelectionWiringTests(unittest.TestCase):
             "ghostship_ai_free_provider_selection_info",
             "ghostship_ai_free_provider_selection_remaining_ratio",
             "ghostship_ai_free_provider_selection_paced_availability",
+            "ghostship_ai_free_provider_selection_pace_state",
             "ghostship_ai_free_provider_selection_reset_timestamp_seconds",
             "ghostship_ai_provider_free_models",
         ):
             self.assertIn(f"# HELP {name} ", text)
+
+    def test_the_collector_renders_one_pace_state_per_provider(self):
+        text = main.render([], [], NOW, 0.0, SNAPSHOT)
+        states = [
+            line
+            for line in text.splitlines()
+            if line.startswith("ghostship_ai_free_provider_selection_pace_state{")
+        ]
+        providers = selection_rows(
+            free_selection.samples(SNAPSHOT, DISPLAY_NAMES)
+        )
+        self.assertEqual(len(states), len(providers))
+        self.assertIn(
+            'ghostship_ai_free_provider_selection_pace_state{provider="google",state="on_pace"} 1',
+            text,
+        )
 
     def test_the_rendering_holds_no_repeated_series(self):
         text = main.render([], [], NOW, 0.0, SNAPSHOT)
