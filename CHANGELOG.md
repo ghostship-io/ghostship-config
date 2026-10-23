@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.105] - 2026-10-23
+
+- AI usage: the Providers page lists every free provider, the model it selected for the free tier, and the free routes it holds apart from its paid allowance. The monthly allowance of OpenCode Go is spent, and its free route still works, so the two are published apart. Everything is a projection of the routing snapshot, and nothing is recomputed: the selection is the provider's first entry in `tier_winners.free`, and the free routes are the candidates whose billing class is `free` or `promotion`, split by their own availability. The class alone decides, so a subscription route of a paid provider is never a free model. A provider whose account only learned its window is a free provider even when it holds no route, a provider with no free winner keeps its row with an empty model and no basis, and a paid provider has no row at all. The basis of a selection is the capacity of the winning route: reported, inferred or published, `learning` for a route that never saw a limit failure, and none when nothing was measured. The new series are `ghostship_ai_free_provider_selection_info`, `ghostship_ai_free_provider_selection_remaining_ratio`, `ghostship_ai_free_provider_selection_paced_availability`, `ghostship_ai_free_provider_selection_reset_timestamp_seconds` and `ghostship_ai_provider_free_models`.
+
 ## [3.17.104] - 2026-10-23
 
 - AI usage: an inferred window on the Providers page names only the window it was learned over. The suffix of an inferred quota id is a window when it is a length of time, so the row of a five hour window reads 'Inferred · 5h'. A suffix that names a state of the inference is not a period, so the row of an exhausted account reads 'Inferred', and no longer 'Inferred · Exhausted'. The label of every other window is unchanged.
