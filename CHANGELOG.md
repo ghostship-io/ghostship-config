@@ -1,8 +1,16 @@
 # Changelog
 
-## [3.17.111] - 2026-10-23
+## [3.17.113] - 2026-10-23
 
 - ai-usage: a published window series carries a quota id of its own. The card of a provider keys its rows by the account, the kind and the quota id, so a provider that publishes one quota id for several model families drew one row of the card for all of them: the Antigravity account publishes 'quotaInfo' for the Gemini, the Claude and the GPT models, and the card showed one of the three. The scope of the window is named after the id when the id does not name it already, so the quota of the Gemini models is 'quotaInfo@gemini' and a window of two families is 'quotaInfo@claude+gpt'. A window whose id names its scope keeps it: '3p-5h' names the Claude and the GPT models of the third-party group, and 'seven_day_fable' names the Fable models of the Claude account. A window of the whole account keeps its id, an inferred window keeps the name of the window it was learned over, and the account records of the routing snapshot keep the quota id of the provider.
+
+## [3.17.112] - 2026-10-23
+
+- AI usage: a route the T3 instance does not offer says why it is unusable. The routing snapshot rebuilt `availability.reason` from the quota windows alone, so an unavailable route whose headroom was known read `available: false` with an empty reason; the live Go free routes `cat-jam-free` and `step-5-preview-free` were the example. The snapshot now reads the ranking's own judgement: the reason reads "not offered by the T3 instance", and a catalog entry marked deprecated appends "(deprecated in the catalog)". The availability state, `available`, `quota_state` and the capacity are unchanged, and so is every other reason.
+
+## [3.17.111] - 2026-10-23
+
+- AI usage: an inferred route that was refused reads "spent" only for the learned window that holds its last refusal, and it becomes available again once that window rolls over, with all of its allowance and a reset one window later. A refusal in the new window spends it again; a route with no learned window keeps its spent state with no reset. The quota id of an inferred window now names the learned window (`inferred:1h`, `inferred:5h`) rather than the state, so a spent route with a known window no longer reads `inferred:exhausted`; a refusal with no learned window keeps that id.
 
 ## [3.17.110] - 2026-10-23
 
