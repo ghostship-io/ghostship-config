@@ -284,6 +284,110 @@ class RelayConfirmationTests(unittest.TestCase):
         self.assertEqual(result['announcements'][0]['notice_sent_at'], NOW)
 
 
+class HourlyPrimaryTests(unittest.TestCase):
+    def browser(self, visited, blocked=False):
+        def call(op, **kwargs):
+            if kwargs.get('action') == 'open':
+                return {'window_id': 'lease'}
+            if op == 'browser.op':
+                url = kwargs['steps'][0]['url']
+                visited.append(url)
+                return {'extracts': {'announcements': {
+                    'blocked': blocked, 'posts': [post()], 'topics': []}}}
+            return {}
+        return call
+
+    def test_hourly_primary_and_eight_hour_wall_backoff(self):
+        visited = []
+        initial = {'schema': 1, 'announcements': []}
+        first = announcements.check(initial, self.browser(visited), NOW)
+        self.assertEqual(first['next_check_at'], NOW + 3600)
+        announcements.check(first, self.browser(visited), NOW + 3599)
+        self.assertEqual(visited, [announcements.SOURCE])
+        blocked = announcements.check(first, self.browser(visited, True), NOW + 3600)
+        self.assertEqual(blocked['next_check_at'], NOW + 9 * 3600)
+        count = len(visited)
+        announcements.check(blocked, self.browser(visited), NOW + 8 * 3600)
+        self.assertEqual(len(visited), count)
+        recovered = announcements.check(blocked, self.browser(visited), NOW + 9 * 3600)
+        self.assertEqual(recovered['next_check_at'], NOW + 10 * 3600)
+        self.assertEqual(recovered['sources'][0]['status'], 'ok')
+        self.assertNotIn('blocked_since', recovered)
+
+    def test_relay_cadence_is_independent_of_primary_retry(self):
+        visited = []
+        document = {'schema': 1, 'announcements': [], 'relay_checked_at': NOW - 100}
+        first = announcements.check(document, self.browser(visited, True), NOW)
+        self.assertEqual(visited, [announcements.SOURCE])
+        announcements.check(first, self.browser(visited, True), NOW + 8 * 3600)
+        self.assertEqual(visited, [announcements.SOURCE, announcements.SOURCE, announcements.RELAY])
+
+    def test_blocked_notice_once_per_episode_with_failed_publication_retry(self):
+        document = announcements.check({'schema': 1, 'announcements': []}, self.browser([], True), NOW)
+        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+            announcements.notify_pending(document, 'fixture-notify', NOW)
+        self.assertNotIn('blocked_notice_sent_at', document)
+        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
+            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
+            announcements.notify_pending(document, 'fixture-notify', NOW + 2)
+            still_blocked = announcements.check(document, self.browser([], True), NOW + 8 * 3600)
+            announcements.notify_pending(still_blocked, 'fixture-notify', NOW + 8 * 3600)
+            self.assertEqual(publish.call_count, 1)
+            first_key = publish.call_args.args[0]
+            recovered = announcements.check(still_blocked, self.browser([]), NOW + 16 * 3600)
+            # Ignore the reset post: this test concerns wall notices only.
+            recovered['announcements'] = []
+            blocked_again = announcements.check(recovered, self.browser([], True), NOW + 17 * 3600)
+            announcements.notify_pending(blocked_again, 'fixture-notify', NOW + 17 * 3600)
+            self.assertEqual(publish.call_count, 2)
+            self.assertNotEqual(first_key[first_key.index('--dedupe') + 1],
+                                publish.call_args.args[0][first_key.index('--dedupe') + 1])
+
+    def test_existing_relay_receipt_suppresses_primary_post_notice_in_either_order(self):
+        for reverse in (False, True):
+            relay = RelayConfirmationTests().document()['announcements'][0]
+            relay['notice_sent_at'] = NOW
+            primary = announcements.parse(post())
+            records = [relay, primary]
+            if reverse:
+                records.reverse()
+            with patch.object(announcements.subprocess, 'run') as publish:
+                announcements.notify_pending({'announcements': records}, 'fixture-notify', NOW + 1)
+                publish.assert_not_called()
+            self.assertEqual(primary['notice_sent_at'], NOW)
+
+    def test_new_posts_share_canonical_notice_key_and_all_confidences_notify(self):
+        relay = RelayConfirmationTests().document()['announcements'][0]
+        primary = announcements.parse(post())
+        low = announcements.parse(post('Reset day!', url=URL + '1'))
+        document = {'announcements': [relay, primary, low]}
+        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
+            announcements.notify_pending(document, 'fixture-notify', NOW)
+            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
+            self.assertEqual(publish.call_count, 2)
+            self.assertTrue(any('Codex reset announced' in call.args[0] for call in publish.call_args_list))
+            self.assertTrue(any('Codex reset announcement needs confirmation' in call.args[0]
+                                for call in publish.call_args_list))
+        self.assertTrue(all(row['notice_sent_at'] == NOW for row in document['announcements']))
+
+    def test_crash_reservation_backs_off_for_eight_hours(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'announcements.json'
+            with patch.object(sys, 'argv', ['checker', '--output', str(path), 'desktop']), \
+                 patch.object(announcements.time, 'time', return_value=NOW), \
+                 patch.object(announcements, 'desktop_check', side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    announcements.main()
+            document = json.loads(path.read_text())
+            self.assertFalse(announcements.due(document, NOW + 7 * 3600))
+            self.assertTrue(announcements.due(document, NOW + 8 * 3600))
+
+    def test_timer_invokes_hourly_but_cache_owns_wall_backoff(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  'modules/self-hosted/ai-usage/announced-resets.nix').read_text()
+        self.assertIn('OnUnitActiveSec = "1h";', source)
+
+
 class SandboxedDesktopTransportTests(unittest.TestCase):
     def test_deployed_wrapper_uses_the_remote_api_instead_of_local_storage(self):
         source = (Path(__file__).resolve().parents[1] /
