@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.205] - 2026-10-23
+
+Remove the two internal heading scrollbars at phone widths.
+
+PR #369.
+
 ## [3.17.204] - 2026-10-23
 
 Restore the Providers model panes and capacity cards. Exact model IDs now survive Grafana regex interpolation, and capacity freshness no longer introduces a five-minute implicit subquery that empties the repeat variable.
