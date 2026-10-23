@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.146] - 2026-10-23
+
+- Run fast PR checks and host integration on main
+
+PR #311.
+
 ## [3.17.145] - 2026-10-23
 
 - Remove per-PR version bumps from configuration instructions and the weekly input-refresh workflow.
