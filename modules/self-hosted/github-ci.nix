@@ -13,7 +13,7 @@ in
     owner = "root";
     group = "root";
     mode = "0400";
-    fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
+    fields.GITHUB_TOKEN = { unit = "github-runner-registration"; key = "TOKEN"; };
   };
   system.activationScripts.ghostship-ci-registration = {
     deps = [ "ghostship-secret-projections" ];

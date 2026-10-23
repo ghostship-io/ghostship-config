@@ -50,6 +50,24 @@ class CIRunnerTests(unittest.TestCase):
         projection = self.module['ghostship']['secretProjections']['ghostship-ci-registration']
         self.assertEqual(projection['owner'], 'root')
         self.assertEqual(projection['mode'], '0400')
+        self.assertEqual(projection['fields']['GITHUB_TOKEN'],
+                         {'unit': 'github-runner-registration', 'key': 'TOKEN'})
+        # General agent environments must never receive the registration credential.
+        expression = """let
+          recipients = import %s;
+          catalog = import %s { inherit recipients; };
+          fields = builtins.concatLists (map (p: builtins.attrValues p.fields)
+            (builtins.attrValues catalog.projections));
+        in {
+          engineering = catalog.projections.t3code.fields.GITHUB_TOKEN;
+          runnerExports = catalog.units.github-runner-registration.exports;
+          exposed = builtins.filter (f: f.unit == "github-runner-registration") fields;
+        }""" % (ROOT / 'secrets/recipients.nix', ROOT / 'secrets/catalog.nix')
+        bindings = json.loads(subprocess.check_output(
+            ['nix-instantiate', '--eval', '--strict', '--json', '--expr', expression], text=True))
+        self.assertEqual(bindings['engineering'], {'unit': 'github', 'key': 'TOKEN'})
+        self.assertEqual(bindings['runnerExports'], ['TOKEN'])
+        self.assertEqual(bindings['exposed'], [])
 
 
 if __name__ == '__main__':
