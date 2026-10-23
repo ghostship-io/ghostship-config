@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.117] - 2026-10-23
+## [3.17.118] - 2026-10-23
 
 - ai-usage: the tiers are ordered by the trust of a model and by the outcome it is worth. The Providers page put a bad model on top: Beam Free led the bulk tier because a route with no window counted as a pace of zero, and no trust spoke about any model. The trust of a model is now read for the task type of the tier it holds (`implementation` for the frontier, the bulk and the free tiers, `cad-execution` for the 3D tier) from the owner's runtime policy and from the delegation ledger, and the worse of the two wins: a trusted route leads a tier, a backup route follows it, and an untrusted route comes last with the reason it holds. An excluded level holds no tier at all. The value that decides the rest is the outcome-weighted value: the measured intelligence placed inside the range of the tier (`p0 = 0.5 + 0.4 * (I - I_min) / (I_max - I_min)`), shrunk toward the rounds that were observed (`p = (k * p0 + s) / (k + n)`, `k = 10`), combined with the measured efficiency, and halved for an untrusted route. A free route leads the bulk tier while its quality is within `0.10` of the best paid route of its own trust level. A route with no window has no pace and waits behind every route that has one. The Artificial Analysis value stays the value of a candidate row and is published beside the published value of every winner, which carries the trust level, the reason, and the outcome it was built from. The collector reads the trust and the outcomes from the model identities, the runtime policy, the delegation ledger and its backfill; all four are read only, and a file that is missing is an empty history. The new series are `ghostship_ai_model_trust_info` and `ghostship_ai_model_outcome`.
+
+## [3.17.117] - 2026-10-23
+
+- Providers page: the Model selection panel renders again. Live it read "An unexpected error happened": its `externalStyles` option was an empty string, and Business Text 6.3.0 maps that option as a list (`e.externalStyles.map is not a function`). It is a list now, and its query reads as one table like every other section. A test holds every Business Text panel to list-valued `externalStyles`, `editors` and `contentPartials` and table-format queries.
 
 ## [3.17.116] - 2026-10-23
 
