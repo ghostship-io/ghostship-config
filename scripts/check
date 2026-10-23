@@ -13,10 +13,11 @@ fi
 cd "$repo_root"
 
 shellcheck scripts/check scripts/check-integration
+shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh scripts/activate-host
 actionlint
 git diff --check
 git diff --cached --check
 python3 scripts/check-test-fixtures.py tests
 timeout 110s python3 scripts/check-unit.py
 gitleaks dir --redact --no-banner .
-printf 'Fast repository checks passed; host evaluation and integration run nightly.\n'
+printf 'Fast repository checks passed; host evaluation and integration run manually on main.\n'

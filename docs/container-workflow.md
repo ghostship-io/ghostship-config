@@ -107,14 +107,14 @@ need the relevant project's JavaScript dependencies and any site credentials.
 patch whitespace checks and the redacted Gitleaks source scan. Unit modules
 fail above ten seconds, with measured 20s/15s budgets for the providers-page
 and OpenCode reader fixtures; the unit command has a 110s hard limit. PRs and
-main pushes use this same entry point.
+main pushes do not repeat the PR gate.
 
 `scripts/check-integration` retains tracked Nix parsing, policy rendering,
 ci/default/browser shell evaluation for both Linux architectures and every
 host's full system derivation. Nightly/manual CI also builds host-evaluation,
 config-tests and config-package, retaining full regression and host assertion
 coverage. Stage new Nix files before evaluation. Integration and browser jobs
-run nightly or manually on main; superseded PR and main runs are cancelled.
+run manually on main; superseded PR runs are cancelled.
 Review the exact diff and unit results, record approval, then use `agent pr land`.
 Frontier authors self-review; other models need one frontier review.
 
