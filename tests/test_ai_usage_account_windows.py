@@ -332,7 +332,7 @@ class AccountWindowTests(unittest.TestCase):
             for labels, value in self.rows("ghostship_ai_account_window_learning")
         }
 
-    def test_a_session_window_publishes_the_share_the_line_and_the_reset(self):
+    def test_a_session_window_publishes_the_share_and_reset_without_a_line(self):
         labels, value = self.row(
             "ghostship_ai_account_window_remaining_ratio", "claude", "five_hour"
         )
@@ -340,12 +340,9 @@ class AccountWindowTests(unittest.TestCase):
         self.assertEqual(labels["kind"], "session")
         self.assertEqual(labels["label"], "Session")
         self.assertEqual(labels["evidence"], "provider_reported")
-        # The even-spend line of the window: 7722 of the 18000 seconds it
-        # has left.
-        _labels, value = self.row(
-            "ghostship_ai_account_window_expected_remaining_ratio", "claude", "five_hour"
-        )
-        self.assertEqual(value, 0.429)
+        self.assertEqual([labels for labels, _ in self.rows(
+            "ghostship_ai_account_window_expected_remaining_ratio", "claude")
+                          if labels['quota_id'] == 'five_hour'], [])
         _labels, value = self.row(
             "ghostship_ai_account_window_reset_timestamp_seconds", "claude", "five_hour"
         )
@@ -707,8 +704,7 @@ class AccountWindowCheckTimeTests(unittest.TestCase):
         self.assertEqual(len(remaining), 1)
         self.assertEqual(remaining[0][1], 0.67)
         expected = self.rows(data, "ghostship_ai_account_window_expected_remaining_ratio")
-        self.assertEqual(len(expected), 1)
-        self.assertEqual(expected[0][1], 0.429)
+        self.assertEqual(expected, [])
         reset = self.rows(data, "ghostship_ai_account_window_reset_timestamp_seconds")
         self.assertEqual(len(reset), 1)
         self.assertEqual(reset[0][1], NOW + 7722)
