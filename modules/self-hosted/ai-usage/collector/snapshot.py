@@ -60,6 +60,7 @@ import aa_bind as bind_module
 import facts as facts_module
 import outcomes as outcomes_module
 import quota as quota_module
+import pools
 import ranking as ranking_module
 import usage_inference
 import value_policy
@@ -3656,6 +3657,11 @@ def build_snapshot(
     does not carry. It is optional: without it every model is trusted and
     no round was observed.
     """
+    ranked = [entry for entry in ranked if pools.visible_route(entry.provider, entry.model)]
+    measured_windows = [window for window in measured_windows or ()
+                        if pools.visible_window(str(window.get('provider') or ''), window)]
+    inferred_windows = [window for window in inferred_windows or ()
+                        if pools.visible_window(str(window.get('provider') or ''), window)]
     facts_index = facts_module.index(facts or {})
     free_set: set[tuple[str, str]] = set()
     for record in free_models or ():
@@ -3883,6 +3889,7 @@ def build_snapshot(
             inventory_keys.append((str(entry[0]), str(entry[1])))
         elif isinstance(entry, Mapping):
             inventory_keys.append((str(entry.get("provider") or ""), str(entry.get("model") or "")))
+    inventory_keys = [pair for pair in inventory_keys if pools.visible_route(*pair)]
     excluded = [list(pair) for pair in inventory_keys if pair not in candidate_keys]
     ranking_coverage = {
         "inventory": len(inventory_keys),

@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 LABELS = {
-    'antigravity:3p': 'Claude & GPT', 'antigravity:gemini': 'Gemini',
+    'antigravity:gemini': 'Gemini',
     'claude:all': 'All models', 'claude:fable': 'Fable (within all models)',
     'codex:all': 'All models', 'ollama:included': 'Included allowance',
     'ollama:credits': 'Usage credits', 'opencode-go:paid': 'Paid models',
@@ -22,7 +22,7 @@ def pool_of_route(provider: str, model: str, billing: str = '') -> str:
     if provider in PER_MODEL:
         return f'{provider}:{model}'
     if provider == 'antigravity':
-        if text.startswith(('claude-', 'gpt-oss-')):
+        if text.startswith(('claude-', 'gpt-')):
             return 'antigravity:3p'
         if text.startswith('gemini-'):
             return 'antigravity:gemini'
@@ -49,7 +49,7 @@ def pool_label(pool: str) -> str:
 
 def pool_of_window(provider: str, window: Mapping[str, Any]) -> str:
     model = str(window.get('model') or '')
-    identifier = str(window.get('quota_id') or window.get('quotaId') or '')
+    identifier = str(window.get('quota_id') or window.get('quotaId') or window.get('quota') or '')
     scope = ' '.join(str(part) for part in window.get('applies_to') or ())
     text = (identifier + ' ' + scope + ' ' + model).lower()
     if provider == 'antigravity':
@@ -72,3 +72,12 @@ def record(provider: str, model: str, billing: str = '') -> dict[str, Any]:
     pool = pool_of_route(provider, model, billing)
     return {'id': pool, 'label': pool_label(pool), 'parent': pool_parent(pool),
             'basis': 'per_model' if provider in PER_MODEL else ('audit' if pool in LABELS else 'default')}
+
+
+def visible_route(provider: str, model: str) -> bool:
+    """The owner excludes Antigravity's third-party pool from publication."""
+    return pool_of_route(provider, model) != 'antigravity:3p'
+
+
+def visible_window(provider: str, window: Mapping[str, Any]) -> bool:
+    return pool_of_window(provider, window) != 'antigravity:3p'
