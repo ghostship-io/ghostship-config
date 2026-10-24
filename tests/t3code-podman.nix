@@ -75,6 +75,10 @@ assert builtins.elem "t3code-podman-identity"
   cfg.system.activationScripts.t3code-podman-reexec-alias.deps;
 assert lib.hasInfix "rootfs.py reconcile /run/t3code-podman-rootfs "
   cfg.system.activationScripts.t3code-podman-reexec-alias.text;
+assert builtins.elem "t3code-podman-reexec-alias"
+  cfg.system.activationScripts.t3code-podman-user-activation.deps;
+assert lib.hasInfix "reconcile-activation.py"
+  cfg.system.activationScripts.t3code-podman-user-activation.text;
 # Force generation of actual system unit text, including the template drop-in.
 {
   system = cfg.system.build.toplevel.drvPath;
