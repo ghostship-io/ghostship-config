@@ -97,6 +97,11 @@ in
       exports = [ "API_KEY" ];
     };
 
+    command-code = mkUnit {
+      relativeFile = "secrets/files/sources/providers/command-code.env.age";
+      exports = [ "API_KEY" ];
+    };
+
     inference-bridge-token = mkUnit {
       relativeFile = "secrets/files/sources/services/inference-bridge-token.age";
       format = "raw";
@@ -786,6 +791,10 @@ in
         };
         COHERE_API_KEY = {
           unit = "cohere";
+          key = "API_KEY";
+        };
+        COMMAND_CODE_API_KEY = {
+          unit = "command-code";
           key = "API_KEY";
         };
         AI_GATEWAY_API_KEY = {

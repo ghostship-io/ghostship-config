@@ -34,6 +34,16 @@ def settings(env=None):
     return {"providerInstances": {"commandCode": {"environment": env or []}}}
 
 
+def route_config(*, zdr="1", api_key="{env:COMMAND_CODE_API_KEY}", enabled=("command-code",)):
+    return json.dumps({"enabled_providers": list(enabled), "providers": {"command-code": {
+        "name": "Command Code GOAT",
+        "package": "@ai-sdk/openai-compatible",
+        "settings": {"baseURL": "https://api.commandcode.ai/provider/v1",
+                      "apiKey": api_key},
+        "headers": {"x-cmd-zdr": zdr},
+    }}})
+
+
 class DocsTest(unittest.TestCase):
     def test_current_table_covers_every_required_provider(self):
         rows, checks = doctor.validate_docs(ROOT, max_age_days=45)
@@ -89,13 +99,30 @@ class DocsTest(unittest.TestCase):
 
 
 class ConfigTest(unittest.TestCase):
-    def test_command_code_requires_cmd_zdr(self):
+    def test_command_code_requires_zdr_route_and_projected_key(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "settings.json"
-            path.write_text(json.dumps(settings([{"name": "CMD_ZDR", "value": "0"}])))
-            self.assertEqual(doctor.check_command_code(path, True).status, "fail")
-            path.write_text(json.dumps(settings([{"name": "CMD_ZDR", "value": "1"}])))
-            self.assertEqual(doctor.check_command_code(path, True).status, "pass")
+            home = Path(directory) / "home"
+            (home / ".config/opencode").mkdir(parents=True)
+            config = home / ".config/opencode/opencode.jsonc"
+            projection = Path(directory) / "t3code.env"
+            projection.write_text("COMMAND_CODE_API_KEY=" + "k" * 24 + "\n")
+            config.write_text(route_config())
+            self.assertEqual(doctor.check_command_code(home, projection, True).status, "pass")
+            for label, text in [
+                ("zdr off", route_config(zdr="0")),
+                ("literal key", route_config(api_key="literal")),
+                ("not enabled", route_config(enabled=("ollama-cloud",))),
+            ]:
+                with self.subTest(case=label):
+                    config.write_text(text)
+                    self.assertEqual(doctor.check_command_code(home, projection, True).status, "fail")
+            config.write_text(route_config())
+            projection.write_text("COMMAND_CODE_API_KEY=\n")
+            self.assertEqual(doctor.check_command_code(home, projection, True).status, "fail")
+            projection.unlink()
+            self.assertEqual(doctor.check_command_code(home, projection, True).status, "fail")
+            config.unlink()
+            self.assertEqual(doctor.check_command_code(home, projection, False).status, "skip")
 
     def test_claude_privacy_env_is_required(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -204,12 +231,12 @@ class EndToEndTest(unittest.TestCase):
             (root / "modules/self-hosted").mkdir(parents=True)
             shutil.copyfile(DOC, root / "docs/provider-zdr.md")
             shutil.copyfile(POOL, root / "modules/self-hosted/inference-pool.json")
-            (home / ".t3/userdata").mkdir(parents=True)
+            (home / ".config/opencode").mkdir(parents=True)
             (home / ".claude").mkdir(parents=True)
             (home / ".grok").mkdir(parents=True)
-            (home / ".t3/userdata/settings.json").write_text(
-                json.dumps(settings([{"name": "CMD_ZDR", "value": "1"}]))
-            )
+            (home / ".config/opencode/opencode.jsonc").write_text(route_config())
+            projection = base / "t3code.env"
+            projection.write_text("COMMAND_CODE_API_KEY=" + "k" * 24 + "\n")
             (home / ".claude/settings.json").write_text(
                 json.dumps({"env": {key: "1" for key in doctor.PRIVACY_ENV}})
             )
@@ -217,7 +244,8 @@ class EndToEndTest(unittest.TestCase):
                 json.dumps({"payload": json.dumps({"settings": {
                     "disable_codebase_upload": True, "sharing_enabled": False}})})
             )
-            report = doctor.build_report(root, home, 45, True, False)
+            report = doctor.build_report(root, home, 45, True, False,
+                                         command_code_secrets=projection)
             self.assertTrue(report.ok(), report.as_dict())
             (home / ".claude/settings.json").unlink()
             report = doctor.build_report(root, home, 45, True, False)

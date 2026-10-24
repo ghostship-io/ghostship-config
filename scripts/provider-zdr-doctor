@@ -165,19 +165,50 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text())
 
 
-def check_command_code(path: Path, required: bool) -> Check:
+def check_command_code(home: Path, projection: Path, required: bool) -> Check:
     name = "command-code"
-    if not path.exists():
-        return Check(name, "fail" if required else "skip", "T3 settings not present")
+    candidates = (
+        home / ".config/opencode/opencode.jsonc",
+        home / ".config/opencode/opencode.json",
+    )
+    path = next((candidate for candidate in candidates if candidate.exists()), None)
+    if path is None:
+        return Check(name, "fail" if required else "skip", "OpenCode config not present")
     try:
         data = _load_json(path)
-        environment = data["providerInstances"]["commandCode"].get("environment", [])
-        values = {item.get("name"): item.get("value") for item in environment if isinstance(item, dict)}
+        provider = data["providers"]["command-code"]
+        settings = provider.get("settings") or {}
+        headers = provider.get("headers") or {}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return Check(name, "fail", "cannot read the Command Code provider instance")
-    if values.get("CMD_ZDR") != "1":
-        return Check(name, "fail", "CMD_ZDR is not 1")
-    return Check(name, "pass", "CMD_ZDR=1")
+        return Check(name, "fail", "cannot read the Command Code OpenCode provider")
+    if settings.get("baseURL") != "https://api.commandcode.ai/provider/v1":
+        return Check(name, "fail", "unexpected provider base URL")
+    if settings.get("apiKey") != "{env:COMMAND_CODE_API_KEY}":
+        return Check(name, "fail", "the API key is not read from the projected environment")
+    if str(headers.get("x-cmd-zdr")) != "1":
+        return Check(name, "fail", "x-cmd-zdr is not 1")
+    enabled = data.get("enabled_providers")
+    disabled = data.get("disabled_providers") or []
+    if "command-code" in disabled or (isinstance(enabled, list) and "command-code" not in enabled):
+        return Check(name, "fail", "the provider is not enabled")
+    try:
+        projected = projection.read_text(encoding="utf-8")
+    except OSError:
+        return Check(name, "fail", "the projected key is missing")
+    keyed = False
+    for line in projected.splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "COMMAND_CODE_API_KEY" and value.strip():
+            keyed = True
+            break
+    if not keyed:
+        return Check(name, "fail", "the projected key is empty")
+    return Check(name, "pass", "x-cmd-zdr=1 on every OpenCode request with the projected key")
 
 
 def check_claude(path: Path, required: bool) -> Check:
@@ -470,12 +501,13 @@ def build_report(
     browser: bool,
     antigravity: bool = False,
     runner: Callable[..., Any] | None = None,
+    command_code_secrets: Path = Path("/run/ghostship-secrets/t3code.env"),
 ) -> Report:
     report = Report(root=root, max_age_days=max_age_days)
     rows, docs_checks = validate_docs(root, max_age_days)
     report.checks.extend(docs_checks)
     report.providers = len(rows)
-    report.checks.append(check_command_code(home / ".t3/userdata/settings.json", require_live))
+    report.checks.append(check_command_code(home, command_code_secrets, require_live))
     report.checks.append(check_claude(home / ".claude/settings.json", require_live))
     report.checks.append(check_grok(home / ".grok/settings_cache.json", require_live))
     report.checks.append(check_pool(root / "modules/self-hosted/inference-pool.json", require_live))

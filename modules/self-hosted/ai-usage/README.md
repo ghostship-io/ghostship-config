@@ -62,12 +62,14 @@ used by the dashboard, managed favorites/default, CLI picks and MCP picks.
 
 ## Sources and what each one reads
 
-Command Code GOAT is a native T3 worker route. Its `command_code` candidate
-record and picker `provider_terms` carry published allowance estimates and
-dated build provenance separately from actual quota and resolved build data.
-Its `price` record carries effective UTC pricing and the schedule. The paid-ZDR
-launcher configuration must be verified before it is eligible; no Command Code
-credential is read by this collector. See the [provider contract](../../../docs/t3code.md#command-code-goat-acp-provider).
+Command Code GOAT is a native T3 worker route served by the OpenCode instance.
+Its `command_code` candidate record and picker `provider_terms` carry published
+allowance estimates and dated build provenance separately from actual quota and
+resolved build data. Its `price` record carries effective UTC pricing and the
+schedule. The live OpenCode provider config and the projected
+`COMMAND_CODE_API_KEY` must both be verified before it is eligible; the
+credential value itself is never read. See the [provider
+contract](../../../docs/t3code.md#command-code-goat-through-opencode).
 
 Every source is read-only and every source reports its own outcome. A source
 that cannot be read reports a status; it never reports a healthy zero.
