@@ -232,8 +232,9 @@ METRIC_HELP = {
     ),
     "ghostship_ai_limit_probe": (
         "Whether a ready T3 provider instance reports its usage limits: "
-        "reported, unsupported (it has none to report), or failed (its probe "
-        "could not read them, which makes the t3 source partial)."
+        "reported, unsupported (it has none to report), or failed (its own "
+        "probe could not read them). It is a per-provider fact and never "
+        "makes the t3 source partial."
     ),
     "ghostship_ai_pool_cooldown_invalid": (
         "One for a cooldown of a pool route that cannot be true; the route is "

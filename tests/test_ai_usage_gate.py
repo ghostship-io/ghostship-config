@@ -24,6 +24,7 @@ def load(name, file):
 
 
 metrics = load("ai_usage_gate_metrics", "metrics.py")
+codes = load("ai_usage_gate_codes", "codes.py")
 facts = load("ai_usage_gate_facts", "facts.py")
 ranking = load("ai_usage_gate_ranking", "ranking.py")
 snapshot = load("ai_usage_gate_snapshot", "snapshot.py")
@@ -223,10 +224,13 @@ class StockUnavailableShapeTests(unittest.TestCase):
     """The stock T3 shape of a provider whose limits probe failed.
 
     The contract reports `usageLimits.unavailable.reason`; the source read the
-    flat shape only, so the provider looked healthy.
+    flat shape only, so the provider looked healthy. The nested shape is read
+    now, and it is published per provider: the source read the provider's
+    status, so a probe that failed is that provider's fact and not a gap in
+    the whole source.
     """
 
-    def test_a_nested_unavailable_makes_the_source_partial(self):
+    def test_a_nested_unavailable_is_published_per_provider(self):
         class Client:
             def __init__(self):
                 self.calls = 0
@@ -255,12 +259,14 @@ class StockUnavailableShapeTests(unittest.TestCase):
         source = main.t3source.collect(Client(), NOW)
         limits = source[0]
         self.assertEqual(limits.source, "t3")
-        self.assertEqual(
-            limits.status,
-            "partial",
-            "a ready provider whose limits probe failed is not a complete reading",
-        )
-        self.assertIn(limits.reason, ("probe_failed", "unsupported"))
+        self.assertEqual(limits.status, "ok")
+        probes = {
+            (labels["provider"], labels["state"])
+            for name, labels, _value in limits.metrics
+            if name == "ghostship_ai_limit_probe"
+        }
+        self.assertEqual(probes, {("claude", "failed")})
+        self.assertEqual(limits.reason, codes.OK)
         data = snapshot.build_snapshot(
             now=NOW,
             sources=[
@@ -273,7 +279,7 @@ class StockUnavailableShapeTests(unittest.TestCase):
             ],
             ranked=[],
         )
-        self.assertTrue(data["partial"])
+        self.assertFalse(data["partial"])
 
 
 class FactsAttestationTests(unittest.TestCase):
