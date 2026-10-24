@@ -570,8 +570,8 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 ### Private runtime identity settings
 
 `/etc/ghostship/owner-identity.env` supplies `GHOSTSHIP_GITHUB_USER_ID`
-(a positive integer), `GHOSTSHIP_T3_ENVIRONMENT_ID`,
-`GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID`, and `GHOSTSHIP_T3_PROJECT_` settings for
+(a positive integer), `GHOSTSHIP_T3_ENVIRONMENT_ID`, and
+`GHOSTSHIP_T3_PROJECT_` settings for
 `CONFIG`, `AGENT`, `3DPRINTING`, `ROMS`, `XPLUS4`, `NEWSLETTER`, and `ORCA`.
 Keep the file root-owned with mode 0600; populate these settings before
 activating the coordinator or inference bridge. The canonical owner-config
