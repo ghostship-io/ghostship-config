@@ -16,6 +16,10 @@ let
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   t3codeSecretsFile = "/run/secrets/t3code.env";
+  # Private store-scoped retail settings (COSTCO_*, SAFEWAY_*, TARGET_*,
+  # WALMART_*, HOMEDEPOT_*, BESTBUY_*). Root-owned and outside the repository;
+  # the generated clients fail with a usage error when a required value is unset.
+  retailStoreEnv = "/etc/ghostship/retail-store.env";
   engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
@@ -207,7 +211,7 @@ in
       # model evidence, not a provider sandbox or another HOME (#403).
       GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence/model-evidence.jsonl";
     };
-    environmentFiles = [ t3codeSecrets ];
+    environmentFiles = [ t3codeSecrets retailStoreEnv ];
   };
 
   ghostship.t3codePodman.enable = true;

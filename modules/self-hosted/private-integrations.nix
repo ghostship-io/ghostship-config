@@ -488,7 +488,13 @@ in {
       # and GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS (the only Drive folders, and their
       # subfolders, the health op reads, so other people's records in a shared
       # folder stay out). A missing setting fails closed in the tool that needs it.
-      environmentFiles = [ "/etc/ghostship/mcp-identity.env" ];
+      # Store-scoped retail clients read their destination from the root-owned
+      # retail-store.env (COSTCO_*, SAFEWAY_*, TARGET_*, WALMART_*, HOMEDEPOT_*
+      # and BESTBUY_*); an unset setting fails with a usage error naming it.
+      environmentFiles = [
+        "/etc/ghostship/mcp-identity.env"
+        "/etc/ghostship/retail-store.env"
+      ];
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         # Read-only view of the dedicated model-evidence directory only; the
