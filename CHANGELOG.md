@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.287] - 2026-10-24
+
+- chill-penguin: pin ghostship-agent to the rewritten main
+
+PR #462.
+
 ## [3.17.286] - 2026-10-24
 
 - Project the private retail store settings into client runtimes
