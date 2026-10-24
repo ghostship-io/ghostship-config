@@ -33,5 +33,6 @@ in
       "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep"
       "hostops" "services" "health" "t3"
       "sessions" "delegation" "deploy" "github" "worker" "workflows" "policy"
+      "apps"
     ]);
 }
