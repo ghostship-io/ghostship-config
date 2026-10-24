@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.260] - 2026-10-24
+
+- Record and re-check zero-data-retention / no-training settings for every T3 and free-pool inference provider, and apply Claude Code's nonessential-traffic opt-outs.
+
+PR #430.
+
 ## [3.17.259] - 2026-10-24
 
 CI: the fast pull-request check has a ten-minute budget so the full fast suite and module evaluation can finish.
