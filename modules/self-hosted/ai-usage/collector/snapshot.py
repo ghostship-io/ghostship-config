@@ -3714,6 +3714,16 @@ def build_snapshot(
         (str(record.get("provider") or ""), str(record.get("model") or ""))
         for record in obsolete_records
     }
+    # The dashboard census counts every route by its one reason. A pruned
+    # route needs the same billing class the page filters on, so a free route
+    # stays on the Free page and a paid route on Paid.
+    for record in obsolete_records:
+        pair = (str(record.get("provider") or ""), str(record.get("model") or ""))
+        record["billing"] = (
+            "promotion" if pair in promo_set
+            else "free" if pair in free_set
+            else "subscription"
+        )
 
     facts_source = facts or {}
     # The version the feed published for the records it produced. A fact of
