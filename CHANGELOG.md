@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.288] - 2026-10-24
+
+- Clean the owner's area values from the current config files (#463)
+
+PR #464.
+
 ## [3.17.287] - 2026-10-24
 
 - chill-penguin: pin ghostship-agent to the rewritten main
