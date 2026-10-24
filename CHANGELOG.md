@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.256] - 2026-10-24
+
+- Pin the coordinator backend to ghostship-agent 0.47.31: append-only tooling
+  and private observation ledgers, native-model catalog pruning, and rotation
+  handoffs derived from open GitHub objectives.
+
+PR #428.
+
 ## [3.17.255] - 2026-10-24
 
 - Restore native Command Code ACP session load/resume support so closed worker threads can reopen.
