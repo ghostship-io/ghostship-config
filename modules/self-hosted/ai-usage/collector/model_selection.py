@@ -529,7 +529,14 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             posterior if posterior is not None else (None if quality is None else quality / 100),
             limit_model, policy=worker_policy)
         required_build = worker_builds.get(str(source.get('provider') or ''))
-        build_allowed = required_build is None or (mapped and model == required_build)
+        route_model = str(source.get('model') or '')
+        # The owner may name either exact identity of the build: the live
+        # native catalog id, or the provider's own model id. A route another
+        # T3 instance serves carries that instance's prefix in its native id
+        # (Command Code's `deepseek/...` is `command-code/deepseek/...` on
+        # OpenCode), and both forms name the same configured build.
+        build_allowed = required_build is None or (
+            mapped and required_build in (model, route_model))
         cost_allowed = ('model_quality' not in snapshot or worker_cost_allowed(source, snapshot.get('candidates') or []))
         row = {
             "key": str(source.get("provider")) + ":" + str(source.get("model")),
