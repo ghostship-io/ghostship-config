@@ -143,10 +143,9 @@ for line in sys.stdin:
                 policy.request(request(method, params))
         policy.request(request("session/set_config_option", {"configId": "model", "value": PAID}))
 
-    def test_unconfirmed_sessions_imports_unknown_options_and_slashes_fail_closed(self):
+    def test_unconfirmed_sessions_unknown_options_and_slashes_fail_closed(self):
         policy = acp.Policy()
-        for method, params in [("session/load", {}), ("session/resume", {}),
-                               ("session/set_config_option", {"configId": "provider", "value": "other"}),
+        for method, params in [("session/set_config_option", {"configId": "provider", "value": "other"}),
                                ("session/prompt", {"sessionId": "unknown"})]:
             with self.assertRaises(ValueError):
                 policy.request(request(method, params))
@@ -156,6 +155,50 @@ for line in sys.stdin:
                 {"type": "text", "text": " /model " + FREE}]}))
         policy.request(request("session/prompt", {"sessionId": "unit-session", "prompt": [
             {"type": "text", "text": "Reply with OK"}]}))
+
+    def test_loaded_and_resumed_sessions_record_paid_model_and_reject_unapproved_models(self):
+        for method in ("session/load", "session/resume"):
+            for model in (PAID, FREE, None):
+                for shape in ("models", "configOptions"):
+                    with self.subTest(method=method, model=model, shape=shape):
+                        policy = acp.Policy()
+                        policy.sessions["unit-restored"] = PAID  # A stale prior selection cannot authorize a failed load.
+                        policy.request(request(method, {"sessionId": "unit-restored"}))
+                        result = {}
+                        if model is not None:
+                            if shape == "models":
+                                result = {"models": {"currentModelId": model,
+                                          "availableModels": [{"modelId": PAID}, {"modelId": FREE}]}}
+                            else:
+                                result = {"configOptions": [{"id": "model", "category": "model",
+                                          "currentValue": model, "options": [{"value": PAID}, {"value": FREE}]}]}
+                        response = {"id": 1, "result": result}
+                        if model == PAID:
+                            policy.response(response)
+                            self.assertEqual(policy.sessions["unit-restored"], PAID)
+                            policy.request(request("session/prompt", {"sessionId": "unit-restored"}, 2))
+                        else:
+                            with self.assertRaises(ValueError):
+                                policy.response(response)
+                            self.assertIsNone(policy.sessions["unit-restored"])
+                            with self.assertRaises(ValueError):
+                                policy.request(request("session/prompt", {"sessionId": "unit-restored"}, 2))
+        acp.Policy().request(request("session/list"))
+
+    def test_rejected_restoration_returns_rpc_error_so_fresh_session_fallback_can_run(self):
+        for method in ("session/load", "session/resume"):
+            with self.subTest(method=method):
+                policy = acp.Policy()
+                policy.request(request(method, {"sessionId": "unit-restored"}))
+                response = {"id": 1, "result": {"models": {"currentModelId": FREE,
+                            "availableModels": [{"modelId": FREE}]}}}
+                self.assertIsNone(policy.agent_response(response))
+                self.assertNotIn("result", response)
+                self.assertIn("error", response)
+                policy.request(request("session/new", number=2))
+                self.assertEqual(policy.agent_response({"id": 2, "result": {
+                    "sessionId": "unit-new", "models": {"currentModelId": PAID,
+                    "availableModels": [{"modelId": PAID}]}}}), "unit-new")
 
     def test_native_unapproved_switch_terminates_boundary(self):
         policy = acp.Policy()
@@ -167,10 +210,10 @@ for line in sys.stdin:
         policy = acp.Policy()
         policy.request(request("initialize"))
         response = {"id": 1, "result": {"agentCapabilities": {"loadSession": True,
-                    "sessionCapabilities": {"list": {}, "resume": {}}}}}
+                    "sessionCapabilities": {"list": {}, "resume": {}, "close": {}}}}}
         policy.response(response)
-        self.assertFalse(response["result"]["agentCapabilities"]["loadSession"])
-        self.assertEqual(response["result"]["agentCapabilities"]["sessionCapabilities"], {"close": {}})
+        self.assertTrue(response["result"]["agentCapabilities"]["loadSession"])
+        self.assertEqual(response["result"]["agentCapabilities"]["sessionCapabilities"], {"list": {}, "resume": {}, "close": {}})
         message = {"method": "session/update", "params": {"update": {
             "sessionUpdate": "available_commands_update", "availableCommands": [{"name": "model"}]}}}
         policy.response(message)

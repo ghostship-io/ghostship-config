@@ -1,5 +1,51 @@
 # Changelog
 
+## [3.17.256] - 2026-10-24
+
+- Pin the coordinator backend to ghostship-agent 0.47.31: append-only tooling
+  and private observation ledgers, native-model catalog pruning, and rotation
+  handoffs derived from open GitHub objectives.
+
+PR #428.
+
+## [3.17.255] - 2026-10-24
+
+- Restore native Command Code ACP session load/resume support so closed worker threads can reopen.
+
+PR #426.
+
+## [3.17.254] - 2026-10-24
+
+- models: number table rows by position, keep each route's unavailable reason
+
+PR #423.
+
+## [3.17.253] - 2026-10-24
+
+- Add the Command Code GOAT DeepSeek latest alias as a distinct paid-ZDR worker route, with published request estimates and UTC pricing.
+
+PR #421.
+
+## [3.17.252] - 2026-10-24
+
+- Keep completed usage collection successful when picker reconciliation temporarily cannot connect to T3.
+
+PR #417.
+
+## [3.17.251] - 2026-10-24
+
+- Pin the coordinator backend to ghostship-agent 0.47.28, which adds
+  existing-owner work starts and commits the start transaction before model
+  selection.
+
+PR #422.
+
+## [3.17.250] - 2026-10-24
+
+- models: selected-only table by default, every evaluated model with a reason
+
+PR #420.
+
 ## [3.17.249] - 2026-10-24
 
 - Add the pinned Command Code GOAT ACP harness with persistent native login, non-fatal setup, enforced paid/ZDR routing and a DeepSeek V4.1 Flash default.
