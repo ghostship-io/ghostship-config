@@ -24,6 +24,8 @@ generated clients. No value is stored in this repository.
 | `TARGET_TIMEZONE` | target | Target API timezone; defaults to `UTC`. |
 | `WALMART_STORE_ID` | walmart | Walmart store id. |
 | `WALMART_POSTAL_CODE` | walmart | Walmart destination ZIP. |
+| `WALMART_LATITUDE` | walmart | Latitude for the Walmart aroundme store query when no store id resolves the store. |
+| `WALMART_LONGITUDE` | walmart | Longitude for the same query. |
 | `HOMEDEPOT_STORE_ID` | homedepot | Home Depot store id. |
 | `HOMEDEPOT_POSTAL_CODE` | homedepot | Home Depot destination ZIP. |
 | `HOMEDEPOT_STATE` | homedepot | Home Depot destination state code. |
