@@ -876,6 +876,14 @@ registration PAT and host homes, runs jobs as a dynamic user without root or
 Podman access, and applies CPU, memory and task limits. Hosted integration stays
 manual on main. PR gates are not repeated on main pushes.
 
+The agent repository has two independently isolated runner slots so unit and
+ledger jobs can run together; configuration and CAD each have one. Every slot has
+its own registration, workspace, logs and private cache. Git origin fetches keep
+full commit history while fetching file blobs on demand, reducing cold-checkout
+traffic without weakening historical ledger reads. The config workflow also
+requests this filter explicitly so its PR gate can verify changes before host
+activation. Private-source imports remain shallow and verify their locked hashes.
+
 
 ### CI source admission
 
