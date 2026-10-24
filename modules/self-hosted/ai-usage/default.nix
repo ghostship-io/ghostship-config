@@ -60,6 +60,11 @@ let
   # decides. Routing stays off until the owner turns it on, so a consumer
   # that ignores the switch still sees it off.
   routingEnabled = if cfg.routing.enabled then "true" else "false";
+  # The free-pool page refresh runs the agent's free-inference client. A
+  # standalone module evaluation has no flake inputs and adds no timer.
+  agentInput = (args.inputs or { }).ghostship-private-agent or null;
+  tools = if agentInput == null then null else agentInput.packages.${pkgs.stdenv.hostPlatform.system};
+  freeInferenceConfig = "${t3Home}/.config/ghostship/free-inference.json";
   workerPreferences = pkgs.writeText "ghostship-model-selection-preferences.json" (
     builtins.toJSON {
       schema = "ghostship.model-selection-preferences/v1";
@@ -240,6 +245,66 @@ in
         OnCalendar = "*-*-* 04:17:00";
         AccuracySec = "5min";
         # A missed pull is not caught up: the next one reads the current pages.
+        Persistent = false;
+      };
+    };
+
+    # Public provider limit pages are refreshed by a free-pool job, never by
+    # the collector. The job reads public pages only; the private Command Code
+    # usage page stays on the browser path. A failed extraction keeps the last
+    # dated rows and marks them stale.
+    systemd.services.ghostship-ai-usage-limits = lib.mkIf (tools != null) {
+      description = "Refresh public provider limit pages through the free inference pool";
+      after = [
+        "network-online.target"
+        "ghostship-inference-bridge.service"
+      ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/limit_pages.py --refresh --state ${stateDir}/page-limits.json --agent ${tools.agent}/bin/agent";
+        Environment = [
+          "GHOSTSHIP_FREE_INFERENCE_CONFIG=${freeInferenceConfig}"
+          "HOME=${stateDir}"
+        ];
+        TimeoutStartSec = "15min";
+        UMask = "0077";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictNamespaces = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
+        ReadOnlyPaths = [ t3Home ];
+        ReadWritePaths = [ stateDir ];
+        MemoryMax = "512M";
+        MemoryHigh = "384M";
+        CPUQuota = "50%";
+        TasksMax = 32;
+        # The free-inference config is owned by the apps user and mode 0600.
+        CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
+        AmbientCapabilities = "";
+      };
+    };
+
+    systemd.timers.ghostship-ai-usage-limits = lib.mkIf (tools != null) {
+      description = "Refresh public provider limit pages every six hours";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "9min";
+        OnCalendar = "*-*-* 02,08,14,20:17:00";
+        AccuracySec = "5min";
         Persistent = false;
       };
     };

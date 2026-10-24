@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from util import HttpResult, http_request
+from util import http_request
 
 PAGE_URL = "https://opencode.ai/go"
 SCHEMA = "ghostship.opencode-go-limits/v1"

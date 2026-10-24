@@ -58,6 +58,31 @@ under `announced_resets.announcements`. Effective quota windows expose
 `announcement_url`, `announced_reset_at`, `provider_used_ratio` and
 `provider_check_at` beside their reset provenance.
 
+The primary author's reset-day phrasing ("...it's reset day today",
+"...that's a reset!") is recorded as a **low-confidence, unverified** Codex
+event with an unknown window. It is visible in the evidence table and can
+never change capacity until an operator confirms a time and scope.
+
+## Monitor health
+
+The routing snapshot carries `announced_resets.health` with `state` (`ok`,
+`blocked`, `stale` or `unknown`), `last_read_at`, `last_success_at`,
+`last_success_age_seconds`, `blocked_since`, `last_blocked_at` and `events`.
+`ok` requires a successful read within three hours; a failed or blocked read
+keeps the previous success time and is published as `stale` or `blocked`. The
+state is also published as:
+
+```promql
+ghostship_ai_announcements_health{state,reason}
+ghostship_ai_announcements_last_success_timestamp_seconds
+ghostship_ai_announcements_events
+```
+
+`AnnouncementMonitorStale` fires after three hours without a successful read,
+and `AnnouncementMonitorBlocked` fires when a sign-in wall or challenge is
+recorded. Neither alert handles or bypasses the challenge: the monitor backs
+off eight hours and sends one operations notice per blocked episode.
+
 An operator can confirm an existing ambiguous event's reset time as root:
 
 ```sh

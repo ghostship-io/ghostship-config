@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 import value_policy
-import allowance
+import limit_models
 import model_quality
 import outcomes as outcomes_module
 import quota
@@ -123,6 +123,13 @@ def quality_value(row: Mapping[str, Any]) -> float | None:
             return None
     score = number(row.get('quality_score'))
     return None if score is None else score / 100
+
+
+def _snapshot_epoch(snapshot: Mapping[str, Any]) -> float:
+    try:
+        return datetime.fromisoformat(str(snapshot.get("generated_at")).replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 def limiting_window(windows: list[Mapping[str, Any]], generated_at: str | None) -> dict[str, Any] | None:
@@ -318,6 +325,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     provider_roles = (((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("provider_roles") or {}
     worker_builds = (((evidence or {}).get('policy') or {}).get('model_selection') or {}).get('worker_builds') or {}
     worker_policy = (((evidence or {}).get('policy') or {}).get('model_selection') or {})
+    snapshot_now = _snapshot_epoch(snapshot)
     for source in snapshot.get("candidates") or []:
         native = source.get("native") or {}
         instance, model = native.get("provider_instance_id"), native.get("model_id")
@@ -363,9 +371,14 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         limit = limiting_window(windows, snapshot.get("generated_at"))
         allowance_record = source.get("allowance") if isinstance(source.get("allowance"), Mapping) else None
         data_policy = _data_policy(allowance_record)
-        pick_score = allowance.score(
+        limit_model = source.get("limit_model") or limit_models.resolve(
+            str(source.get('provider') or ''), str(source.get('model') or ''),
+            now=snapshot_now, windows=windows, allowance=allowance_record,
+            capacity=capacity, price=source.get('price'),
+            page_limits=source.get('page_limits'))
+        pick_score = limit_models.score(
             posterior if posterior is not None else (None if quality is None else quality / 100),
-            allowance_record, windows, policy=worker_policy)
+            limit_model, policy=worker_policy)
         required_build = worker_builds.get(str(source.get('provider') or ''))
         build_allowed = required_build is None or (mapped and model == required_build)
         cost_allowed = ('model_quality' not in snapshot or worker_cost_allowed(source, snapshot.get('candidates') or []))
@@ -406,9 +419,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         if allowance_record is not None:
             row["allowance"] = allowance_record
             row["data_policy"] = data_policy
-            row["pick_score"] = pick_score
-            row["binding_window"] = (pick_score or {}).get("binding_window")
-            row["pick_reason"] = allowance.reason(pick_score, allowance_record, posterior)
+        row["limit_model"] = limit_model
+        row["pick_score"] = pick_score
+        row["binding_window"] = (pick_score or {}).get("binding_window")
+        if limit_model.get("basis") in ("discovered", "measured", "cost"):
+            row["pick_reason"] = limit_models.reason(pick_score, limit_model)
         if data_policy and data_policy.get("sensitive_ok") is False:
             # The owner's rule: a model whose prompts train the vendor or whose
             # data is not zero-retention stays out of internal and sensitive
@@ -455,7 +470,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                              **({'options': review_options} if review_options else {})}
             orchestrator_row = {**row, 'native': review_native,
                                 'effort': review_effort[0] if review_effort else None, **quality_fields}
-            if not (row.get('data_policy') or {}).get('sensitive_ok') is False:
+            if (row.get('data_policy') or {}).get('sensitive_ok') is not False:
                 # Review authority is independent of worker eligibility, but a
                 # model the owner excluded from internal work stays out of
                 # internal review too.
