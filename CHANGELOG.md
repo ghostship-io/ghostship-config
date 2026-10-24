@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.285] - 2026-10-24
+
+Pin the private agent to release 0.47.96.
+
+PR #460.
+
 ## [3.17.284] - 2026-10-24
 
 - Name the one model-evidence store for the picker and the recorder (#403)
