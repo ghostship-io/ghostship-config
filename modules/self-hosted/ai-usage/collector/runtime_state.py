@@ -166,6 +166,15 @@ _LIMIT_NOTICE = re.compile(
 _RESET_PART = re.compile(r"(\d+) (days?|hours?|minutes?|seconds?)", re.I)
 LIMIT_MAX_SECONDS = 31 * 86400.0
 
+# Antigravity's two windows. The shared short window is five hours and the
+# per-model limit is weekly; a notice names a wait but never which window it
+# belongs to. A wait inside the short window (with a small margin for the
+# moment the notice was written) is the short window; anything longer is the
+# weekly one.
+SESSION_WINDOW_SECONDS = 5 * 3600.0
+SESSION_MARGIN_SECONDS = 300.0
+WEEKLY_WINDOW_SECONDS = 7 * 86400.0
+
 
 def read_limit_windows(path: str | Path, now: float) -> list[dict[str, Any]]:
     """Provider-originated spent windows, scoped to the run's selected model.
@@ -225,17 +234,28 @@ def read_limit_windows(path: str | Path, now: float) -> list[dict[str, Any]]:
         reset = observed + delay
         if not 0 < delay <= LIMIT_MAX_SECONDS or reset <= now:
             continue
+        # Antigravity has a shared short window and a per-model weekly one, and
+        # the notice does not name which it is. A wait inside the short window
+        # is the short window; a longer one is the weekly window. Both are
+        # kept, so a model that is out for its short window carries that
+        # window's reset and is routed first when it comes back.
+        session = delay <= SESSION_WINDOW_SECONDS + SESSION_MARGIN_SECONDS
+        kind = 'session' if session else 'weekly'
         window = {
             'provider': 'antigravity', 'account': 'default', 'model': model,
-            'appliesTo': [model], 'kind': 'quota', 'quotaId': 'runtime-limit:' + model,
-            'usedRatio': 1.0, 'resetEpoch': reset, 'durationSeconds': None,
+            'appliesTo': [model], 'kind': kind,
+            'quotaId': ('runtime-limit-5h:' if session else 'runtime-limit:') + model,
+            'usedRatio': 1.0, 'resetEpoch': reset,
+            'durationSeconds': (SESSION_WINDOW_SECONDS if session else WEEKLY_WINDOW_SECONDS),
             'observedAtEpoch': observed, 'source': 't3_runtime',
             'basis': 'provider_limit_message', 'resetSource': 'provider_message',
         }
         # Multiple notices may round the relative time differently. Keep the
-        # latest reported deadline; never shorten a still-active lockout.
-        if model not in windows or reset > windows[model]['resetEpoch']:
-            windows[model] = window
+        # latest reported deadline of each window; never shorten an active
+        # lockout, and never let one window's reset hide the other's.
+        key = (model, kind)
+        if key not in windows or reset > windows[key]['resetEpoch']:
+            windows[key] = window
     return [windows[key] for key in sorted(windows)]
 
 # The model prefix of the OpenCode instance names the account it serves.

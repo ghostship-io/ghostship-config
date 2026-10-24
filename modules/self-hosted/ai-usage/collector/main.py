@@ -72,9 +72,14 @@ POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
 # The OpenCode request records, inside the T3 Code home. The reader opens the
 # database read only, and the unit's read only paths cover the home.
 OPENCODE_DB_FILE = f"{T3_HOME}/{usage_inference.OPENCODE_DB_RELATIVE}"
+# The OpenCode Free instance keeps its own request records: the free routes
+# are used through that instance, so its refusals are the free routes'
+# evidence. It has its own database, its own cache and its own read.
+FREE_OPENCODE_DB_FILE = f"{T3_HOME}/{usage_inference.FREE_OPENCODE_DB_RELATIVE}"
 # The reader's own cache of the OpenCode events, in the collector's state
 # directory. The state directory is writable and nothing else is.
 EVENTS_CACHE_FILE = usage_inference.EVENTS_CACHE_PATH
+FREE_EVENTS_CACHE_FILE = usage_inference.FREE_EVENTS_CACHE_PATH
 # The T3 Code state, read only. It carries the observed failures of the
 # routes: a child that could not start, a provider that reported its
 # allowance spent, a model that was refused.
@@ -224,6 +229,12 @@ METRIC_HELP = {
     "ghostship_ai_provider_limit": (
         "A limit of a free provider, with the basis it was read with: "
         "published, configured, observed or unknown."
+    ),
+    "ghostship_ai_limit_probe": (
+        "Whether a ready T3 provider instance reports its usage limits: "
+        "reported, unsupported (it has none to report), or failed (its own "
+        "probe could not read them). It is a per-provider fact and never "
+        "makes the t3 source partial."
     ),
     "ghostship_ai_pool_cooldown_invalid": (
         "One for a cooldown of a pool route that cannot be true; the route is "
@@ -1859,6 +1870,8 @@ def collect(
     state_path: str | None = None,
     events_cache: str = EVENTS_CACHE_FILE,
     opencode_db: str = OPENCODE_DB_FILE,
+    free_opencode_db: str | None = None,
+    free_events_cache: str | None = FREE_EVENTS_CACHE_FILE,
     window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
     t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
@@ -1937,12 +1950,23 @@ def collect(
     # contributes no events: the routes it would have fed keep the basis
     # they had.
     routes = _known_routes(offered, pool_models, extra)
+    # The free instance's records live beside its own configuration, in the
+    # same T3 Code home. The collector reads them the same way. An instance
+    # that is not installed has no record to read, and its cache is not
+    # touched either.
+    if free_opencode_db is None:
+        free_opencode_db = f"{t3_home}/{usage_inference.FREE_OPENCODE_DB_RELATIVE}"
+    if not os.path.exists(free_opencode_db):
+        free_opencode_db = None
+        free_events_cache = None
     inferred = usage_inference.read_and_infer(
         moment,
         opencode_db=opencode_db,
         events_cache=events_cache,
         pool_ledger=pool_ledger,
         routes=routes,
+        free_opencode_db=free_opencode_db,
+        free_events_cache=free_events_cache,
     )
     results.extend(inferred.results)
     context["announced_resets"] = announcements or {"schema": 1, "status": "not_checked", "announcements": []}

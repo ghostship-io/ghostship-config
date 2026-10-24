@@ -255,6 +255,73 @@ class AntigravityTests(unittest.TestCase):
         }
         self.assertIn("gemini-2.5-pro", models)
 
+    def test_the_model_bucket_names_its_window_and_its_length(self):
+        """A spent model carries the reset of the window it is spent on."""
+        with tempfile.TemporaryDirectory() as home:
+            base = Path(home) / ".t3" / "userdata" / "providers" / "antigravity" / "acct"
+            token_dir = base / "antigravity-acp"
+            token_dir.mkdir(parents=True)
+            (token_dir / "acp_token.json").write_text(
+                json.dumps(
+                    {
+                        "client_id": "id",
+                        "client_secret": "secret",
+                        "refresh_token": "refresh",
+                        "project_id": "project",
+                    }
+                )
+            )
+            now = 1792873606.0  # 2026-10-24T20:26:46Z
+
+            def fake_http(url, **kwargs):
+                if "oauth2.googleapis.com" in url:
+                    return FakeResponse(body={"access_token": "access", "expires_in": 3600})
+                if "fetchAvailableModels" in url:
+                    return FakeResponse(
+                        body={
+                            "models": {
+                                # Nearly spent on the weekly window: the reset
+                                # is five days away.
+                                "gemini-example": {
+                                    "quotaInfo": {
+                                        "remainingFraction": 0.02,
+                                        "resetTime": "2026-10-29T04:02:15Z",
+                                    }
+                                },
+                                # Spent on the shared short window: the reset
+                                # is inside five hours.
+                                "claude-example": {
+                                    "quotaInfo": {
+                                        "remainingFraction": 0.0,
+                                        "resetTime": "2026-10-25T01:30:16Z",
+                                    }
+                                },
+                                "gpt-example": {
+                                    "weeklyQuotaInfo": {
+                                        "remainingFraction": 0.5,
+                                        "resetTime": "2026-10-31T20:30:15Z",
+                                    }
+                                },
+                            }
+                        }
+                    )
+                return FakeResponse(body={"groups": [{"buckets": []}]})
+
+            result = providers.read_antigravity(home, now, http=fake_http)
+
+        windows = {
+            (window["model"], window["quotaId"]): window for window in result.windows
+        }
+        weekly = windows[("gemini-example", "quotaInfo")]
+        self.assertEqual(weekly["kind"], "weekly")
+        self.assertEqual(weekly["durationSeconds"], 7 * 86400)
+        short = windows[("claude-example", "quotaInfo")]
+        self.assertEqual(short["kind"], "session")
+        self.assertEqual(short["durationSeconds"], 5 * 3600)
+        named = windows[("gpt-example", "weeklyQuotaInfo")]
+        self.assertEqual(named["kind"], "weekly")
+        self.assertEqual(named["durationSeconds"], 7 * 86400)
+
 
 class OpenRouterAndOllamaTests(unittest.TestCase):
     def test_openrouter_credits_and_free_allowance(self):
