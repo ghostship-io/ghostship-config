@@ -21,7 +21,7 @@ class Render(unittest.TestCase):
                 group.return_value.gr_gid = 62020
                 with self.assertRaises(SystemExit): render.main()
                 self.assertFalse((root/'ghostship.key').exists())
-                source.write_text('TUNNEL_ID=tunnel_'+'a'*32+'\nAPI_KEY=synthetic-one\n')
+                source.write_text('TUNNEL_ID=tunnel_'+'a'*32+'\nAPI_KEY=synthetic-one\nHOME_POSTAL_CODE=12345\n')
                 render.main()
                 config = json.loads((root/'ghostship.yaml').read_text())
                 self.assertEqual(config['control_plane']['api_key'], 'file:'+str(root/'ghostship.key'))
@@ -42,3 +42,23 @@ class Render(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+class HomePostalTests(unittest.TestCase):
+    """The rendered runtime destination comes from private configuration (#463)."""
+
+    def test_the_postal_code_comes_from_private_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            retail = Path(temporary) / 'retail.env'
+            retail.write_text('COSTCO_POSTAL_CODE=12345\n')
+            with patch.dict('os.environ', {'GHOSTSHIP_RETAIL_ENV': str(retail)}):
+                self.assertEqual(render.home_postal({}), '12345')
+                self.assertEqual(render.home_postal({'HOME_POSTAL_CODE': '54321'}), '54321')
+
+    def test_a_missing_or_malformed_postal_code_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            retail = Path(temporary) / 'missing.env'
+            with patch.dict('os.environ', {'GHOSTSHIP_RETAIL_ENV': str(retail)}):
+                with self.assertRaises(SystemExit):
+                    render.home_postal({})
+                with self.assertRaises(SystemExit):
+                    render.home_postal({'HOME_POSTAL_CODE': 'not-a-code'})
