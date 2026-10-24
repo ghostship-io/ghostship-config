@@ -1,0 +1,38 @@
+{
+  "five_hour": {
+    "utilization": 2.0,
+    "resets_at": "2026-10-25T01:10:00.495009+00:00",
+    "limit_dollars": null,
+    "used_dollars": null,
+    "remaining_dollars": null,
+    "locked_reason": null
+  },
+  "seven_day": {
+    "utilization": 57.0,
+    "resets_at": "2026-10-29T03:00:00.495032+00:00",
+    "limit_dollars": null,
+    "used_dollars": null,
+    "remaining_dollars": null,
+    "locked_reason": null
+  },
+  "limits": [
+    {
+      "kind": "session",
+      "group": "session",
+      "percent": 2,
+      "severity": "normal",
+      "resets_at": "2026-10-25T01:10:00.495009+00:00",
+      "scope": null,
+      "is_active": false
+    },
+    {
+      "kind": "weekly_all",
+      "group": "weekly",
+      "percent": 57,
+      "severity": "normal",
+      "resets_at": "2026-10-29T03:00:00.495032+00:00",
+      "scope": null,
+      "is_active": true
+    }
+  ]
+}

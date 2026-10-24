@@ -47,6 +47,7 @@ TESTS = (
     "test_t3code_boot_environment.py",
     "test_command_code_provider.py",
     "test_ai_usage_command_code.py",
+    "test_ai_usage_claude_usage.py",
     "test_test_fixture_lint.py",
     "test_siem_alerts.py",
     "test_siem_grafana.py",
