@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.291] - 2026-10-24
+
+- ai-usage: prune obsolete models from candidate lists
+
+PR #480.
+
 ## [3.17.290] - 2026-10-24
 
 - ai-usage: collect Claude subscription usage (left, binding window, reset)
