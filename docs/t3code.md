@@ -112,6 +112,20 @@ preserved. Shared GitHub, OpenCode, OpenRouter, and Bitwarden environment fields
 come from the existing encrypted secret catalog through the dedicated `t3code`
 projection. The Google account and Codex login remain user-owned.
 
+A fourth, `opencode-free`, instance exposes the agent's owner-approved free
+routes as ordinary one-off T3 workers. `t3code-managed-config` runs
+`t3code-free-instance-reconcile` at container setup, `t3code-server.service`
+runs it once before T3 starts, and `t3code-free-instance.timer` repeats it every
+15 minutes. It generates a private config home under
+`/home/t3code/.config/opencode-free` with its own `XDG_CONFIG_HOME` and a
+filtered `OPENCODE_MODELS_PATH` catalog, so the main `opencode` instance and
+`~/.config/opencode` are untouched. Provider entries name the projected
+environment variables; no key is written to a file. While the agent's
+`trust.approved_routes` is empty the instance is disabled and its config and
+catalog are empty. T3 watches `settings.json`, so a reconciler update appears
+without a restart; the timer exists because a one-off manual edit can race a T3
+settings write.
+
 The image defines the `nobody`/`nogroup` (uid/gid 65534) account. Google's ACP
 harness drops to this unprivileged account for sandboxed tool work; when it
 cannot resolve the account the agent aborts instead of running the turn. The
