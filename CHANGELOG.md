@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.292] - 2026-10-24
+
+- ai-usage: collect Command Code usage for the opencode and native routes
+
+PR #477.
+
 ## [3.17.291] - 2026-10-24
 
 - ai-usage: prune obsolete models from candidate lists
