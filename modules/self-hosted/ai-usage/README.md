@@ -78,6 +78,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
 | `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
+| `opencode_go_limits` | The complete Go and Go Plus per-model request table, plus each model's training/retention policy, with the date the page was read; a failed refresh keeps the last dated values and marks them stale | `opencode.ai/go` and the hashed JavaScript chunk it names, resolved on every refresh |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
@@ -1466,6 +1467,34 @@ The collector calls the policy input's authenticated picker reconciler on its
 normal cadence. Incremental settings patches preserve unrelated favorites and
 preferences. A durable ownership journal makes retries converge; partial
 snapshots cannot retire omitted favorites. Existing threads keep their model.
+
+### Allowance-billed routes and assumed-latest quality
+
+A route billed by an allowance is not ordered on quality alone. OpenCode Go's
+published table gives every model a five-hour request figure and a monthly
+allowance; the documented 20%/50%/100% shares make the weekly and monthly
+request budgets arithmetic. The picker weights the model's quality against the
+requests it can still afford before each window resets. The default weights are
+`0.6` quality and `0.4` capacity, overridable in the runtime policy's
+`model_selection.ranking_weights`; a malformed override is ignored. The capacity
+term is `log10(1 + affordable requests) / log10(1 + 50000)`, so two models of one
+account are comparable. Every row publishes its `pick_score` breakdown
+(`quality_term`, `capacity_term`, `weights`), `affordable_requests`,
+`binding_window` and a `pick_reason`; a route whose window was measured uses
+that remaining share, and a published-only budget says so. A measured usage
+reading always beats an estimate. Unknown stays unknown, never zero.
+
+An undated or alias model id binds to the newest dated Artificial Analysis
+record of its family, and the binding says `assumed latest (owner rule)` beside
+any vendor evidence. A dated id, including a short checkpoint such as `-1017`,
+stays exact. A newer dated record moves the binding automatically.
+
+The same dated table carries each model's training and retention policy. A
+model whose prompts are used for training, or whose data is not zero-retention,
+is published with `data_policy.sensitive_ok: false` and stays out of internal
+and sensitive work (`selection_eligible: false`, reason
+`data policy: training used or not ZDR`). It remains visible so the exclusion
+can be audited. A policy the table does not state stays unknown.
 
 An optional runtime file, `--custom-resets` (default
 `/var/lib/ghostship-ai-usage/custom-resets.json`), contains
