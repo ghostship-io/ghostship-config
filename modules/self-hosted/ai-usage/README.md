@@ -1631,8 +1631,13 @@ See [event contract and operations](../../../docs/ai-usage-announcements.md).
 
 ### Exact worker builds
 
-`ghostship.aiUsage.workerBuilds` maps a provider to an exact native model ID.
-The configured Ollama choice is `ollama-cloud/deepseek-v4.1-flash:1017`. An
+`ghostship.aiUsage.workerBuilds` maps a provider to an exact model ID. The
+configured Ollama choice is `ollama-cloud/deepseek-v4.1-flash:1017`. The owner
+may name either exact identity of the build: the live native catalog ID, or
+the provider's own model ID. A route another instance serves carries that
+instance's prefix in its native ID: the configured Command Code build
+`deepseek/deepseek-v4.1-flash` is served by the `opencode` instance as
+`command-code/deepseek/deepseek-v4.1-flash`, and either form admits it. An
 undated alias keeps its own measured quality and outcomes, but cannot replace
 that build. Missing or spent configured builds yield no worker for that provider;
 other providers remain available. Orchestrator choices are independent.
