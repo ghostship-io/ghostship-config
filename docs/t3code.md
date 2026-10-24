@@ -273,6 +273,8 @@ remote catalog changes are disabled; changing the pin or paid allowlist needs
 a reviewed configuration change. Installation is atomic and retries reuse the
 completed release. T3's startup installs the managed `cmd` entry and merges only
 the `commandCode` provider instance before the server reads its settings.
+Each successful setup sets this managed instance to `enabled: true`; disabling
+it in T3's settings does not persist across a successful server restart.
 Setup is an optional, non-fatal `ExecStartPre=-` step: failure logs one sanitized
 line, disables an existing managed instance where its settings remain readable,
 and lets T3 start. Installation and configuration finish before the launcher
