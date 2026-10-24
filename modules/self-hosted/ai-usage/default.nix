@@ -89,7 +89,7 @@ in
     type = lib.types.attrsOf lib.types.str;
     default.ollama = "ollama-cloud/deepseek-v4.1-flash:1017";
     default.commandCode = "deepseek/deepseek-v4.1-flash";
-    description = "Exact native worker model IDs selected by the owner, keyed by provider. Missing or unavailable IDs cannot fall back to another catalog ID. A provider's latest alias may change builds.";
+    description = "Exact worker model IDs selected by the owner, keyed by provider: the live native catalog ID, or the provider's own model ID when another instance serves the route. Missing or unavailable IDs cannot fall back to another catalog ID. A provider's latest alias may change builds.";
   };
 
   config = {
