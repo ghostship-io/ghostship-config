@@ -35,6 +35,20 @@ def write(name, content):
         Path(temporary).unlink(missing_ok=True)
 
 
+def home_postal(fields):
+    """The owner's postal code from private runtime configuration, or fail closed."""
+    value = (fields.get('HOME_POSTAL_CODE') or '').strip()
+    if not value:
+        path = os.environ.get('GHOSTSHIP_RETAIL_ENV', '/etc/ghostship/retail-store.env')
+        try:
+            value = values(path).get('COSTCO_POSTAL_CODE', '').strip()
+        except OSError:
+            value = ''
+    if not re.fullmatch(r'[0-9]{5}', value):
+        raise SystemExit('ghostship: home postal code missing from the owner-private retail store environment')
+    return value
+
+
 def main():
     fields = values(sys.argv[1])
     # Validate before replacing any live credential/configuration.
@@ -57,7 +71,7 @@ def main():
                 'stdio_send_initialized_notification': True},
     }))
     # Personal destination belongs to deployment, never to the reusable image.
-    write('runtime.json', json.dumps({'home_postal_code': 'a postal code'}))
+    write('runtime.json', json.dumps({'home_postal_code': home_postal(fields)}))
 
 
 if __name__ == '__main__':
