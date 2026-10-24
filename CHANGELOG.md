@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.251] - 2026-10-24
+
+- Pin the coordinator backend to ghostship-agent 0.47.28, which adds
+  existing-owner work starts and commits the start transaction before model
+  selection.
+
+PR #422.
+
 ## [3.17.250] - 2026-10-24
 
 - models: selected-only table by default, every evaluated model with a reason
