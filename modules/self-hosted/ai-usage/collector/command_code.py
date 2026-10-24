@@ -42,13 +42,85 @@ def _read(path: str) -> str:
         return ''
 
 
+def _strip_jsonc(text: str) -> str:
+    """JSONC as JSON: comments and trailing commas outside strings.
+
+    OpenCode's config is JSONC, so a comment or trailing comma is valid.
+    """
+    out = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            out.append(char)
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            out.append(char)
+            index += 1
+            continue
+        if char == '/' and index + 1 < len(text) and text[index + 1] == '/':
+            while index < len(text) and text[index] not in '\r\n':
+                index += 1
+            continue
+        if char == '/' and index + 1 < len(text) and text[index + 1] == '*':
+            index += 2
+            while index + 1 < len(text) and not (text[index] == '*' and text[index + 1] == '/'):
+                index += 1
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    stripped = ''.join(out)
+    result = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(stripped):
+        char = stripped[index]
+        if in_string:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+        if char == ',':
+            following = index + 1
+            while following < len(stripped) and stripped[following] in ' \t\r\n':
+                following += 1
+            if following < len(stripped) and stripped[following] in '}]':
+                index += 1
+                continue
+        result.append(char)
+        index += 1
+    return ''.join(result)
+
+
 def _config(home: str) -> dict[str, Any] | None:
     for relative in CONFIG_NAMES:
         text = _read(str(Path(home) / relative))
         if not text:
             continue
         try:
-            config = json.loads(text)
+            config = json.loads(_strip_jsonc(text))
         except ValueError:
             return None
         return config if isinstance(config, dict) else None

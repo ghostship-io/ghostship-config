@@ -165,6 +165,79 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text())
 
 
+def _strip_jsonc(text: str) -> str:
+    """JSONC as JSON: comments and trailing commas outside strings."""
+    out = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            out.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            out.append(char)
+            index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "/":
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "*":
+            index += 2
+            while index + 1 < len(text) and not (text[index] == "*" and text[index + 1] == "/"):
+                index += 1
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    stripped = "".join(out)
+    result = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(stripped):
+        char = stripped[index]
+        if in_string:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+        if char == ",":
+            following = index + 1
+            while following < len(stripped) and stripped[following] in " \t\r\n":
+                following += 1
+            if following < len(stripped) and stripped[following] in "}]":
+                index += 1
+                continue
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
+def _load_jsonc(path: Path) -> Any:
+    return json.loads(_strip_jsonc(path.read_text(encoding="utf-8")))
+
+
 def check_command_code(home: Path, projection: Path, required: bool) -> Check:
     name = "command-code"
     candidates = (
@@ -175,7 +248,7 @@ def check_command_code(home: Path, projection: Path, required: bool) -> Check:
     if path is None:
         return Check(name, "fail" if required else "skip", "OpenCode config not present")
     try:
-        data = _load_json(path)
+        data = _load_jsonc(path)
         provider = data["providers"]["command-code"]
         settings = provider.get("settings") or {}
         headers = provider.get("headers") or {}
