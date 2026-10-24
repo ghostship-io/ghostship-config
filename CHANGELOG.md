@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.279] - 2026-10-24
+
+Pin the private agent to release 0.47.76.
+
+PR #453.
+
 ## [3.17.278] - 2026-10-24
 
 - Coordinator: seed the pointer with the home owner's HOME
