@@ -511,16 +511,28 @@ def read_antigravity(
             fraction = quota.get("remainingFraction")
             if not isinstance(fraction, (int, float)):
                 continue
+            reset = iso_to_epoch(quota.get("resetTime"))
+            # The model's current bucket is its most constraining one: the
+            # shared short window on a model that is inside it, the weekly
+            # window on a model whose week is nearly gone. The reset it
+            # states is the evidence of which window it is.
+            if key == "quotaInfo" and reset is not None:
+                short = reset - now <= 5 * 3600.0 + 300.0
+                kind = "session" if short else "weekly"
+                duration = 5 * 3600.0 if short else 7 * 86400.0
+            elif window == "weekly":
+                kind, duration = "weekly", 7 * 86400.0
+            else:
+                kind, duration = "quota", None
             labels = {
                 "provider": "antigravity",
                 "account": "default",
                 "model": model_id,
-                "window": window,
+                "window": kind,
                 "quota": key,
                 "source": source,
             }
             samples.append(("ghostship_ai_quota_used_ratio", labels, _clamp(1.0 - float(fraction))))
-            reset = iso_to_epoch(quota.get("resetTime"))
             if reset is not None:
                 samples.append(("ghostship_ai_quota_reset_timestamp_seconds", labels, reset))
             samples.append(("ghostship_ai_quota_observed_timestamp_seconds", labels, now))
@@ -529,11 +541,11 @@ def read_antigravity(
                     "provider": "antigravity",
                     "account": "default",
                     "model": model_id,
-                    "kind": window,
+                    "kind": kind,
                     "quotaId": key,
                     "usedRatio": _clamp(1.0 - float(fraction)),
                     "resetEpoch": reset,
-                    "durationSeconds": None,
+                    "durationSeconds": duration,
                     "source": source,
                     "observedAtEpoch": now,
                 }

@@ -18,6 +18,9 @@ from metrics import SourceResult
 NOW = 1_800_000_000.0
 NOTICE = ('Usage Limit Reached\n\nYou have reached your current quota for this period. '
           'Your limit will reset in 6 days, 22 hours.')
+# The 5-hour window, as the same notice names it when the short window is spent.
+SHORT_NOTICE = ('Usage Limit Reached\n\nYou have reached your current quota for this period. '
+                'Your limit will reset in 3 hours, 45 minutes.')
 
 
 def iso(moment):
@@ -82,6 +85,28 @@ class RuntimeLimitsTests(unittest.TestCase):
         first = runtime_state.read_limit_windows(self.path, NOW)
         later = runtime_state.read_limit_windows(self.path, NOW + 3600)
         self.assertEqual(first, later)
+
+    def test_a_short_notice_carries_the_five_hour_reset_and_the_long_one_the_weekly_reset(self):
+        self.message(text=SHORT_NOTICE)
+        self.message(text=NOTICE)
+        windows = {w['quotaId']: w for w in runtime_state.read_limit_windows(self.path, NOW + 60)}
+        short = windows['runtime-limit-5h:gemini-4-argon']
+        weekly = windows['runtime-limit:gemini-4-argon']
+        self.assertEqual(short['kind'], 'session')
+        self.assertEqual(short['durationSeconds'], 5 * 3600)
+        self.assertEqual(short['resetEpoch'], NOW + 3 * 3600 + 45 * 60)
+        self.assertEqual(weekly['kind'], 'weekly')
+        self.assertEqual(weekly['durationSeconds'], 7 * 86400)
+        self.assertEqual(weekly['resetEpoch'], NOW + 6 * 86400 + 22 * 3600)
+
+    def test_the_weekly_notice_has_a_pace_and_the_short_one_has_none(self):
+        self.message(text=SHORT_NOTICE)
+        self.message(text=NOTICE)
+        windows = {w['quotaId']: w for w in runtime_state.read_limit_windows(self.path, NOW + 60)}
+        self.assertIsNone(quota.window_pace(windows['runtime-limit-5h:gemini-4-argon'], NOW + 60))
+        pace = quota.window_pace(windows['runtime-limit:gemini-4-argon'], NOW + 60)
+        self.assertIsNotNone(pace)
+        self.assertEqual(pace['duration_seconds'], 7 * 86400)
 
     def test_real_ranking_snapshot_and_selection_keep_notice_spent(self):
         self.message()
