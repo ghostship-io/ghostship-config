@@ -689,10 +689,12 @@ never mixed:
 
 ### The card order of the Providers page
 
-The Providers page draws one card per provider account, and the cards come
-in the order the owner approved. A Grafana variable keeps only the order of
-the query that fills it, so the page cannot sort the cards itself: the
-collector publishes the place of every account, and the page reads it.
+The Providers page splits its accounts into a paid list and a free list by
+the scope of this series, and draws each list from the account's windows:
+the paid list shows the lowest allowance first and the free list shows the
+blocked providers first. The place the collector publishes is the order of
+the Grafana variables that fill the two lists; the page itself no longer
+draws one card per account in that order.
 
 | Series | Value |
 | --- | --- |
