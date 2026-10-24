@@ -8,7 +8,12 @@
 # already exists - T3 Code's own read-only RPC surface, the provider APIs T3
 # Code does not read, the free inference pool, and the public model catalog.
 # The contract, every metric name and label, is in README.md.
-{ config, lib, pkgs, ... } @ args:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}@args:
 let
   cfg = config.ghostship.aiUsage;
   # The container home the provider credentials, the model catalog and the
@@ -55,10 +60,12 @@ let
   # decides. Routing stays off until the owner turns it on, so a consumer
   # that ignores the switch still sees it off.
   routingEnabled = if cfg.routing.enabled then "true" else "false";
-  workerPreferences = pkgs.writeText "ghostship-model-selection-preferences.json" (builtins.toJSON {
-    schema = "ghostship.model-selection-preferences/v1";
-    worker_builds = cfg.workerBuilds;
-  });
+  workerPreferences = pkgs.writeText "ghostship-model-selection-preferences.json" (
+    builtins.toJSON {
+      schema = "ghostship.model-selection-preferences/v1";
+      worker_builds = cfg.workerBuilds;
+    }
+  );
 in
 {
   imports = [ ./announced-resets.nix ];
@@ -83,17 +90,27 @@ in
   config = {
     systemd.services.ghostship-ai-usage = {
       description = "Collect AI provider usage, limits, and free models for Prometheus";
-      after = [ "network-online.target" "podman.socket" ];
-      wants = [ "network-online.target" "podman.socket" ];
+      after = [
+        "network-online.target"
+        "podman.socket"
+      ];
+      wants = [
+        "network-online.target"
+        "podman.socket"
+      ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled} --model-selection-preferences ${workerPreferences}${policyArg}${lib.optionalString (policy != null) " --reconcile-picker"}";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled} --model-selection-preferences ${workerPreferences}${policyArg}${
+          lib.optionalString (policy != null) " --reconcile-picker"
+        }";
         # The collector finds the T3 Code container's address with the Podman
         # CLI. The CLI must not open the container storage (ProtectSystem makes
         # it read-only), so it asks the Podman API socket instead.
-        Environment = [ "CONTAINER_HOST=unix:///run/podman/podman.sock"
-          "GHOSTSHIP_MODEL_EVIDENCE_PATH=${t3Home}/.local/state/ghostship/model-evidence.jsonl" ]
-          ++ lib.optional (policy != null) "PYTHONPATH=${policy}/tools/python";
+        Environment = [
+          "CONTAINER_HOST=unix:///run/podman/podman.sock"
+          "GHOSTSHIP_MODEL_EVIDENCE_PATH=${t3Home}/.local/state/ghostship/model-evidence.jsonl"
+        ]
+        ++ lib.optional (policy != null) "PYTHONPATH=${policy}/tools/python";
         # The T3 usage summary pages over 30 days and the free pool catalog is
         # paged; a few minutes is the honest bound.
         TimeoutStartSec = "5min";
@@ -114,7 +131,11 @@ in
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         SystemCallArchitectures = "native";
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
         # Only the textfile and the ranking state are writable.
         ReadWritePaths = [
           textfileDir
@@ -193,7 +214,11 @@ in
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
         SystemCallArchitectures = "native";
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
         # Only the quality cache is written.
         ReadWritePaths = [
           stateDir
@@ -215,6 +240,55 @@ in
         OnCalendar = "*-*-* 04:17:00";
         AccuracySec = "5min";
         # A missed pull is not caught up: the next one reads the current pages.
+        Persistent = false;
+      };
+    };
+
+    # The Go page and its hashed chunk are public. A six-hour refresh writes
+    # the dated table; the collector only reads that file, so a test or a dry
+    # run never opens a socket.
+    systemd.services.ghostship-ai-usage-opencode-go = {
+      description = "Refresh the dated OpenCode Go limit table";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/opencode_go.py --refresh --state ${stateDir}/opencode-go-limits.json";
+        TimeoutStartSec = "5min";
+        UMask = "0077";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictNamespaces = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
+        ReadWritePaths = [ stateDir ];
+        MemoryMax = "128M";
+        CPUQuota = "25%";
+        TasksMax = 8;
+        CapabilityBoundingSet = [ ];
+        AmbientCapabilities = "";
+      };
+    };
+
+    systemd.timers.ghostship-ai-usage-opencode-go = {
+      description = "Refresh the OpenCode Go limit table every six hours";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "6min";
+        OnCalendar = "*-*-* 01,07,13,19:47:00";
+        AccuracySec = "5min";
         Persistent = false;
       };
     };
