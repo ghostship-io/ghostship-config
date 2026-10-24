@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 SCHEMA = "ghostship.provider-zdr-doctor/v1"
-STATES = {"ON", "NOT AVAILABLE", "BLOCKED"}
+STATES = {"ON", "NOT AVAILABLE", "BLOCKED", "OWNER DECLINED"}
 REQUIRED = {
     "Command Code GOAT",
     "Anthropic Claude Code",
@@ -243,6 +243,110 @@ def check_pool(path: Path, required: bool) -> Check:
     return Check(name, "pass", f"{len(providers)} providers, no ZDR model filter")
 
 
+TERMINAL_ESCAPE = re.compile(
+    r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][A-Z0-9]|\x1b[=>]"
+)
+
+
+def _clean_terminal(text: str) -> str:
+    return TERMINAL_ESCAPE.sub("", text)
+
+
+def antigravity_telemetry_state(text: str) -> str | None:
+    """The Enable Telemetry value from an `agy` /config panel, or None."""
+    match = re.search(r"Enable Telemetry\s+(on|off)\b", text, re.I)
+    return match.group(1).lower() if match else None
+
+
+def _trusted_antigravity_workspace(home: Path) -> Path | None:
+    path = home / ".gemini/antigravity-cli/settings.json"
+    try:
+        data = _load_json(path)
+    except (OSError, ValueError, TypeError):
+        return None
+    for item in data.get("trustedWorkspaces", []):
+        if isinstance(item, str) and Path(item).is_dir():
+            return Path(item)
+    return None
+
+
+def _agy_config_panel(workspace: Path) -> str:
+    import fcntl
+    import os
+    import pty
+    import select
+    import struct
+    import termios
+    import time
+
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 45, 140, 0, 0))
+    env = dict(os.environ, TERM="xterm-256color", NO_COLOR="1")
+    process = subprocess.Popen(
+        ["agy"],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        cwd=str(workspace),
+        env=env,
+        close_fds=True,
+    )
+    os.close(slave)
+    try:
+        time.sleep(3)
+        os.write(master, b"/config\r")
+        time.sleep(2)
+        os.write(master, b"telemetry")
+        time.sleep(1.5)
+        output = b""
+        deadline = time.time() + 4
+        while time.time() < deadline:
+            ready, _, _ = select.select([master], [], [], 0.2)
+            if ready:
+                try:
+                    output += os.read(master, 65536)
+                except OSError:
+                    break
+            elif output:
+                break
+        return _clean_terminal(output.decode("utf-8", "replace"))
+    finally:
+        try:
+            os.write(master, b"\x03\x04")
+        except OSError:
+            pass
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        os.close(master)
+
+
+def check_antigravity(home: Path, required: bool) -> Check:
+    name = "antigravity-telemetry"
+    from shutil import which
+
+    settings = home / ".gemini/antigravity-cli/settings.json"
+    if not settings.exists():
+        return Check(name, "fail" if required else "skip", "Antigravity CLI settings not present")
+    if which("agy") is None:
+        return Check(name, "fail" if required else "skip", "agy is not installed")
+    workspace = _trusted_antigravity_workspace(home)
+    if workspace is None:
+        return Check(name, "fail" if required else "skip", "no trusted Antigravity workspace")
+    try:
+        panel = _agy_config_panel(workspace)
+    except Exception as exc:
+        return Check(name, "fail", f"could not open /config: {type(exc).__name__}")
+    state = antigravity_telemetry_state(panel)
+    if state == "off":
+        return Check(name, "pass", "Enable Telemetry is off in /config")
+    if state == "on":
+        return Check(name, "fail", "Enable Telemetry is on in /config")
+    return Check(name, "fail" if required else "skip", "could not read Enable Telemetry from /config")
+
+
 def browser_call(url: str, script: str, runner: Callable[..., Any]) -> Any:
     request = json.dumps({"op": "eval", "script": script})
     result = runner(
@@ -274,6 +378,20 @@ def _switch_states() -> str:
     )
 
 
+def _claude_privacy_off(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    states = {
+        item.get("label"): item.get("checked")
+        for item in value.get("switches", [])
+        if isinstance(item, dict)
+    }
+    return (
+        states.get("Help improve our AI models") == "false"
+        and states.get("Location metadata") == "false"
+    )
+
+
 BROWSER_CHECKS: dict[str, tuple[str, str, Callable[[Any], bool], str]] = {
     "openrouter": (
         "https://openrouter.ai/settings/privacy",
@@ -300,6 +418,20 @@ BROWSER_CHECKS: dict[str, tuple[str, str, Callable[[Any], bool], str]] = {
         "([...document.querySelectorAll('[role=switch]')].map(e=>e.getAttribute('aria-checked')))",
         lambda value: isinstance(value, list) and len(value) == 2 and all(item == "false" for item in value),
         "API training and Labs models are off",
+    ),
+    "claude": (
+        "https://claude.ai/settings/data-privacy-controls",
+        "({switches:[...document.querySelectorAll('span[role=switch]')]"
+        ".map(e=>({label:e.getAttribute('aria-label'),checked:e.getAttribute('aria-checked')}))})",
+        _claude_privacy_off,
+        "Help improve our AI models and Location metadata are off",
+    ),
+    "grok": (
+        "https://grok.com/?_s=data",
+        "([...document.querySelectorAll('button[role=switch]')]"
+        ".map(e=>e.getAttribute('aria-checked')).slice(0,2))",
+        lambda value: value == ["false", "false"],
+        "Improve the Model and Personalize Grok using X are off",
     ),
 }
 
@@ -336,6 +468,7 @@ def build_report(
     max_age_days: int,
     require_live: bool,
     browser: bool,
+    antigravity: bool = False,
     runner: Callable[..., Any] | None = None,
 ) -> Report:
     report = Report(root=root, max_age_days=max_age_days)
@@ -348,6 +481,8 @@ def build_report(
     report.checks.append(check_pool(root / "modules/self-hosted/inference-pool.json", require_live))
     if browser:
         report.checks.extend(run_browser_checks((row["Provider"] for row in rows), runner))
+    if antigravity:
+        report.checks.append(check_antigravity(home, require_live))
     return report
 
 
@@ -358,9 +493,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-age-days", type=int, default=45)
     parser.add_argument("--require-live", action="store_true", help="fail when a live settings file is missing")
     parser.add_argument("--browser", action="store_true", help="re-read the account toggles through the personal profile")
+    parser.add_argument("--antigravity", action="store_true", help="read Enable Telemetry from the agy /config panel")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    report = build_report(args.root, args.home, args.max_age_days, args.require_live, args.browser)
+    report = build_report(
+        args.root, args.home, args.max_age_days, args.require_live, args.browser, args.antigravity
+    )
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
     else:
