@@ -437,17 +437,28 @@ in {
     # Host CLI picker runs as root or a service account; the explicit path keeps
     # it on the T3 home store instead of guessing HOME (#403).
     environment.variables.GHOSTSHIP_MODEL_EVIDENCE_PATH =
-      "/srv/apps/t3code/home/.local/state/ghostship/model-evidence.jsonl";
-    # The evidence file is 0600 for the T3 home owner. Grant the integrations
-    # uid (62020) read on the directory and on future files via a default ACL,
-    # the same pattern the coordinator review store uses.
+      "/srv/apps/t3code/home/.local/state/ghostship/model-evidence/model-evidence.jsonl";
+    # The store lives in its own directory so the integrations container never
+    # sees the parent state tree. The recorder writes it 0600 for the T3 home
+    # owner; grant the integrations uid (62020) read on that directory and on
+    # future files via a default ACL, and an explicit mask on the file so the
+    # named entry survives a 0600 recreation.
     systemd.services.podman-ghostship-private-integrations.preStart = lib.mkBefore ''
-      evidence=/srv/apps/t3code/home/.local/state/ghostship
-      if [ -d "$evidence" ]; then
+      state=/srv/apps/t3code/home/.local/state/ghostship
+      evidence="$state/model-evidence"
+      legacy="$state/model-evidence.jsonl"
+      owner=$(${pkgs.coreutils}/bin/stat -c %u:%g "$state" 2>/dev/null || echo 3000:3000)
+      if [ -d "$state" ]; then
+        ${pkgs.coreutils}/bin/install -d -m 0750 -o "''${owner%:*}" -g "''${owner#*:}" "$evidence"
+        # One-time move of the pre-#403 store; the T3 recorder then appends here.
+        if [ -f "$legacy" ] && [ ! -e "$evidence/model-evidence.jsonl" ]; then
+          ${pkgs.coreutils}/bin/mv "$legacy" "$evidence/model-evidence.jsonl"
+          ${pkgs.coreutils}/bin/chown "''${owner%:*}:''${owner#*:}" "$evidence/model-evidence.jsonl"
+        fi
         ${pkgs.acl}/bin/setfacl -m u:62020:rx "$evidence"
         ${pkgs.acl}/bin/setfacl -m d:u:62020:rX "$evidence"
         if [ -f "$evidence/model-evidence.jsonl" ]; then
-          ${pkgs.acl}/bin/setfacl -m u:62020:r "$evidence/model-evidence.jsonl"
+          ${pkgs.acl}/bin/setfacl -m u:62020:r,m::r "$evidence/model-evidence.jsonl"
         fi
       fi
     '';
@@ -471,9 +482,11 @@ in {
       environmentFiles = [ "/etc/ghostship/mcp-identity.env" ];
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
-        # Read-only view of the one model-evidence store; the pre-start grants
-        # this runtime's uid read through an ACL (#403).
-        "/srv/apps/t3code/home/.local/state/ghostship:/run/ghostship-model-evidence:ro"
+        # Read-only view of the dedicated model-evidence directory only; the
+        # pre-start grants this runtime's uid read through an ACL (#403). The
+        # parent state directory holds handoffs, sessions and reviews and stays
+        # out of this container entirely.
+        "/srv/apps/t3code/home/.local/state/ghostship/model-evidence:/run/ghostship-model-evidence:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"
         "/run/ghostship-hostops:/run/ghostship-hostops:ro"
         # Service executor credentials: the runtime's default directory.

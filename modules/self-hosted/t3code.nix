@@ -205,7 +205,7 @@ in
     environment = {
       # The picker and the probe recorder must read one store: the T3 home's
       # model evidence, not a provider sandbox or another HOME (#403).
-      GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence.jsonl";
+      GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence/model-evidence.jsonl";
     };
     environmentFiles = [ t3codeSecrets ];
   };
