@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.290] - 2026-10-24
+
+- ai-usage: collect Claude subscription usage (left, binding window, reset)
+
+PR #474.
+
 ## [3.17.289] - 2026-10-24
 
 - Fix the duplicated tmpfiles attribute that broke the host build
