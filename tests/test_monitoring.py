@@ -1,4 +1,7 @@
 import json
+import os
+import shlex
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,12 +12,140 @@ from engineio.packet import MESSAGE, Packet
 from engineio.payload import Payload
 from test_config import load
 
+ROOT = Path(__file__).resolve().parents[1]
+
 provision = load(
     "monitoring_provision", "modules/self-hosted/monitoring-provision.py"
 )
 heartbeats = load(
     "monitoring_heartbeats", "modules/self-hosted/monitoring-heartbeats.py"
 )
+
+NOTIFY_SCRIPT = ROOT / "modules/self-hosted/unit-notify.sh"
+SCHEDULER = "ghostship-inference-scheduler.service"
+AUTH = "ghostship-free-worker-auth.service"
+DESCRIPTION = "Durable free inference scheduler in the separate worker container"
+
+
+class UnitNotifyTests(unittest.TestCase):
+    """ghostship-unit-notify failure texts follow what actually happened.
+
+    A start job that fails on a dependency never runs the unit, so the unit's
+    own Result/ExecMainStatus still read success/0. The 2026-10-24 scheduler
+    incident journal (see issue 450) showed such an alert phrased as
+    "success (exit status 0)".
+    """
+
+    HOST = "fixture-host"
+
+    def run_notify(self, show):
+        """Run the failure path with stubbed systemctl; return the notify line.
+
+        ``show`` maps each expected ``systemctl show`` argument string to the
+        output the incident's journal-backed queries would produce.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bindir = root / "bin"
+            bindir.mkdir()
+            log = root / "notify.log"
+            cases = "\n".join(
+                f'    "{invocation}") printf \'%s\\n\' {shlex.quote(output)} ;;'
+                for invocation, output in show.items()
+            )
+            systemctl = bindir / "systemctl"
+            systemctl.write_text(
+                "#!/usr/bin/env bash\n"
+                'case "$*" in\n'
+                f"{cases}\n"
+                "    *) exit 4 ;;\n"
+                "esac\n"
+            )
+            systemctl.chmod(0o755)
+            publisher = bindir / "ghostship-notify"
+            publisher.write_text(
+                "#!/usr/bin/env bash\n"
+                'for argument in "$@"; do printf \'%s\\n\' "$argument" '
+                '>> "$UNIT_NOTIFY_LOG"; done\n'
+                "exit 0\n"
+            )
+            publisher.chmod(0o755)
+            script = NOTIFY_SCRIPT.read_text().replace("@host@", self.HOST)
+            result = subprocess.run(
+                ["bash", "-c", script, "ghostship-unit-notify", "failure", SCHEDULER],
+                env={
+                    **os.environ,
+                    "PATH": f"{bindir}:{os.environ['PATH']}",
+                    "UNIT_NOTIFY_LOG": str(log),
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            # ghostship-notify is exec'd with the flags, title and body, one
+            # argument per line.
+            return log.read_text().splitlines()
+
+    def dependency_failed_start_fixture(self):
+        # The evidence from the incident journal: the scheduler's start job
+        # failed with result 'dependency', the unit never ran, and the
+        # required auth unit itself exited 1, so systemd lists it as failed.
+        return {
+            f"show -P Description {SCHEDULER}": DESCRIPTION,
+            f"show -P Result {SCHEDULER}": "success",
+            f"show -P ExecMainStatus {SCHEDULER}": "0",
+            f"show -p BindsTo,Requires,Requisite {SCHEDULER}": (
+                f"Requires={AUTH}\nRequisite=other-dependency.service"
+            ),
+            f"show -P ActiveState {AUTH}": "failed",
+            "show -P ActiveState other-dependency.service": "inactive",
+        }
+
+    def test_dependency_failed_start_names_the_job_and_the_dependency(self):
+        arguments = self.run_notify(self.dependency_failed_start_fixture())
+        self.assertEqual(arguments, [
+            "--topic", "operations",
+            "--priority", "4",
+            "--source", "systemd",
+            "--incident",
+            "--dedupe", SCHEDULER,
+            "--title", f"Service {SCHEDULER} failed on {self.HOST}",
+            f"{DESCRIPTION}: start job failed: dependency {AUTH} failed. "
+            f"Inspect: journalctl -b -u {SCHEDULER}",
+        ])
+        self.assertNotIn("success (exit status 0)", " ".join(arguments))
+
+    def test_real_nonzero_exit_keeps_the_result_text(self):
+        # The unit itself ran and exited 1; the message must keep the current
+        # result (exit status N) form.
+        show = self.dependency_failed_start_fixture()
+        show[f"show -P Description {SCHEDULER}"] = DESCRIPTION
+        show[f"show -P Result {SCHEDULER}"] = "exit-code"
+        show[f"show -P ExecMainStatus {SCHEDULER}"] = "1"
+        arguments = self.run_notify(show)
+        self.assertEqual(arguments, [
+            "--topic", "operations",
+            "--priority", "4",
+            "--source", "systemd",
+            "--incident",
+            "--dedupe", SCHEDULER,
+            "--title", f"Service {SCHEDULER} failed on {self.HOST}",
+            f"{DESCRIPTION}: exit-code (exit status 1). "
+            f"Inspect: journalctl -b -u {SCHEDULER}",
+        ])
+        self.assertNotIn("start job failed", " ".join(arguments))
+
+    def test_dependency_failed_start_without_a_failed_candidate_stays_named(self):
+        # No dependency edge is itself failed at query time (the culprit is
+        # further down the cascade); the alert still names the job outcome.
+        show = self.dependency_failed_start_fixture()
+        show[f"show -P ActiveState {AUTH}"] = "inactive"
+        arguments = self.run_notify(show)
+        self.assertEqual(
+            arguments[-1],
+            f"{DESCRIPTION}: start job failed: a dependency failed before the "
+            f"unit ran. Inspect: journalctl -b -u {SCHEDULER}",
+        )
 
 
 class MonitoringTests(unittest.TestCase):
