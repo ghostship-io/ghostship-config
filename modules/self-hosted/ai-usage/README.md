@@ -1648,7 +1648,7 @@ Every entry names its provider and model; a wildcard, a malformed entry or an
 unknown schema fails the collector visibly. An entry that omits `sensitivity`
 defaults to `["public"]`, never to every level. The 2026-10-24 owner approval
 lists the measured free routes of the US-hosted providers (OpenCode, NVIDIA,
-Groq, Google, OpenRouter and Cloudflare Workers AI), with
+Google and OpenRouter), with
 `source: "owner 2026-10-24 US-hosted free providers"`, `allow_training: true`
 where the terms allow training or are unknown, and sensitivity up to
 `internal`. OrcaRouter (jurisdiction unpublished), the EU/China-hosted
