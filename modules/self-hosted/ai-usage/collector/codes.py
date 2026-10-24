@@ -16,6 +16,7 @@ from __future__ import annotations
 # The closed vocabulary.
 OK = "ok"
 MISSING_CREDENTIALS = "missing_credentials"
+EXPIRED_CREDENTIALS = "expired_credentials"
 UNSUPPORTED = "unsupported"
 HTTP_ERROR = "http_error"
 HTTP_UNAUTHORIZED = "http_unauthorized"
@@ -53,6 +54,7 @@ CODES = frozenset(
     {
         OK,
         MISSING_CREDENTIALS,
+        EXPIRED_CREDENTIALS,
         UNSUPPORTED,
         HTTP_ERROR,
         HTTP_UNAUTHORIZED,
