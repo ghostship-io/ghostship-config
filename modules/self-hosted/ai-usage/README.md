@@ -21,12 +21,19 @@ usage. Authentication, malformed responses and output write errors still fail vi
 Antigravity can return its quota denial as an entire assistant response on a
 completed T3 run. The collector reads those exact provider notices from the
 read-only message/run projections and publishes a zero-capacity window for the
-run's selected model. The reset countdown is anchored to the message time, with
+run's selected model. The notice names a wait, not the window it belongs to:
+a wait inside five hours is the shared short window
+(`runtime-limit-5h:<model>`, five hours) and a longer one is the model's
+weekly window (`runtime-limit:<model>`, seven days). Both are kept, so a model
+that is out for its short window carries that window's reset and can be
+routed first when it comes back, and the weekly window carries a pace. The
+reset countdown is anchored to the message time, with
 `t3_runtime` provenance and `provider_limit_message` basis. It stays spent until
 that deadline, beyond the ordinary reading freshness limit; polling or another
 model's successful run cannot release it. Prompts, quoted examples and raw error
-text never become published quota evidence. This window feeds the same selection
-used by the dashboard, managed favorites/default, CLI picks and MCP picks.
+text never become published quota evidence. These windows feed the same
+selection used by the dashboard, managed favorites/default, CLI picks and MCP
+picks.
 
 * Unit: `ghostship-ai-usage.service` (`Type=oneshot`), timer
   `ghostship-ai-usage.timer` (`OnUnitActiveSec=5min`, `AccuracySec=1s`,
@@ -76,7 +83,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 
 | Source | What it reads | Where from |
 | --- | --- | --- |
-| `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
+| `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them. A provider instance that reports it has no usage limits, or whose own probe failed, is published per provider as a probe state and does not make the source partial | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
 | `claude_usage` | The Claude subscription windows: the five-hour session and the shared weekly pool, with each used share and reset. The T3 Claude probe reports `probeFailed` on this host, so the account's own OAuth usage endpoint is the reading. | `api.anthropic.com/api/oauth/usage`, with the Claude Code OAuth access token the T3 container already holds; the token is read only and never refreshed by the collector |
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
@@ -839,6 +846,12 @@ basis. A paid provider has no row at all.
   the source last produced a reading.
 * `ghostship_ai_source_observed_timestamp_seconds{source,provider}` - when the
   reported reading was observed, which may be older than the collection.
+* `ghostship_ai_limit_probe{provider,state}` - 1 for each ready T3 provider
+  instance. `state` is `reported` when it reports its usage limits,
+  `unsupported` when it has none to report (its routes are measured from their
+  request records instead, so this never makes the snapshot partial), or
+  `failed` when its limits probe could not read them (which does make the t3
+  source `partial`, with reason `probe_failed`).
 * `ghostship_ai_source_duration_seconds{source,provider}` - how long the source
   took to read.
 * `ghostship_ai_provider_coverage{provider,source}` - 1 for every provider the
@@ -1570,7 +1583,7 @@ publishes which basis it used:
 | Ollama Cloud | session and week | — |
 | Codex | 5h and week | — |
 | Claude | one shared weekly pool and its five-hour session | Fable is a sub-cap of the weekly pool |
-| Antigravity | shared short window | per-model weekly `runtime-limit:<model>` |
+| Antigravity | shared short window | per-model short `runtime-limit-5h:<model>` and weekly `runtime-limit:<model>` |
 | Grok | week | — |
 | Free pool | per-route minute, day and daily tokens, with cooldowns | — |
 
