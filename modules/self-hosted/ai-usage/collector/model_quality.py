@@ -160,11 +160,15 @@ def _decision(rows: list[Mapping[str, Any]], picked: Mapping[str, Any] | None) -
         return str(row.get('selection_reason') or 'Not eligible for selection')
     if row.get('quality_score') is None:
         return 'No Artificial Analysis score for this exact build'
-    if row.get('state') != 'available' and picked is not None and picked.get('available'):
-        # A usable pick outranks an unusable model whatever the scores.
-        return {'exhausted': 'Allowance spent', 'excluded': 'Excluded by trust policy',
-                'reserved': 'Reserved: ' + str(row.get('reason') or 'by the provider pool guard')}.get(
-                    row.get('state'), str(row.get('reason') or 'Not available right now'))
+    state = row.get('state')
+    spent_alike = state == 'exhausted' and picked is not None and not picked.get('available')
+    if state != 'available' and not spent_alike:
+        # The route's own reason: spent, excluded, reserved, not offered, cooling.
+        reason = str(row.get('reason') or '')
+        if state == 'reserved':
+            return 'Reserved: ' + (reason or 'by the provider pool guard')
+        return {'quota_exhausted': 'Allowance spent', 'model_excluded': 'Excluded by trust policy'}.get(
+            reason, reason[:1].upper() + reason[1:] if reason else 'Not available right now')
     if picked is None:
         return 'Not available right now'
     score = picked.get('quality_score')
@@ -225,17 +229,14 @@ def annotate(quality: dict, selection: Mapping[str, Any]) -> None:
                        representative=row is representative)
         models.append(representative)
     models.sort(key=lambda row:(row['overall'] is None,-(row['overall'] or 0),row['provider'],row['model']))
-    chosen_rank = 0
     for rank, representative in enumerate(models,1):
-        if representative['selection'] == 'selected':
-            chosen_rank += 1
         for row in groups[(representative['provider'],representative['model'])]:
-            row.update(model_rank=rank,selected_rank=chosen_rank if representative['selection'] == 'selected' else None)
+            row.update(model_rank=rank)
 
 
 FIELDS = ("overall", "aa", "observed", "observed_weight", "n", "passed", "rank", "merged", "merge_n",
           "median_seconds", "seconds_per_pass", "tokens_per_pass", "quota_per_pass", "review_findings", "date",
-          "representative", "model_rank", "selected_rank")
+          "representative", "model_rank")
 
 
 def samples(quality: Mapping[str, Any]) -> list:
