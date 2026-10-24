@@ -62,14 +62,13 @@ class ReportedLimitsTests(unittest.TestCase):
     def test_visible_capacity_excludes_free_only_openrouter_and_distinguishes_missing(self):
         page = json.loads((Path(__file__).resolve().parents[1] /
             'modules/self-hosted/siem/dashboards/ai-usage.json').read_text())
-        panel = next(p for p in page['panels'] if p['id'] == 210)
+        panel = next(p for p in page['panels'] if p['id'] == 264)
         code = "const helpers={};const context={handlebars:{registerHelper:(k,v)=>helpers[k]=v}};"
         code += "new Function('context'," + json.dumps(panel['options']['helpers']) + ")(context);"
-        code += "console.log(JSON.stringify({cards:helpers.capacityCards([{account:'openrouter',kind:'daily',quota_id:'daily',field:'left',value:.8}],0),missing:helpers.capacityCards([{account:'claude',field:'reported_missing',value:1}],0)}));"
+        code += "console.log(JSON.stringify({cards:helpers.providerRows([{account:'openrouter',kind:'daily',quota_id:'daily',field:'left',value:.8}],0),missing:helpers.providerRows([{account:'claude',field:'reported_missing',value:1}],0)}));"
         value=json.loads(subprocess.check_output(['node','-e',code],text=True))
         self.assertEqual(value['cards'], [])
-        missing=value['missing'][0]['windows'][0]
-        self.assertEqual(missing['label'], 'Reported limits unavailable')
-        self.assertEqual(missing['fillClass'], 'unavailable')
-        self.assertIn('source read failed', missing['sub'])
+        missing=value['missing'][0]
+        self.assertEqual((missing['head'], missing['kind'], missing['bar']), ('Unknown', 'unk', None))
+        self.assertIn('could not be read', missing['detail'])
         self.assertIn('account!="openrouter"', panel['targets'][0]['expr'])
