@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.261] - 2026-10-24
+
+Provider-aware limit calculations with a discovered → measured → cost → unknown chain, free-pool refresh of public limit pages, Command Code usage via the browser path, and visible reset-announcement monitor health with a three-hour alert.
+
+PR #427.
+
 ## [3.17.260] - 2026-10-24
 
 - Record and re-check zero-data-retention / no-training settings for every T3 and free-pool inference provider, and apply Claude Code's nonessential-traffic opt-outs.
