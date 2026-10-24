@@ -488,16 +488,6 @@ in
             ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} reconcile ${root} ${spec}
           '';
         };
-        system.activationScripts.t3code-podman-user-activation = {
-          deps = [ "t3code-podman-reexec-alias" ];
-          text = ''
-            ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/reconcile-activation.py} \
-              --user ${user} --uid ${uid} \
-              --systemctl ${pkgs.systemd}/bin/systemctl --systemd-run ${pkgs.systemd}/bin/systemd-run \
-              --runuser ${pkgs.util-linux}/bin/runuser --env ${pkgs.coreutils}/bin/env \
-              --true ${pkgs.coreutils}/bin/true
-          '';
-        };
         users.groups.${user}.gid = cfg.uid;
         users.users.${user} = {
           isSystemUser = true;
