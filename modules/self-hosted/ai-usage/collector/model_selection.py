@@ -154,6 +154,21 @@ def apply_approved_free_workers(policy: dict[str, Any], entries: list[dict[str, 
             keys.add((entry["provider"], entry["model"]))
 
 
+def _approval_pair(provider: str, model: str) -> tuple[str, str]:
+    """The provider/model pair an owner approval names.
+
+    The ``opencode-free`` instance serves an approved route under its
+    ``provider/model`` id (``nvidia/z-ai/glm-5.3``,
+    ``cloudflare-workers-ai/@cf/...``). The owner approves the underlying
+    provider and model, so the instance prefix is not part of the approval.
+    """
+    if provider == "opencode-free" and "/" in model:
+        underlying, _, rest = model.partition("/")
+        if underlying and rest:
+            return underlying, rest
+    return provider, model
+
+
 def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) -> dict[str, Any] | None:
     """The owner's approval for a free route, or None.
 
@@ -161,6 +176,7 @@ def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) 
     entry. Nothing here invents an approval: a route not named by the owner
     never becomes a first-choice worker, whatever its quality.
     """
+    approved_provider, approved_model = _approval_pair(provider, model)
     entries = (policy or {}).get("approved_free_workers") if isinstance(policy, Mapping) else None
     if isinstance(entries, Mapping):
         entries = [entries]
@@ -169,12 +185,12 @@ def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) 
     for entry in entries:
         if not isinstance(entry, Mapping):
             continue
-        if str(entry.get("provider") or "") != provider:
+        if str(entry.get("provider") or "") != approved_provider:
             continue
         wanted = str(entry.get("model") or "")
         # The owner approves an exact route. A wildcard or an empty model is
         # not an approval of a family, and it never matches.
-        if not wanted or wanted == "*" or wanted != model:
+        if not wanted or wanted == "*" or wanted != approved_model:
             continue
         sensitivity = entry.get("sensitivity")
         levels = list(sensitivity) if isinstance(sensitivity, list) and sensitivity else ["public"]
@@ -477,7 +493,12 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         billing = (source.get('access') or {}).get('billing') or 'unknown'
         # Free inference choices are published independently of native T3
         # identities. They never become T3 favorites or a new-thread default.
-        mapped = bool(native.get("mapped") and instance and model and billing not in ('free', 'promotion'))
+        # The one exception is the one-off opencode-free instance: it is a
+        # real T3 provider serving the owner's approved free workers, so its
+        # routes keep the native identity the picker needs.
+        served_free_instance = str(source.get('provider') or '') == 'opencode-free'
+        mapped = bool(native.get("mapped") and instance and model
+                      and (billing not in ('free', 'promotion') or served_free_instance))
         descriptors = native.get("options") or []
         effort = effort_options(descriptors) if mapped else []
         options = native_options(descriptors) if mapped else []
