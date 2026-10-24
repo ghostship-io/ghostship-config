@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.269] - 2026-10-24
+
+Make the deferred Console OAuth cutover an explicit state the auth unit reports and succeeds with, and add a doctor for it, instead of failing every activation and reddening each deploy switch.
+
+PR #441.
+
 ## [3.17.268] - 2026-10-24
 
 Pin the private agent to release 0.47.60.
