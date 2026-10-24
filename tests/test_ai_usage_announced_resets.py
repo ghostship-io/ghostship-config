@@ -555,5 +555,85 @@ class SandboxedDesktopTransportTests(unittest.TestCase):
         self.assertEqual(result.stdout, 'MCP probe\n')
 
 
+class MonitorHealthTests(unittest.TestCase):
+    def test_live_reset_day_phrasings_record_unverified_events(self):
+        for text in (
+                "Day 17/ Bet you thought we forgot, but no, it's reset day today.",
+                "Day 18/ Decisions API is GA, but yes\u2026 that's a reset!"):
+            record = announcements.parse({"url": URL, "text": text,
+                                          "published_at": "2026-10-22T05:00:00Z"})
+            self.assertIsNotNone(record, text)
+            self.assertEqual(record["confidence"], "low")
+            self.assertEqual(record["products"], ["codex"])
+            self.assertEqual(record["windows"], ["unknown"])
+            self.assertIsNone(record["reset_at"])
+            self.assertEqual(record["reason"], "ambiguous_reset_scope")
+            measured = {"provider": "codex", "quotaId": "weekly", "kind": "weekly",
+                        "usedRatio": .5, "resetEpoch": NOW + 600000,
+                        "durationSeconds": 604800, "observedAtEpoch": NOW}
+            results = [SourceResult("t3", "ok", windows=[measured.copy()])]
+            # An unverified event is visible but never changes capacity.
+            self.assertEqual(announcements.overrides(
+                results, {"announcements": [record]}, NOW), [])
+
+    def test_a_generic_reset_mention_without_the_primary_phrasing_is_ignored(self):
+        for text in ("Reset day today!", "I reset my computer today."):
+            self.assertIsNone(announcements.parse(
+                {"url": URL, "text": text, "published_at": "2026-10-22T05:00:00Z"}))
+
+    def test_health_reports_ok_stale_blocked_and_unknown(self):
+        now = NOW
+        ok = announcements.health(
+            {"status": "ok", "checked_at": now, "last_success_at": now}, now)
+        self.assertEqual((ok["state"], ok["reason"]), ("ok", ""))
+        self.assertAlmostEqual(ok["last_success_age_seconds"], 0)
+
+        stale = announcements.health(
+            {"status": "ok", "last_success_at": now - 4 * 3600}, now)
+        self.assertEqual(stale["state"], "stale")
+        self.assertIn("last successful read", stale["reason"])
+
+        failed = announcements.health(
+            {"status": "unavailable", "last_success_at": now - 60}, now)
+        self.assertEqual(failed["state"], "stale")
+        self.assertEqual(failed["reason"], "the last read did not succeed")
+
+        blocked = announcements.health(
+            {"status": "blocked", "last_success_at": now - 60,
+             "sources": [{"source_url": announcements.SOURCE, "status": "blocked"}]}, now)
+        self.assertEqual(blocked["state"], "blocked")
+        self.assertTrue(blocked["blocked"])
+
+        unknown = announcements.health({}, now)
+        self.assertEqual(unknown["state"], "unknown")
+
+    def test_health_samples_expose_last_success_and_event_count(self):
+        rows = list(announcements.health_samples(
+            {"status": "ok", "last_success_at": NOW, "announcements": [{}, {}]}, NOW))
+        names = {name: (labels, value) for name, labels, value in rows}
+        self.assertEqual(names["ghostship_ai_announcements_health"][0]["state"], "ok")
+        self.assertEqual(names["ghostship_ai_announcements_last_success_timestamp_seconds"][1], NOW)
+        self.assertEqual(names["ghostship_ai_announcements_events"][1], 2)
+
+    def test_a_successful_read_records_last_success_and_a_failure_preserves_it(self):
+        def call(operation, **kwargs):
+            if operation == "browser.window":
+                return {"window_id": "w"}
+            return {"extracts": {"announcements": {"blocked": False, "posts": []}}}
+
+        document = {"schema": 1, "announcements": [], "checked_at": 0, "next_check_at": 0}
+        updated = announcements.check(document, call, NOW)
+        self.assertEqual(updated["status"], "ok")
+        self.assertEqual(updated["last_success_at"], NOW)
+
+        def fail(operation, **kwargs):
+            raise OSError("desktop unavailable")
+
+        failed = announcements.check(updated, fail, NOW + 3600)
+        self.assertEqual(failed["status"], "unavailable")
+        self.assertEqual(failed["last_success_at"], NOW)
+        self.assertEqual(failed["last_error"], "unavailable")
+
+
 if __name__ == "__main__":
     unittest.main()

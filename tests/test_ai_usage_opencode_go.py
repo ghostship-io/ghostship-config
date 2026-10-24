@@ -1,5 +1,4 @@
 """The dated OpenCode Go table, its allowance pick and the assume-latest binder."""
-import json
 import sys
 import tempfile
 import unittest
@@ -8,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'modules/self-hosted/ai-usage/collector'))
 
 import aa_bind
+import allowance
 import main
 import model_selection
 import opencode_go
@@ -202,12 +202,12 @@ class AllowancePickTests(unittest.TestCase):
         # the session window is still fully available (34,670), so the
         # monthly share binds before the next reset.
         deepseek = next(row for row in result['worker'] if row['model'] == 'deepseek-v4.1-flash')
-        picked = model_selection.allowance.affordable(deepseek['allowance'], windows)
+        picked = allowance.affordable(deepseek['allowance'], windows)
         self.assertEqual(picked['binding_window'], 'monthly')
         self.assertAlmostEqual(picked['affordable_requests'], 17335.0)
         mimo = next(row for row in result['worker'] if row['model'] == 'mimo-v2.6-pro')
         self.assertAlmostEqual(
-            model_selection.allowance.affordable(mimo['allowance'], windows)['affordable_requests'],
+            allowance.affordable(mimo['allowance'], windows)['affordable_requests'],
             1625.0)
 
     def test_models_trained_on_prompts_stay_out_of_internal_work(self):

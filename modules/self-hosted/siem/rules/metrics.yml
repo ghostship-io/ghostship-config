@@ -58,6 +58,25 @@ groups:
           summary: 'No host metrics in 10 minutes (node_exporter or Vector)'
           evidence: 'node_load1'
 
+      # The reset-announcement monitor reads Tibo's public timeline hourly.
+      # A successful read is published by the collector; three hours without
+      # one means the monitor, the Desktop profile or the collector is stuck.
+      - alert: AnnouncementMonitorStale
+        expr: '(time() - max(ghostship_ai_announcements_last_success_timestamp_seconds) > 10800) or absent_over_time(ghostship_ai_announcements_last_success_timestamp_seconds[3h])'
+        for: 5m
+        labels: {severity: warning, category: ai-usage}
+        annotations:
+          summary: 'Tibo reset-announcement monitor has not read successfully in over 3 hours'
+          evidence: 'ghostship_ai_announcements_last_success_timestamp_seconds, ghostship_ai_announcements_health'
+
+      - alert: AnnouncementMonitorBlocked
+        expr: 'ghostship_ai_announcements_health{state="blocked"} == 1'
+        for: 15m
+        labels: {severity: warning, category: ai-usage}
+        annotations:
+          summary: 'Tibo reset-announcement monitor is blocked by a sign-in wall or challenge'
+          evidence: 'ghostship_ai_announcements_health{state="blocked"}'
+
       - alert: ContainerMetricsStale
         expr: 'absent_over_time(ghostship_container_cpu_seconds_total[10m])'
         labels: {severity: warning, category: pipeline}
