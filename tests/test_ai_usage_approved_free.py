@@ -41,6 +41,30 @@ class ApprovedFreeTests(unittest.TestCase):
             {'generated_at': NOW, 'candidates': candidates,
              **({'quota': {'accounts': quota}} if quota else {})}, [], evidence=policy(entries))
 
+    def test_an_approved_route_served_by_opencode_free_matches_its_underlying_provider(self):
+        approved = [{'provider': 'nvidia', 'model': 'z-ai/glm-5.3',
+                     'allow_training': True, 'sensitivity': ['public', 'internal']}]
+        free = candidate('opencode-free', 'nvidia/z-ai/glm-5.3', 40,
+                         billing='free', mapped=True)
+        result = self.build([free], entries=approved)
+        row = result['worker'][0]
+        self.assertTrue(row['approved_free'])
+        self.assertTrue(row['selection_eligible'])
+        self.assertTrue(row['picker_eligible'])
+        self.assertIsNotNone(row['native'])
+        self.assertEqual(row['approved_free']['source'],
+                         'owner runtime policy: approved_free_workers')
+        self.assertEqual(result['providers']['opencode-free']['selected']['worker'],
+                         row['native'])
+
+    def test_an_unapproved_opencode_free_route_stays_unapproved(self):
+        free = candidate('opencode-free', 'google/gemini-3.8-flash', 40,
+                         billing='free', mapped=True)
+        result = self.build([free], entries=APPROVED)
+        row = result['worker'][0]
+        self.assertIsNone(row['approved_free'])
+        self.assertNotIn('approved free worker', row.get('pick_reason') or '')
+
     def test_an_approved_free_route_leads_a_paid_route_while_it_has_limit(self):
         paid = candidate('codex', 'gpt-6.1-sol', 55, mapped=False)
         free = candidate('opencode', 'big-pickle', 40, billing='free', remaining=0.6, mapped=False)
