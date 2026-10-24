@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.259] - 2026-10-24
+
+CI: the fast pull-request check has a ten-minute budget so the full fast suite and module evaluation can finish.
+
+PR #432.
+
 ## [3.17.258] - 2026-10-24
 
 - Create the OrcaSlicer/Blender application install, workspace and audit roots on the Agent Desktop and document the sandboxed application tools.
