@@ -197,8 +197,15 @@ class SelectionTests(unittest.TestCase):
     def test_free_route_close_to_best_quality_leads_subscription(self):
         free = candidate('free-provider', 'free', quality=85)
         free['access'] = {'billing': 'free'}
-        value = self.build([candidate('codex', 'reviewer', quality=90), free])
+        value = selection.build(
+            {'generated_at': '2026-10-23T12:00:00Z',
+             'candidates': [candidate('codex', 'reviewer', quality=90), free]},
+            [{'instance_id': 'codex', 'model': 'reviewer'}],
+            evidence={'policy': {'model_selection': {'approved_free_workers': [
+                {'provider': 'free-provider', 'model': 'free', 'allow_training': True,
+                 'sensitivity': ['public', 'internal']}]}}})
         self.assertEqual(value['worker'][0]['model'], 'free')
+        self.assertTrue(value['worker'][0]['approved_free'])
         self.assertEqual(value['default_worker']['model'], 'reviewer')
         self.assertIsNone(next(r for r in value['worker'] if r['model'] == 'free')['native'])
 

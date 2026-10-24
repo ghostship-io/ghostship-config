@@ -1,0 +1,475 @@
+{
+  "schema": "ghostship.approved-free-workers/v1",
+  "approved_at": "2026-10-24",
+  "approval_source": "owner 2026-10-24 US-hosted free providers",
+  "entries": [
+    {
+      "provider": "cloudflare-workers-ai",
+      "model": "@cf/google/gemma-4-26b-a4b-it",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 16.67; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "cloudflare-workers-ai",
+      "model": "@cf/openai/gpt-oss-120b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 11.6; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.5-flash-lite",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 22.17; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.8-flash",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 39.77; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 11.6; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 8.97; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 33.68; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "google/gemma-4-31b-it",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 14.67; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "minimaxai/minimax-m3.1-flash",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 42.71; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 10.25; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 22.93; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "openai/gpt-oss-20b",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 8.97; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "z-ai/glm-5.3",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 44.78; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "nvidia",
+      "model": "z-ai/glm-5.3-flash",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 41.81; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "beam-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 30.33; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "glm-5.3-flash-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 41.81; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "hy3-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 25.3; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "ling-3.0-flash-fin-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 22.6; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "ling-3.0-tiny-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 11.06; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "ling-3.1-flash-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 41.09; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "longcat-2.0-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 19.11; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "mimo-v2.6-flash-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 37.88; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "minimax-m3-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 29.22; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "minimax-m3.1-flash-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 42.71; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "nemotron-3.5-lightning-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 12.86; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "nemotron-3.5-super-vl-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 26.49; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "north-mini-code-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 9.91; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "ring-2.6-1t-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 16.62; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "step-5-preview-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 43.73; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "cohere/north-mini-code:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 9.91; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 16.67; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-31b-it:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 14.67; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 8.39; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 10.25; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 22.93; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3.5-lightning:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 12.86; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 26.49; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "thinkingmachines/inkling-small:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 25.66; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "openrouter",
+      "model": "thinkingmachines/inkling:free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "AA 24.98; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    }
+  ]
+}
