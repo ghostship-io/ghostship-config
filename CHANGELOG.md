@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.296] - 2026-10-24
+
+- ai-usage: approved free routes are native T3 workers on opencode-free
+
+PR #485.
+
 ## [3.17.295] - 2026-10-24
 
 - ai-usage: per-day false-available and false-exhausted counts for every free
