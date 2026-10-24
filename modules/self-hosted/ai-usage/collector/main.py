@@ -2469,6 +2469,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--approved-free-workers",
+        default="",
+        help=(
+            "The owner's explicit free-worker approvals. Every route is named "
+            "by provider and model; the file is configuration, never a rule "
+            "that admits a future provider."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -2596,6 +2605,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.model_selection_preferences:
         model_selection.apply_worker_builds(outcomes['policy'], worker_builds)
+    approved_free_workers = model_selection.load_approved_free_workers(args.approved_free_workers)
+    if outcomes is not None:
+        model_selection.apply_approved_free_workers(outcomes['policy'], approved_free_workers)
     measured_evidence, evidence_state = model_quality.read_evidence(now)
     snapshot = build_snapshot(
         results,
