@@ -182,6 +182,13 @@ attack evidence to investigate, never a reason to relax enforcement unreviewed.
   codecs, review the new set and update the allowlist in a PR.
 - To roll back, set the server and python flags back to `complain` in
   `plex-apparmor.profile` and deploy; do not add broad rules to recover.
+- Python 2's `ctypes` probe ran `ldconfig -p` without closing inherited
+  descriptors, so the interpreter's open packaged runtime files reached
+  `//ldconfig` and every probe logged a `file_inherit` denial. The interpreter's
+  `sitecustomize` (mounted from `modules/self-hosted/plex-sitecustomize.py`)
+  closes every descriptor above stderr for that probe only. The SIEM rule no
+  longer exempts those denials: a reappearing `file_inherit` denial means the
+  probe path changed and is breakage to investigate, not to allow.
 
 ## Profile authoring pitfalls
 
