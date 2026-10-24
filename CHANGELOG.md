@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.248] - 2026-10-24
+
+- Remove ineffective transient activation reconciliation; verify the isolated manager's declared activation unit directly.
+
+PR #416.
+
 ## [3.17.247] - 2026-10-24
 
 - Supply the dedicated Podman manager's user-activation unit during configuration switches.
