@@ -54,6 +54,7 @@ import snapshot as snapshot_module  # noqa: E402
 import static_routes as static_routes_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
+import tool_loop_evidence  # noqa: E402
 import usage_inference  # noqa: E402
 from metrics import MetricWriter, Sample, SourceResult  # noqa: E402
 # The scope of a quota window lives with the other window rules now, in the
@@ -1816,6 +1817,67 @@ def _attach_opencode_go(snapshot: dict[str, Any], limits: Mapping[str, Any] | No
         candidate["aa_evidence"] = record.get("vendor_evidence") or []
 
 
+def best_free_t3_models(
+    ranked: Iterable[Any],
+    outcomes: Mapping[str, Any] | None,
+    evidence: Iterable[Mapping[str, Any]] | None,
+) -> set[str]:
+    """The per-provider best free models that may carry a T3 worker turn.
+
+    The owner's approved list stays untouched. For each approved provider this
+    keeps at most two models, ranked by the quality of the ranked row and
+    restricted to routes with a recorded passing T3 tool-loop proof. A provider
+    with no proof contributes no T3 candidate. The model ids are the
+    ``opencode-free`` route ids (``<provider>/<model>``).
+    """
+    policy = (outcomes or {}).get("policy") or {}
+    approved = ((policy.get("model_selection") or {}).get("approved_free_workers") or [])
+    if not isinstance(approved, list):
+        return set()
+    proven: set[str] = set()
+    for row in evidence or ():
+        if (isinstance(row, Mapping)
+                and row.get("source") in ("probe", "bench", "work")
+                and row.get("passed") is True
+                and str(row.get("provider") or "") == "opencode-free"):
+            model = str(row.get("model") or "")
+            if model:
+                proven.add(model)
+    rank: dict[tuple[str, str], int] = {}
+    quality: dict[tuple[str, str], float] = {}
+    for entry in ranked or ():
+        provider = str(getattr(entry, "provider", "") or "")
+        model = str(getattr(entry, "model", "") or "")
+        place = getattr(entry, "rank", None)
+        if not isinstance(place, int) or isinstance(place, bool) or place < 1:
+            place = 1_000_000
+        score = getattr(entry, "quality", None)
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            score = 0.0
+        if provider and model:
+            rank[(provider, model)] = place
+            quality[(provider, model)] = float(score)
+    groups: dict[str, list[tuple[int, float, str]]] = {}
+    for entry in approved:
+        if not isinstance(entry, Mapping):
+            continue
+        provider = str(entry.get("provider") or "")
+        model = str(entry.get("model") or "")
+        route = f"{provider}/{model}"
+        if not provider or not model or route not in proven:
+            continue
+        place = rank.get(("opencode-free", route), rank.get((provider, model), 1_000_000))
+        score = quality.get(("opencode-free", route), quality.get((provider, model), 0.0))
+        groups.setdefault(provider, []).append((place, score, route))
+    best: set[str] = set()
+    for entries in groups.values():
+        # The owner's order is the rank, not a quality opinion. Quality only
+        # breaks an exact rank tie, then the model id keeps it deterministic.
+        entries.sort(key=lambda item: (item[0], -item[1], item[2]))
+        best.update(route for _place, _score, route in entries[:2])
+    return best
+
+
 def build_snapshot(
     results: list[SourceResult],
     ranked: list[Any],
@@ -1836,6 +1898,7 @@ def build_snapshot(
     go_limits: Mapping[str, Any] | None = None,
     page_limits: Mapping[str, Any] | None = None,
     command_usage: Mapping[str, Any] | None = None,
+    tool_loop_proofs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1863,11 +1926,31 @@ def build_snapshot(
                 ),
             }
         )
+    # The owner wants only the best free models as T3 workers. The approved
+    # list is unchanged; the collector keeps the native identity of at most the
+    # best two proven routes per approved provider, so every other approved
+    # route stays a free_pool route.
+    native_models = dict(context.get("native_models") or {})
+    if tool_loop_proofs is not None:
+        proofs, proof_state = tool_loop_proofs, "test"
+    else:
+        proofs, proof_state = tool_loop_evidence.read_with_state(now)
+    if proofs is None:
+        # An unreadable store is not evidence that no free route is proven.
+        # Keep the mapping the collector already has rather than stripping
+        # every free T3 route.
+        best_free = None
+    else:
+        best_free = best_free_t3_models(ranked, outcomes, proofs)
+    if best_free is not None:
+        for pair in list(native_models):
+            if pair[0] == "opencode-free" and pair[1] not in best_free:
+                native_models.pop(pair, None)
     snapshot = snapshot_module.build_snapshot(
         now=now,
         sources=sources,
         ranked=ranked,
-        native_models=context.get("native_models") or {},
+        native_models=native_models,
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
         measured_windows=list(measured_windows or []),
@@ -1895,6 +1978,10 @@ def build_snapshot(
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
+        snapshot["tool_loop_evidence"] = {
+            "state": proof_state,
+            "count": len(proofs or []),
+        }
         snapshot["announced_resets"] = context.get("announced_resets") or {
             "schema": 1, "status": "not_checked", "announcements": []}
         snapshot["announced_resets"]["health"] = announced_resets.health(
