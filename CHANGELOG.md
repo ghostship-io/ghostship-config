@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.276] - 2026-10-24
+
+- Plex: close the interpreter's descriptors for the ldconfig probe
+
+PR #449.
+
 ## [3.17.275] - 2026-10-24
 
 Pin the private agent to release 0.47.72.
