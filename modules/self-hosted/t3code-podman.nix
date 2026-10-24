@@ -89,6 +89,16 @@ let
     StandardError=inherit
     ExecStart=${pkgs.dbus}/bin/dbus-daemon --nofork --nopidfile --systemd-activation --address=systemd: --config-file=${busConfig}
     EOF
+    # This isolated service manager has no host user activation hooks. NixOS
+    # nevertheless explicitly restarts this unit during every switch.
+    cat > $out/nixos-activation.service <<'EOF'
+    [Unit]
+    Description=Isolated Podman manager activation (no host user hooks)
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=${pkgs.coreutils}/bin/true
+    EOF
     cat > $out/podman.service <<'EOF'
     [Unit]
     Requires=dbus.socket
@@ -476,6 +486,16 @@ in
           deps = [ "t3code-podman-identity" ];
           text = ''
             ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} reconcile ${root} ${spec}
+          '';
+        };
+        system.activationScripts.t3code-podman-user-activation = {
+          deps = [ "t3code-podman-reexec-alias" ];
+          text = ''
+            ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/reconcile-activation.py} \
+              --user ${user} --uid ${uid} \
+              --systemctl ${pkgs.systemd}/bin/systemctl --systemd-run ${pkgs.systemd}/bin/systemd-run \
+              --runuser ${pkgs.util-linux}/bin/runuser --env ${pkgs.coreutils}/bin/env \
+              --true ${pkgs.coreutils}/bin/true
           '';
         };
         users.groups.${user}.gid = cfg.uid;
