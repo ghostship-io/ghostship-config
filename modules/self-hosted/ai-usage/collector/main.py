@@ -2550,12 +2550,20 @@ def main(argv: list[str] | None = None) -> int:
     for path, size in snapshot_module.publish(snapshot, args.projection):
         log(f"wrote {size} bytes to {path}")
     if args.reconcile_picker:
-        from ghostship_t3.bridge import Bridge
+        from ghostship_t3.bridge import Bridge, T3Error
         from ghostship_t3.model_selection import reconcile
         bridge = Bridge(server=resolve_t3_base_url(T3_SERVER_FILE),
                         bearer=read_session_token(T3_SESSION_FILE))
-        reconciliation = reconcile(snapshot, bridge, args.picker_state)
-        log(f"picker: {reconciliation['state']}; {reconciliation['favorite_changes']} favorite changes")
+        try:
+            reconciliation = reconcile(snapshot, bridge, args.picker_state)
+        except T3Error as error:
+            if not isinstance(error.__cause__, (ConnectionError, TimeoutError)):
+                raise
+            # Collection has already published its outputs. A T3 restart must
+            # not turn that successful collection into a failed service run.
+            log("picker: deferred while T3 is unreachable; retry on the next collection")
+        else:
+            log(f"picker: {reconciliation['state']}; {reconciliation['favorite_changes']} favorite changes")
     for result in results:
         log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")
