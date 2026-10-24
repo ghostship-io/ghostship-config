@@ -137,6 +137,17 @@ let
   };
 in
 {
+  options.ghostship.freeWorker.authCutover = lib.mkOption {
+    type = lib.types.enum [ "enabled" "deferred" ];
+    default = "enabled";
+    description = ''
+      Whether the Console OAuth cutover that separates the Go and Zen workspaces
+      runs. `deferred` keeps the cutover waiting for the owner: the auth unit
+      then records the deferred state and exits successfully without reading or
+      changing a credential, instead of failing on every activation.
+    '';
+  };
+
   config = lib.mkIf enabled {
     ghostship.containerRuntimes.ghostship-worker = {
       runtime = tools.agent;
@@ -252,7 +263,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${pkgs.python3}/bin/python3 ${./free-worker-auth.py} --podman ${pkgs.podman}/bin/podman --manifest ${data}/oauth-roles.json --plan ${authPlan}";
+        ExecStart = "${pkgs.python3}/bin/python3 ${./free-worker-auth.py} --podman ${pkgs.podman}/bin/podman --manifest ${data}/oauth-roles.json --plan ${authPlan} --cutover ${config.ghostship.freeWorker.authCutover}";
         TimeoutStartSec = 600;
         UMask = "0077";
       };

@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Report the Console OAuth cutover state the auth unit recorded.
+
+`ghostship-free-worker-auth.service` writes `oauth-roles.cutover.json` next to
+its manifest on every start. While the host declares
+`ghostship.freeWorker.authCutover = "deferred"`, the state is `deferred` and no
+credential is read or changed; once the owner runs the cutover it becomes
+`complete`. A `blocked` state means the unit failed and must be read in its
+journal. Exit 0 for deferred or complete, 1 for blocked or an invalid record,
+2 when no state has been recorded yet.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+DEFAULT_STATE = Path('/srv/apps/ghostship-worker/oauth-roles.cutover.json')
+PHASES = ('deferred', 'complete', 'blocked')
+
+
+def report(path):
+    try:
+        state = json.loads(path.read_text())
+    except FileNotFoundError:
+        return 2, 'unknown: the auth unit has not recorded a state yet'
+    except (OSError, ValueError):
+        return 1, 'invalid: the recorded cutover state is unreadable'
+    phase = state.get('phase') if isinstance(state, dict) else None
+    if phase not in PHASES:
+        return 1, 'invalid: the recorded cutover phase is not one of ' + ', '.join(PHASES)
+    if phase == 'blocked':
+        return 1, 'blocked: ' + str(state.get('reason') or 'the auth unit failed; read its journal')
+    if phase == 'deferred':
+        return 0, ('deferred: the Console OAuth cutover waits for the owner; '
+                   'no credential was read or changed (' + str(state.get('observed_at') or 'time unrecorded') + ')')
+    return 0, 'complete: the Console OAuth workspaces are separated'
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--state', type=Path, default=DEFAULT_STATE)
+    parser.add_argument('--json', action='store_true')
+    args = parser.parse_args(argv)
+    code, message = report(args.state)
+    if args.json:
+        print(json.dumps({'cutover': message.split(':')[0], 'detail': message, 'state': str(args.state)}))
+    else:
+        print(message)
+    return code
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
