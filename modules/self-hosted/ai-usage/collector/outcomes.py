@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import catalog
+import command_code
 from util import iso_to_epoch
 from value_policy import TRUST_LEVELS, trust_rank
 
@@ -213,6 +214,9 @@ def identity_of(provider: str, model: str, identities: Any) -> str:
     route's own provider and the very model of the route. The second step
     is the normalized model, and the third is the normalized model itself.
     """
+    if command_code.is_worker_route(provider, model):
+        # A shared underlying model does not prove a shared harness outcome.
+        return command_code.IDENTITY
     records = _identity_list(identities)
     text = str(model or "")
     aliases = set(catalog.PROVIDER_ALIASES.get(provider, (provider,)))

@@ -328,6 +328,9 @@ ACP initialization without login; these checks do **not** establish account,
 model, or inference availability. After deployment and the owner's native
 login, verify T3 lists the paid models and answers a trivial public prompt with
 ZDR enforced. Follow the candidate receipt and guarded deployment workflow.
+A candidate with fresh T3 userdata still needs the matching persisted
+`.t3/runtime` binaries. Omitting that directory can select an older bundled
+runtime and incorrectly report that the ACP registry driver is unregistered.
 
 For later usage integration, the vendor's [usage documentation](https://commandcode.ai/docs/resources/usage-limits)
 names native `/usage` meters for balance and 5-hour/weekly caps and resets;
@@ -363,6 +366,18 @@ time, and dated vendor provenance. If only the alias is exposed, record the
 resolved build as unknown and the dated 1017 announcement separately; do not
 claim that the run independently proved checkpoint equality with a pinned
 1017 route. The CLI pin freezes the harness, not hosted model weights.
+
+The collector's worker identity is
+`commandCode/deepseek/deepseek-v4.1-flash`, separate from every OpenCode/Ollama
+DeepSeek route and its outcome history. It publishes the GOAT table above as
+`command_code.estimated_allowances`, not measured quota windows. Current usage
+and remaining capacity come only from native Command Code reporting through T3;
+until reported they stay unknown. The effective published input/output price
+follows the UTC schedule above. CLI and MCP picks read the same published worker
+selection. Eligibility requires the configured managed `cmd acp` launcher with
+`CMD_ZDR=1`; this subscription route is always paid and never a free-route choice.
+The existing quality evidence and priors remain in force; a successful public
+transport prompt establishes no harness quality claim before the controlled pilot.
 
 ## Grok Build CLI and T3 provider
 
