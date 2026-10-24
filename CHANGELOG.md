@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.298] - 2026-10-24
+
+- Pin the agent revision that carries the latest worker changes
+
+PR #486.
+
 ## [3.17.297] - 2026-10-24
 
 - Refresh the engineering GitHub projection after the credential rotation
