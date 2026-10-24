@@ -96,6 +96,12 @@ STANDARD_WINDOWS: tuple[tuple[str, float], ...] = (
 )
 WINDOW_SECONDS: Mapping[str, float] = dict(STANDARD_WINDOWS)
 
+# A route that was refused and has not recovered has no learned window yet.
+# The reading still has to say when it may come back, so the refusal is spent
+# for the free allowance period: one day. It is an estimate, it is published
+# as one, and a window the route later learns replaces it.
+UNLEARNED_WINDOW_SECONDS = 86400.0
+
 # How many of the last episodes decide the window and the scope.
 EPISODE_HISTORY = 5
 
@@ -655,10 +661,15 @@ class _Group:
         The width is the route's own learned window, or the account's when a
         route of an account with a shared budget is measured against it.
         """
-        limits = [event.at for event in self.events if event.outcome == "limit"]
-        if not limits:
+        refusal = self.last_refusal()
+        if refusal is None:
             return None
-        return self.tiled_window(max(limits), width)
+        return self.tiled_window(refusal, width)
+
+    def last_refusal(self) -> float | None:
+        """The instant of the latest refusal of the group, or None."""
+        limits = [event.at for event in self.events if event.outcome == "limit"]
+        return max(limits) if limits else None
 
     def state(self) -> str:
         limits = [event.at for event in self.events if event.outcome == "limit"]
@@ -669,9 +680,14 @@ class _Group:
             # The last refusal has no success behind it. It spends the
             # window that holds it, and the route is available again once
             # that window has rolled over: a success in the window would
-            # have ended the episode, so the new window is empty.
+            # have ended the episode, so the new window is empty. A route
+            # that never learned a window is spent for the estimated one.
             spent = self.refused_window()
-            if spent is not None and self.now >= spent[1]:
+            if spent is not None:
+                if self.now >= spent[1]:
+                    return "in_window"
+                return "exhausted"
+            if self.window_seconds is None and self.now >= max(limits) + UNLEARNED_WINDOW_SECONDS:
                 return "in_window"
             return "exhausted"
         return "in_window"
@@ -822,6 +838,11 @@ def _capacity_of(
             if spent is not None and group.now < spent[1]:
                 state = "exhausted"
                 spent_group = route_group
+        if spent_group is not group:
+            # The route is spent on its own record, so its spent window is
+            # its own: it never stands for the account, and it never gates a
+            # sibling that worked after it.
+            scope = "model"
     start, window_events = group.current_window()
     if scope == "model":
         weights = {model: 1.0}
@@ -870,16 +891,24 @@ def _capacity_of(
         # The last refusal has no recovery behind it: the route is spent
         # until the learned window that holds the refusal resets.
         left = 0.0
-        width = spent_group.window_seconds
-        spent = spent_group.refused_window(width) if width is not None else None
-        if spent is not None and width is not None:
+        # The route's own window, when it learned one; otherwise the free
+        # allowance period, estimated from the refusal itself.
+        estimated = spent_group.window_seconds is None
+        if estimated:
+            width = UNLEARNED_WINDOW_SECONDS
+            refusal = spent_group.last_refusal()
+            spent = (refusal, refusal + width) if refusal is not None else None
+        else:
+            width = spent_group.window_seconds
+            spent = spent_group.refused_window(width)
+        if spent is not None:
             start = spent[0]
             reset_at = spent[1]
-            reset_source = "inferred_window"
+            reset_source = "window_estimate" if estimated else "inferred_window"
             expected_left = _clamp01(1.0 - (group.now - start) / width)
             paced = left - expected_left
         elif spent_group.open_episode is not None:
-            # No window was learned, so nothing says when the refusal ends.
+            # No open episode to tile: the refusal itself is the start.
             start = spent_group.open_episode.start_at
         # The provider's own estimate of the reset is the best evidence
         # there is, and it replaces the end of the learned window while it
