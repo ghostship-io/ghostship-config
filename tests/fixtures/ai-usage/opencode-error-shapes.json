@@ -1,0 +1,68 @@
+{
+  "_comment": "Captured OpenCode request failures, in the shapes OpenCode recorded on 2026-10-24. The account names, workspace identifiers and request identifiers were removed or replaced with placeholders; the types, statuses, messages, bodies and retry waits are as recorded. These rows are evidence of what a refusal looks like, not a history of an account.",
+  "records": [
+    {
+      "id": "msg_nvidia_http_429",
+      "note": "NVIDIA free route, refused with a bare HTTP 429 and no retry wait.",
+      "time_created": 1792832559130,
+      "data": {
+        "model": {"providerID": "nvidia", "id": "z-ai/glm-5.3"},
+        "time": {"created": 1792832559130},
+        "error": {
+          "type": "provider.rate-limit",
+          "message": "Provider request failed with HTTP 429: {\"status\":429,\"title\":\"Too Many Requests\"}",
+          "status": 429,
+          "response": {"body": "{\"status\":429,\"title\":\"Too Many Requests\"}"}
+        }
+      }
+    },
+    {
+      "id": "msg_opencode_free_limit",
+      "note": "The OpenCode Free instance, refused when the free allowance was spent.",
+      "time_created": 1792841210169,
+      "data": {
+        "model": {"providerID": "opencode", "id": "glm-5.3-flash-free"},
+        "time": {"created": 1792841210169},
+        "error": {
+          "type": "provider.free-limit",
+          "message": "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+          "status": 429,
+          "response": {
+            "body": "{\"type\":\"error\",\"error\":{\"type\":\"FreeUsageLimitError\",\"message\":\"Free usage limit reached. Subscribe to OpenCode Go to keep going: https://opencode.ai/go\"}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_go_monthly_limit",
+      "note": "OpenCode Go, refused against the monthly allowance with the wait the provider asked for.",
+      "time_created": 1792815292001,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "deepseek-v4.1-flash"},
+        "time": {"created": 1792815292001},
+        "error": {
+          "type": "provider.quota",
+          "message": "Go usage limit exceeded",
+          "status": 429,
+          "response": {
+            "body": "{\"type\":\"error\",\"error\":{\"type\":\"GoUsageLimitError\",\"message\":\"Go usage limit exceeded\"},\"metadata\":{\"workspace\":\"wrk_example_workspace\",\"limitName\":\"monthly\"}}"
+          }
+        },
+        "retryAfterMs": 584375000
+      }
+    },
+    {
+      "id": "msg_transient_rate_limit",
+      "note": "A refusal with no HTTP status: the record does not say the route was refused against a limit.",
+      "time_created": 1792800000000,
+      "data": {
+        "model": {"providerID": "requesty", "id": "example-model"},
+        "time": {"created": 1792800000000},
+        "error": {
+          "type": "provider.rate-limit",
+          "message": "Rate limit exceeded: example-request-identifier."
+        }
+      }
+    }
+  ]
+}

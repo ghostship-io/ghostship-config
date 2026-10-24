@@ -18,6 +18,12 @@ from metrics import SourceResult
 NOW = 1_800_000_000.0
 NOTICE = ('Usage Limit Reached\n\nYou have reached your current quota for this period. '
           'Your limit will reset in 6 days, 22 hours.')
+# The 5-hour window, as the same notice names it when the short window is spent.
+SHORT_NOTICE = ('Usage Limit Reached\n\nYou have reached your current quota for this period. '
+                'Your limit will reset in 3 hours, 45 minutes.')
+# The captured notices: the fields the reader reads, with the thread, run and
+# message identifiers removed. They are the live shapes of the two windows.
+CAPTURED = Path(__file__).resolve().parent / 'fixtures' / 'ai-usage' / 'antigravity-notices.json'
 
 
 def iso(moment):
@@ -83,6 +89,28 @@ class RuntimeLimitsTests(unittest.TestCase):
         later = runtime_state.read_limit_windows(self.path, NOW + 3600)
         self.assertEqual(first, later)
 
+    def test_a_short_notice_carries_the_five_hour_reset_and_the_long_one_the_weekly_reset(self):
+        self.message(text=SHORT_NOTICE)
+        self.message(text=NOTICE)
+        windows = {w['quotaId']: w for w in runtime_state.read_limit_windows(self.path, NOW + 60)}
+        short = windows['runtime-limit-5h:gemini-4-argon']
+        weekly = windows['runtime-limit:gemini-4-argon']
+        self.assertEqual(short['kind'], 'session')
+        self.assertEqual(short['durationSeconds'], 5 * 3600)
+        self.assertEqual(short['resetEpoch'], NOW + 3 * 3600 + 45 * 60)
+        self.assertEqual(weekly['kind'], 'weekly')
+        self.assertEqual(weekly['durationSeconds'], 7 * 86400)
+        self.assertEqual(weekly['resetEpoch'], NOW + 6 * 86400 + 22 * 3600)
+
+    def test_the_weekly_notice_has_a_pace_and_the_short_one_has_none(self):
+        self.message(text=SHORT_NOTICE)
+        self.message(text=NOTICE)
+        windows = {w['quotaId']: w for w in runtime_state.read_limit_windows(self.path, NOW + 60)}
+        self.assertIsNone(quota.window_pace(windows['runtime-limit-5h:gemini-4-argon'], NOW + 60))
+        pace = quota.window_pace(windows['runtime-limit:gemini-4-argon'], NOW + 60)
+        self.assertIsNotNone(pace)
+        self.assertEqual(pace['duration_seconds'], 7 * 86400)
+
     def test_real_ranking_snapshot_and_selection_keep_notice_spent(self):
         self.message()
         moment = NOW + 2 * 86400
@@ -116,6 +144,55 @@ class RuntimeLimitsTests(unittest.TestCase):
         self.assertEqual(snapshot['model_selection']['default_worker'],
                          {'instanceId': 'codex', 'model': 'gpt-6.1-sol'})
         self.assertIsNone(snapshot['model_selection']['providers']['antigravity']['selected']['worker'])
+
+
+class CapturedNoticeTests(unittest.TestCase):
+    """The notices the live state held, in their captured shapes.
+
+    Both windows are kept: the short one carries its five-hour reset, and the
+    weekly one its seven-day reset.
+    """
+
+    def build(self, rows):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / 'state.sqlite'
+        with sqlite3.connect(path) as db:
+            db.execute('CREATE TABLE orchestration_v2_projection_runs '
+                       '(run_id TEXT, provider_instance_id TEXT, payload_json TEXT)')
+            db.execute('CREATE TABLE orchestration_v2_projection_messages '
+                       '(run_id TEXT, role TEXT, streaming INTEGER, created_at TEXT, payload_json TEXT)')
+            for index, row in enumerate(rows):
+                db.execute('INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?)', (
+                    str(index), row['instance'],
+                    json.dumps({'modelSelection': {'instanceId': row['instance'], 'model': row['model']}}),
+                ))
+                db.execute('INSERT INTO orchestration_v2_projection_messages VALUES (?,?,?,?,?)', (
+                    str(index), 'assistant', 0, row['created_at'], json.dumps({'text': row['text']}),
+                ))
+        return path
+
+    def test_the_captured_notices_publish_both_windows_with_their_resets(self):
+        rows = json.loads(CAPTURED.read_text(encoding='utf-8'))['rows']
+        moment = runtime_state._iso_epoch('2026-10-23T21:16:30Z')
+        windows = {
+            window['quotaId']: window
+            for window in runtime_state.read_limit_windows(self.build(rows), moment)
+        }
+        short = windows['runtime-limit-5h:gemini-3.8-flash']
+        self.assertEqual(short['kind'], 'session')
+        self.assertEqual(short['durationSeconds'], 5 * 3600)
+        self.assertEqual(short['resetEpoch'], runtime_state._iso_epoch('2026-10-24T00:48:42.609Z'))
+        weekly = windows['runtime-limit:gemini-3.8-flash']
+        self.assertEqual(weekly['kind'], 'weekly')
+        self.assertEqual(weekly['durationSeconds'], 7 * 86400)
+        self.assertEqual(weekly['resetEpoch'], runtime_state._iso_epoch('2026-10-29T03:03:55.536Z'))
+        self.assertGreater(short['resetEpoch'], moment)
+        self.assertGreater(weekly['resetEpoch'], short['resetEpoch'])
+        argon = windows['runtime-limit:gemini-4-argon']
+        self.assertEqual(argon['kind'], 'weekly')
+        self.assertEqual(argon['resetEpoch'], runtime_state._iso_epoch('2026-10-30T19:15:59.947Z'))
+        self.assertGreater(argon['resetEpoch'], moment)
 
 
 if __name__ == '__main__':

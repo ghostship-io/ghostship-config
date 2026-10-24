@@ -39,7 +39,7 @@ def at(day=0, hour=0, minute=0):
     return DAY0 + day * 86400.0 + hour * HOUR + minute * MINUTE
 
 
-def event(provider, model, when, outcome="success", usage=None, window_hint=None):
+def event(provider, model, when, outcome="success", usage=None, window_hint=None, reset_hint=None):
     """One recorded use of a route."""
     return {
         "provider": provider,
@@ -48,6 +48,7 @@ def event(provider, model, when, outcome="success", usage=None, window_hint=None
         "outcome": outcome,
         "usage": usage,
         "window_hint": window_hint,
+        "reset_hint": reset_hint,
     }
 
 
@@ -181,7 +182,7 @@ class NoFailure(unittest.TestCase):
 class ExhaustedFirstEpisode(unittest.TestCase):
     """Case 6: the first refusal, with no history behind it."""
 
-    def test_exhausted_without_a_known_window(self):
+    def test_exhausted_with_an_estimated_reset_and_no_learned_window(self):
         events = [
             event("acme", "sonnet", at(0, 8), usage=1000.0),
             event("acme", "sonnet", at(0, 9), outcome="limit"),
@@ -189,12 +190,14 @@ class ExhaustedFirstEpisode(unittest.TestCase):
         result = route(events, at(0, 9, 30))
         self.assertEqual(result.state, "exhausted")
         self.assertEqual(result.left, 0.0)
-        self.assertIsNone(result.reset_at)
+        # No recovery has taught the window yet: the refusal is spent for the
+        # free allowance period, and the reset says it is an estimate.
+        self.assertEqual(result.reset_at, at(1, 9))
+        self.assertEqual(result.reset_source, "window_estimate")
         self.assertIsNone(result.window)
-        self.assertIsNone(result.window_seconds)
-        self.assertIsNone(result.expected_left)
-        self.assertIsNone(result.paced_availability)
-        self.assertAlmostEqual(result.start_at, at(0, 8))
+        self.assertIsNone(result.budget)
+        # The estimated window starts at the refusal itself.
+        self.assertAlmostEqual(result.start_at, at(0, 9))
 
 
 class ExhaustedWithHistory(unittest.TestCase):
@@ -873,18 +876,34 @@ class TheWindowThatRolledOver(unittest.TestCase):
 
 
 class RefusalWithoutALearnedWindow(unittest.TestCase):
-    """A refusal with no completed episode has no window to roll over."""
+    """A refusal with no completed episode has no window to roll over.
 
-    def test_any_reading_is_spent_without_a_reset(self):
+    It is still spent for the free allowance period, with a reset published
+    as the estimate it is. Once that period passes the route reads available
+    again, the same way a learned window rolls.
+    """
+
+    def test_the_refusal_is_spent_for_the_estimated_period(self):
         events = [
             event("acme", "m", DAY0 + 0.0, usage=100.0),
             event("acme", "m", DAY0 + 600.0, outcome="limit"),
         ]
-        for now in (DAY0 + 600.0, DAY0 + 100000.0):
-            result = inference.infer_capacity(events, now)[("acme", "m")]
-            self.assertEqual(result.state, "exhausted", now)
-            self.assertEqual(result.left, 0.0, now)
-            self.assertIsNone(result.reset_at, now)
+        result = inference.infer_capacity(events, DAY0 + 700.0)[("acme", "m")]
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, DAY0 + 600.0 + 86400.0)
+        self.assertEqual(result.reset_source, "window_estimate")
+        self.assertIsNone(result.window)
+
+    def test_the_estimated_period_rolls_without_a_success(self):
+        events = [
+            event("acme", "m", DAY0 + 0.0, usage=100.0),
+            event("acme", "m", DAY0 + 600.0, outcome="limit"),
+        ]
+        result = inference.infer_capacity(events, DAY0 + 90000.0)[("acme", "m")]
+        self.assertEqual(result.state, "in_window")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.reset_at)
 
 
 class NeverRefused(unittest.TestCase):
@@ -993,6 +1012,117 @@ class PerModelProviders(unittest.TestCase):
         self.assertEqual(refused.episodes, 1)
         self.assertEqual(dict(refused.weights), {"lumen-b": 1.0})
         self.assertIsNone(refused.share)
+
+
+class StatedResetTests(unittest.TestCase):
+    """A refusal that states its reset carries that reset.
+
+    The provider's own estimate is the best evidence of when a refusal
+    ends. It is used while it is still ahead of the reading, it never
+    replaces a measured share, and it is labelled as an estimate.
+    """
+
+    def setUp(self):
+        # The worked episode of the owner rule: use from 08:00, refused at
+        # 10:30, working again at 13:02, so the learned window is 5 hours.
+        self.events = [
+            event("acme", "sonnet", at(0, 8), usage=600000.0),
+            event("acme", "sonnet", at(0, 10, 30), outcome="limit"),
+            event("acme", "sonnet", at(0, 13, 2), usage=0.0),
+            event("acme", "sonnet", at(0, 13, 5), usage=150000.0),
+        ]
+
+    def test_a_stated_reset_is_the_reset_of_the_open_refusal(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 16)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, at(0, 16))
+        self.assertEqual(result.reset_source, "provider_estimate")
+
+    def test_an_open_refusal_without_a_stated_reset_uses_the_learned_window(self):
+        events = self.events + [event("acme", "sonnet", at(0, 15), outcome="limit")]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.reset_source, "inferred_window")
+        # The window learned from the completed episode ends five hours
+        # after the first use of the open one.
+        self.assertEqual(result.reset_at, at(0, 18, 5))
+
+    def test_a_stated_reset_that_is_already_past_is_not_published(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 15, 10)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.reset_at, at(0, 18, 5))
+        self.assertEqual(result.reset_source, "inferred_window")
+
+    def test_the_share_left_and_the_pace_are_never_taken_from_the_reset(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 16)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.left, 0.0)
+        # The pace still reads the learned 5-hour window from 13:05.
+        self.assertAlmostEqual(result.expected_left, 1.0 - (2 * HOUR + 15 * MINUTE) / (5 * HOUR))
+        self.assertAlmostEqual(result.paced_availability, -result.expected_left)
+
+
+class TheRouteThatWasRefusedLast(unittest.TestCase):
+    """The account can have room while a route was just refused.
+
+    A route whose own record ends on a refusal has nothing left, whatever
+    another model of the account did after it: the refusal is this route's
+    last word, and the account's learned window says when it ends.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 8), usage=1000.0),
+            event("acme", "beta", at(0, 8, 5), usage=1000.0),
+            event("acme", "alpha", at(0, 9), usage=1000.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "alpha", at(0, 11), usage=0.0),
+            event("acme", "beta", at(0, 13, 20), usage=1000.0),
+            event("acme", "alpha", at(0, 13), outcome="limit"),
+        ]
+        self.now = at(0, 13, 30)
+
+    def test_the_refused_route_has_nothing_left(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "account")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertIsNotNone(result.reset_at)
+        self.assertGreater(result.reset_at, self.now)
+
+    def test_the_model_that_kept_working_is_unaffected(self):
+        results = inference.infer_capacity(self.events, self.now)
+        self.assertEqual(results[("acme", "beta")].state, "no_failure")
+
+
+    def test_a_pool_daily_limit_is_spent_for_the_day(self):
+        """A pool event that names its day is an estimated reset for the day."""
+        events = [
+            event("openrouter", "example-free", at(0, 8), usage=100.0),
+            event(
+                "openrouter",
+                "example-free",
+                at(0, 9),
+                outcome="limit",
+                window_hint="1d",
+            ),
+        ]
+        result = route(events, at(0, 10), provider="openrouter", model="example-free")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.window, "1d")
+        self.assertEqual(result.reset_source, "inferred_window")
+        self.assertIsNotNone(result.reset_at)
+        self.assertGreater(result.reset_at, at(0, 10))
 
 
 if __name__ == "__main__":

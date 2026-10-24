@@ -21,12 +21,19 @@ usage. Authentication, malformed responses and output write errors still fail vi
 Antigravity can return its quota denial as an entire assistant response on a
 completed T3 run. The collector reads those exact provider notices from the
 read-only message/run projections and publishes a zero-capacity window for the
-run's selected model. The reset countdown is anchored to the message time, with
+run's selected model. The notice names a wait, not the window it belongs to:
+a wait inside five hours is the shared short window
+(`runtime-limit-5h:<model>`, five hours) and a longer one is the model's
+weekly window (`runtime-limit:<model>`, seven days). Both are kept, so a model
+that is out for its short window carries that window's reset and can be
+routed first when it comes back, and the weekly window carries a pace. The
+reset countdown is anchored to the message time, with
 `t3_runtime` provenance and `provider_limit_message` basis. It stays spent until
 that deadline, beyond the ordinary reading freshness limit; polling or another
 model's successful run cannot release it. Prompts, quoted examples and raw error
-text never become published quota evidence. This window feeds the same selection
-used by the dashboard, managed favorites/default, CLI picks and MCP picks.
+text never become published quota evidence. These windows feed the same
+selection used by the dashboard, managed favorites/default, CLI picks and MCP
+picks.
 
 * Unit: `ghostship-ai-usage.service` (`Type=oneshot`), timer
   `ghostship-ai-usage.timer` (`OnUnitActiveSec=5min`, `AccuracySec=1s`,
@@ -76,7 +83,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 
 | Source | What it reads | Where from |
 | --- | --- | --- |
-| `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
+| `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them. A provider instance that reports it has no usage limits, or whose own probe failed, is published per provider as a probe state and does not make the source partial | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
 | `claude_usage` | The Claude subscription windows: the five-hour session and the shared weekly pool, with each used share and reset. The T3 Claude probe reports `probeFailed` on this host, so the account's own OAuth usage endpoint is the reading. | `api.anthropic.com/api/oauth/usage`, with the Claude Code OAuth access token the T3 container already holds; the token is read only and never refreshed by the collector |
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
@@ -88,7 +95,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
 | `free_pool` | The free inference pool: the provider states with the pool's own probe of each route and the reason it parks a candidate, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
-| `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to | OpenCode's own SQLite database, read only, with the collector's cache of the events in its state directory |
+| `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to. Both OpenCode instances are read: the main record and the OpenCode Free instance's, which is where the free routes are used | OpenCode's own SQLite databases, read only, with the collector's cache of the events in its state directory |
 | `pool_events` | The request records of the free pool's routes, and the capacity they imply | The free pool's own reservation ledger, read only |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
 
@@ -124,9 +131,14 @@ limit failures in it (the owner rule is in ghostship-agent's
 
 The reader is `collector/opencode_reader.py`. It reads the SQLite database
 OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
-home. It is a source now: the collector reads it as `opencode_events`, and
-the capacity it implies is published with the route it belongs to. What it
-produces is fixed:
+home, and the record of the OpenCode Free instance at
+`.config/opencode-free/data/opencode/opencode.db`. The free routes are used
+through their own instance, so its refusals are the free routes' evidence.
+Both records are read with the same classifier, the product of the two is
+one source, `opencode_events`, and the capacity they imply is published with
+the route it belongs to. A free instance that is not installed has no record
+and is not a gap; a record that is there and cannot be read makes the source
+partial. What it produces is fixed:
 
 * `status` is `ok` or `unreadable`, and `reason` is a fixed code
   (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
@@ -135,7 +147,8 @@ produces is fixed:
 * `events` is one event per request: the collector's provider name, the
   model id as recorded, the instant in epoch seconds, the outcome
   (`success`, `limit` or `other`), the tokens used (`None` when the record
-  has none), and the window the failure named (`None`, `5h`, `7d` or `1d`).
+  has none), the window the failure named (`None`, `5h`, `7d` or `1d`), and
+  the reset the failure stated (`None` when it stated none).
 * `counts` holds the rows read, the rows whose provider is not in the
   mapping table, and the events per outcome.
 
@@ -143,11 +156,18 @@ Only a budget failure is a limit. A request that stopped for `stop`,
 `tool-calls`, `length` or `content-filter` is a success. A refusal that
 names the account's allowance is a limit, and the window it names is used
 when it names one: a session usage limit is five hours, a weekly usage limit
-is seven days, a daily limit is one day. A concurrency refusal, a per-minute
+is seven days, a daily limit is one day. A refusal that came back as an HTTP
+429 is a limit of the route, whatever its type, because the provider refused
+the request against a limit. A concurrency refusal, a per-minute
 refusal, a transient upstream refusal, a request that was too large, an
 expired key, an aborted run and a timeout spend no window, so they are read
 as `other` and never as a limit. A request that carries a retry is one
 event, with the outcome it ended on.
+
+A refusal that states how long to wait (`retryAfterMs`) carries the instant
+it ends as its reset. It is the provider's own estimate, and the inference
+uses it for the refusal and labels it `provider_estimate`; a refusal that
+states no wait leaves the reset to the learned window.
 
 The provider table is committed, not guessed. The OpenCode provider ids
 `ollama-cloud`, `opencode-go`, `opencode`, `openrouter`, `google`,
@@ -252,12 +272,12 @@ The providers that report no usage, and every free route, showed "Limits
 unknown" on the Providers page. The owner rule reads their capacity from
 their limit failures instead, and the collector now does that.
 
-`collector/usage_inference.py` is the wiring between the two readers and the
+`collector/usage_inference.py` is the wiring between the readers and the
 inference (`collector/inference.py`, which does the computation and reads no
-file). Every run reads both records at the same time, puts their events on
-the routes of the collector's inventory, and infers the capacity of every
-route they touch. The two reads run together and each of them caps itself
-at twenty seconds, so the pair never holds the collector.
+file). Every run reads the request records and the pool ledger at the same
+time, puts their events on the routes of the collector's inventory, and
+infers the capacity of every route they touch. The reads run together and
+each of them caps itself at twenty seconds, so they never hold the collector.
 
 The rules:
 
@@ -282,7 +302,15 @@ The rules:
   window that holds the refusal: it has nothing left until that window ends.
   Once that window has rolled over the route reads available again, with all
   of its allowance and a window that starts at the rollover; a refusal in
-  the new window spends it again.
+  the new window spends it again. A route whose own record ends on a refusal
+  stays spent even when another model of the account worked after it, and
+  that spent window is its own, so it never gates a sibling. A route that
+  never learned a window of its own is spent for one day from the refusal:
+  that period is an estimate (`reset_source: window_estimate`), published as
+  one, and it rolls like a learned window. When the refusal itself stated
+  its reset, that reset is published as the end of the spent window
+  (`reset_source: provider_estimate`); otherwise the learned window's end is
+  the estimate (`reset_source: inferred`).
 * The quota id of an inferred window names the window it was learned from
   (`inferred:1h`, `inferred:5h`), not the state of the route. A refusal with
   no learned window reads `inferred:exhausted`, and a route that was never
@@ -822,6 +850,12 @@ basis. A paid provider has no row at all.
   the source last produced a reading.
 * `ghostship_ai_source_observed_timestamp_seconds{source,provider}` - when the
   reported reading was observed, which may be older than the collection.
+* `ghostship_ai_limit_probe{provider,state}` - 1 for each ready T3 provider
+  instance. `state` is `reported` when it reports its usage limits,
+  `unsupported` when it has none to report (its routes are measured from their
+  request records instead), or `failed` when its own limits probe could not
+  read them. It is a fact about one provider: the source read the provider's
+  status, so none of the three makes the snapshot partial.
 * `ghostship_ai_source_duration_seconds{source,provider}` - how long the source
   took to read.
 * `ghostship_ai_provider_coverage{provider,source}` - 1 for every provider the
@@ -1331,7 +1365,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `quota_state` | `available`, `exhausted`, or `unknown` |
 | `probe` | whether the route answered its last live probe: `state` is `works`, `fails` or `unprobed`; `class` names the failure (`success`, `quota`, `auth`, `model_not_found`, `catalog_mismatch`, `policy_parked`, `timeout` or `upstream_error`, and empty when unprobed); `checked_at` is the UTC moment of the newest reading; `source` is `pool_probe` or `t3_probe`; `max_age_seconds` is 172800. The newer of the free pool's own probe and the latest OpenCode request of the route is the reading. A reading older than `max_age_seconds` is kept with its moment and its source, and the state falls back to `unprobed`: a route nothing probed reads `unprobed` with no moment and no source |
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
-| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count and the state. It is empty for a route whose capacity was not inferred |
+| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count, the state, and `reset_source`/`reset_estimated` when the reset is an estimate rather than a measured window's end. It is empty for a route whose capacity was not inferred |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
 | `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
 | `frontier_surplus` | whether a frontier model may carry volume work: the entitlement it comes from (its kind, its length, its reset, its quota id), the surplus, the reserve the review keeps, and the pace. A weekly or monthly allowance that resets within a day is not the same thing as a session window that resets in a few hours, so the window is named |
@@ -1553,7 +1587,7 @@ publishes which basis it used:
 | Ollama Cloud | session and week | — |
 | Codex | 5h and week | — |
 | Claude | one shared weekly pool and its five-hour session | Fable is a sub-cap of the weekly pool |
-| Antigravity | shared short window | per-model weekly `runtime-limit:<model>` |
+| Antigravity | shared short window | per-model short `runtime-limit-5h:<model>` and weekly `runtime-limit:<model>` |
 | Grok | week | — |
 | Free pool | per-route minute, day and daily tokens, with cooldowns | — |
 

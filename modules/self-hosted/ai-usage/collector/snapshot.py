@@ -346,6 +346,8 @@ def _inferred_window_record(
         "weights_basis": inference.get("weights_basis") or None,
         "episodes": inference.get("episodes"),
         "state": inference.get("state") or None,
+        "reset_source": inference.get("reset_source") or None,
+        "reset_estimated": bool(inference.get("reset_estimated")),
         "rolling": bool(inference.get("rolling")),
     }
     scope = [str(token) for token in applies_to or ()]

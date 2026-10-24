@@ -1,0 +1,101 @@
+{
+  "_comment": "The Antigravity quota notices as they were captured from the T3 Code state on 2026-10-23/24. The thread, run and message identifiers were removed; the fields the reader reads are kept exactly: the creation time, the provider's text, and the run's selected instance and model.",
+  "rows": [
+    {
+      "created_at": "2026-10-23T21:15:59.947Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 6 days, 22 hours.",
+      "instance": "antigravity",
+      "model": "gemini-4-argon"
+    },
+    {
+      "created_at": "2026-10-23T21:15:40.320Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 6 days, 22 hours.",
+      "instance": "antigravity",
+      "model": "gemini-4-argon"
+    },
+    {
+      "created_at": "2026-10-23T21:15:33.004Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 6 days, 22 hours.",
+      "instance": "antigravity",
+      "model": "gemini-4-argon"
+    },
+    {
+      "created_at": "2026-10-23T21:15:22.101Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 6 days, 22 hours.",
+      "instance": "antigravity",
+      "model": "gemini-4-argon"
+    },
+    {
+      "created_at": "2026-10-23T21:15:04.635Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 6 days, 22 hours.",
+      "instance": "antigravity",
+      "model": "gemini-4-argon"
+    },
+    {
+      "created_at": "2026-10-23T21:03:55.332Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 5 days, 6 hours.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:55.536Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 5 days, 6 hours.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:51.999Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 5 days, 6 hours.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:42.609Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 3 hours, 45 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:30.066Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 3 hours, 45 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:29.561Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 3 hours, 45 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-23T21:03:06.574Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 3 hours, 45 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-22T07:49:52.603Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 1 hour, 12 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-22T07:43:13.388Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 1 hour, 19 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-22T07:43:01.471Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 1 hour, 19 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "created_at": "2026-10-22T07:41:57.391Z",
+      "text": "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 1 hour, 20 minutes.",
+      "instance": "antigravity",
+      "model": "gemini-3.8-flash"
+    }
+  ]
+}

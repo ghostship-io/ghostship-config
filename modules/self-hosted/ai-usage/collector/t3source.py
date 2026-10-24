@@ -416,18 +416,32 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
         state = str(provider.get("status") or "")
         provider_states[name] = state
         limits = provider.get("usageLimits")
+        probe_state = "absent"
         if state == "ready" and isinstance(limits, dict):
             unavailable = limits.get("unavailable")
             if isinstance(unavailable, dict) and unavailable.get("reason"):
                 # The stock shape: the provider is ready, but its limits probe
-                # reported that it could not read them. The source read part
-                # of the picture, so it is partial, and the reason is a code.
-                status = "partial"
-                reason_code = (
-                    codes.UNSUPPORTED
+                # reported that it could not read them. That is a fact about
+                # the provider's own probe, not a failure of this source: the
+                # source read the provider's status, and the per-provider
+                # metric says what the status was. `unsupported` is an
+                # instance with no limits to report; any other reason is a
+                # probe that failed. Neither makes the whole snapshot partial.
+                probe_state = (
+                    "unsupported"
                     if str(unavailable.get("reason")) == "unsupported"
-                    else codes.PROBE_FAILED
+                    else "failed"
                 )
+            else:
+                probe_state = "reported"
+        if probe_state != "absent":
+            samples.append(
+                (
+                    "ghostship_ai_limit_probe",
+                    {"provider": name, "state": probe_state},
+                    1.0,
+                )
+            )
         if not isinstance(limits, dict):
             continue
         checked_at = iso_to_epoch(limits.get("checkedAt"))
