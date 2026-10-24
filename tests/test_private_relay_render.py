@@ -21,7 +21,7 @@ class Render(unittest.TestCase):
                 group.return_value.gr_gid = 62020
                 with self.assertRaises(SystemExit): render.main()
                 self.assertFalse((root/'ghostship.key').exists())
-                source.write_text('TUNNEL_ID=tunnel_'+'a'*32+'\nAPI_KEY=synthetic-one\nHOME_POSTAL_CODE=96701\n')
+                source.write_text('TUNNEL_ID=tunnel_'+'a'*32+'\nAPI_KEY=synthetic-one\nHOME_POSTAL_CODE=12345\n')
                 render.main()
                 config = json.loads((root/'ghostship.yaml').read_text())
                 self.assertEqual(config['control_plane']['api_key'], 'file:'+str(root/'ghostship.key'))

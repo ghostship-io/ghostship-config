@@ -30,6 +30,12 @@ in
     };
   };
 
+  # The widget destination env must exist before the container starts on a
+  # rebuilt host; the deployer writes the values, this guarantees the file.
+  systemd.tmpfiles.rules = [
+    "f /etc/ghostship/homepage-widgets.env 0600 root root -"
+  ];
+
   virtualisation.oci-containers.containers."homepage" = {
     podman.sdnotify = "healthy";
     image = "ghcr.io/gethomepage/homepage:latest";
