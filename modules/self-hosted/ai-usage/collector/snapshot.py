@@ -3699,6 +3699,21 @@ def build_snapshot(
     for record in promo_models or ():
         if isinstance(record, tuple) and len(record) == 2:
             promo_set.add((str(record[0]), str(record[1])))
+    # The owner's approved free workers are the routes the one-off
+    # opencode-free instance serves as provider-native threads. The catalog
+    # prices the underlying provider, not that free instance, so without this
+    # mapping the picker would call an approved free route unknown and paid.
+    approved_free = (
+        (((outcomes or {}).get("policy") or {}).get("model_selection") or {})
+        .get("approved_free_workers") or []
+    )
+    for entry in approved_free:
+        if not isinstance(entry, Mapping):
+            continue
+        provider = str(entry.get("provider") or "")
+        model = str(entry.get("model") or "")
+        if provider and model:
+            free_set.add(("opencode-free", f"{provider}/{model}"))
     native_models = native_models or {}
     policy = dict(policy or {})
     entries: dict[tuple[str, str], list[Any]] = {}

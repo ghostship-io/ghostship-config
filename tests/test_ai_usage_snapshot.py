@@ -320,5 +320,25 @@ class SnapshotContractTests(unittest.TestCase):
             self.assertEqual(projected, [(str(projection), written)])
 
 
+class FreeInstanceBillingTests(unittest.TestCase):
+    def test_an_approved_opencode_free_route_is_billed_free(self):
+        rows = [Ranked(provider='opencode-free', model='nvidia/z-ai/glm-5.3')]
+        outcomes = {'policy': {'model_selection': {'approved_free_workers': [
+            {'provider': 'nvidia', 'model': 'z-ai/glm-5.3',
+             'allow_training': True, 'sensitivity': ['public', 'internal']}]}}}
+        data = snapshot.build_snapshot(now=NOW, sources=[], ranked=rows, outcomes=outcomes)
+        row = next(candidate for candidate in data['candidates']
+                   if candidate['model'] == 'nvidia/z-ai/glm-5.3')
+        self.assertEqual(row['access']['billing'], 'free')
+        self.assertEqual(row['access']['kind'], 'dedicated_free')
+
+    def test_an_unapproved_opencode_free_route_keeps_the_unknown_billing(self):
+        rows = [Ranked(provider='opencode-free', model='google/gemini-3.8-flash')]
+        data = snapshot.build_snapshot(now=NOW, sources=[], ranked=rows)
+        row = next(candidate for candidate in data['candidates']
+                   if candidate['model'] == 'google/gemini-3.8-flash')
+        self.assertEqual(row['access']['billing'], 'unknown')
+
+
 if __name__ == "__main__":
     unittest.main()
