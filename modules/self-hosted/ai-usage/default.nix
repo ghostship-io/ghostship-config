@@ -309,6 +309,82 @@ in
       };
     };
 
+    # The private Command Code usage page needs the owner's signed-in
+    # profile, so it runs through the Agent Desktop browser rather than a
+    # provider page fetch. The launcher's session cookie stays in the profile;
+    # the collector only reads the dated state this check writes. A failed
+    # check leaves the last dated state in place, and freshness expires it.
+    systemd.services.ghostship-ai-usage-command-code = lib.mkIf (tools != null && tools ? default) {
+      description = "Refresh the private Command Code usage page through the owner's browser";
+      after = [
+        "network-online.target"
+        "podman-agent-desktop.service"
+      ];
+      wants = [ "network-online.target" ];
+      path = [ pkgs.openssh pkgs.coreutils ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStartPre = "${pkgs.coreutils}/bin/install -m 0600 /run/ghostship-integrations/agent-desktop-key /run/ghostship-ai-usage-browser/agent-desktop-key";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/command_code_usage.py --refresh --state ${stateDir}/command-code-usage.json --bladebro ${tools.default}/bin/ghostship-bladebro";
+        RuntimeDirectory = "ghostship-ai-usage-browser";
+        RuntimeDirectoryMode = "0700";
+        Environment = [
+          "HOME=${stateDir}"
+          "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+          "GHOSTSHIP_BROWSER_DRIVER=desktop"
+          # A one-shot check leaves its browser window for the idle lease to
+          # close; keep that short so the owner's profile is not held.
+          "GHOSTSHIP_DESKTOP_IDLE_TTL=30"
+          "AGENT_DESKTOP_SSH_HOST=10.89.7.2"
+          "AGENT_DESKTOP_SSH_PORT=2222"
+          "AGENT_DESKTOP_SSH_USER=abc"
+          "AGENT_DESKTOP_SSH_KEY=/run/ghostship-ai-usage-browser/agent-desktop-key"
+          "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
+        ];
+        TimeoutStartSec = "5min";
+        UMask = "0077";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictNamespaces = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
+        ReadOnlyPaths = [ "/run/ghostship-integrations" ];
+        ReadWritePaths = [
+          stateDir
+          "/run/ghostship-ai-usage-browser"
+        ];
+        MemoryMax = "512M";
+        MemoryHigh = "384M";
+        CPUQuota = "50%";
+        TasksMax = 32;
+        CapabilityBoundingSet = [ ];
+        AmbientCapabilities = "";
+      };
+    };
+
+    systemd.timers.ghostship-ai-usage-command-code = lib.mkIf (tools != null && tools ? default) {
+      description = "Refresh the private Command Code usage page every fifteen minutes";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "7min";
+        OnCalendar = "*-*-* *:02,17,32,47:00";
+        AccuracySec = "30s";
+        Persistent = false;
+      };
+    };
+
     # The Go page and its hashed chunk are public. A six-hour refresh writes
     # the dated table; the collector only reads that file, so a test or a dry
     # run never opens a socket.
