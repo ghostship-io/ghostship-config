@@ -87,6 +87,37 @@ def _trust(row: Mapping[str, Any]) -> str:
     return max(levels or ["trusted"], key=lambda level: TRUST.get(level, 3))
 
 
+def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) -> dict[str, Any] | None:
+    """The owner's approval for a free route, or None.
+
+    The list lives in the runtime policy and is empty until the owner adds an
+    entry. Nothing here invents an approval: a route not named by the owner
+    never becomes a first-choice worker, whatever its quality.
+    """
+    entries = (policy or {}).get("approved_free_workers") if isinstance(policy, Mapping) else None
+    if isinstance(entries, Mapping):
+        entries = [entries]
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        if str(entry.get("provider") or "") != provider:
+            continue
+        wanted = str(entry.get("model") or "")
+        if wanted not in ("*", model):
+            continue
+        sensitivity = entry.get("sensitivity")
+        return {
+            "source": "owner runtime policy: approved_free_workers",
+            "sensitivity": list(sensitivity) if isinstance(sensitivity, list) else ["public", "internal", "sensitive"],
+            "allow_training": bool(entry.get("allow_training")),
+            "approved_at": entry.get("approved_at"),
+            "note": str(entry.get("note") or ""),
+        }
+    return None
+
+
 def _data_policy(allowance_record: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """The training/retention policy of an allowance-billed route.
 
@@ -207,6 +238,7 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def rank(row):
         quality = row['quality_p']
         free = (row['billing'] in ('free', 'promotion') and quality is not None
+                and bool(row.get('approved_free'))
                 and quality >= best.get(row['trust_level'], 1) - value_policy.FREE_ROUTE_MARGIN)
         # An allowance-billed route is ordered by its weighted quality and
         # affordable allowance; a route without an allowance keeps the quality
@@ -214,7 +246,16 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         combined = (row.get('pick_score') or {}).get('score')
         if combined is None:
             combined = quality
+        # An owner-approved free route is a first-choice worker while it has
+        # limit left; an overspent (far_behind) route moves behind every route
+        # that is not, so the picker falls back to paid instead of spending a
+        # limit that is already consumed faster than its window.
+        approved_active = bool(row.get('approved_free')) and row['available'] and not row.get('overspent')
+        # A free route the owner did not approve never takes a paid route's
+        # place for internal work, whatever its score.
+        unapproved_free = row['billing'] in ('free', 'promotion') and not row.get('approved_free')
         return (not row.get('selection_eligible', True), not row['available'], TRUST.get(row['trust_level'], 3),
+                not approved_active, unapproved_free,
                 row.get('ranking_pace_state', row['pace_state']) == 'far_behind', not free,
                 -(combined if combined is not None else -1),
                 -(quality if quality is not None else -1),
@@ -376,6 +417,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             now=snapshot_now, windows=windows, allowance=allowance_record,
             capacity=capacity, price=source.get('price'),
             page_limits=source.get('page_limits'))
+        approval = _approved_free(worker_policy, str(source.get('provider') or ''),
+                                  str(source.get('model') or ''))
+        approved_free = bool(approval and billing in ('free', 'promotion'))
+        overspent = remaining == 0 or (capacity.get('pace_state') or '') == 'far_behind'
         pick_score = limit_models.score(
             posterior if posterior is not None else (None if quality is None else quality / 100),
             limit_model, policy=worker_policy)
@@ -422,13 +467,28 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         row["limit_model"] = limit_model
         row["pick_score"] = pick_score
         row["binding_window"] = (pick_score or {}).get("binding_window")
+        row["approved_free"] = approval if approved_free else None
+        row["free_worker"] = approved_free
+        row["overspent"] = overspent
+        if approved_free:
+            # The owner named this route. It is a first-choice worker while it
+            # has limit left; an approved training-allowed route may serve
+            # internal work the generic data policy would otherwise exclude.
+            row["selection_eligible"] = True
+            row["selection_reason"] = "owner-approved free worker"
         if limit_model.get("basis") in ("discovered", "measured", "cost"):
             row["pick_reason"] = limit_models.reason(pick_score, limit_model)
-        if data_policy and data_policy.get("sensitive_ok") is False:
+        if approved_free:
+            if not row.get("pick_reason"):
+                row["pick_reason"] = "approved free worker"
+            state = "approved free worker overspent; fall back to paid" if overspent else (
+                "approved free worker")
+            row["pick_reason"] = state + ("; " + row["pick_reason"] if row["pick_reason"] != state else "")
+        if (data_policy and data_policy.get("sensitive_ok") is False
+                and not (approved_free and (approval or {}).get("allow_training"))):
             # The owner's rule: a model whose prompts train the vendor or whose
             # data is not zero-retention stays out of internal and sensitive
-            # work. It remains listed with its reason so the exclusion is
-            # auditable rather than silently dropped.
+            # work unless the owner explicitly approved this exact route.
             row["selection_eligible"] = False
             row["selection_reason"] = "data policy: training used or not ZDR"
         if row['pool']['id'] in excluded_pools:
@@ -501,7 +561,12 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 group['selected'][category] = row['native']
             if (category == 'worker' and row['available'] and row['selection_eligible']
                     and row['billing'] in ('free', 'promotion')):
-                free_selected.setdefault(row['provider'], row['key'])
+                if row.get('approved_free') and not row.get('overspent'):
+                    # The owner's approved free worker is the provider's free
+                    # choice even when another free route has a higher score.
+                    free_selected[row['provider']] = row['key']
+                elif not row.get('overspent'):
+                    free_selected.setdefault(row['provider'], row['key'])
             if row["available"] and row["selection_eligible"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
                 if row.get("pick_reason"):
@@ -518,8 +583,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             for provider, group in providers.items()}
         def lane_key(row):
             displayed = displayed_choices[row['provider']]
+            free_pick = (category != 'worker' or bool(row.get('approved_free')))
             picked = ((row['native'] is not None and row['native'] == displayed)
-                      or (category == 'worker' and row['key'] == free_selected.get(row['provider'])))
+                      or (category == 'worker' and free_pick
+                          and row['key'] == free_selected.get(row['provider'])))
             capacity = row['remaining_ratio']
             return (not picked, not row['available'], TRUST.get(row['trust_level'],3),
                     row.get('ranking_pace_state', row['pace_state']) == 'far_behind', -(capacity if capacity is not None else -1),
@@ -567,6 +634,9 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'pick_basis': ExactLabel(str(pick.get('basis') or '')),
                       'pick_reason': ExactLabel(str(row.get('pick_reason') or '')),
                       'data_policy': ExactLabel(str(policy.get('training') or '') + '/' + str(policy.get('retention') or '')),
+                      'approved_free': 'true' if row.get('approved_free') else 'false',
+                      'approval_source': ExactLabel(str((row.get('approved_free') or {}).get('source') or '')),
+                      'overspent': 'true' if row.get('overspent') else 'false',
                       'sensitive_ok': ('' if policy.get('sensitive_ok') is None
                                        else 'true' if policy.get('sensitive_ok') else 'false')}
             numbers = {'info': 1.0, 'position': row['position'],
@@ -586,6 +656,8 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                        'remaining_ratio': limit.get('remaining_ratio'),
                        'pace_delta': limit.get('pace_delta'),
                        'pick_score': pick.get('score'),
+                       'approved_free': 1.0 if row.get('approved_free') else 0.0,
+                       'overspent': 1.0 if row.get('overspent') else 0.0,
                        'quality_term': pick.get('quality_term'),
                        'capacity_term': pick.get('capacity_term'),
                        'affordable_requests': pick.get('affordable_requests'),
