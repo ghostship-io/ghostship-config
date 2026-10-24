@@ -51,6 +51,13 @@ class EvidenceStoreTests(unittest.TestCase):
         self.assertIn('legacy="$state/model-evidence.jsonl"', text)
         self.assertIn('mv "$legacy" "$evidence/model-evidence.jsonl"', text)
 
+    def test_the_legacy_name_is_linked_to_the_one_store(self):
+        """The T3 unit applies the new path only at its next restart (#403)."""
+        text = INTEGRATIONS.read_text()
+        self.assertIn('ln -sfn model-evidence/model-evidence.jsonl "$legacy"', text)
+        self.assertIn('chown -h', text)
+        self.assertIn('legacy store and new store both exist; leaving both', text)
+
 
 if __name__ == "__main__":
     unittest.main()

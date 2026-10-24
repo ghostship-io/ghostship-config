@@ -454,6 +454,15 @@ in {
         if [ -f "$legacy" ] && [ ! -e "$evidence/model-evidence.jsonl" ]; then
           ${pkgs.coreutils}/bin/mv "$legacy" "$evidence/model-evidence.jsonl"
           ${pkgs.coreutils}/bin/chown "''${owner%:*}:''${owner#*:}" "$evidence/model-evidence.jsonl"
+        elif [ -f "$legacy" ] && [ ! -L "$legacy" ]; then
+          echo "model evidence: legacy store and new store both exist; leaving both" >&2
+        fi
+        # The T3 unit keeps running until its next restart, so its recorder may
+        # still target the legacy path. Point that name at the one store instead
+        # of letting it recreate a second, invisible copy (#403).
+        if [ ! -e "$legacy" ] || [ -L "$legacy" ]; then
+          ${pkgs.coreutils}/bin/ln -sfn model-evidence/model-evidence.jsonl "$legacy"
+          ${pkgs.coreutils}/bin/chown -h "''${owner%:*}:''${owner#*:}" "$legacy"
         fi
         ${pkgs.acl}/bin/setfacl -m u:62020:rx "$evidence"
         ${pkgs.acl}/bin/setfacl -m d:u:62020:rX "$evidence"
