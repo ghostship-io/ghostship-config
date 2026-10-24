@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.268] - 2026-10-24
+
+Pin the private agent to release 0.47.60.
+
+PR #440.
+
 ## [3.17.267] - 2026-10-24
 
 Command Code GOAT now runs through T3 Code's OpenCode instance using the
