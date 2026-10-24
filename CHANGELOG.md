@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.245] - 2026-10-24
+
+- Isolate runner registration credential fixtures from the test caller's environment.
+
+PR #413.
+
 ## [3.17.244] - 2026-10-24
 
 - Keep recovery observation running continuously between bounded repair attempts.
