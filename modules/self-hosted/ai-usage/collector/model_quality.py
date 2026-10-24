@@ -153,28 +153,54 @@ def choose(candidate: Mapping[str, Any], preferred: list[dict]) -> dict | None:
                                      row["effort"] != wanted, row["effort"]))
 
 
+def _decision(rows: list[Mapping[str, Any]], picked: Mapping[str, Any] | None) -> str:
+    """Why a model was not selected, in the fixed words the dashboard shows."""
+    row = next((item for item in rows if item['category'] == 'worker'), rows[0])
+    if not row.get('selection_eligible', True):
+        return str(row.get('selection_reason') or 'Not eligible for selection')
+    if row.get('quality_score') is None:
+        return 'No Artificial Analysis score for this exact build'
+    if row.get('state') != 'available' and picked is not None and picked.get('available'):
+        # A usable pick outranks an unusable model whatever the scores.
+        return {'exhausted': 'Allowance spent', 'excluded': 'Excluded by trust policy',
+                'reserved': 'Reserved: ' + str(row.get('reason') or 'by the provider pool guard')}.get(
+                    row.get('state'), str(row.get('reason') or 'Not available right now'))
+    if picked is None:
+        return 'Not available right now'
+    score = picked.get('quality_score')
+    return 'Outranked in its provider by %s%s' % (
+        picked['model'], '' if score is None else ' (%s)' % round(score, 1))
+
+
 def annotate(quality: dict, selection: Mapping[str, Any]) -> None:
-    """Publish active membership and one ranked representative per model."""
-    active, preferred, selected, billing = set(), {}, set(), {}
-    for category in ('worker','orchestrator'):
+    """Publish each model's selection status and why, plus one ranked representative."""
+    roles, preferred, billing, rows_by_key, picks = defaultdict(list), {}, {}, defaultdict(list), {}
+    providers = selection.get('providers') or {}
+    for category in ('worker', 'orchestrator'):
         for row in selection.get(category) or []:
-            key = (row['provider'],row['model'])
+            key = (row['provider'], row['model'])
             billing[key] = row.get('billing') or 'unknown'
-            evidence = row.get('quality_evidence')
-            if evidence is not None:
-                preferred.setdefault(key,evidence)
-            if (row['available'] and row['selection_eligible']
-                    and (row['picker_eligible'] or row.get('billing') in ('free','promotion'))
-                    and row['trust_level'] not in ('excluded','untrusted')):
-                active.add(key)
-            chosen = ((selection.get('providers') or {}).get(row['provider']) or {}).get('selected') or {}
-            if row.get('native') is not None and row['native'] == chosen.get(category):
-                selected.add(key)
-            if category == 'worker' and row['key'] == (selection.get('free_selected') or {}).get(row['provider']):
-                selected.add(key)
+            rows_by_key[key].append({**row, 'category': category})
+            if row.get('quality_evidence') is not None:
+                preferred.setdefault(key, row['quality_evidence'])
+        for name, group in providers.items():
+            # The lane shows the available pick, or the best eligible model of
+            # a provider with nothing available, as a grey spent card.
+            chosen = (group.get('selected') or {}).get(category) or next(
+                (item['native'] for item in group.get(category) or []
+                 if item['picker_eligible'] and item['selection_eligible']), None)
+            for item in group.get(category) or []:
+                if item.get('native') is not None and item['native'] == chosen:
+                    roles[(item['provider'], item['model'])].append(category)
+                    picks.setdefault(name, item)
+    for provider, key in (selection.get('free_selected') or {}).items():
+        for item in selection.get('worker') or []:
+            if item['key'] == key:
+                roles[(item['provider'], item['model'])].append('worker')
+                picks.setdefault(provider, item)
     groups = defaultdict(list)
     for row in quality.get('rows') or []:
-        groups[(row['provider'],row['model'])].append(row)
+        groups[(row['provider'], row['model'])].append(row)
     models = []
     for key, rows in groups.items():
         for row in rows:
@@ -188,29 +214,36 @@ def annotate(quality: dict, selection: Mapping[str, Any]) -> None:
             representative = min(pool,
                 key=lambda row:(row['overall'] is None,-(row['overall'] or 0),-row['n'],
                                 row['median_seconds'] if row['median_seconds'] is not None else math.inf,row['effort']))
+        if key in roles:
+            decision = 'selected', 'Best eligible %s model of %s' % (' and '.join(dict.fromkeys(roles[key])), key[0])
+        elif key in rows_by_key:
+            decision = 'not selected', _decision(rows_by_key[key], picks.get(key[0]))
+        else:
+            decision = 'not selected', 'Outside the worker and review roles'
         for row in rows:
-            row.update(active=key in active, model_selected=key in selected,
+            row.update(selection=decision[0], selection_reason=decision[1],
                        representative=row is representative)
         models.append(representative)
     models.sort(key=lambda row:(row['overall'] is None,-(row['overall'] or 0),row['provider'],row['model']))
-    active_rank = 0
+    chosen_rank = 0
     for rank, representative in enumerate(models,1):
-        if representative['active']:
-            active_rank += 1
+        if representative['selection'] == 'selected':
+            chosen_rank += 1
         for row in groups[(representative['provider'],representative['model'])]:
-            row.update(model_rank=rank,active_rank=active_rank if representative['active'] else None)
+            row.update(model_rank=rank,selected_rank=chosen_rank if representative['selection'] == 'selected' else None)
 
 
 FIELDS = ("overall", "aa", "observed", "observed_weight", "n", "passed", "rank", "merged", "merge_n",
           "median_seconds", "seconds_per_pass", "tokens_per_pass", "quota_per_pass", "review_findings", "date",
-          "active", "model_selected", "representative", "model_rank", "active_rank")
+          "representative", "model_rank", "selected_rank")
 
 
 def samples(quality: Mapping[str, Any]) -> list:
     values = []
     for row in quality.get("rows") or []:
         labels = {key: ExactLabel(str(row.get(key) or "")) for key in
-                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state", "billing")}
+                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state", "billing",
+                  "selection", "selection_reason")}
         labels.update(source=ExactLabel(" + ".join(row["sources"]) or "none"),
                       evidence_state=str(quality.get("state") or "no_evidence"))
         values.append(("ghostship_ai_quality_info", labels, 1.0))
