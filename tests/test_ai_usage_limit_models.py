@@ -67,11 +67,12 @@ class MeasuredTests(unittest.TestCase):
         self.assertEqual([row['kind'] for row in model['windows']], ['session', 'weekly'])
         self.assertEqual(model['affordable']['binding_window'], 'weekly')
 
-    def test_claude_is_one_shared_weekly_pool_with_a_fable_sub_cap(self):
+    def test_claude_reads_a_session_and_one_shared_weekly_pool(self):
         model = limit_models.resolve('claude', 'claude-fable-5', now=NOW,
                                      windows=[dict(WINDOW, kind='weekly', remaining_ratio=0.4)])
         kinds = [row['kind'] for row in model['windows']]
-        self.assertEqual(kinds, ['weekly'])
+        self.assertEqual(kinds, ['session', 'weekly'])
+        self.assertEqual(model['affordable']['binding_window'], 'weekly')
         self.assertEqual(model['sub_cap']['kind'], 'weekly')
         self.assertIn('sub-cap', model['sub_cap']['basis'])
 

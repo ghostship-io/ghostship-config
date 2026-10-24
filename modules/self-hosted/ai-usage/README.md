@@ -77,6 +77,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | Source | What it reads | Where from |
 | --- | --- | --- |
 | `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
+| `claude_usage` | The Claude subscription windows: the five-hour session and the shared weekly pool, with each used share and reset. The T3 Claude probe reports `probeFailed` on this host, so the account's own OAuth usage endpoint is the reading. | `api.anthropic.com/api/oauth/usage`, with the Claude Code OAuth access token the T3 container already holds; the token is read only and never refreshed by the collector |
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
 | `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
@@ -90,6 +91,14 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to | OpenCode's own SQLite database, read only, with the collector's cache of the events in its state directory |
 | `pool_events` | The request records of the free pool's routes, and the capacity they imply | The free pool's own reservation ledger, read only |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
+
+The Claude reading is the account's own OAuth usage endpoint, with the
+credential the T3 Code Claude provider already holds. The T3 provider limits
+probe for `claudeAgent` answers `probeFailed` here, so the `t3` source keeps
+its fixed reason and the `claude_usage` source supplies the session and weekly
+windows. The collector reads the credential, never refreshes or rotates it,
+and reports a missing or expired credential as a fixed reason rather than a
+zero.
 
 The 3D reading is not a provider source: it is the measured use of our own 3D
 printing projects. Only session history files inside a directory whose name
@@ -1524,7 +1533,7 @@ publishes which basis it used:
 | Command Code GOAT | 5h, week, month | 41,000 / 103,000 / 205,000 for DeepSeek; peak and off-peak prices |
 | Ollama Cloud | session and week | — |
 | Codex | 5h and week | — |
-| Claude | one shared weekly pool | Fable is a sub-cap of that pool |
+| Claude | one shared weekly pool and its five-hour session | Fable is a sub-cap of the weekly pool |
 | Antigravity | shared short window | per-model weekly `runtime-limit:<model>` |
 | Grok | week | — |
 | Free pool | per-route minute, day and daily tokens, with cooldowns | — |
