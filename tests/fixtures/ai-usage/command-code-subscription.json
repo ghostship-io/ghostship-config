@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "data": {
+    "id": "sub_captured",
+    "status": "active",
+    "currentPeriodStart": "2026-10-23T23:36:32.000Z",
+    "currentPeriodEnd": "2026-11-23T23:36:32.000Z",
+    "cancelAtPeriodEnd": false,
+    "planId": "individual-goat"
+  }
+}

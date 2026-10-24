@@ -83,7 +83,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
 | `opencode_go_limits` | The complete Go and Go Plus per-model request table, plus each model's training/retention policy, with the date the page was read; a failed refresh keeps the last dated values and marks them stale | `opencode.ai/go` and the hashed JavaScript chunk it names, resolved on every refresh |
 | `limit_pages` | The dated rows a free-pool job extracted from public provider limit and plan pages, with each page's status and the diff against the last reading; a failed or invalid extraction keeps the last good rows and marks them stale | The provider pages listed in `collector/limit_pages.py`, read by a free-inference job with sensitivity `public` |
-| `command_code_usage` | The private Command Code account usage page: the three used shares and their resets, plus per-model requests, tokens and per-request cost; a missing or stale state is never a zero | The owner's signed-in Command Code usage page through the browser path (the workspace slug stays in runtime state) |
+| `command_code_usage` | The private Command Code account usage page: the three used shares and their resets, plus per-model requests, tokens and per-request cost; a missing or stale state is never a zero | The owner's signed-in Command Code Studio page through the Agent Desktop browser. The check reads the page's own credit and per-model responses in the page origin, so the session cookie stays in the profile; the workspace slug, user id and subscription id never reach the state file |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
@@ -99,6 +99,14 @@ its fixed reason and the `claude_usage` source supplies the session and weekly
 windows. The collector reads the credential, never refreshes or rotates it,
 and reports a missing or expired credential as a fixed reason rather than a
 zero.
+
+The Command Code reading is the owner's signed-in Studio page. The check runs
+in the Agent Desktop personal profile, evaluates the page's own
+`/internal/billing/credits` and `/internal/usage/by-model` requests, and writes
+the dated state. The session cookie stays in the browser profile; the state
+file carries only the three windows and the model usage. A missing desktop, a
+signed-out profile or an unusable response fails the check as a fixed code and
+leaves the previous state untouched, whose age then marks it stale.
 
 The 3D reading is not a provider source: it is the measured use of our own 3D
 printing projects. Only session history files inside a directory whose name
@@ -1553,9 +1561,12 @@ Public limit pages are refreshed every six hours by
 `ghostship-ai-usage-limits`, a free-inference job with sensitivity `public`.
 The job never reads an account page or a credential. Its rows are validated,
 diffed against the last dated values, and written to `page-limits.json`; the
-collector only reads that file. The private Command Code usage page stays on
-the browser path and is read into `command-code-usage.json`; the collector only
-reads it.
+collector only reads that file. The private Command Code usage page is
+refreshed every fifteen minutes by `ghostship-ai-usage-command-code`, a
+oneshot that runs `command_code_usage.py --refresh` through the Agent Desktop
+personal profile and writes `command-code-usage.json`. A failed check leaves
+the last dated state in place; the collector only reads the file, and a state
+older than the freshness limit is not a reading.
 
 A candidate row publishes `limit_model` (basis, windows, affordable tasks,
 binding window, estimate) and `pick_score` (quality term, capacity term,
