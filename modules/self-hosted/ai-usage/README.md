@@ -469,6 +469,17 @@ The snapshot reconciles its inventory with its candidates in
 so a model that is offered but not a candidate is named instead of silently
 dropped.
 
+The one filter the owner allows is obsolescence. `collector/obsolete.py`
+removes a model only when the public catalog marks it deprecated, or when
+another model of the same provider and family carries a newer major
+generation. A variant is only superseded by the same variant; a plain
+generation is superseded by any newer generation of its family; a point
+release never hides its earlier major. Every removed model is named in
+`obsolete_models` with its reason and, for a generation, the model that
+supersedes it, and `coverage.ranking.obsolete` counts them. The ordinary
+`excluded_models` list no longer repeats an obsolete model, so each missing
+model has exactly one visible reason. Nothing else is filtered.
+
 ### 3D evidence
 
 The 3D tier has no prior and no blended score. A model enters it only with
