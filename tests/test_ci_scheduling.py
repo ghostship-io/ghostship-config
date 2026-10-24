@@ -13,7 +13,9 @@ class CISchedulingTests(unittest.TestCase):
         self.assertNotIn('|| github.sha', text)
         self.assertNotIn('schedule:', text)
         self.assertIn('runs-on: [self-hosted, Linux, ARM64, ghostship-fast]', text)
-        self.assertIn('timeout-minutes: 2', text)
+        # The host checkout is slow; 10 minutes is the approved stopgap until
+        # the shallow-fetch fix restores the tight budget.
+        self.assertIn('timeout-minutes: 10', text)
         self.assertIn("if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository", text)
         for name in ('Validate container development workflow', 'Evaluate hosts and run regression tests'):
             step = text.split('- name: ' + name, 1)[1].split('- name:', 1)[0]
