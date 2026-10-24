@@ -5,10 +5,13 @@ import asyncio
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PAID = frozenset(json.loads((ROOT / "paid-models.json").read_text())["models"])
+MODEL_POLICY = json.loads((ROOT / "paid-models.json").read_text())
+PAID = frozenset(MODEL_POLICY["models"])
+DEFAULT = MODEL_POLICY["default"]
 
 
 def provider_environment(environment):
@@ -52,22 +55,26 @@ class Policy:
         if "id" in message:
             self.pending[message["id"]] = (method, params)
 
-    def catalog(self, result, session):
+    def catalog(self, result, session, *, initial=False):
+        selected = self.sessions.get(session)
         models = result.get("models")
         if models:
             models["availableModels"] = [m for m in models.get("availableModels", [])
                                          if m.get("modelId") in PAID]
-            self.sessions[session] = models.get("currentModelId")
-            if self.sessions[session] not in PAID:
+            models["availableModels"].sort(key=lambda m: m["modelId"] != DEFAULT)
+            selected = models.get("currentModelId")
+            if selected not in PAID and not initial:
                 raise ValueError("native agent selected an unapproved model")
         for option in result.get("configOptions", []):
             if option.get("category") == "model" or option.get("id") == "model":
                 option["options"] = [m for m in option.get("options", []) if m.get("value") in PAID]
-                self.sessions[session] = option.get("currentValue")
-                if self.sessions[session] not in PAID:
+                option["options"].sort(key=lambda m: m["value"] != DEFAULT)
+                selected = option.get("currentValue")
+                if selected not in PAID and not initial:
                     raise ValueError("native agent selected an unapproved model")
-        if self.sessions.get(session) not in PAID:
-            raise ValueError("native agent selected an unapproved model")
+        # An unapproved native default must not prevent session creation. Keep
+        # its reported value honest; no prompt crosses until a paid pick is ACKed.
+        self.sessions[session] = selected if selected in PAID else None
 
     def response(self, message):
         request = self.pending.pop(message.get("id"), None) if "method" not in message else None
@@ -79,7 +86,8 @@ class Policy:
                 caps["loadSession"] = False
                 caps["sessionCapabilities"] = {"close": {}}
             elif method == "session/new":
-                self.catalog(result, result["sessionId"])
+                self.catalog(result, result["sessionId"], initial=True)
+                return result["sessionId"]
             elif method in {"session/set_model", "session/set_config_option"}:
                 session = params.get("sessionId")
                 if method == "session/set_model":
@@ -108,6 +116,8 @@ async def serve(env):
         stderr=asyncio.subprocess.DEVNULL,
     )
     policy = Policy()
+    defaults = {}
+    initializing = {}
     write_lock = asyncio.Lock()
 
     async def emit(message):
@@ -133,7 +143,42 @@ async def serve(env):
     async def agent():
         while line := await process.stdout.readline():
             message = json.loads(line)
-            policy.response(message)
+            if (message.get("method") == "session/update" and
+                    message.get("params", {}).get("sessionId") in initializing):
+                policy.response(message)
+                initializing[message["params"]["sessionId"]].append(message)
+                continue
+            pending_default = defaults.pop(message.get("id"), None) if "method" not in message else None
+            if pending_default:
+                original, session = pending_default
+                if "result" in message:
+                    # Acknowledge the default only after the native agent does.
+                    result = original["result"]
+                    if result.get("models"):
+                        result["models"]["currentModelId"] = DEFAULT
+                    for option in result.get("configOptions", []):
+                        if option.get("category") == "model" or option.get("id") == "model":
+                            option["currentValue"] = DEFAULT
+                    policy.sessions[session] = DEFAULT
+                    policy.catalog(result, session)
+                else:
+                    # A failed default selection still permits session creation.
+                    # Prompts wait for the client's explicit paid selection.
+                    policy.sessions[session] = None
+                await emit(original)
+                for update in initializing.pop(session, []):
+                    await emit(update)
+                continue
+            session = policy.response(message)
+            if session:
+                policy.sessions[session] = None
+                identifier = "paid-default-" + uuid.uuid4().hex
+                defaults[identifier] = (message, session)
+                initializing[session] = []
+                process.stdin.write(json.dumps({"jsonrpc": "2.0", "id": identifier,
+                    "method": "session/set_model", "params": {"sessionId": session, "modelId": DEFAULT}}).encode() + b"\n")
+                await process.stdin.drain()
+                continue
             await emit(message)
 
     tasks = [asyncio.create_task(client()), asyncio.create_task(agent())]

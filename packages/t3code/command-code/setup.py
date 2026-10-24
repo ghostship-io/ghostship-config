@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -93,9 +94,33 @@ def install(home, source=ROOT):
     temporary = target.with_name(".cmd-install")
     temporary.unlink(missing_ok=True)
     temporary.symlink_to(release / "acp.py")
-    os.replace(temporary, target)
-    configure(home, source)
+    try:
+        configure(home, source)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def startup(home, source=ROOT):
+    try:
+        install(home, source)
+        return 0
+    except Exception:
+        # Preserve the previous cmd link/release and disable only our managed
+        # instance. Invalid settings or an unrelated instance remain untouched.
+        try:
+            path = home / ".t3/userdata/settings.json"
+            data = json.loads(path.read_text())
+            provider = data.get("providerInstances", {}).get("commandCode", {})
+            if (provider.get("driver") == "acpRegistry" and
+                    provider.get("config", {}).get("commandPath") == str(home / ".local/bin/cmd")):
+                provider["enabled"] = False
+                atomic_json(path, data)
+        except Exception:
+            pass
+        print("Command Code setup unavailable; T3 will start without this optional provider.", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    install(Path.home())
+    sys.exit(startup(Path.home()))
