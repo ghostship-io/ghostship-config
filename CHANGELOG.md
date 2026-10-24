@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.271] - 2026-10-24
+
+Pin the private agent to release 0.47.62.
+
+PR #444.
+
 ## [3.17.270] - 2026-10-24
 
 Ship `ghostship_policy` in the private MCP source so a host evaluation can build the pinned agent.
