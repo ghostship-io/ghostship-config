@@ -150,6 +150,10 @@ class RouteCapacity:
     weights_basis: str = "assumed"
     episodes: int = 0
     share: float | None = None
+    # Where the reset came from. A window the inference measured says so; a
+    # reset the provider stated in its refusal is the provider's estimate,
+    # and it is only used while it is still ahead of the reading.
+    reset_source: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         """The result as plain data."""
@@ -172,6 +176,7 @@ class RouteCapacity:
             "weights_basis": self.weights_basis,
             "episodes": self.episodes,
             "share": self.share,
+            "reset_source": self.reset_source,
         }
 
     def keys(self) -> tuple[str, ...]:
@@ -193,6 +198,7 @@ class _Event:
     usage: float | None
     window_hint: str | None
     order: int
+    reset_hint: float | None = None
 
 
 @dataclass
@@ -206,6 +212,9 @@ class _Episode:
     window_seconds: float
     per_model: dict[str, float]
     usage: float
+    # The instant the provider itself said the refusal ends, when it said
+    # one. It is the reset of the refusal, not a measured window.
+    reset_at: float | None = None
 
 
 def snap_window(duration_seconds: float) -> str:
@@ -268,6 +277,14 @@ def _normalize(raw: Any, order: int) -> _Event | None:
     hint = str(hint) if hint else None
     if hint not in WINDOW_SECONDS:
         hint = None
+    reset = _get(raw, "reset_hint")
+    if reset is not None:
+        try:
+            reset = float(reset)
+        except (TypeError, ValueError):
+            reset = None
+        if reset is not None and not math.isfinite(reset):
+            reset = None
     return _Event(
         provider=str(provider),
         model=str(model),
@@ -276,6 +293,7 @@ def _normalize(raw: Any, order: int) -> _Event | None:
         usage=usage,
         window_hint=hint,
         order=order,
+        reset_hint=reset,
     )
 
 
@@ -362,6 +380,7 @@ def _scan_episodes(events: Sequence[_Event], unit: str) -> tuple[list[_Episode],
                 window_seconds=seconds,
                 per_model=per_model,
                 usage=usage,
+                reset_at=limit.reset_hint,
             )
             break
         recovery = events[recovery_index]
@@ -778,6 +797,7 @@ def _capacity_of(
     window = group.window
     window_seconds = group.window_seconds
     reset_at: float | None = None
+    reset_source = ""
     expected_left: float | None = None
     paced: float | None = None
     left = 1.0
@@ -813,16 +833,25 @@ def _capacity_of(
         if spent is not None and window_seconds is not None:
             start = spent[0]
             reset_at = spent[1]
+            reset_source = "inferred_window"
             expected_left = _clamp01(1.0 - (group.now - start) / window_seconds)
             paced = left - expected_left
         elif group.open_episode is not None:
             # No window was learned, so nothing says when the refusal ends.
             start = group.open_episode.start_at
+        # The provider's own estimate of the reset is the best evidence
+        # there is, and it replaces the end of the learned window while it
+        # is still ahead. It never shortens a window that has already rolled.
+        hint = group.open_episode.reset_at if group.open_episode is not None else None
+        if hint is not None and hint > group.now:
+            reset_at = hint
+            reset_source = "provider_estimate"
     else:
         if budget is not None and budget > 0:
             left = max(0.0, 1.0 - usage / budget)
         if window_seconds is not None:
             reset_at = start + window_seconds
+            reset_source = "inferred_window"
             expected_left = _clamp01(1.0 - (group.now - start) / window_seconds)
             paced = left - expected_left
 
@@ -849,6 +878,7 @@ def _capacity_of(
         weights_basis=weights_basis,
         episodes=len(group.completed),
         share=share,
+        reset_source=reset_source,
     )
 
 

@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "modules" / "self-hosted" / "ai-usage" / "collector"
 FIXTURE = ROOT / "tests" / "fixtures" / "ai-usage" / "opencode-messages.json"
+CAPTURED = ROOT / "tests" / "fixtures" / "ai-usage" / "opencode-error-shapes.json"
 
 # The free providers OpenCode reaches through their own integrations, and the
 # free pool's provider each one of them belongs to. The table comes from the
@@ -359,6 +360,77 @@ class ProviderMappingTests(unittest.TestCase):
         self.assertIsNone(reader().provider_for("a-provider-nobody-knows"))
 
 
+class CapturedRefusalTests(unittest.TestCase):
+    """The refusals the live records hold, in their captured shapes.
+
+    The shapes were captured from the two OpenCode records on 2026-10-24,
+    with the account names, workspace identifiers and request identifiers
+    removed. They pin what a refusal looks like, never a history.
+    """
+
+    def captured(self, identifier):
+        records = json.loads(CAPTURED.read_text(encoding="utf-8"))["records"]
+        return next(record for record in records if record["id"] == identifier)
+
+    def test_the_captured_http_429_is_a_limit(self):
+        # A bare HTTP 429 names no per-minute or concurrency cap, so it is
+        # the refusal of the route that the inference measures.
+        row = self.captured("msg_nvidia_http_429")
+        self.assertEqual(reader().classify(row["data"]), ("limit", None))
+
+    def test_the_captured_free_limit_is_a_limit(self):
+        row = self.captured("msg_opencode_free_limit")
+        self.assertEqual(reader().classify(row["data"]), ("limit", None))
+
+    def test_a_rate_limit_with_no_status_stays_other(self):
+        row = self.captured("msg_transient_rate_limit")
+        self.assertEqual(reader().classify(row["data"]), ("other", None))
+
+    def test_the_captured_wait_is_the_reset_hint(self):
+        row = self.captured("msg_go_monthly_limit")
+        moment = row["time_created"] / 1000.0
+        self.assertEqual(reader().reset_hint(row["data"], moment), moment + 584375.0)
+
+    def test_a_refusal_that_states_no_wait_has_no_reset_hint(self):
+        row = self.captured("msg_nvidia_http_429")
+        self.assertIsNone(
+            reader().reset_hint(row["data"], row["time_created"] / 1000.0)
+        )
+
+    def test_a_wait_beyond_the_bound_is_not_a_reset(self):
+        row = dict(self.captured("msg_go_monthly_limit")["data"])
+        row["retryAfterMs"] = 40 * 86400 * 1000
+        self.assertIsNone(reader().reset_hint(row, 1800000000.0))
+
+
+class CapturedRefusalReadTests(unittest.TestCase):
+    """The captured refusals as the reader emits them."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.cache = Path(self.directory.name) / "events.json"
+        self.now = 1800000000.0
+
+    def build(self, records):
+        path, connection = build_database(self.directory.name, records)
+        self.addCleanup(connection.close)
+        return path
+
+    def test_the_reader_carries_the_stated_reset_into_the_event(self):
+        captured = json.loads(CAPTURED.read_text(encoding="utf-8"))["records"]
+        row = next(record for record in captured if record["id"] == "msg_go_monthly_limit")
+        row = dict(row, type="assistant", session_id="ses_captured")
+        row["time_created"] = int(self.now * 1000) - 60000
+        row["data"] = dict(row["data"])
+        row["data"]["time"] = {"created": row["time_created"]}
+        result = reader().read_events(self.build([row]), self.now)
+        self.assertEqual(result["status"], "ok")
+        event = result["events"][0]
+        self.assertEqual(event["outcome"], "limit")
+        self.assertEqual(event["reset_hint"], row["time_created"] / 1000.0 + 584375.0)
+
+
 class FreeProviderAliasTests(unittest.TestCase):
     """The free integrations read under the free pool's provider name."""
 
@@ -422,7 +494,7 @@ class FreeProviderAliasTests(unittest.TestCase):
         moments = [event["at"] for event in result["events"] if event["provider"] == "kilo"]
         self.assertIn(moment / 1000.0, moments)
         written = json.loads(self.cache_path.read_text(encoding="utf-8"))
-        self.assertEqual(written["version"], 2)
+        self.assertEqual(written["version"], reader().CACHE_VERSION)
 
     def test_the_free_alias_cache_holds_no_error_text(self):
         moment = int((self.now - 2 * 86400) * 1000)

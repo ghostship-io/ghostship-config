@@ -44,6 +44,7 @@ The contract is fixed:
                 "outcome": "success" | "limit" | "other",
                 "usage": <tokens> | None,
                 "window_hint": None | "1m" | "1h" | "5h" | "1d" | "7d" | "30d",
+                "reset_hint": <epoch seconds> | None,
             },
             ...
         ],
@@ -109,7 +110,13 @@ BACKFILL_S = BACKFILL_DAYS * DAY_SECONDS
 # no row of a free provider, because those rows were counted and never
 # emitted. A cache of version one is discarded, and the history is read again,
 # so the free rows are read with the names they belong to.
-CACHE_VERSION = 2
+#
+# Version three is the version of the observed rate limit and the reset the
+# provider states. A version two cache holds an HTTP 429 as an `other` and
+# carries no reset, so the refusals it already read can never become the
+# limit episodes they are. A cache of version two is discarded, and the
+# history is read again with the classifier that names them.
+CACHE_VERSION = 3
 
 # The three statuses a reading has.
 STATUS_OK = "ok"
@@ -156,6 +163,11 @@ WINDOW_30D = "30d"
 
 WINDOWS = (WINDOW_1M, WINDOW_1H, WINDOW_5H, WINDOW_1D, WINDOW_7D, WINDOW_30D)
 
+# The longest reset a refusal may state, and still be the reset of the
+# refusal. A provider that names a later instant is not saying when this
+# refusal ends, and a reset that is already past is not a reading.
+RESET_HINT_MAX_S = 31 * 86400.0
+
 # The finishes that mean the request completed. A request that stopped for
 # one of these reasons used its budget and is a success, whatever the
 # provider called the stop.
@@ -195,6 +207,7 @@ PROVIDER_MAP = {
     "google-free": "google",
     "cf-workers": "cloudflare-workers-ai",
     "cloudflare-free": "cloudflare-workers-ai",
+    "cloudflare-workers-ai": "cloudflare-workers-ai",
     "vercel-free": "vercel",
     "requesty-free": "requesty",
     "huggingface-free": "huggingface",
@@ -257,6 +270,17 @@ _NEVER_LIMIT_TYPES = ("abort", "timeout", "auth")
 # The error type that states the request was refused against the account's
 # allowance.
 QUOTA_TYPES = frozenset({"provider.quota"})
+
+# The error type OpenCode gives a refusal that came back as an HTTP 429. The
+# provider refused the request against a limit of the route; whether that
+# limit is a budget or a per-minute cap is decided by the phrases, so a
+# refusal that names a per-minute or concurrency cap is already `_other`
+# before this type is read.
+RATE_LIMIT_TYPES = frozenset({"provider.rate-limit"})
+
+# The HTTP status of a refusal against a limit. A refusal with another status
+# is not a rate limit, whatever its type says.
+RATE_LIMIT_STATUS = 429
 
 # The words that make a quota refusal a budget refusal. Without one of them
 # the refusal is not about the account's allowance.
@@ -356,11 +380,49 @@ def classify_error(error: Mapping[str, Any]) -> tuple[str, str | None]:
     matched, window = _budget_window(message)
     if matched:
         return (OUTCOME_LIMIT, window)
+    if _is_rate_limit(error, kind):
+        # The provider refused the request against a limit of the route and
+        # named no window. The inference learns the window from the record.
+        return (OUTCOME_LIMIT, None)
     text = _normalise(message)
     if kind in QUOTA_TYPES and any(word in text for word in _BUDGET_WORDS):
         # The provider refused against the account's allowance and said so.
         return (OUTCOME_LIMIT, None)
     return (OUTCOME_OTHER, None)
+
+
+def _is_rate_limit(error: Any, kind: str) -> bool:
+    """True when the failure came back as a refusal against a limit.
+
+    The type and the status are both required: an HTTP 429 from the provider
+    is a limit of the route, while a rate-limit type that carries no status
+    is the record of something else.
+    """
+    if kind not in RATE_LIMIT_TYPES or not isinstance(error, Mapping):
+        return False
+    status = error.get("status")
+    if isinstance(status, bool) or not isinstance(status, (int, float)):
+        return False
+    return int(status) == RATE_LIMIT_STATUS
+
+
+def reset_hint(data: Mapping[str, Any], moment: float) -> float | None:
+    """The instant the provider said the refusal ends, or None.
+
+    OpenCode records the wait a refusal asked for as `retryAfterMs`. It is
+    the provider's own estimate of the reset, so it is kept as a hint and
+    never as a measured window: the inference uses it as the reset of the
+    refusal when the route has no learned window of its own.
+    """
+    if not isinstance(data, Mapping):
+        return None
+    value = data.get("retryAfterMs")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    delay = float(value) / 1000.0
+    if not 0.0 < delay <= RESET_HINT_MAX_S:
+        return None
+    return float(moment) + delay
 
 
 def classify(data: Mapping[str, Any]) -> tuple[str, str | None]:
@@ -416,7 +478,7 @@ def provider_for(provider_id: str) -> str | None:
 
 
 # The fields the reader uses, and the paths they are read from.
-EXTRACTED_FIELDS = ("model", "time", "finish", "error", "tokens", "retry")
+EXTRACTED_FIELDS = ("model", "time", "finish", "error", "tokens", "retry", "retryAfterMs")
 
 # The query reads only the fields the reader uses. The whole record is never
 # selected: it is about 27 KB a row, so a 35 day read of it is more than a
@@ -429,7 +491,7 @@ EXTRACTED_FIELDS = ("model", "time", "finish", "error", "tokens", "retry")
 READ_SQL = (
     "SELECT time_created, "
     "json_extract(CASE WHEN json_valid(data) THEN data END, "
-    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry') "
+    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry', '$.retryAfterMs') "
     "FROM session_message "
     "WHERE type = 'assistant' AND time_created >= ? "
     "ORDER BY time_created"
@@ -440,7 +502,7 @@ READ_SQL = (
 READ_SQL_UNTIL = (
     "SELECT time_created, "
     "json_extract(CASE WHEN json_valid(data) THEN data END, "
-    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry') "
+    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry', '$.retryAfterMs') "
     "FROM session_message "
     "WHERE type = 'assistant' AND time_created >= ? AND time_created < ? "
     "ORDER BY time_created"
@@ -645,14 +707,16 @@ def read_events(
                 counts["rows_unmapped"] += 1
                 continue
             outcome, window_hint = classify(data)
+            moment = _event_time(data, time_created)
             events.append(
                 {
                     "provider": provider,
                     "model": model,
-                    "at": _event_time(data, time_created),
+                    "at": moment,
                     "outcome": outcome,
                     "usage": usage_tokens(data),
                     "window_hint": window_hint,
+                    "reset_hint": reset_hint(data, moment),
                     "retired": is_retirement(data),
                 }
             )

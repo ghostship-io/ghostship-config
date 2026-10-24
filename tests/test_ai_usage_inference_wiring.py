@@ -910,5 +910,88 @@ class InferredQuotaIdTests(unittest.TestCase):
         self.assertEqual(usage().quota_id_for(capacity), "inferred:no-limit-seen")
 
 
+class FreeInstanceRecordTests(WiringTestCase):
+    """The OpenCode Free instance's record is part of the same source.
+
+    The free routes are used through their own instance, so its record is
+    where their refusals are. It is read beside the main record, and a
+    record that is not installed is absent rather than a gap.
+    """
+
+    def read(self, records, free_records=(), free_path=None):
+        database = build_database(self.directory, list(records))
+        if free_path is None:
+            free_dir = Path(self.directory) / "free"
+            free_dir.mkdir()
+            free_path = build_database(free_dir, list(free_records))
+        return usage().read_and_infer(
+            NOW,
+            opencode_db=database,
+            events_cache=self.cache,
+            pool_ledger=None,
+            free_opencode_db=free_path,
+            free_events_cache=os.path.join(self.directory, "free-events.json"),
+            routes={("openrouter", "example-model"), ("nvidia", "z-ai/glm-5.3")},
+        )
+
+    def test_the_free_record_reaches_the_same_source(self):
+        inferred = self.read(
+            [record(at(13, 0), usage=1000)],
+            [record(at(13, 10), provider="nvidia", model="z-ai/glm-5.3", usage=1000)],
+        )
+        self.assertEqual(inferred.results[0].source, "opencode_events")
+        self.assertNotEqual(inferred.results[0].status, "unreadable")
+        self.assertEqual(
+            sorted(inferred.capacities),
+            [("nvidia", "z-ai/glm-5.3"), ("openrouter", "example-model")],
+        )
+        self.assertEqual(inferred.unmatched["opencode_events"], 0)
+
+    def test_a_refusal_in_the_free_record_marks_its_route_exhausted(self):
+        inferred = self.read(
+            [record(at(13, 0), usage=1000)],
+            [
+                record(at(13, 0), provider="nvidia", model="z-ai/glm-5.3", usage=1000),
+                record(at(13, 10), provider="nvidia", model="z-ai/glm-5.3", limit=True),
+            ],
+        )
+        capacity = inferred.capacities[("nvidia", "z-ai/glm-5.3")]
+        self.assertEqual(capacity["state"], "exhausted")
+        self.assertEqual(capacity["left"], 0.0)
+
+    def read_without_free(self, records):
+        directory = Path(self.directory) / "main-only"
+        directory.mkdir()
+        database = build_database(directory, list(records))
+        return usage().read_and_infer(
+            NOW,
+            opencode_db=database,
+            events_cache=str(directory / "events.json"),
+            pool_ledger=None,
+            routes={("openrouter", "example-model")},
+        )
+
+    def test_a_missing_free_record_is_not_a_partial_source(self):
+        absent = os.path.join(self.directory, "absent-free.db")
+        with_free = self.read([record(at(13, 0), usage=1000)], free_path=absent)
+        without = self.read_without_free([record(at(13, 0), usage=1000)])
+        self.assertEqual(with_free.results[0].status, without.results[0].status)
+        self.assertEqual(
+            sorted(with_free.capacities), [("openrouter", "example-model")]
+        )
+
+    def test_an_unreadable_free_record_makes_the_source_partial(self):
+        broken = os.path.join(self.directory, "broken-free.db")
+        with open(broken, "w", encoding="utf-8") as stream:
+            stream.write("not a database")
+        inferred = self.read([record(at(13, 0), usage=1000)], free_path=broken)
+        self.assertEqual(inferred.results[0].status, "partial")
+        self.assertEqual(inferred.results[0].reason, "database_unreadable")
+        # The main record still contributes its reading.
+        self.assertEqual(
+            sorted(inferred.capacities), [("openrouter", "example-model")]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

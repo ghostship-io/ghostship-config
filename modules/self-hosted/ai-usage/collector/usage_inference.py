@@ -66,10 +66,18 @@ __all__ = [
 # the home read only, and the reader opens the file read only as well.
 OPENCODE_DB_RELATIVE = ".local/share/opencode/opencode.db"
 
+# The OpenCode Free instance's own database, beside the free instance's
+# configuration. The free routes are used through that instance, so its
+# refusals are the free routes' evidence; it is a second record of the same
+# source, read the same way.
+FREE_OPENCODE_DB_RELATIVE = ".config/opencode-free/data/opencode/opencode.db"
+
 # The collector's own cache of the OpenCode events, in its state directory.
 # It is the reader's state, and it never holds the text of a provider's
-# error.
+# error. The free instance's record has a cache of its own, because each
+# record has its own cursor.
 EVENTS_CACHE_PATH = "/var/lib/ghostship-ai-usage/opencode-events.json"
+FREE_EVENTS_CACHE_PATH = "/var/lib/ghostship-ai-usage/opencode-free-events.json"
 
 # The two records, by the name their status is published under.
 SOURCE_OPENCODE = "opencode_events"
@@ -173,23 +181,30 @@ def read_records(
     opencode_db: str,
     events_cache: str,
     pool_ledger: str | None,
+    free_opencode_db: str | None = None,
+    free_events_cache: str | None = None,
     timeout_s: float = READ_BUDGET_S,
 ) -> Inference:
-    """Read both records, and return the events they hold.
+    """Read every record, and return the events they hold.
 
-    The two reads run at the same time and each of them caps itself, so the
-    pair never costs more than one reader's limit. A read that fails is
-    reported as unreadable and contributes no events: the collector keeps
-    running, and the routes that reader would have fed keep the basis they
-    had.
+    The two OpenCode records and the pool ledger are read at the same time
+    and each of them caps itself, so the pair never costs more than one
+    reader's limit. A read that fails is reported as unreadable and
+    contributes no events: the collector keeps running, and the routes that
+    reader would have fed keep the basis they had.
+
+    The OpenCode Free instance is optional: an instance that is not
+    installed has no record, and a missing record is not a gap in the
+    reading. A record that is there and cannot be read is.
     """
     results: list[SourceResult] = []
     records: dict[str, list[dict[str, Any]]] = {SOURCE_OPENCODE: [], SOURCE_POOL: []}
-    def read_opencode() -> tuple[dict[str, Any], float]:
+
+    def read_opencode(path: str, cache: str) -> tuple[dict[str, Any], float]:
         began = time.monotonic()
         try:
             reading = opencode_reader.collect_events(
-                opencode_db, events_cache, float(now), timeout_s=float(timeout_s)
+                path, cache, float(now), timeout_s=float(timeout_s)
             )
         except Exception:  # pragma: no cover - the reader does not raise
             return ({"status": "unreadable", "reason": opencode_reader.REASON_UNREADABLE}, time.monotonic() - began)
@@ -207,19 +222,76 @@ def read_records(
             return ({"status": "unreadable", "reason": pool_reader.REASON_UNREADABLE}, time.monotonic() - began)
         return (reading, time.monotonic() - began)
 
-    with ThreadPoolExecutor(max_workers=2) as workers:
-        opencode_future = workers.submit(read_opencode)
+    with ThreadPoolExecutor(max_workers=3) as workers:
+        opencode_future = workers.submit(read_opencode, opencode_db, events_cache)
+        free_future = (
+            workers.submit(read_opencode, free_opencode_db, free_events_cache)
+            if free_opencode_db and free_events_cache
+            else None
+        )
         pool_future = workers.submit(read_pool)
         opencode_reading, opencode_duration = opencode_future.result()
+        free_reading, free_duration = (
+            (free_future.result() if free_future is not None else (None, 0.0))
+        )
         pool_reading, pool_duration = pool_future.result()
+
+    # The free instance's record is part of the same source. An instance
+    # that is not installed is absent, not a partial reading; a record that
+    # is there and cannot be read is a partial one.
+    if (
+        free_reading is not None
+        and not (
+            str(free_reading.get("status") or "") == "unreadable"
+            and str(free_reading.get("reason") or "") == opencode_reader.REASON_MISSING
+        )
+    ):
+        opencode_reading, opencode_duration = _merge_opencode(
+            opencode_reading, opencode_duration, free_reading, free_duration
+        )
 
     results.append(_result(SOURCE_OPENCODE, opencode_reading, float(now), opencode_duration))
     results.append(_result(SOURCE_POOL, pool_reading, float(now), pool_duration))
-    for source, reading in ((SOURCE_OPENCODE, opencode_reading), (SOURCE_POOL, pool_reading)):
-        for event in reading.get("events") or ():
-            if isinstance(event, Mapping):
-                records[source].append(dict(event))
+    for event in opencode_reading.get("events") or ():
+        if isinstance(event, Mapping):
+            records[SOURCE_OPENCODE].append(dict(event))
+    for event in pool_reading.get("events") or ():
+        if isinstance(event, Mapping):
+            records[SOURCE_POOL].append(dict(event))
     return Inference(results=results, records=records)
+
+
+def _merge_opencode(
+    main: Mapping[str, Any],
+    main_duration: float,
+    free: Mapping[str, Any],
+    free_duration: float,
+) -> tuple[dict[str, Any], float]:
+    """One OpenCode reading from the two instance records.
+
+    The events of both records are one record: the same provider name is
+    the same account, whichever instance reached it. A record that could
+    not be read keeps the other one's events and makes the reading partial;
+    two records that could not be read make it unreadable.
+    """
+    statuses = [str(main.get("status") or ""), str(free.get("status") or "")]
+    if all(status == "unreadable" for status in statuses):
+        status = "unreadable"
+    elif all(status == "ok" for status in statuses):
+        status = "ok"
+    else:
+        status = "partial"
+    reason = codes.OK
+    for reading in (main, free):
+        candidate = str(reading.get("reason") or codes.UNKNOWN)
+        if str(reading.get("status") or "") != "ok" and candidate != codes.OK:
+            reason = candidate
+            break
+    events = list(main.get("events") or ()) + list(free.get("events") or ())
+    events.sort(key=lambda event: (float(event.get("at") or 0.0), str(event.get("provider") or ""), str(event.get("model") or "")))
+    merged = dict(main)
+    merged.update({"status": status, "reason": reason, "events": events})
+    return (merged, main_duration + free_duration)
 
 
 def _index(routes: Iterable[tuple[str, str]]) -> tuple[dict[tuple[str, str], tuple[str, str]], dict[tuple[str, str], set[str]]]:
@@ -426,12 +498,14 @@ def read_and_infer(
     events_cache: str,
     pool_ledger: str | None,
     routes: Iterable[tuple[str, str]],
+    free_opencode_db: str | None = None,
+    free_events_cache: str | None = None,
     timeout_s: float = READ_BUDGET_S,
 ) -> Inference:
-    """Read both records, put them on the routes, and infer the capacity.
+    """Read every record, put them on the routes, and infer the capacity.
 
-    The events of the two records are one record: a route of the pool and a
-    route of the OpenCode instance are separate routes, and the inference
+    The events of the records are one record: a route of the pool and a
+    route of the OpenCode instances are separate routes, and the inference
     reads the account of each provider on its own.
     """
     reading = read_records(
@@ -439,6 +513,8 @@ def read_and_infer(
         opencode_db=opencode_db,
         events_cache=events_cache,
         pool_ledger=pool_ledger,
+        free_opencode_db=free_opencode_db,
+        free_events_cache=free_events_cache,
         timeout_s=timeout_s,
     )
     unmatched: dict[str, int] = {}
@@ -512,6 +588,10 @@ def detail_for(capacity: Mapping[str, Any]) -> dict[str, Any]:
         "weights_basis": str(capacity.get("weights_basis") or ""),
         "episodes": int(capacity.get("episodes") or 0),
         "state": str(capacity.get("state") or ""),
+        # A reset the provider stated in its refusal is its estimate, not a
+        # window the inference measured; the two never read the same.
+        "reset_source": str(capacity.get("reset_source") or ""),
+        "reset_estimated": str(capacity.get("reset_source") or "") == "provider_estimate",
         # A window that ends inside the collector's own run interval
         # rolls: it is over before the next reading is taken.
         "rolling": seconds is not None and seconds < ROLLING_BELOW_S,
@@ -538,10 +618,13 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
     reset = capacity.get("reset_at")
     duration = capacity.get("window_seconds")
     detail = detail_for(capacity)
-    if detail["rolling"]:
+    reset_source = "provider_estimate" if detail["reset_estimated"] else "inferred"
+    if detail["rolling"] and not detail["reset_estimated"]:
         # The window is shorter than the interval the collector runs at:
         # it ends between two readings, and the reset the inference
-        # measured is already past. The window rolls, and it says so.
+        # measured is already past. The window rolls, and it says so. A
+        # reset the provider stated is kept: it is the provider's own
+        # estimate and it is still ahead.
         reset = None
     if state == STATE_EXHAUSTED:
         used_ratio = 1.0
@@ -565,6 +648,7 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
         ends_at=None,
         gating=True,
         inference=detail,
+        reset_source=reset_source,
     )
 
 

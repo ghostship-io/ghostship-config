@@ -88,7 +88,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
 | `free_pool` | The free inference pool: the provider states with the pool's own probe of each route and the reason it parks a candidate, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
-| `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to | OpenCode's own SQLite database, read only, with the collector's cache of the events in its state directory |
+| `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to. Both OpenCode instances are read: the main record and the OpenCode Free instance's, which is where the free routes are used | OpenCode's own SQLite databases, read only, with the collector's cache of the events in its state directory |
 | `pool_events` | The request records of the free pool's routes, and the capacity they imply | The free pool's own reservation ledger, read only |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
 
@@ -124,9 +124,14 @@ limit failures in it (the owner rule is in ghostship-agent's
 
 The reader is `collector/opencode_reader.py`. It reads the SQLite database
 OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
-home. It is a source now: the collector reads it as `opencode_events`, and
-the capacity it implies is published with the route it belongs to. What it
-produces is fixed:
+home, and the record of the OpenCode Free instance at
+`.config/opencode-free/data/opencode/opencode.db`. The free routes are used
+through their own instance, so its refusals are the free routes' evidence.
+Both records are read with the same classifier, the product of the two is
+one source, `opencode_events`, and the capacity they imply is published with
+the route it belongs to. A free instance that is not installed has no record
+and is not a gap; a record that is there and cannot be read makes the source
+partial. What it produces is fixed:
 
 * `status` is `ok` or `unreadable`, and `reason` is a fixed code
   (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
@@ -135,7 +140,8 @@ produces is fixed:
 * `events` is one event per request: the collector's provider name, the
   model id as recorded, the instant in epoch seconds, the outcome
   (`success`, `limit` or `other`), the tokens used (`None` when the record
-  has none), and the window the failure named (`None`, `5h`, `7d` or `1d`).
+  has none), the window the failure named (`None`, `5h`, `7d` or `1d`), and
+  the reset the failure stated (`None` when it stated none).
 * `counts` holds the rows read, the rows whose provider is not in the
   mapping table, and the events per outcome.
 
@@ -143,11 +149,18 @@ Only a budget failure is a limit. A request that stopped for `stop`,
 `tool-calls`, `length` or `content-filter` is a success. A refusal that
 names the account's allowance is a limit, and the window it names is used
 when it names one: a session usage limit is five hours, a weekly usage limit
-is seven days, a daily limit is one day. A concurrency refusal, a per-minute
+is seven days, a daily limit is one day. A refusal that came back as an HTTP
+429 is a limit of the route, whatever its type, because the provider refused
+the request against a limit. A concurrency refusal, a per-minute
 refusal, a transient upstream refusal, a request that was too large, an
 expired key, an aborted run and a timeout spend no window, so they are read
 as `other` and never as a limit. A request that carries a retry is one
 event, with the outcome it ended on.
+
+A refusal that states how long to wait (`retryAfterMs`) carries the instant
+it ends as its reset. It is the provider's own estimate, and the inference
+uses it for the refusal and labels it `provider_estimate`; a refusal that
+states no wait leaves the reset to the learned window.
 
 The provider table is committed, not guessed. The OpenCode provider ids
 `ollama-cloud`, `opencode-go`, `opencode`, `openrouter`, `google`,
@@ -252,12 +265,12 @@ The providers that report no usage, and every free route, showed "Limits
 unknown" on the Providers page. The owner rule reads their capacity from
 their limit failures instead, and the collector now does that.
 
-`collector/usage_inference.py` is the wiring between the two readers and the
+`collector/usage_inference.py` is the wiring between the readers and the
 inference (`collector/inference.py`, which does the computation and reads no
-file). Every run reads both records at the same time, puts their events on
-the routes of the collector's inventory, and infers the capacity of every
-route they touch. The two reads run together and each of them caps itself
-at twenty seconds, so the pair never holds the collector.
+file). Every run reads the request records and the pool ledger at the same
+time, puts their events on the routes of the collector's inventory, and
+infers the capacity of every route they touch. The reads run together and
+each of them caps itself at twenty seconds, so they never hold the collector.
 
 The rules:
 
@@ -282,7 +295,11 @@ The rules:
   window that holds the refusal: it has nothing left until that window ends.
   Once that window has rolled over the route reads available again, with all
   of its allowance and a window that starts at the rollover; a refusal in
-  the new window spends it again.
+  the new window spends it again. When the refusal itself stated its reset,
+  that reset is published as the end of the spent window (`reset_source:
+  provider_estimate`, `inference.reset_estimated: true`) while it is still
+  ahead; otherwise the learned window's end is the estimate
+  (`reset_source: inferred`).
 * The quota id of an inferred window names the window it was learned from
   (`inferred:1h`, `inferred:5h`), not the state of the route. A refusal with
   no learned window reads `inferred:exhausted`, and a route that was never
