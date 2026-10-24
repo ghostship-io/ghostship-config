@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.263] - 2026-10-24
+
+- Record the individual-account ZDR opt-outs for Claude, Grok, and Antigravity, and mark the owner-declined paid and contract paths.
+
+PR #435.
+
 ## [3.17.262] - 2026-10-24
 
 Owner-approved trusted-free routes become first-choice workers until their limit is overspent, with a pace-aware reason and a paid fallback; the normal models page can show them beside paid models.
