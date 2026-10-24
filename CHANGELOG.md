@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.244] - 2026-10-24
+
+- Keep recovery observation running continuously between bounded repair attempts.
+
+PR #412.
+
 ## [3.17.243] - 2026-10-24
 
 - Wait for Kuma's initial server handshake before provisioning monitors.
