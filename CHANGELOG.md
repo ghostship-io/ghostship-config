@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.280] - 2026-10-24
+
+Failure notifications for a unit whose start job failed on a dependency now name the job outcome and the failing dependency instead of reporting `success (exit status 0)`.
+
+PR #454.
+
 ## [3.17.279] - 2026-10-24
 
 Pin the private agent to release 0.47.76.
