@@ -31,7 +31,7 @@
 - [ ] **Step 1: Port full 8-group hierarchy**
   Groups: Calendar, Plex, Library, Downloads, Utilities, Automation, Management, Infrastructure.
 - [ ] **Step 2: Port custom widgets**
-  Weather (Ewa Beach), Resources, and SearXNG search widget.
+  Weather (the owner's local area), Resources, and SearXNG search widget.
 - [ ] **Step 3: Port docker socket config**
   Enforce `chill-penguin` socket path.
 

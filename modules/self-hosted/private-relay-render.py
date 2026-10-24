@@ -57,7 +57,7 @@ def main():
                 'stdio_send_initialized_notification': True},
     }))
     # Personal destination belongs to deployment, never to the reusable image.
-    write('runtime.json', json.dumps({'home_postal_code': '96706'}))
+    write('runtime.json', json.dumps({'home_postal_code': 'a postal code'}))
 
 
 if __name__ == '__main__':

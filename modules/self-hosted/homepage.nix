@@ -155,7 +155,7 @@ in
           "1.search.focus=literal:true"
           "1.search.target=literal:_blank"
           "1.search.showSearchSuggestions=literal:false"
-          "2.openmeteo.label=literal:\"Ewa Beach\""
+          "2.openmeteo.label=literal:\"the owner's local area\""
           "2.openmeteo.latitude=literal:21.3156"
           "2.openmeteo.longitude=literal:-158.0072"
           "2.openmeteo.timezone=literal:Pacific/Honolulu"
