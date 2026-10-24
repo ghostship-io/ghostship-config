@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 
 PUBLIC_TASK = ('SENSITIVITY: public\nWrite a short public reference paragraph explaining when an HTTP GET '
                'request can be retried safely. Include one concrete example. Use no tools or private information.')
@@ -239,8 +240,20 @@ def main():
     parser.add_argument('--podman', required=True)
     parser.add_argument('--manifest', required=True, type=Path)
     parser.add_argument('--plan', required=True, type=Path)
+    # The Console OAuth cutover needs the owner at the provider console. Until
+    # the owner runs it, the host declares the cutover deferred and this unit
+    # must succeed without touching a credential, instead of failing on every
+    # activation and turning the deploy switch red.
+    parser.add_argument('--cutover', choices=('enabled', 'deferred'), default='enabled')
     args = parser.parse_args()
     os.umask(0o077)
+    if args.cutover == 'deferred':
+        state = {'phase': 'deferred', 'unit': 'ghostship-free-worker-auth.service',
+                 'reason': 'the Console OAuth cutover waits for the owner; no credential was read or changed',
+                 'observed_at': datetime.now(timezone.utc).isoformat(), 'cutover': 'deferred'}
+        write_private(args.manifest.with_suffix('.cutover.json'), state)
+        print(json.dumps(state))
+        return 0
     source = Target(args.podman, 't3code', '3000:3000', '/home/t3code')
     free = Target(args.podman, 'ghostship-worker', '63000:62020', '/home/worker')
     try:

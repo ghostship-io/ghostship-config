@@ -108,6 +108,55 @@ class AuthCutoverTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue())['phase'], 'unavailable')
         self.assertEqual(len(source.records()), 2)
 
+    def test_a_deferred_cutover_succeeds_without_touching_a_credential(self):
+        import contextlib
+        import io
+        import os
+        plan = self.manifest.with_name('plan.json')
+        plan.write_text(json.dumps(PLAN))
+        output = io.StringIO()
+        previous_umask = os.umask(0o077)
+        try:
+            with patch.object(auth, 'Target', side_effect=AssertionError('deferred must not reach a runtime')), \
+                    patch('sys.argv', ['auth', '--podman', 'podman', '--manifest', str(self.manifest),
+                                       '--plan', str(plan), '--cutover', 'deferred']), \
+                    contextlib.redirect_stdout(output):
+                self.assertEqual(auth.main(), 0)
+        finally:
+            os.umask(previous_umask)
+        state = json.loads(output.getvalue())
+        self.assertEqual(state['phase'], 'deferred')
+        self.assertIn('owner', state['reason'])
+        recorded = json.loads(self.manifest.with_suffix('.cutover.json').read_text())
+        self.assertEqual(recorded['phase'], 'deferred')
+        self.assertEqual(recorded['unit'], 'ghostship-free-worker-auth.service')
+        self.assertEqual(self.manifest.with_suffix('.cutover.json').stat().st_mode & 0o777, 0o600)
+
+    def test_the_doctor_reports_each_cutover_state(self):
+        from importlib.machinery import SourceFileLoader
+        target = Path(__file__).resolve().parents[1] / 'scripts/free-worker-auth-doctor'
+        loader = SourceFileLoader('free_worker_auth_doctor', str(target))
+        spec = importlib.util.spec_from_loader('free_worker_auth_doctor', loader)
+        doctor = importlib.util.module_from_spec(spec)
+        loader.exec_module(doctor)
+        state = self.manifest.with_suffix('.cutover.json')
+        cases = [
+            ({'phase': 'deferred', 'reason': 'owner', 'observed_at': '2026-10-24T05:00:00+00:00'}, 0, 'deferred'),
+            ({'phase': 'complete'}, 0, 'complete'),
+            ({'phase': 'blocked', 'reason': 'native_auth_command_unavailable'}, 1, 'blocked'),
+            ({'phase': 'unexpected'}, 1, 'invalid'),
+        ]
+        for payload, expected_code, word in cases:
+            with self.subTest(payload=payload):
+                state.write_text(json.dumps(payload))
+                code, message = doctor.report(state)
+                self.assertEqual(code, expected_code)
+                self.assertIn(word, message)
+        state.unlink()
+        code, message = doctor.report(state)
+        self.assertEqual(code, 2)
+        self.assertIn('unknown', message)
+
     def test_malformed_or_unexplained_queued_probe_is_not_unavailable(self):
         for raw in ('not JSON', json.dumps({'job': {'id':'public-probe', 'status':'queued'}})):
             with self.subTest(raw=raw):
