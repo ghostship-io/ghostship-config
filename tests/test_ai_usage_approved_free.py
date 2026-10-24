@@ -1,5 +1,6 @@
 """Owner-approved free routes are first-choice workers until their limit is spent."""
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -102,6 +103,61 @@ class ApprovedFreeTests(unittest.TestCase):
         approval = result['worker'][0]['approved_free']
         self.assertEqual(approval['source'], 'owner runtime policy: approved_free_workers')
         self.assertTrue(approval['allow_training'])
+
+
+class OwnerApprovalFileTests(unittest.TestCase):
+    PATH = Path(__file__).resolve().parents[1] / 'modules/self-hosted/ai-usage/approved-free-workers.json'
+
+    def test_the_file_is_explicit_and_has_no_wildcard(self):
+        entries = model_selection.load_approved_free_workers(str(self.PATH))
+        self.assertGreater(len(entries), 10)
+        self.assertTrue(all(entry['model'] != '*' and entry['provider'] for entry in entries))
+        self.assertTrue(all(entry['allow_training'] for entry in entries))
+        self.assertTrue(all(entry['sensitivity'] == ['public', 'internal'] for entry in entries))
+        self.assertTrue(all(entry['source'] == 'owner 2026-10-24 US-hosted free providers'
+                            for entry in entries))
+
+    def test_the_named_owner_routes_are_present(self):
+        entries = {(entry['provider'], entry['model'])
+                   for entry in model_selection.load_approved_free_workers(str(self.PATH))}
+        for route in (
+                ('opencode', 'step-5-preview-free'),
+                ('opencode', 'minimax-m3.1-flash-free'),
+                ('opencode', 'glm-5.3-flash-free'),
+                ('opencode', 'mimo-v2.6-flash-free'),
+                ('groq', 'qwen/qwen3.8-27b'),
+                ('nvidia', 'z-ai/glm-5.3'),
+                ('nvidia', 'minimaxai/minimax-m3.1-flash'),
+                ('nvidia', 'z-ai/glm-5.3-flash'),
+                ('google', 'gemini-3.8-flash'),
+                ('openrouter', 'thinkingmachines/inkling-small:free')):
+            self.assertIn(route, entries)
+
+    def test_non_us_and_unknown_jurisdictions_are_absent(self):
+        entries = {(entry['provider'], entry['model'])
+                   for entry in model_selection.load_approved_free_workers(str(self.PATH))}
+        for provider in ('orcarouter', 'mistral', 'ovh', 'zai', 'requesty', 'cohere', 'upstage'):
+            self.assertFalse(any(p == provider for p, _ in entries), provider)
+        self.assertFalse(any('muse' in model or 'spark' in model for _, model in entries))
+
+    def test_applying_the_file_is_idempotent_and_preserves_the_policy(self):
+        entries = model_selection.load_approved_free_workers(str(self.PATH))
+        policy = {'model_selection': {'provider_roles': {'codex': ['worker']}}}
+        model_selection.apply_approved_free_workers(policy, entries)
+        count = len(policy['model_selection']['approved_free_workers'])
+        model_selection.apply_approved_free_workers(policy, entries)
+        self.assertEqual(len(policy['model_selection']['approved_free_workers']), count)
+        self.assertEqual(policy['model_selection']['provider_roles'], {'codex': ['worker']})
+
+    def test_a_malformed_file_fails_visibly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'bad.json'
+            path.write_text('{"schema": "other", "entries": []}')
+            with self.assertRaises(ValueError):
+                model_selection.load_approved_free_workers(str(path))
+            path.write_text('{"schema": "ghostship.approved-free-workers/v1", "entries": [{"provider": "x", "model": "y"}]}')
+            with self.assertRaises(ValueError):
+                model_selection.load_approved_free_workers(str(path))
 
 
 if __name__ == '__main__':

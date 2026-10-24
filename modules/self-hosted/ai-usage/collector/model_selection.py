@@ -87,6 +87,70 @@ def _trust(row: Mapping[str, Any]) -> str:
     return max(levels or ["trusted"], key=lambda level: TRUST.get(level, 3))
 
 
+APPROVED_FREE_SCHEMA = "ghostship.approved-free-workers/v1"
+SENSITIVITIES = ("public", "internal", "sensitive")
+
+
+def load_approved_free_workers(path: str) -> list[dict[str, Any]]:
+    """Load the owner's explicit free-worker approvals.
+
+    The file is configuration, not a rule: every route is named by provider and
+    model, and a malformed or unknown-schema file is an error rather than an
+    empty approval set.
+    """
+    if not path:
+        return []
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise ValueError("approved free workers are unreadable") from None
+    if not isinstance(document, dict) or document.get("schema") != APPROVED_FREE_SCHEMA:
+        raise ValueError("approved free workers have an unsupported schema")
+    entries = document.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("approved free workers have no entries")
+    approved = []
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("approved free worker is not an object")
+        provider = str(entry.get("provider") or "").strip()
+        model = str(entry.get("model") or "").strip()
+        sensitivity = entry.get("sensitivity")
+        if (not provider or not model or not isinstance(entry.get("allow_training"), bool)
+                or not isinstance(sensitivity, list)
+                or any(value not in SENSITIVITIES for value in sensitivity)):
+            raise ValueError("approved free worker is invalid")
+        key = (provider, model)
+        if key in seen:
+            continue
+        seen.add(key)
+        approved.append({
+            "provider": provider,
+            "model": model,
+            "allow_training": bool(entry.get("allow_training")),
+            "sensitivity": list(sensitivity),
+            "approved_at": entry.get("approved_at"),
+            "source": str(entry.get("source") or document.get("approval_source") or ""),
+            "note": str(entry.get("note") or ""),
+        })
+    return approved
+
+
+def apply_approved_free_workers(policy: dict[str, Any], entries: list[dict[str, Any]]) -> None:
+    """Merge the explicit approvals into the runtime policy, never widening it."""
+    selection = policy.setdefault("model_selection", {})
+    declared = selection.setdefault("approved_free_workers", [])
+    if not isinstance(declared, list):
+        raise ValueError("runtime policy approved free workers are invalid")
+    keys = {(entry.get("provider"), entry.get("model")) for entry in declared
+            if isinstance(entry, dict)}
+    for entry in entries:
+        if (entry["provider"], entry["model"]) not in keys:
+            declared.append(entry)
+            keys.add((entry["provider"], entry["model"]))
+
+
 def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) -> dict[str, Any] | None:
     """The owner's approval for a free route, or None.
 
@@ -109,7 +173,8 @@ def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) 
             continue
         sensitivity = entry.get("sensitivity")
         return {
-            "source": "owner runtime policy: approved_free_workers",
+            "source": str(entry.get("source") or entry.get("approval_source")
+                          or "owner runtime policy: approved_free_workers"),
             "sensitivity": list(sensitivity) if isinstance(sensitivity, list) else ["public", "internal", "sensitive"],
             "allow_training": bool(entry.get("allow_training")),
             "approved_at": entry.get("approved_at"),
