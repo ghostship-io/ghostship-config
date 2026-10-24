@@ -178,3 +178,6 @@ class SourceClosureTests(unittest.TestCase):
         self.assertIn('PYTHONPATH=/pinned-agent/tools/python', script)
         self.assertIn('setpriv', script)
         self.assertIn("XDG_STATE_HOME='/worker-home/.local/state'", script)
+        # 0.47.75 resolves authority state from the shared home, not the XDG
+        # sandbox variables, so the pre-start must not inherit root's HOME.
+        self.assertIn("HOME='/worker-home'", script)
