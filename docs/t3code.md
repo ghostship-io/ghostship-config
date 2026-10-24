@@ -291,8 +291,11 @@ at all.
 The startup step is optional and non-fatal (`ExecStartPre=-`). It writes the
 config atomically with mode `0600`, rewrites only changed content, and preserves
 other providers, permissions, MCP servers and defaults. An owner config that
-does not parse is left byte for byte as it was. T3 Code's catalog helper still
-runs afterwards and prunes only models the provider marks deprecated.
+does not parse is left byte for byte as it was. It reads only
+`COMMAND_CODE_API_KEY` from the projected file with a plain value parse; the
+file is never sourced into a shell, so no other secret reaches the process and
+no value is evaluated as a command. T3 Code's catalog helper still runs
+afterwards and prunes only models the provider marks deprecated.
 
 The key is the owner's Command Code API key: the same key authenticates the CLI
 and the API. It is kept in Bitwarden (`commandcode.ai`) and in the encrypted
