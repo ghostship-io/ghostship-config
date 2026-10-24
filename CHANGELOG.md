@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.295] - 2026-10-24
+
+- ai-usage: per-day false-available and false-exhausted counts for every free
+  route, published on the Free models data, with the owner's
+  two-consecutive-day acceptance probe.
+
+PR #484.
+
 ## [3.17.294] - 2026-10-24
 
 - ai-usage: publish the obsolete label on pruned route metrics
