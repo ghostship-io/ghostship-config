@@ -4,9 +4,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const hook=JSON.parse(fs.readFileSync(process.argv[2])).panels.find(p=>p.id===250).options.afterRender;
 const nodes=[],tableRows=[];
-function tableRow(selected,rankAll,rankSelected,search){
+function tableRow(selected,search){
  const rank={textContent:''};
- return {dataset:{selected,rankAll,rankSelected,qualitySearch:search},hidden:true,rank,nextElementSibling:null,querySelector:()=>rank};
+ return {dataset:{selected,qualitySearch:search},hidden:true,rank,nextElementSibling:null,querySelector:()=>rank};
 }
 class Element {
  constructor(tag='div'){this.tagName=tag;this.dataset={};this.attrs={};this.children=[];this.listeners={};this.value='';this.checked=false;nodes.push(this)}
@@ -31,8 +31,8 @@ fixture('th','data-col','passes');fixture('p','data-quality-evidence-note');fixt
 const expand=fixture('span','data-quality-expand-label');expand.textContent='Compare measured efforts';
 // One selected model and one that is only evaluated: the default view shows the
 // selected one, All models shows both.
-tableRows.push(tableRow('true','1','1','codex gpt-sol Best eligible worker model of codex'),
-               tableRow('false','2','','opencode-go mimo Allowance spent'));
+tableRows.push(tableRow('true','codex gpt-sol Best eligible worker model of codex'),
+               tableRow('false','opencode-go mimo Allowance spent'));
 let disconnected=false;
 global.ResizeObserver=class{observe(){}disconnect(){disconnected=true}};
 global.document={querySelector(){throw Error('the hook must use its own panel element')}};
@@ -43,10 +43,13 @@ assert.equal(root.querySelector('[data-quality-filter]').type,'search');
 assert.equal(root.querySelector('[data-quality-all]').type,'checkbox');
 assert.equal(root.querySelector('[data-quality-range]').textContent,'1–1 of 1');
 assert.deepEqual(tableRows.map(row=>row.hidden),[false,true],'default view lists selected models only');
-assert.equal(tableRows[0].rank.textContent,'1');
+assert.equal(tableRows[0].rank.textContent,1,'rows are numbered by position in the shown list');
 const all=root.querySelector('[data-quality-all]');all.checked=true;all.listeners.change();
 assert.deepEqual(tableRows.map(row=>row.hidden),[false,false],'All models lists every evaluated model');
-assert.equal(tableRows[1].rank.textContent,'2');
+assert.equal(tableRows[1].rank.textContent,2);
+all.checked=false;tableRows[0].dataset.selected='false';tableRows[1].dataset.selected='true';all.listeners.change();
+assert.equal(tableRows[1].rank.textContent,1,'a shorter list renumbers from one');
+tableRows[0].dataset.selected='true';tableRows[1].dataset.selected='false';all.checked=true;all.listeners.change();
 const filter=root.querySelector('[data-quality-filter]');filter.value='spent';filter.listeners.input();
 assert.deepEqual(tableRows.map(row=>row.hidden),[true,false],'the selection reason is searchable');
 filter.value='';filter.listeners.input();all.checked=false;all.listeners.change();

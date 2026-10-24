@@ -147,9 +147,6 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(status['unscored'],('not selected','No Artificial Analysis score for this exact build'))
         # A provider with nothing available still shows its best model, as the grey lane card does.
         self.assertEqual(status['alone'],('selected','Best eligible worker model of solo'))
-        selected=[r for r in result['rows'] if r['selection']=='selected' and r['representative']]
-        self.assertEqual(sorted(r['selected_rank'] for r in selected),[1,2])
-        self.assertTrue(all(r['selected_rank'] is None for r in result['rows'] if r['selection']!='selected'))
         self.assertEqual(sum(r['representative'] for r in result['rows']),5)
         representative=next(r for r in result['rows'] if r['model']=='best' and r['representative'])
         self.assertEqual(representative['effort'],chosen['worker'][0]['effort']['value'])
@@ -159,6 +156,24 @@ class QualityTests(unittest.TestCase):
         self.assertIn('selection="selected"',text)
         self.assertIn('selection_reason="Allowance spent"',text)
         self.assertNotIn('ghostship_ai_quality_active',text)
+
+    def test_unavailable_routes_keep_their_own_reason(self):
+        offered,gone,cooling,solo_a,solo_b=(candidate(name,70) for name in ('offered','gone','cooling','solo_a','solo_b'))
+        gone.update(available=False,availability={'reason':'the route is not offered by the instance'})
+        cooling.update(available=False,availability={'reason':'the route is parked by its own source'})
+        for row in (solo_a,solo_b):
+            row['provider']='solo'
+            row['native']['provider_instance_id']='solo_native'
+            row['capacity']['remaining_ratio']=0
+        solo_b['aa']['indices']['intelligence']=60
+        rows=[offered,gone,cooling,solo_a,solo_b]
+        result=quality.build(rows,[],NOW)
+        quality.annotate(result,selection.build({'candidates':rows},[]))
+        status={row['model']:row['selection_reason'] for row in result['rows']}
+        self.assertEqual(status['gone'],'The route is not offered by the instance')
+        self.assertEqual(status['cooling'],'The route is parked by its own source')
+        # Everything of a spent provider is equally spent: the reason is the ranking, not the spend.
+        self.assertEqual(status['solo_b'],'Outranked in its provider by solo_a (70.0)')
 
     def test_models_outside_every_role_are_still_listed_with_their_reason(self):
         row=candidate('hidden')
