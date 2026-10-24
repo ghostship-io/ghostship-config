@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.249] - 2026-10-24
+
+- Add the pinned Command Code GOAT ACP harness with persistent native login, non-fatal setup, enforced paid/ZDR routing and a DeepSeek V4.1 Flash default.
+
+PR #409.
+
 ## [3.17.248] - 2026-10-24
 
 - Remove ineffective transient activation reconciliation; verify the isolated manager's declared activation unit directly.
