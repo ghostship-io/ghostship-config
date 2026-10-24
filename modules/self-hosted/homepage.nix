@@ -30,6 +30,12 @@ in
     };
   };
 
+  # The widget destination env must exist before the container starts on a
+  # rebuilt host; the deployer writes the values, this guarantees the file.
+  systemd.tmpfiles.rules = [
+    "f /etc/ghostship/homepage-widgets.env 0600 root root -"
+  ];
+
   virtualisation.oci-containers.containers."homepage" = {
     podman.sdnotify = "healthy";
     image = "ghcr.io/gethomepage/homepage:latest";
@@ -58,7 +64,12 @@ in
       "/sys/class/net:/sys/class/net:ro"
       "/sys/devices/platform:/sys/devices/platform:ro"
     ];
-    environmentFiles = [ config.ghostship.selfHostedSecrets.projections.homepage.containerPath ];
+    # The widget destination (label, coordinates) is owner-private runtime
+    # configuration, supplied root-owned at 0600 like the retail store env.
+    environmentFiles = [
+      config.ghostship.selfHostedSecrets.projections.homepage.containerPath
+      "/etc/ghostship/homepage-widgets.env"
+    ];
   };
 
   systemd.services.homepage-podman-broker = {
@@ -155,9 +166,9 @@ in
           "1.search.focus=literal:true"
           "1.search.target=literal:_blank"
           "1.search.showSearchSuggestions=literal:false"
-          "2.openmeteo.label=literal:\"the owner's local area\""
-          "2.openmeteo.latitude=literal:a home coordinate"
-          "2.openmeteo.longitude=literal:a home coordinate"
+          "2.openmeteo.label=literal:Home"
+          "2.openmeteo.latitude=literal:{{HOMEPAGE_VAR_HOME_LAT}}"
+          "2.openmeteo.longitude=literal:{{HOMEPAGE_VAR_HOME_LON}}"
           "2.openmeteo.timezone=literal:Pacific/Honolulu"
           "2.openmeteo.units=literal:imperial"
         )
