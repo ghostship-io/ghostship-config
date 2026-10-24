@@ -1547,14 +1547,23 @@ the explicit entries in `approved-free-workers.json` beside this module (the
 file is configuration, never a rule that admits a future provider), and merges
 them into the runtime policy's `model_selection.approved_free_workers` list.
 Every entry names its provider and model; a wildcard, a malformed entry or an
-unknown schema fails the collector visibly. The 2026-10-24 owner approval lists
-the measured free routes of the US-hosted providers (OpenCode, NVIDIA, Groq,
-Google, OpenRouter and Cloudflare Workers AI), with
+unknown schema fails the collector visibly. An entry that omits `sensitivity`
+defaults to `["public"]`, never to every level. The 2026-10-24 owner approval
+lists the measured free routes of the US-hosted providers (OpenCode, NVIDIA,
+Groq, Google, OpenRouter and Cloudflare Workers AI), with
 `source: "owner 2026-10-24 US-hosted free providers"`, `allow_training: true`
 where the terms allow training or are unknown, and sensitivity up to
 `internal`. OrcaRouter (jurisdiction unpublished), the EU/China-hosted
 providers, and `muse-spark-1.3-contributor-free` (no measured AA score) are not
-in the file. Private owner data (`sensitive`) never goes to these routes.
+in the file.
+
+Each row publishes `sensitivity_eligible` for `public`, `internal` and
+`sensitive`. The picker must call `model_selection.allowed_for(row,
+sensitivity)` (or read that map) before using a row for a request. A
+training-allowed route never admits `sensitive`, even if an entry lists it, and
+the generic data policy stays in force for sensitive work: private owner data
+goes to neither pool. A row's `selection_eligible` is the `internal` default;
+an approval limited to `public` is visible but is not the internal default.
 
 ```json
 {"provider": "nvidia", "model": "z-ai/glm-5.3", "allow_training": true,
