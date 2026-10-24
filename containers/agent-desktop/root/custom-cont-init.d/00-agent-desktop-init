@@ -12,7 +12,8 @@ install -d -o 3000 -g 3000 -m 0700 \
   "$DATA/chrome/agent" "$DATA/chrome/personal" \
   "$DATA/bladebro" "$DATA/bladebro/agent" "$DATA/bladebro/personal" \
   "$DATA/ssh" "$DATA/ssh/host" /config/.ssh \
-  "$DATA/runs" "$DATA/runs/paused" "$DATA/runs/state"
+  "$DATA/runs" "$DATA/runs/paused" "$DATA/runs/state" \
+  "$DATA/apps" "$DATA/app-workspaces" "$DATA/app-audit"
 
 # Retire the previous Camoufox runtime: remove the browser download and the
 # obsolete Playwright storage-state files from the persistent volume.
