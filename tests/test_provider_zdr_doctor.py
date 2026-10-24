@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = ROOT / "scripts/provider-zdr-doctor"
@@ -143,6 +144,11 @@ class BrowserTest(unittest.TestCase):
             doctor.BROWSER_CHECKS["groq"][0]: ["true", "true"],
             doctor.BROWSER_CHECKS["chatgpt"][0]: "false",
             doctor.BROWSER_CHECKS["mistral"][0]: ["false", "false"],
+            doctor.BROWSER_CHECKS["claude"][0]: {"switches": [
+                {"label": "Location metadata", "checked": "false"},
+                {"label": "Help improve our AI models", "checked": "false"},
+            ]},
+            doctor.BROWSER_CHECKS["grok"][0]: ["false", "false"],
         }
         checks = doctor.run_browser_checks(doctor.BROWSER_CHECKS, self.runner(values))
         self.assertTrue(all(check.status == "pass" for check in checks), checks)
@@ -153,9 +159,37 @@ class BrowserTest(unittest.TestCase):
             doctor.BROWSER_CHECKS["groq"][0]: ["true", "false"],
             doctor.BROWSER_CHECKS["chatgpt"][0]: "true",
             doctor.BROWSER_CHECKS["mistral"][0]: ["true", "false"],
+            doctor.BROWSER_CHECKS["claude"][0]: {"switches": [
+                {"label": "Location metadata", "checked": "true"},
+                {"label": "Help improve our AI models", "checked": "true"},
+            ]},
+            doctor.BROWSER_CHECKS["grok"][0]: ["true", "false"],
         }
         checks = doctor.run_browser_checks(doctor.BROWSER_CHECKS, self.runner(values))
         self.assertTrue(all(check.status == "fail" for check in checks), checks)
+
+
+class AntigravityTest(unittest.TestCase):
+    def test_panel_parser(self):
+        self.assertEqual(doctor.antigravity_telemetry_state("Enable Telemetry             off"), "off")
+        self.assertEqual(doctor.antigravity_telemetry_state("Enable Telemetry on"), "on")
+        self.assertEqual(doctor.antigravity_telemetry_state("ENABLE TELEMETRY  OFF"), "off")
+        self.assertIsNone(doctor.antigravity_telemetry_state("Search: telemetry"))
+
+    def test_check_reads_the_panel_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            settings = home / ".gemini/antigravity-cli/settings.json"
+            settings.parent.mkdir(parents=True)
+            settings.write_text(json.dumps({"trustedWorkspaces": ["/tmp"]}))
+            with patch("shutil.which", return_value="/usr/bin/agy"), \
+                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=Path("/tmp")), \
+                 patch.object(doctor, "_agy_config_panel", return_value="Enable Telemetry off"):
+                self.assertEqual(doctor.check_antigravity(home, True).status, "pass")
+            with patch("shutil.which", return_value="/usr/bin/agy"), \
+                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=Path("/tmp")), \
+                 patch.object(doctor, "_agy_config_panel", return_value="Enable Telemetry on"):
+                self.assertEqual(doctor.check_antigravity(home, True).status, "fail")
 
 
 class EndToEndTest(unittest.TestCase):
