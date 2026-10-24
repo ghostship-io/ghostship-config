@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.289] - 2026-10-24
+
+- Fix the duplicated tmpfiles attribute that broke the host build
+
+PR #475.
+
 ## [3.17.288] - 2026-10-24
 
 - Clean the owner's area values from the current config files (#463)
