@@ -14,6 +14,11 @@ in
   # Apple Silicon support - handled by nixos-apple-silicon
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
+  # The Console OAuth cutover needs the owner at the provider console
+  # (2026-10-24). Deferred, so the auth unit records that state and
+  # succeeds instead of failing every activation and reddening each
+  # deploy switch. No credential changes while it is deferred.
+  ghostship.freeWorker.authCutover = "deferred";
   ghostship.githubEngineering.enable = true;
   # Model routing is off: the owner turned it off on 2026-10-22. The static
   # worker table (worker_routes in ghostship-agent's runtime policy) governs
