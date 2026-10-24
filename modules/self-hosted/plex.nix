@@ -48,6 +48,14 @@ let
       echo "Plex Preferences.xml not found at $PREFS_FILE, skipping update"
     fi
   '';
+
+  # Plex's bundled Python 2 starts the ldconfig probe without closing inherited
+  # descriptors, so the interpreter's open runtime files reach the confined
+  # //ldconfig domain and every probe logs a file_inherit denial. This module is
+  # mounted as the interpreter's sitecustomize and closes them for that probe
+  # only. Remove the SIEM exemption in the same change (docs/plex-apparmor.md).
+  plex-sitecustomize = pkgs.writeText "sitecustomize.py" (builtins.readFile ./plex-sitecustomize.py);
+  plex-python-site = "/usr/lib/plexmediaserver/Resources/Python/lib/python2.7/site-packages";
 in
 {
   ghostship.apps.plex = {
@@ -129,6 +137,7 @@ in
     volumes = [
       "/srv/apps/plex:/config:rw"
       "/mnt/share/Library:/library:rw"
+      "${plex-sitecustomize}:${plex-python-site}/sitecustomize.py:ro"
     ];
   };
 
