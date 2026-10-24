@@ -1,10 +1,10 @@
 """The limit probe of the T3 source, per provider instance.
 
 The t3 source publishes the subscription windows T3 Code knows about. A
-provider instance that has no usage limits to report is a fact about the
-instance, not a gap in the reading: the routes it serves are measured from
-their request records instead. An instance whose limits probe failed is a
-real gap, and the source says so. These tests pin both readings.
+provider instance that has no usage limits to report, or whose own limits
+probe failed, is a fact about that provider's probe, not a gap in the
+source: the source read the provider's status, and the per-provider metric
+says what the probe said. These tests pin that reading.
 """
 import importlib.util
 import sys
@@ -96,12 +96,14 @@ class LimitProbeTests(unittest.TestCase):
         self.assertIn(("opencode-free", "unsupported"), self.probes(result))
         self.assertIn(("opencode-go", "reported"), self.probes(result))
 
-    def test_a_failed_probe_is_a_gap_and_makes_the_source_partial(self):
+    def test_a_failed_probe_is_published_and_does_not_make_the_source_partial(self):
+        # The source read the provider's status; the probe that the provider
+        # runs for itself failed, and the per-provider metric says so. The
+        # snapshot is not partial for a fact one provider states about itself.
         result = self.read(
             [provider("claudeAgent", limits(unavailable="probeFailed"))]
         )
-        self.assertEqual(result.status, "partial")
-        self.assertEqual(result.reason, codes.PROBE_FAILED)
+        self.assertEqual(result.status, "ok")
         self.assertIn(("claude", "failed"), self.probes(result))
 
     def test_an_unsupported_instance_never_masks_a_failed_probe(self):
@@ -111,8 +113,10 @@ class LimitProbeTests(unittest.TestCase):
                 provider("opencode-free", limits(unavailable="unsupported")),
             ]
         )
-        self.assertEqual(result.status, "partial")
-        self.assertEqual(result.reason, codes.PROBE_FAILED)
+        self.assertEqual(
+            self.probes(result),
+            {("claude", "failed"), ("opencode-free", "unsupported")},
+        )
 
     def test_a_ready_instance_without_a_limits_reading_is_not_a_gap(self):
         result = self.read([provider("muse")])

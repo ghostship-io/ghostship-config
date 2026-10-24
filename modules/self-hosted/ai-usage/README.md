@@ -852,9 +852,9 @@ basis. A paid provider has no row at all.
 * `ghostship_ai_limit_probe{provider,state}` - 1 for each ready T3 provider
   instance. `state` is `reported` when it reports its usage limits,
   `unsupported` when it has none to report (its routes are measured from their
-  request records instead, so this never makes the snapshot partial), or
-  `failed` when its limits probe could not read them (which does make the t3
-  source `partial`, with reason `probe_failed`).
+  request records instead), or `failed` when its own limits probe could not
+  read them. It is a fact about one provider: the source read the provider's
+  status, so none of the three makes the snapshot partial.
 * `ghostship_ai_source_duration_seconds{source,provider}` - how long the source
   took to read.
 * `ghostship_ai_provider_coverage{provider,source}` - 1 for every provider the

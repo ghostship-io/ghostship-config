@@ -421,17 +421,17 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             unavailable = limits.get("unavailable")
             if isinstance(unavailable, dict) and unavailable.get("reason"):
                 # The stock shape: the provider is ready, but its limits probe
-                # reported that it could not read them. `unsupported` is a
-                # fact about the provider, not a gap in this reading: an
-                # instance with no usage limits is measured from its request
-                # records instead, and it never makes every snapshot partial.
-                # Any other reason is a probe that failed, which is a gap.
-                if str(unavailable.get("reason")) == "unsupported":
-                    probe_state = "unsupported"
-                else:
-                    probe_state = "failed"
-                    status = "partial"
-                    reason_code = codes.PROBE_FAILED
+                # reported that it could not read them. That is a fact about
+                # the provider's own probe, not a failure of this source: the
+                # source read the provider's status, and the per-provider
+                # metric says what the status was. `unsupported` is an
+                # instance with no limits to report; any other reason is a
+                # probe that failed. Neither makes the whole snapshot partial.
+                probe_state = (
+                    "unsupported"
+                    if str(unavailable.get("reason")) == "unsupported"
+                    else "failed"
+                )
             else:
                 probe_state = "reported"
         if probe_state != "absent":
