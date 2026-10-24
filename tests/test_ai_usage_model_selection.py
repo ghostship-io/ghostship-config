@@ -333,6 +333,56 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(value['providers']['codex']['selected']['orchestrator']['model'],'reviewer')
         self.assertEqual(value['providers']['codex']['selected']['worker']['model'],'dated:1017')
 
+    def test_collector_publishes_and_retries_picker_after_t3_connection_failure(self):
+        import json
+        import tempfile
+        from types import ModuleType
+        from unittest.mock import Mock, patch
+        import main
+
+        class T3Error(RuntimeError):
+            pass
+
+        bridge_module = ModuleType('ghostship_t3.bridge')
+        bridge_module.Bridge = Mock()
+        bridge_module.T3Error = T3Error
+        picker_module = ModuleType('ghostship_t3.model_selection')
+        picker_module.reconcile = Mock()
+        modules = {'ghostship_t3': ModuleType('ghostship_t3'),
+                   'ghostship_t3.bridge': bridge_module,
+                   'ghostship_t3.model_selection': picker_module}
+        evidence = {'policy': {'roles': {'orchestrator': []},
+                              'model_selection': {'categories': list(selection.CATEGORIES)}},
+                    'identities': [{'id': 'example'}]}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, modules), \
+             patch.object(main, 'collect', return_value=([], [], {})), \
+             patch.object(main, 'read_outcomes', return_value=evidence), \
+             patch.object(main.model_quality, 'read_evidence', return_value=([], 'no_evidence')), \
+             patch.object(main, 'read_session_token', return_value=''), \
+             patch.object(main, 'resolve_t3_base_url', return_value='http://127.0.0.1:1'), \
+             patch.object(main, 'log') as log:
+            root = Path(directory)
+            args = state_args(root, ['--reconcile-picker', '--now', '1000',
+                                    '--projection', str(root / 'projection.json')])
+            for cause in (ConnectionRefusedError(111, 'Connection refused'), TimeoutError()):
+                error = T3Error('transport details must not enter the log')
+                error.__cause__ = cause
+                picker_module.reconcile.side_effect = error
+                self.assertEqual(main.main(args), 0)
+                self.assertTrue((root / 'output.json').is_file())
+                self.assertEqual(json.loads((root / 'projection.json').read_text()),
+                                 json.loads((root / 'snapshot.json').read_text()))
+                self.assertFalse((root / 'picker-state.json').exists())
+            self.assertNotIn('transport details', str(log.call_args_list))
+            picker_module.reconcile.side_effect = None
+            picker_module.reconcile.return_value = {'state': 'updated', 'favorite_changes': 1}
+            self.assertEqual(main.main(args), 0)
+            self.assertEqual(picker_module.reconcile.call_count, 3)
+            # A malformed settings response or authentication failure must still fail visibly.
+            picker_module.reconcile.side_effect = T3Error('unexpected response')
+            with self.assertRaises(T3Error):
+                main.main(args)
+
     def test_subpoint_quality_differences_are_not_alphabetical_ties(self):
         weaker = candidate('example', 'a-model', quality=85)
         stronger = candidate('example', 'z-model', quality=85)
