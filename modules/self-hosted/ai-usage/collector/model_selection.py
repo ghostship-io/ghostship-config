@@ -710,12 +710,30 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         rows.sort(key=lane_key)
         for index, row in enumerate(rows,1):
             row['position'] = index
+    obsolete = []
+    for record in snapshot.get("obsolete_models") or []:
+        provider = str(record.get("provider") or "")
+        model = str(record.get("model") or "")
+        if not provider or not model:
+            continue
+        reason = str(record.get("reason") or "obsolete")
+        if "obsolete" not in reason.lower():
+            reason = "obsolete: " + reason
+        obsolete.append({
+            "provider": provider,
+            "model": model,
+            "display_name": model,
+            "reason": reason,
+            "billing": str(record.get("billing") or "unknown"),
+            "basis": str(record.get("basis") or ""),
+            "superseded_by": record.get("superseded_by"),
+        })
     return {"schema": SCHEMA, "generated_at": snapshot.get("generated_at"),
             "partial": bool(snapshot.get("partial", False)),
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
             "providers": providers, "worker_builds": dict(worker_builds),
             "free_selected": free_selected,
-            "role_exclusions": role_exclusions, **categories,
+            "role_exclusions": role_exclusions, "obsolete": obsolete, **categories,
             "default_worker": next((row["native"] for row in categories["worker"]
                                     if row["available"] and row["picker_eligible"] and row["selection_eligible"]), None)}
 
@@ -757,7 +775,8 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'sensitivity_internal': ('true' if (row.get('sensitivity_eligible') or {}).get('internal') else 'false'),
                       'sensitivity_sensitive': ('true' if (row.get('sensitivity_eligible') or {}).get('sensitive') else 'false'),
                       'sensitive_ok': ('' if policy.get('sensitive_ok') is None
-                                       else 'true' if policy.get('sensitive_ok') else 'false')}
+                                       else 'true' if policy.get('sensitive_ok') else 'false'),
+                      'obsolete': 'false'}
             numbers = {'info': 1.0, 'position': row['position'],
                        'selected': float((row['key'] == (selection.get('free_selected') or {}).get(row['provider'])
                                            if category == 'worker' and row.get('billing') in ('free', 'promotion') else
@@ -795,4 +814,46 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                 finite = number(value)
                 if finite is not None:
                     values.append(('ghostship_ai_picker_model_' + field, dict(labels), finite))
+    # Every pruned route is published with the obsolete label, so the Paid
+    # and Free pages can count it as one reason instead of losing it. The
+    # route is not selected and sits after every live position.
+    for index, row in enumerate(selection.get("obsolete") or [], 1):
+        labels = {
+            "category": "worker",
+            "provider": str(row.get("provider") or ""),
+            "model": ExactLabel(str(row.get("model") or "")),
+            "display_name": ExactLabel(str(row.get("display_name") or row.get("model") or "")),
+            "state": "unavailable",
+            "picker_eligible": "false",
+            "trust": "trusted",
+            "pool": "",
+            "pool_label": "Obsolete",
+            "billing": str(row.get("billing") or "unknown"),
+            "reason": ExactLabel(str(row.get("reason") or "obsolete")),
+            "window": "",
+            "quota_id": "",
+            "pace_state": "unknown",
+            "reset_source": "provider",
+            "effort": "",
+            "quality_basis": "unknown",
+            "quality_binding_basis": "",
+            "allowance_plan": "",
+            "allowance_basis": "",
+            "binding_window": "",
+            "pick_basis": "obsolete",
+            "pick_reason": "obsolete",
+            "data_policy": "/",
+            "approved_free": "false",
+            "approval_source": "",
+            "overspent": "false",
+            "sensitivity_public": "true",
+            "sensitivity_internal": "true",
+            "sensitivity_sensitive": "true",
+            "sensitive_ok": "",
+            "obsolete": "true",
+        }
+        for field, value in (("info", 1.0),
+                             ("position", 100000.0 + index),
+                             ("selected", 0.0)):
+            values.append(("ghostship_ai_picker_model_" + field, dict(labels), value))
     return values
