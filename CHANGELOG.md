@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.17.267] - 2026-10-24
+
+Command Code GOAT now runs through T3 Code's OpenCode instance using the
+Provider API key instead of the retired ACP command. The OpenAI-compatible and
+Anthropic routes both carry the vendor's zero-retention header, the model list
+refreshes from the vendor, and the paid DeepSeek worker route keeps its picker
+identity.
+
+PR #438.
+
 ## [3.17.266] - 2026-10-24
 
 Reconcile a private `opencode-free` T3 provider instance from the owner's single
