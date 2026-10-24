@@ -11,9 +11,8 @@ groups:
     interval: 1m
     rules:
       # Plex's Internet-facing domains enforce; a denial is breakage or an attack.
-      # ldconfig inheriting the interpreter's open .py descriptors is intended.
       - alert: AppArmorDeniedEnforced
-        expr: '_time:5m apparmor:="DENIED" aa_profile:~"^ghostship-plex//(server|python|ldconfig)$" NOT (aa_profile:="ghostship-plex//ldconfig" AND aa_operation:="file_inherit") | stats by (aa_profile, aa_operation) count() as n'
+        expr: '_time:5m apparmor:="DENIED" aa_profile:~"^ghostship-plex//(server|python|ldconfig)$" | stats by (aa_profile, aa_operation) count() as n'
         labels: {severity: high, category: apparmor}
         annotations:
           summary: '{{ $value }} AppArmor denials in {{ $labels.aa_profile }} ({{ $labels.aa_operation }})'
