@@ -10,7 +10,8 @@ Runs before the T3 Code server starts. Two things happen there:
   good list. The API key is never written to the config: OpenCode resolves
   ``{env:COMMAND_CODE_API_KEY}`` from the projected secret at request time,
   and every request carries the vendor's ``x-cmd-zdr: 1`` zero-retention
-  header.
+  header. This process reads only that one variable from the projection file,
+  with a plain value parse; it never sources the file or runs a shell.
 * the retired ACP ``commandCode`` instance is removed from T3 Code's settings
   when it is the managed ``cmd acp`` launcher, so the dead provider does not
   appear beside the OpenCode route.
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 import tempfile
 import urllib.request
@@ -31,6 +33,8 @@ ROOT = Path(__file__).resolve().parent
 BASE_URL = "https://api.commandcode.ai/provider/v1"
 KEY_ENV = "COMMAND_CODE_API_KEY"
 TIMEOUT_SECONDS = 10
+USER_AGENT = "ghostship-t3code-command-code/1"
+SECRETS_FILE = Path("/run/secrets/t3code.env")
 MANAGED_INSTANCE = "commandCode"
 MANAGED_INSTANCE_CONFIG = {"source": "local", "commandArgs": ["acp"]}
 
@@ -74,8 +78,7 @@ def fetch_models(key, base_url=BASE_URL, timeout=TIMEOUT_SECONDS):
         headers={
             "Authorization": f"Bearer {key}",
             "Accept": "application/json",
-            # The API sits behind a browser-signature filter.
-            "User-Agent": "curl/8.11.1",
+            "User-Agent": USER_AGENT,
         },
     )
     try:
@@ -175,6 +178,44 @@ def retire(settings_path):
     return True
 
 
+def parse_env(text):
+    """KEY=VALUE pairs from a projection file, without a shell.
+
+    Quoted values use shlex so the projection's own quoting is undone; shlex
+    only parses, it never expands or executes, and the caller reads one name.
+    """
+    values = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        name, separator, value = line.partition("=")
+        if not separator:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            try:
+                parts = shlex.split(value, comments=False)
+            except ValueError:
+                continue
+            if len(parts) != 1:
+                continue
+            value = parts[0]
+        values[name.strip()] = value
+    return values
+
+
+def projected_key(path):
+    """Only COMMAND_CODE_API_KEY from the projection, or an empty string."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return parse_env(text).get(KEY_ENV, "").strip()
+
+
 def config_path(home, environ=os.environ):
     configured = environ.get("XDG_CONFIG_HOME")
     directory = Path(configured) if configured else home / ".config"
@@ -186,11 +227,15 @@ def config_path(home, environ=os.environ):
     return directory / "opencode.jsonc"
 
 
-def main(home=None, source=ROOT, key=None, fetch=fetch_models, environ=None):
+def main(home=None, source=ROOT, key=None, fetch=fetch_models, environ=None,
+         secrets_file=SECRETS_FILE):
     environ = environ if environ is not None else os.environ
     home = Path(home or Path.home())
     fragment = json.loads((Path(source) / "provider.json").read_text(encoding="utf-8"))
-    key = (key if key is not None else environ.get(KEY_ENV, "")).strip()
+    # Only this one variable is read, from the projection file itself. The
+    # file is never sourced, so no other secret reaches this process and no
+    # value is ever evaluated by a shell.
+    key = (key if key is not None else projected_key(secrets_file)).strip()
     entries = None
     if key:
         try:

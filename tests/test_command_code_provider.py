@@ -2,10 +2,12 @@
 
 import importlib.util
 import json
+import shlex
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "packages/t3code/command-code"
@@ -97,12 +99,15 @@ class ConfigureTests(unittest.TestCase):
 
     def test_missing_key_makes_no_request_and_adds_no_empty_provider(self):
         home = home_with({"enabled_providers": ["ollama-cloud"]})
+        secrets = Path(tempfile.mkdtemp()) / "t3code.env"
+        secrets.write_text("OTHER=" + "value" + "\n")
 
         def forbidden(key):
             raise AssertionError("no request without a key")
 
-        self.assertEqual(configure.main(home=home, source=SOURCE, key="",
-                                        fetch=forbidden, environ={}), 0)
+        self.assertEqual(configure.main(home=home, source=SOURCE, key=None,
+                                        fetch=forbidden, environ={},
+                                        secrets_file=secrets), 0)
         config = config_of(home)
         self.assertNotIn("providers", config)
         self.assertEqual(config["enabled_providers"], ["ollama-cloud"])
@@ -160,13 +165,61 @@ class ConfigureTests(unittest.TestCase):
         # No key and no existing file: nothing to add, so nothing is created.
         self.assertFalse((empty / ".config/opencode/opencode.jsonc").exists())
 
-    def test_image_configures_the_route_before_t3_starts(self):
+    def test_image_runs_configure_directly_without_sourcing_secrets(self):
         image = (ROOT / "packages/t3code/image.nix").read_text()
-        directive = "ExecStartPre=-${pkgs.bashInteractive}/bin/bash -c 'set -a; test ! -f /run/secrets/t3code.env"
+        directive = "ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/configure.py"
         self.assertIn("cp -r ${./command-code}/.", image)
-        self.assertIn("/usr/share/t3code-command-code/configure.py", image)
+        self.assertIn(directive, image)
         self.assertLess(image.index(directive),
                         image.index("ExecStart=${managedBin}/t3code-server-run"))
+        self.assertNotIn("set -a", image)
+        self.assertNotIn(". /run/secrets/t3code.env", image)
+
+    def test_catalog_fetch_identifies_itself(self):
+        seen = {}
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *arguments):
+                return False
+
+            def read(self, *arguments):
+                return json.dumps({"data": VENDOR}).encode()
+
+        def opener(request, timeout=None):
+            seen.update(request.header_items())
+            return Response()
+
+        with patch("urllib.request.urlopen", opener):
+            self.assertEqual(configure.fetch_models("fixture"), VENDOR)
+        self.assertEqual(configure.USER_AGENT, "ghostship-t3code-command-code/1")
+        self.assertEqual(seen.get("User-agent"), configure.USER_AGENT)
+        self.assertNotIn("curl", configure.USER_AGENT.lower())
+        self.assertNotIn("mozilla", configure.USER_AGENT.lower())
+
+    def test_only_the_projected_key_is_read_and_nothing_is_evaluated(self):
+        home = home_with()
+        secrets = Path(tempfile.mkdtemp()) / "t3code.env"
+        marker = secrets.parent / "executed"
+        value = "pre$(touch " + str(marker) + ")post'quote\""
+        seen = {}
+
+        def capture(key):
+            seen["key"] = key
+            return VENDOR
+
+        for label, encoded in (("projection quoting", shlex.quote(value)),
+                               ("bare value", value)):
+            with self.subTest(case=label):
+                secrets.write_text("OTHER=" + "value" + "\n"
+                                   "COMMAND_CODE_API_KEY=" + encoded + "\n")
+                self.assertEqual(configure.main(home=home, source=SOURCE, key=None,
+                                                fetch=capture, environ={},
+                                                secrets_file=secrets), 0)
+                self.assertEqual(seen["key"], value)
+                self.assertFalse(marker.exists())
 
     def test_documented_route_and_terms_are_current(self):
         docs = (ROOT / "docs/t3code.md").read_text()
