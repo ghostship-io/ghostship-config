@@ -49,7 +49,8 @@ def weights(policy: Mapping[str, Any] | None = None) -> dict[str, float]:
     if isinstance(override, Mapping):
         quality = _number(override.get("quality"))
         capacity = _number(override.get("capacity"))
-        if quality is not None and capacity is not None and quality + capacity > 0:
+        if (quality is not None and capacity is not None
+                and quality >= 0 and capacity >= 0 and quality + capacity > 0):
             return {"quality": quality, "capacity": capacity}
     return dict(DEFAULT_WEIGHTS)
 
@@ -208,7 +209,6 @@ def reason(breakdown: Mapping[str, Any] | None, allowance: Mapping[str, Any] | N
     configured = breakdown.get("weights") or DEFAULT_WEIGHTS
     parts = []
     quality_value = _number(breakdown.get("quality_term"))
-    capacity_value = _number(breakdown.get("capacity_term"))
     if quality_value is not None:
         parts.append(f"quality {quality_value * 100:.1f} x {configured.get('quality')}")
     requests = _number(breakdown.get("affordable_requests"))

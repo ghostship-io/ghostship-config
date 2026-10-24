@@ -37,7 +37,6 @@ align the native options when the model supports the measured setting.
 from __future__ import annotations
 
 import re
-from collections import Counter
 from typing import Any, Iterable, Mapping
 
 import value_policy

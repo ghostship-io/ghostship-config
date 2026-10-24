@@ -18,6 +18,8 @@ SOURCE = "https://x.com/thsottiaux"
 PATH = "/var/lib/ghostship-ai-usage/announced-resets.json"
 INTERVAL = 3600
 BACKOFF = 8 * 3600
+# A monitor with no successful read for this long is stale and alerts.
+STALE_AFTER_SECONDS = 3 * 3600
 POST_URL = reset_events.POST_URL
 TOPIC_URL = re.compile(r"https://community\.openai\.com/t/[a-zA-Z0-9_-]+/\d+(?:/\d+)?(?:#announcement-\d+)?$")
 
@@ -128,6 +130,63 @@ def samples(document):
                 "quote": ExactLabel(entry["quote"]),
                 "reset_at": ExactLabel(reset_at),
             }, 1.0
+
+
+def health(document, now):
+    """The monitor's own health, apart from the events it found.
+
+    ``ok`` means the last read succeeded and the last success is within three
+    hours. ``blocked`` means an X sign-in wall or challenge stopped the read.
+    ``stale`` means no successful read in three hours, or the last read failed.
+    ``unknown`` means nothing has succeeded yet. The state never hides a
+    failure: a failed read with a recent success is still ``stale``.
+    """
+    last_success = document.get("last_success_at")
+    if isinstance(last_success, bool) or not isinstance(last_success, (int, float)):
+        last_success = None
+    age = None if last_success is None else max(0.0, float(now) - float(last_success))
+    blocked = document.get("status") == "blocked" or primary_blocked(document)
+    if blocked:
+        state, reason = "blocked", "X showed a sign-in wall or challenge"
+    elif last_success is None:
+        state, reason = "unknown", "no successful read yet"
+    elif age is not None and age > STALE_AFTER_SECONDS:
+        state, reason = "stale", f"last successful read {int(age)}s ago"
+    elif document.get("status") in ("unavailable", "checking"):
+        state, reason = "stale", "the last read did not succeed"
+    else:
+        state, reason = "ok", ""
+    return {
+        "state": state,
+        "reason": reason,
+        "last_read_at": document.get("checked_at"),
+        "last_success_at": last_success,
+        "last_success_age_seconds": age,
+        "next_check_at": document.get("next_check_at"),
+        "blocked": blocked,
+        "blocked_since": document.get("blocked_since"),
+        "last_blocked_at": document.get("last_blocked_at"),
+        "events": len(document.get("announcements") or []),
+        "source": SOURCE,
+    }
+
+
+def health_samples(document, now=None):
+    """Health series so the dashboard can show a silent monitor."""
+    moment = time.time() if now is None else float(now)
+    status = health(document, moment)
+    yield "ghostship_ai_announcements_health", {
+        "state": status["state"],
+        "reason": status["reason"] or "none",
+        "source": "announced_resets",
+    }, 1.0
+    if status["last_success_at"] is not None:
+        yield (
+            "ghostship_ai_announcements_last_success_timestamp_seconds",
+            {"source": "announced_resets"},
+            float(status["last_success_at"]),
+        )
+    yield "ghostship_ai_announcements_events", {"source": "announced_resets"}, float(status["events"])
 
 
 def primary_blocked(document):
@@ -282,11 +341,18 @@ def check(document, call, now):
         if page["blocked"]:
             updated["sources"][0]["status"] = "blocked"
             updated.setdefault("blocked_since", now)
+            updated["last_blocked_at"] = now
+            updated["last_error"] = "blocked"
         else:
             updated.pop("blocked_since", None)
             updated.pop("blocked_notice_sent_at", None)
+            # Only a completed read is a success. A failed or blocked read
+            # keeps the previous success time, so the health age is honest.
+            updated["last_success_at"] = now
+            updated["last_error"] = ""
     except (OSError, ValueError, KeyError, TypeError):
         updated["status"] = "unavailable"
+        updated["last_error"] = "unavailable"
     finally:
         updated["next_check_at"] = now + (BACKOFF if primary_blocked(updated) else INTERVAL)
         updated["announcements"] = list(records.values())[-100:]
@@ -295,6 +361,7 @@ def check(document, call, now):
                 call("browser.window", action="close", window_id=window)
             except (OSError, ValueError, KeyError):
                 updated["status"] = "unavailable"
+                updated["last_error"] = "unavailable"
     return updated
 
 
@@ -350,6 +417,7 @@ def desktop_check(document, command, now):
                 future.cancel()
     except Exception:
         return {**document, "checked_at": now, "identity": "personal", "status": "unavailable",
+                "last_error": "unavailable",
                 "next_check_at": now + (BACKOFF if primary_blocked(document) else INTERVAL)}
 
 
