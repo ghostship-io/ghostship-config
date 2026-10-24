@@ -230,6 +230,11 @@ METRIC_HELP = {
         "A limit of a free provider, with the basis it was read with: "
         "published, configured, observed or unknown."
     ),
+    "ghostship_ai_limit_probe": (
+        "Whether a ready T3 provider instance reports its usage limits: "
+        "reported, unsupported (it has none to report), or failed (its probe "
+        "could not read them, which makes the t3 source partial)."
+    ),
     "ghostship_ai_pool_cooldown_invalid": (
         "One for a cooldown of a pool route that cannot be true; the route is "
         "not blocked by it."
