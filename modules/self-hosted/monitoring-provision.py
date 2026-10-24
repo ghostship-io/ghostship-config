@@ -97,8 +97,13 @@ def main():
     client = socketio.Client(request_timeout=15, reconnection=False)
     monitors = {}
     notifications = []
+    info_event = threading.Event()
     monitor_event = threading.Event()
     notification_event = threading.Event()
+
+    @client.on("info")
+    def server_info(_data):
+        info_event.set()
 
     @client.on("monitorList")
     def monitor_list(data):
@@ -120,6 +125,10 @@ def main():
 
     client.connect(os.environ["KUMA_URL"], transports=["polling"])
     try:
+        # Kuma awaits sendInfo before installing its public RPC handlers. A
+        # connected transport alone is too early to send needSetup reliably.
+        if not info_event.wait(20):
+            raise RuntimeError("Kuma did not provide its initial info handshake")
         # The administrator account name is supplied by the deployment outside
         # this repository; an unset value is a deployment mistake, not a
         # default to fall back to.
