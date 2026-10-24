@@ -1540,6 +1540,32 @@ binding window, estimate) and `pick_score` (quality term, capacity term,
 weights). The snapshot also carries `limit_models`, `page_limits` and
 `command_code_usage` health blocks.
 
+### Owner-approved free workers
+
+A free route is never a first-choice worker on its own. The runtime policy's
+`model_selection.approved_free_workers` list is the gate, and it is empty until
+the owner adds an entry:
+
+```json
+{"provider": "nvidia", "model": "z-ai/glm-5.3", "allow_training": true,
+ "sensitivity": ["public", "internal"], "approved_at": "2026-10-24", "note": "owner approval"}
+```
+
+The collector reads the list; it never writes it and never infers an approval
+from quality, price or a provider name. An approved route is a first-choice
+worker while it is available and not overspent (a route more than twenty
+points behind its binding window's pace is overspent). It then follows every
+route that is not, so the picker falls back to paid instead of spending a
+limit that is already consumed too fast. `allow_training: true` lets the owner
+approve a route whose prompts are used for training; without it the generic
+`data policy: training used or not ZDR` exclusion applies.
+
+Rows carry `approved_free` (source, sensitivity, allow_training, approved_at,
+note), `free_worker` and `overspent`; the picker metrics add the
+`approved_free`, `approval_source` and `overspent` labels and gauges. The
+normal models page shows these rows beside paid models; no separate free-only
+page is required.
+
 An optional runtime file, `--custom-resets` (default
 `/var/lib/ghostship-ai-usage/custom-resets.json`), contains
 `{"schema":1,"windows":[{"provider":"example","quota_id":"weekly","reset_at":"2030-01-01T17:00:00Z"}]}`.
