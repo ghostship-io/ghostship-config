@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.299] - 2026-10-24
+
+- ai-usage: only the best proven free route per provider is a T3 worker
+
+PR #495.
+
 ## [3.17.298] - 2026-10-24
 
 - Pin the agent revision that carries the latest worker changes
