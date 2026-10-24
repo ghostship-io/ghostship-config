@@ -1555,8 +1555,13 @@ Thereafter `w = (n - 4) / (n + 6)` and
 `overall = (1 - w) * AA + w * observed`; observed becomes the majority at 15.
 Without AA, five outcomes are required for an observed-only overall score.
 
-The default table contains one row per model in the active, available native
-selection pool. All models includes spent and unused models. Efforts collapse
+The default table contains one row per selected model: the model each lane
+card shows, including a grey spent card. All models lists every evaluated
+model. Each row carries a selection status and a fixed-wording reason
+(`selection`, `selection_reason` labels): the role it is the best eligible
+model of, or why it is not selected (outranked by the provider's pick, allowance
+spent, over the worker price cap, no Artificial Analysis score for that exact
+build, or outside the worker and review roles). Efforts collapse
 to the best measured setting, with a comparison only when observed effort
 results differ; columns without evidence are omitted. Unmeasured efforts cannot
 erase established outcomes once a supported effort has five verified samples.

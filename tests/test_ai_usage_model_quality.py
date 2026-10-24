@@ -126,21 +126,46 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(chosen['effort'],'low')
         self.assertLess(chosen['overall'],30)
 
-    def test_model_summary_marks_active_pool_and_keeps_spent_models_for_all_toggle(self):
-        active=candidate('active')
-        spent=candidate('spent')
+    def test_every_evaluated_model_gets_a_selection_status_and_reason(self):
+        best,second,spent,unscored=candidate('best',80),candidate('second',60),candidate('spent',70),candidate('unscored',None)
         spent['capacity']['remaining_ratio']=0
-        rows=[active,spent]
-        result=quality.build(rows,rounds('active',n=5)+rounds('active','high',n=6),NOW)
-        selected=selection.build({'candidates':rows},[])
-        quality.annotate(result,selected)
-        active_rows=[r for r in result['rows'] if r['active']]
-        self.assertEqual({r['model'] for r in active_rows},{'active'})
-        self.assertEqual(sum(r['representative'] for r in active_rows),1)
-        representative=next(r for r in active_rows if r['representative'])
-        self.assertEqual(representative['effort'],selected['worker'][0]['effort']['value'])
-        self.assertEqual(representative['active_rank'],1)
-        self.assertEqual(sum(r['representative'] for r in result['rows']),2)
+        alone=candidate('alone',50)
+        alone['provider']='solo'
+        alone['native']['provider_instance_id']='solo_native'
+        alone['capacity']['remaining_ratio']=0
+        rows=[best,second,spent,unscored,alone]
+        result=quality.build(rows,rounds('best',n=5)+rounds('best','high',n=6),NOW)
+        chosen=selection.build({'candidates':rows},[])
+        quality.annotate(result,chosen)
+        status={}
+        for row in result['rows']:
+            status[row['model']]=(row['selection'],row['selection_reason'])
+        self.assertEqual(status['best'],('selected','Best eligible worker model of example'))
+        self.assertEqual(status['second'],('not selected','Outranked in its provider by best (%s)' % round(
+            next(r['overall'] for r in result['rows'] if r['model']=='best' and r['representative']),1)))
+        self.assertEqual(status['spent'],('not selected','Allowance spent'))
+        self.assertEqual(status['unscored'],('not selected','No Artificial Analysis score for this exact build'))
+        # A provider with nothing available still shows its best model, as the grey lane card does.
+        self.assertEqual(status['alone'],('selected','Best eligible worker model of solo'))
+        selected=[r for r in result['rows'] if r['selection']=='selected' and r['representative']]
+        self.assertEqual(sorted(r['selected_rank'] for r in selected),[1,2])
+        self.assertTrue(all(r['selected_rank'] is None for r in result['rows'] if r['selection']!='selected'))
+        self.assertEqual(sum(r['representative'] for r in result['rows']),5)
+        representative=next(r for r in result['rows'] if r['model']=='best' and r['representative'])
+        self.assertEqual(representative['effort'],chosen['worker'][0]['effort']['value'])
+        labels={name:labels for name,labels,_ in quality.samples(result) if name=='ghostship_ai_quality_info'}
+        self.assertTrue(labels)
+        text=main.render([],[],NOW,0,{'model_quality':result})
+        self.assertIn('selection="selected"',text)
+        self.assertIn('selection_reason="Allowance spent"',text)
+        self.assertNotIn('ghostship_ai_quality_active',text)
+
+    def test_models_outside_every_role_are_still_listed_with_their_reason(self):
+        row=candidate('hidden')
+        result=quality.build([row],[],NOW)
+        quality.annotate(result,{'providers':{},'worker':[],'orchestrator':[]})
+        self.assertEqual({(r['selection'],r['selection_reason']) for r in result['rows']},
+                         {('not selected','Outside the worker and review roles')})
 
     def test_boolean_effort_remains_a_native_boolean_for_review_and_work(self):
         row=candidate()
