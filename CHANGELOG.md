@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.250] - 2026-10-24
+
+- models: selected-only table by default, every evaluated model with a reason
+
+PR #420.
+
 ## [3.17.249] - 2026-10-24
 
 - Add the pinned Command Code GOAT ACP harness with persistent native login, non-fatal setup, enforced paid/ZDR routing and a DeepSeek V4.1 Flash default.
