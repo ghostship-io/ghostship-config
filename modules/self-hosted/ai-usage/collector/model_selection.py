@@ -88,7 +88,7 @@ def _trust(row: Mapping[str, Any]) -> str:
 
 
 APPROVED_FREE_SCHEMA = "ghostship.approved-free-workers/v1"
-SENSITIVITIES = ("public", "internal", "sensitive")
+SENSITIVITY_LEVELS = ("public", "internal", "sensitive")
 
 
 def load_approved_free_workers(path: str) -> list[dict[str, Any]]:
@@ -117,9 +117,12 @@ def load_approved_free_workers(path: str) -> list[dict[str, Any]]:
         provider = str(entry.get("provider") or "").strip()
         model = str(entry.get("model") or "").strip()
         sensitivity = entry.get("sensitivity")
-        if (not provider or not model or not isinstance(entry.get("allow_training"), bool)
+        if sensitivity is None:
+            sensitivity = ["public"]
+        if (not provider or not model or model == "*"
+                or not isinstance(entry.get("allow_training"), bool)
                 or not isinstance(sensitivity, list)
-                or any(value not in SENSITIVITIES for value in sensitivity)):
+                or any(value not in SENSITIVITY_LEVELS for value in sensitivity)):
             raise ValueError("approved free worker is invalid")
         key = (provider, model)
         if key in seen:
@@ -169,18 +172,54 @@ def _approved_free(policy: Mapping[str, Any] | None, provider: str, model: str) 
         if str(entry.get("provider") or "") != provider:
             continue
         wanted = str(entry.get("model") or "")
-        if wanted not in ("*", model):
+        # The owner approves an exact route. A wildcard or an empty model is
+        # not an approval of a family, and it never matches.
+        if not wanted or wanted == "*" or wanted != model:
             continue
         sensitivity = entry.get("sensitivity")
+        levels = list(sensitivity) if isinstance(sensitivity, list) and sensitivity else ["public"]
+        allow_training = bool(entry.get("allow_training"))
+        if allow_training:
+            # Private owner data never goes to a training-allowed route, even
+            # if an entry mistakenly lists the sensitive level.
+            levels = [level for level in levels if level != "sensitive"]
         return {
             "source": str(entry.get("source") or entry.get("approval_source")
                           or "owner runtime policy: approved_free_workers"),
-            "sensitivity": list(sensitivity) if isinstance(sensitivity, list) else ["public", "internal", "sensitive"],
-            "allow_training": bool(entry.get("allow_training")),
+            "sensitivity": levels,
+            "allow_training": allow_training,
             "approved_at": entry.get("approved_at"),
             "note": str(entry.get("note") or ""),
         }
     return None
+
+
+def allowed_for(row: Mapping[str, Any], sensitivity: str) -> bool:
+    """Whether one request's sensitivity may use this row.
+
+    An approved route admits only the levels its entry names, and a
+    training-allowed route never admits ``sensitive``. The generic data policy
+    stays in force: a route whose prompts train the vendor is public-only
+    unless the owner explicitly approved that exact route for internal work.
+    """
+    level = str(sensitivity or "internal").strip().lower()
+    if level not in SENSITIVITY_LEVELS:
+        return False
+    approval = row.get("approved_free")
+    policy = row.get("data_policy") or {}
+    sensitive_ok = policy.get("sensitive_ok") if isinstance(policy, Mapping) else None
+    if isinstance(approval, Mapping):
+        levels = set(approval.get("sensitivity") or ["public"])
+        if approval.get("allow_training"):
+            levels.discard("sensitive")
+        if sensitive_ok is False:
+            levels.discard("sensitive")
+            if not approval.get("allow_training"):
+                levels.discard("internal")
+        return level in levels
+    if sensitive_ok is False and level in ("internal", "sensitive"):
+        return False
+    return True
 
 
 def _data_policy(allowance_record: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -535,12 +574,16 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         row["approved_free"] = approval if approved_free else None
         row["free_worker"] = approved_free
         row["overspent"] = overspent
+        row["sensitivity_eligible"] = {
+            level: allowed_for(row, level) for level in SENSITIVITY_LEVELS
+        }
         if approved_free:
-            # The owner named this route. It is a first-choice worker while it
-            # has limit left; an approved training-allowed route may serve
-            # internal work the generic data policy would otherwise exclude.
-            row["selection_eligible"] = True
-            row["selection_reason"] = "owner-approved free worker"
+            # The owner named this route. Its own sensitivity list, not a
+            # blanket flag, decides which requests may use it; an
+            # allow_training route never admits sensitive work.
+            row["selection_eligible"] = bool(row["sensitivity_eligible"]["internal"])
+            row["selection_reason"] = ("owner-approved free worker" if row["selection_eligible"]
+                                       else "not approved for internal work")
         if limit_model.get("basis") in ("discovered", "measured", "cost"):
             row["pick_reason"] = limit_models.reason(pick_score, limit_model)
         if approved_free:
@@ -553,7 +596,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 and not (approved_free and (approval or {}).get("allow_training"))):
             # The owner's rule: a model whose prompts train the vendor or whose
             # data is not zero-retention stays out of internal and sensitive
-            # work unless the owner explicitly approved this exact route.
+            # work unless the owner explicitly approved this exact route for
+            # internal work. Sensitive remains excluded even then.
             row["selection_eligible"] = False
             row["selection_reason"] = "data policy: training used or not ZDR"
         if row['pool']['id'] in excluded_pools:
@@ -702,6 +746,9 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'approved_free': 'true' if row.get('approved_free') else 'false',
                       'approval_source': ExactLabel(str((row.get('approved_free') or {}).get('source') or '')),
                       'overspent': 'true' if row.get('overspent') else 'false',
+                      'sensitivity_public': ('true' if (row.get('sensitivity_eligible') or {}).get('public') else 'false'),
+                      'sensitivity_internal': ('true' if (row.get('sensitivity_eligible') or {}).get('internal') else 'false'),
+                      'sensitivity_sensitive': ('true' if (row.get('sensitivity_eligible') or {}).get('sensitive') else 'false'),
                       'sensitive_ok': ('' if policy.get('sensitive_ok') is None
                                        else 'true' if policy.get('sensitive_ok') else 'false')}
             numbers = {'info': 1.0, 'position': row['position'],

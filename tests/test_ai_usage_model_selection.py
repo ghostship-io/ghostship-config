@@ -202,7 +202,8 @@ class SelectionTests(unittest.TestCase):
              'candidates': [candidate('codex', 'reviewer', quality=90), free]},
             [{'instance_id': 'codex', 'model': 'reviewer'}],
             evidence={'policy': {'model_selection': {'approved_free_workers': [
-                {'provider': 'free-provider', 'model': 'free', 'allow_training': True}]}}})
+                {'provider': 'free-provider', 'model': 'free', 'allow_training': True,
+                 'sensitivity': ['public', 'internal']}]}}})
         self.assertEqual(value['worker'][0]['model'], 'free')
         self.assertTrue(value['worker'][0]['approved_free'])
         self.assertEqual(value['default_worker']['model'], 'reviewer')

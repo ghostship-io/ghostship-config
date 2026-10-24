@@ -1,4 +1,5 @@
 """Owner-approved free routes are first-choice workers until their limit is spent."""
+import json
 import sys
 import tempfile
 import unittest
@@ -30,7 +31,8 @@ def policy(entries):
     return {'policy': {'model_selection': {'approved_free_workers': entries}}}
 
 
-APPROVED = [{'provider': 'opencode', 'model': 'big-pickle', 'allow_training': True}]
+APPROVED = [{'provider': 'opencode', 'model': 'big-pickle', 'allow_training': True,
+             'sensitivity': ['public', 'internal']}]
 
 
 class ApprovedFreeTests(unittest.TestCase):
@@ -90,12 +92,49 @@ class ApprovedFreeTests(unittest.TestCase):
         free = candidate('opencode', 'big-pickle', 40, billing='free', mapped=False,
                          allowance=allowance)
         approved = self.build([free], [{'provider': 'opencode', 'model': 'big-pickle',
-                                        'allow_training': True}])
+                                        'allow_training': True,
+                                        'sensitivity': ['public', 'internal']}])
         self.assertTrue(approved['worker'][0]['selection_eligible'])
         refused = self.build([free], [{'provider': 'opencode', 'model': 'big-pickle',
-                                       'allow_training': False}])
+                                       'allow_training': False,
+                                       'sensitivity': ['public', 'internal']}])
         self.assertFalse(refused['worker'][0]['selection_eligible'])
         self.assertIn('data policy', refused['worker'][0]['selection_reason'])
+
+    def test_a_sensitive_request_never_uses_an_approved_training_route(self):
+        allowance = {'budgets': [{'kind': 'session', 'requests': 1000, 'unit': 'requests'}],
+                     'training': 'used', 'retention': 'not_zdr', 'sensitive_ok': False,
+                     'source': 'provider page', 'checked_at': NOW}
+        free = candidate('opencode', 'big-pickle', 40, billing='free', mapped=False,
+                         allowance=allowance)
+        result = self.build([free])
+        row = result['worker'][0]
+        self.assertTrue(row['sensitivity_eligible']['public'])
+        self.assertTrue(row['sensitivity_eligible']['internal'])
+        self.assertFalse(row['sensitivity_eligible']['sensitive'])
+        self.assertFalse(model_selection.allowed_for(row, 'sensitive'))
+        sensitive_picks = [item for item in result['worker']
+                           if model_selection.allowed_for(item, 'sensitive')]
+        self.assertNotIn(row, sensitive_picks)
+
+    def test_a_missing_sensitivity_defaults_to_public(self):
+        free = candidate('opencode', 'big-pickle', 40, billing='free', mapped=False)
+        result = self.build([free], [{'provider': 'opencode', 'model': 'big-pickle',
+                                      'allow_training': True}])
+        row = result['worker'][0]
+        self.assertEqual(row['approved_free']['sensitivity'], ['public'])
+        self.assertTrue(row['sensitivity_eligible']['public'])
+        self.assertFalse(row['sensitivity_eligible']['internal'])
+        self.assertFalse(row['selection_eligible'])
+        self.assertEqual(row['selection_reason'], 'not approved for internal work')
+
+    def test_a_wildcard_approval_matches_nothing(self):
+        free = candidate('opencode', 'big-pickle', 40, billing='free', mapped=False)
+        result = self.build([free], [{'provider': 'opencode', 'model': '*',
+                                      'allow_training': True,
+                                      'sensitivity': ['public', 'internal']}])
+        self.assertIsNone(result['worker'][0]['approved_free'])
+        self.assertFalse(result['worker'][0]['free_worker'])
 
     def test_the_approval_is_published_with_its_source(self):
         free = candidate('opencode', 'big-pickle', 40, billing='free', mapped=False)
@@ -158,6 +197,20 @@ class OwnerApprovalFileTests(unittest.TestCase):
             path.write_text('{"schema": "ghostship.approved-free-workers/v1", "entries": [{"provider": "x", "model": "y"}]}')
             with self.assertRaises(ValueError):
                 model_selection.load_approved_free_workers(str(path))
+            path.write_text('{"schema": "ghostship.approved-free-workers/v1", "entries": ['
+                            '{"provider": "x", "model": "*", "allow_training": true}]}')
+            with self.assertRaises(ValueError):
+                model_selection.load_approved_free_workers(str(path))
+
+    def test_a_missing_sensitivity_in_the_file_defaults_to_public(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'list.json'
+            path.write_text(json.dumps({
+                'schema': 'ghostship.approved-free-workers/v1',
+                'entries': [{'provider': 'opencode', 'model': 'big-pickle',
+                             'allow_training': True}]}))
+            entries = model_selection.load_approved_free_workers(str(path))
+            self.assertEqual(entries[0]['sensitivity'], ['public'])
 
 
 if __name__ == '__main__':
