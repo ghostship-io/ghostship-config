@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""Verify the provider ZDR table, repo config, and optional live account read-backs."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterable
+
+SCHEMA = "ghostship.provider-zdr-doctor/v1"
+STATES = {"ON", "NOT AVAILABLE", "BLOCKED"}
+REQUIRED = {
+    "Command Code GOAT",
+    "Anthropic Claude Code",
+    "OpenAI Codex",
+    "OpenCode Go and Zen",
+    "Ollama Cloud",
+    "Google Antigravity",
+    "Google AI Studio / Gemini API",
+    "Grok / xAI",
+    "OpenRouter",
+    "Groq",
+    "Mistral",
+    "NVIDIA",
+    "Cloudflare Workers AI",
+    "Cohere",
+    "Kilo",
+    "Vercel AI Gateway",
+    "OVHcloud AI Endpoints",
+    "Poolside",
+    "Z.ai",
+    "Requesty",
+    "OrcaRouter",
+    "Upstage",
+    "Inception",
+    "Hugging Face Inference Providers",
+}
+COLUMNS = ("Provider", "Surface", "Mechanism", "State", "Evidence", "Checked", "Detail")
+PRIVACY_ENV = (
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "DISABLE_TELEMETRY",
+    "DISABLE_ERROR_REPORTING",
+    "DISABLE_FEEDBACK_COMMAND",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
+)
+NO_FILTER_SENTENCE = "No provider's model list is filtered or allowlisted to obtain ZDR."
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+FORBIDDEN_POOL_KEYS = {"zdr_models", "zdr_allowlist", "model_filter", "model_allowlist", "zdr_filter"}
+
+
+@dataclass
+class Check:
+    name: str
+    status: str
+    detail: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {"name": self.name, "status": self.status, "detail": self.detail}
+
+
+@dataclass
+class Report:
+    root: Path
+    max_age_days: int
+    checks: list[Check] = field(default_factory=list)
+    providers: int = 0
+
+    def add(self, name: str, status: str, detail: str) -> None:
+        self.checks.append(Check(name, status, detail))
+
+    def ok(self) -> bool:
+        return not any(check.status == "fail" for check in self.checks)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": SCHEMA,
+            "ok": self.ok(),
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "providers": self.providers,
+            "checks": [check.as_dict() for check in self.checks],
+        }
+
+
+def _cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def parse_table(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    header: list[str] | None = None
+    for line in text.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = _cells(line)
+        if header is None:
+            if cells == list(COLUMNS):
+                header = cells
+            continue
+        if all(set(cell) <= {"-", ":", " "} for cell in cells):
+            continue
+        if len(cells) != len(COLUMNS):
+            raise ValueError(f"table row has {len(cells)} columns, expected {len(COLUMNS)}: {cells[0]}")
+        rows.append(dict(zip(COLUMNS, cells)))
+    if header is None:
+        raise ValueError("no provider table header found")
+    return rows
+
+
+def validate_docs(root: Path, max_age_days: int, today: date | None = None) -> tuple[list[dict[str, str]], list[Check]]:
+    checks: list[Check] = []
+    path = root / "docs/provider-zdr.md"
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        return [], [Check("docs", "fail", f"cannot read {path.name}: {type(exc).__name__}")]
+    if NO_FILTER_SENTENCE not in text:
+        checks.append(Check("docs.no-model-filter", "fail", "the no-filter statement is missing"))
+    else:
+        checks.append(Check("docs.no-model-filter", "pass", "no provider model list is filtered for ZDR"))
+    try:
+        rows = parse_table(text)
+    except ValueError as exc:
+        return [], checks + [Check("docs.table", "fail", str(exc))]
+    present = {row["Provider"] for row in rows}
+    missing = sorted(REQUIRED - present)
+    extra = sorted(present - REQUIRED)
+    if missing:
+        checks.append(Check("docs.providers", "fail", "missing: " + ", ".join(missing)))
+    elif extra:
+        checks.append(Check("docs.providers", "fail", "unreviewed: " + ", ".join(extra)))
+    else:
+        checks.append(Check("docs.providers", "pass", f"{len(rows)} required providers"))
+    current = today or date.today()
+    for row in rows:
+        name = row["Provider"]
+        if row["State"] not in STATES:
+            checks.append(Check(f"docs.{name}.state", "fail", f"invalid state {row['State']!r}"))
+        if not re.search(r"https?://|`[^`]+`", row["Evidence"]):
+            checks.append(Check(f"docs.{name}.evidence", "fail", "no URL or repo path"))
+        if EMAIL.search(row["Detail"] + " " + row["Evidence"]):
+            checks.append(Check(f"docs.{name}.private", "fail", "private identifier in the table"))
+        try:
+            checked = date.fromisoformat(row["Checked"])
+        except ValueError:
+            checks.append(Check(f"docs.{name}.date", "fail", f"invalid date {row['Checked']!r}"))
+            continue
+        if checked > current:
+            checks.append(Check(f"docs.{name}.date", "fail", "date is in the future"))
+        elif (current - checked).days > max_age_days:
+            checks.append(
+                Check(f"docs.{name}.date", "fail", f"evidence is {(current - checked).days} days old")
+            )
+    if not any(check.status == "fail" for check in checks):
+        checks.append(Check("docs.dates", "pass", f"all evidence within {max_age_days} days"))
+    return rows, checks
+
+
+def _load_json(path: Path) -> Any:
+    return json.loads(path.read_text())
+
+
+def check_command_code(path: Path, required: bool) -> Check:
+    name = "command-code"
+    if not path.exists():
+        return Check(name, "fail" if required else "skip", "T3 settings not present")
+    try:
+        data = _load_json(path)
+        environment = data["providerInstances"]["commandCode"].get("environment", [])
+        values = {item.get("name"): item.get("value") for item in environment if isinstance(item, dict)}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return Check(name, "fail", "cannot read the Command Code provider instance")
+    if values.get("CMD_ZDR") != "1":
+        return Check(name, "fail", "CMD_ZDR is not 1")
+    return Check(name, "pass", "CMD_ZDR=1")
+
+
+def check_claude(path: Path, required: bool) -> Check:
+    name = "claude-privacy"
+    if not path.exists():
+        return Check(name, "fail" if required else "skip", "Claude settings not present")
+    try:
+        data = _load_json(path)
+        environment = data.get("env", {})
+    except (OSError, ValueError, TypeError):
+        return Check(name, "fail", "cannot read Claude settings")
+    missing = [key for key in PRIVACY_ENV if environment.get(key) != "1"]
+    if missing:
+        return Check(name, "fail", "not set: " + ", ".join(missing))
+    return Check(name, "pass", "nonessential traffic and feedback are off")
+
+
+def check_grok(path: Path, required: bool) -> Check:
+    name = "grok-upload"
+    if not path.exists():
+        return Check(name, "fail" if required else "skip", "Grok settings cache not present")
+    try:
+        cache = _load_json(path)
+        payload = cache.get("payload", cache)
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        settings = payload.get("settings", payload) if isinstance(payload, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return Check(name, "fail", "cannot read the Grok settings cache")
+    if not isinstance(settings, dict):
+        return Check(name, "fail", "unexpected Grok settings shape")
+    bad: list[str] = []
+    if settings.get("disable_codebase_upload") is not True:
+        bad.append("disable_codebase_upload is not true")
+    if settings.get("sharing_enabled") is not False:
+        bad.append("sharing_enabled is not false")
+    if bad:
+        return Check(name, "fail", "; ".join(bad))
+    return Check(name, "pass", "codebase upload and sharing are off")
+
+
+def check_pool(path: Path, required: bool) -> Check:
+    name = "free-pool-policy"
+    if not path.exists():
+        return Check(name, "fail" if required else "skip", "inference-pool.json not present")
+    try:
+        data = _load_json(path)
+        providers = data.get("providers", {})
+    except (OSError, ValueError, TypeError):
+        return Check(name, "fail", "cannot read inference-pool.json")
+    if not isinstance(providers, dict) or not providers:
+        return Check(name, "fail", "no providers in inference-pool.json")
+    problems = []
+    for provider, account in providers.items():
+        if not isinstance(account, dict):
+            problems.append(f"{provider}: not an object")
+            continue
+        forbidden = FORBIDDEN_POOL_KEYS & set(account)
+        if forbidden:
+            problems.append(f"{provider}: ZDR filter keys {sorted(forbidden)}")
+    if problems:
+        return Check(name, "fail", "; ".join(problems))
+    return Check(name, "pass", f"{len(providers)} providers, no ZDR model filter")
+
+
+def browser_call(url: str, script: str, runner: Callable[..., Any]) -> Any:
+    request = json.dumps({"op": "eval", "script": script})
+    result = runner(
+        ["ghostship-bladebro", "--identity", "personal", "--url", url, "--request", request],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    if getattr(result, "returncode", 1) != 0:
+        raise RuntimeError("browser command failed")
+    envelope = json.loads(result.stdout)
+    if not envelope.get("ok"):
+        raise RuntimeError(str(envelope.get("error", "browser error")))
+    value = envelope.get("result")
+    # Some Bladebro results are JSON encoded once more; plain strings such as
+    # "false" must stay strings so the expected-value comparison is exact.
+    if isinstance(value, str) and value[:1] in "[{":
+        try:
+            value = json.loads(value)
+        except ValueError:
+            pass
+    return value
+
+
+def _switch_states() -> str:
+    return (
+        "({switches:[...document.querySelectorAll('button[role=switch]')]"
+        ".map(e=>e.getAttribute('aria-checked'))})"
+    )
+
+
+BROWSER_CHECKS: dict[str, tuple[str, str, Callable[[Any], bool], str]] = {
+    "openrouter": (
+        "https://openrouter.ai/settings/privacy",
+        _switch_states(),
+        lambda value: value.get("switches") == ["true"] * 5 + ["false"] * 5,
+        "five ZDR scopes on; training, publish, discount, and catalog filter off",
+    ),
+    "groq": (
+        "https://console.groq.com/settings/data-controls",
+        "([...document.querySelectorAll('button[role=switch]')].map(e=>e.getAttribute('aria-checked')).slice(0,2))",
+        lambda value: value == ["true", "true"],
+        "Global ZDR and Inference APIs ZDR are on",
+    ),
+    "chatgpt": (
+        "https://chatgpt.com/settings/data-controls",
+        "(()=>{const e=[...document.querySelectorAll('button[role=switch]')]"
+        ".find(x=>x.getAttribute('aria-label')==='Allow chats to improve the model');"
+        "return e?e.getAttribute('aria-checked'):null})()",
+        lambda value: value == "false",
+        "Improve the model for everyone is off",
+    ),
+    "mistral": (
+        "https://admin.mistral.ai/plateforme/privacy",
+        "([...document.querySelectorAll('[role=switch]')].map(e=>e.getAttribute('aria-checked')))",
+        lambda value: isinstance(value, list) and len(value) == 2 and all(item == "false" for item in value),
+        "API training and Labs models are off",
+    ),
+}
+
+
+def run_browser_checks(
+    provider_names: Iterable[str], runner: Callable[..., Any] | None = None
+) -> list[Check]:
+    runner = runner or subprocess.run
+    checks: list[Check] = []
+    for provider, (url, script, expected, detail) in BROWSER_CHECKS.items():
+        name = f"browser.{provider}"
+        if runner is subprocess.run:
+            # A missing CLI is a skip, not a provider failure.
+            from shutil import which
+
+            if which("ghostship-bladebro") is None:
+                checks.append(Check(name, "skip", "ghostship-bladebro is not installed"))
+                continue
+        try:
+            value = browser_call(url, script, runner)
+        except Exception as exc:
+            checks.append(Check(name, "fail", f"read-back failed: {type(exc).__name__}"))
+            continue
+        if expected(value):
+            checks.append(Check(name, "pass", detail))
+        else:
+            checks.append(Check(name, "fail", f"unexpected read-back: {value!r}"))
+    return checks
+
+
+def build_report(
+    root: Path,
+    home: Path,
+    max_age_days: int,
+    require_live: bool,
+    browser: bool,
+    runner: Callable[..., Any] | None = None,
+) -> Report:
+    report = Report(root=root, max_age_days=max_age_days)
+    rows, docs_checks = validate_docs(root, max_age_days)
+    report.checks.extend(docs_checks)
+    report.providers = len(rows)
+    report.checks.append(check_command_code(home / ".t3/userdata/settings.json", require_live))
+    report.checks.append(check_claude(home / ".claude/settings.json", require_live))
+    report.checks.append(check_grok(home / ".grok/settings_cache.json", require_live))
+    report.checks.append(check_pool(root / "modules/self-hosted/inference-pool.json", require_live))
+    if browser:
+        report.checks.extend(run_browser_checks((row["Provider"] for row in rows), runner))
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--home", type=Path, default=Path.home())
+    parser.add_argument("--max-age-days", type=int, default=45)
+    parser.add_argument("--require-live", action="store_true", help="fail when a live settings file is missing")
+    parser.add_argument("--browser", action="store_true", help="re-read the account toggles through the personal profile")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    report = build_report(args.root, args.home, args.max_age_days, args.require_live, args.browser)
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2))
+    else:
+        for check in report.checks:
+            print(f"{check.status:4} {check.name}: {check.detail}")
+        print("ok" if report.ok() else "drift")
+    return 0 if report.ok() else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -247,6 +247,8 @@ activation supports research files; repository profiles are refused until their
 mount and commit paths are implemented. Scheduled provider probes remain off
 until their native adapters are validated. Run the deployed boundary proof with
 `agent worker toolcheck --profile research` inside the worker container.
+Provider data-retention settings and their re-check are documented in
+[provider zero data retention](provider-zdr.md).
 
 Use `agent deploy run` for merged changes. It preserves busy T3 sessions and
 checks activation gates; a deployment that requires an unauthorized restart
