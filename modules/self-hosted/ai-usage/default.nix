@@ -76,7 +76,8 @@ in
   options.ghostship.aiUsage.workerBuilds = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
     default.ollama = "ollama-cloud/deepseek-v4.1-flash:1017";
-    description = "Exact native worker builds selected by the owner, keyed by provider. A missing or unavailable build cannot fall back to an alias.";
+    default.commandCode = "deepseek/deepseek-v4.1-flash";
+    description = "Exact native worker model IDs selected by the owner, keyed by provider. Missing or unavailable IDs cannot fall back to another catalog ID. A provider's latest alias may change builds.";
   };
 
   config = {

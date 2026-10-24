@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
 import codes
+import command_code
 from metrics import ExactLabel, SourceResult, Sample
 from t3client import T3Client, T3Error
 from util import iso_to_epoch
@@ -42,6 +43,7 @@ INSTANCE_PROVIDERS = {
     "pi": "pi",
     "opencode": "opencode-go",
     "muse": "muse",
+    "commandCode": "commandCode",
 }
 
 # The OpenCode instance reports the Go subscription windows.
@@ -369,6 +371,16 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 reason=codes.RPC_FAILED,
                 duration_s=time.monotonic() - started,
             )
+    command_instance = {}
+    if any(provider.get('instanceId') == command_code.INSTANCE for provider in providers):
+        try:
+            configured = client.call('server.getConfig', {}) or {}
+            settings = configured.get('settings') if isinstance(configured, Mapping) else {}
+            instances = settings.get('providerInstances') if isinstance(settings, Mapping) else {}
+            command_instance = instances.get(command_code.INSTANCE) if isinstance(instances, Mapping) else {}
+        except T3Error:
+            # A model catalog alone does not prove the managed ZDR launcher.
+            status = 'partial'
     samples: list[Sample] = []
 
     windows: list[dict[str, Any]] = []
@@ -400,6 +412,10 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 "name": _model_label(model),
                 "options": _model_options(model),
             }
+            if instance == command_code.INSTANCE:
+                verified = command_code.configured(command_instance, slug)
+                native[pair]['commandCodePolicyVerified'] = verified
+                native[pair]['available'] = native[pair]['available'] and verified
         state = str(provider.get("status") or "")
         provider_states[name] = state
         limits = provider.get("usageLimits")

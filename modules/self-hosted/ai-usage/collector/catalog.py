@@ -22,6 +22,7 @@ from typing import Any, Iterable
 # key is the provider's own catalog; the rest are fallbacks that carry the
 # newest models (OpenCode publishes the current line of every provider).
 PROVIDER_ALIASES = {
+    "commandCode": ("commandCode",),
     "ollama": ("ollama-cloud", "ollama"),
     "opencode-go": ("opencode-go", "opencode"),
     "opencode": ("opencode",),

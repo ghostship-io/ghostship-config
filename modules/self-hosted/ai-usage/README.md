@@ -13,6 +13,11 @@ listener and no new port: the service is a oneshot job that writes a file.
 
 ## How it runs
 
+After publishing usage outputs, optional picker reconciliation defers connection
+failures and timeouts while T3 is unavailable, then retries on the next collection
+using its ownership journal. Missing connectivity does not invalidate collected
+usage. Authentication, malformed responses and output write errors still fail visibly.
+
 Antigravity can return its quota denial as an entire assistant response on a
 completed T3 run. The collector reads those exact provider notices from the
 read-only message/run projections and publishes a zero-capacity window for the
@@ -56,6 +61,13 @@ used by the dashboard, managed favorites/default, CLI picks and MCP picks.
   is its own state, and the path can be moved with `--events-cache`.
 
 ## Sources and what each one reads
+
+Command Code GOAT is a native T3 worker route. Its `command_code` candidate
+record and picker `provider_terms` carry published allowance estimates and
+dated build provenance separately from actual quota and resolved build data.
+Its `price` record carries effective UTC pricing and the schedule. The paid-ZDR
+launcher configuration must be verified before it is eligible; no Command Code
+credential is read by this collector. See the [provider contract](../../../docs/t3code.md#command-code-goat-acp-provider).
 
 Every source is read-only and every source reports its own outcome. A source
 that cannot be read reports a status; it never reports a healthy zero.
@@ -1555,8 +1567,13 @@ Thereafter `w = (n - 4) / (n + 6)` and
 `overall = (1 - w) * AA + w * observed`; observed becomes the majority at 15.
 Without AA, five outcomes are required for an observed-only overall score.
 
-The default table contains one row per model in the active, available native
-selection pool. All models includes spent and unused models. Efforts collapse
+The default table contains one row per selected model: the model each lane
+card shows, including a grey spent card. All models lists every evaluated
+model. Each row carries a selection status and a fixed-wording reason
+(`selection`, `selection_reason` labels): the role it is the best eligible
+model of, or why it is not selected (outranked by the provider's pick, allowance
+spent, over the worker price cap, no Artificial Analysis score for that exact
+build, or outside the worker and review roles). Efforts collapse
 to the best measured setting, with a comparison only when observed effort
 results differ; columns without evidence are omitted. Unmeasured efforts cannot
 erase established outcomes once a supported effort has five verified samples.

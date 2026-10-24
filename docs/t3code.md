@@ -297,8 +297,12 @@ fails, session creation still succeeds with the guard recording it as
 unselected: prompts are refused until an approved model selection is
 acknowledged. Unapproved switches during a session still stop it.
 The guard filters both model catalogs and rejects other model selections,
-unknown configuration changes, session import/resume, and slash commands that
-could bypass the picker. Use T3's model and mode controls. Native permission
+unknown configuration changes and slash commands that could bypass the picker.
+Native ACP `loadSession` and list/resume/close capabilities pass through unchanged.
+Loaded and resumed sessions record their reported current model and apply the
+same catalog policy before a prompt can run. A missing or unapproved model
+returns an ACP restoration error so T3 can try a fresh session; it never reuses
+a stale paid selection from an earlier session. Use T3's model and mode controls. Native permission
 requests and tool results still pass through ACP.
 
 Every native process receives `CMD_ZDR=1`. Command Code's [ZDR contract](https://commandcode.ai/docs/resources/zdr)
@@ -328,6 +332,9 @@ ACP initialization without login; these checks do **not** establish account,
 model, or inference availability. After deployment and the owner's native
 login, verify T3 lists the paid models and answers a trivial public prompt with
 ZDR enforced. Follow the candidate receipt and guarded deployment workflow.
+A candidate with fresh T3 userdata still needs the matching persisted
+`.t3/runtime` binaries. Omitting that directory can select an older bundled
+runtime and incorrectly report that the ACP registry driver is unregistered.
 
 For later usage integration, the vendor's [usage documentation](https://commandcode.ai/docs/resources/usage-limits)
 names native `/usage` meters for balance and 5-hour/weekly caps and resets;
@@ -364,11 +371,23 @@ resolved build as unknown and the dated 1017 announcement separately; do not
 claim that the run independently proved checkpoint equality with a pinned
 1017 route. The CLI pin freezes the harness, not hosted model weights.
 
+The collector's worker identity is
+`commandCode/deepseek/deepseek-v4.1-flash`, separate from every OpenCode/Ollama
+DeepSeek route and its outcome history. It publishes the GOAT table above as
+`command_code.estimated_allowances`, not measured quota windows. Current usage
+and remaining capacity come only from native Command Code reporting through T3;
+until reported they stay unknown. The effective published input/output price
+follows the UTC schedule above. CLI and MCP picks read the same published worker
+selection. Eligibility requires the configured managed `cmd acp` launcher with
+`CMD_ZDR=1`; this subscription route is always paid and never a free-route choice.
+The existing quality evidence and priors remain in force; a successful public
+transport prompt establishes no harness quality claim before the controlled pilot.
+
 ## Provider zero-data-retention state
 
 Every inference provider's strongest available zero-retention or no-training
 setting, its evidence, and the owner decisions it still needs are recorded in
-[provider zero-data retention](provider-zdr.md). The managed Claude Code setup
+[provider zero data retention](provider-zdr.md). The managed Claude Code setup
 in `packages/t3code/provider-privacy/setup.py` turns off nonessential traffic,
 telemetry, error reporting, and feedback before T3 starts.
 `scripts/provider-zdr-doctor` re-checks the table, the Command Code `CMD_ZDR`,
