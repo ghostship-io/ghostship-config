@@ -1780,8 +1780,7 @@ def build_snapshot(
         native_models=context.get("native_models") or {},
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
-        measured_windows=(list(measured_windows or [])
-                          + command_code_usage.windows(command_usage)),
+        measured_windows=list(measured_windows or []),
         catalog=catalog,
         facts=facts,
         aa_3d_cache=aa_3d_cache,
@@ -1852,6 +1851,7 @@ def collect(
     t3_home: str = T3_HOME,
     secrets_env: str = SECRETS_ENV_FILE,
     claude_credentials: str = "",
+    command_usage: Mapping[str, Any] | None = None,
     pool_server: str = POOL_SERVER_FILE,
     pool_token: str = POOL_TOKEN_FILE,
     pool_ledger: str | None = POOL_LEDGER_FILE,
@@ -1896,6 +1896,31 @@ def collect(
         providers_module.read_ollama(secrets_env, moment, state_path=window_state_path)
     )
     results.extend(pool_module.collect(pool_server, pool_token, pool_ledger, moment, home=t3_home))
+    # The private Command Code usage state is a source like any other: its
+    # windows must reach the ranking, not only the account section, so every
+    # Command Code candidate carries the measured headroom. A missing or
+    # stale state is a fixed reason, never a zero.
+    if command_usage is not None:
+        command_windows = command_code_usage.windows(command_usage)
+        observed = command_usage.get("checked_at_epoch")
+        results.append(
+            SourceResult(
+                source="command_code_usage",
+                status="ok" if command_windows else (
+                    "not_checked"
+                    if str(command_usage.get("status") or "") == "not_checked"
+                    else "stale"
+                ),
+                reason=codes.OK if command_windows else codes.STALE_READING,
+                observed_at=(
+                    float(observed)
+                    if isinstance(observed, (int, float))
+                    and not isinstance(observed, bool)
+                    else None
+                ),
+                windows=command_windows,
+            )
+        )
 
     extra: list[Sample] = []
     ranked: list[Any] = []
@@ -2599,6 +2624,7 @@ def main(argv: list[str] | None = None) -> int:
         now,
         state_path=args.state,
         claude_credentials=args.claude_credentials,
+        command_usage=command_usage,
         window_state_path=args.window_state,
         events_cache=args.events_cache,
         aa_cache=aa_cache,
