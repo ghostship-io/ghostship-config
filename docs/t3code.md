@@ -263,84 +263,76 @@ and complete its Google sign-in; T3's ACP login does not authenticate the CLI.
 For scripted tasks, use `agy -p "your task"`. The ARM64 CLI launcher was verified
 on Chill Penguin; authenticated execution requires the separate CLI login.
 
-## Command Code GOAT ACP provider
+## Command Code GOAT through OpenCode
 
-The image installs `command-code` **1.88.0** from the committed npm lock under
-`packages/t3code/command-code/`. The installer verifies the exact upstream
-SHA-512 integrity and requires Node >=22 (the managed tools supply Node 24).
-`npm ci --ignore-scripts` pins transitive packages too. Native self-updates and
-remote catalog changes are disabled; changing the pin or paid allowlist needs
-a reviewed configuration change. Installation is atomic and retries reuse the
-completed release. T3's startup installs the managed `cmd` entry and merges only
-the `commandCode` provider instance before the server reads its settings.
-Each successful setup sets this managed instance to `enabled: true`; disabling
-it in T3's settings does not persist across a successful server restart.
-Setup is an optional, non-fatal `ExecStartPre=-` step: failure logs one sanitized
-line, disables an existing managed instance where its settings remain readable,
-and lets T3 start. Installation and configuration finish before the launcher
-switches, so a failure preserves the previous ready CLI release. With a ready
-release, subsequent startup needs no registry access.
+Command Code's [Provider API](https://commandcode.ai/docs/provider) speaks the
+OpenAI and Anthropic formats, and every plan above Go has API access (Go
+answers `403 upgrade_required`). T3 Code reaches it through its existing
+OpenCode instance rather than an ACP command:
+`packages/t3code/command-code/configure.py` merges two providers into
+OpenCode's config before the server starts.
 
-The instance uses T3's [local ACP command support](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-acp.md)
-with `cmd acp`. Command Code's [native ACP server](https://commandcode.ai/docs/acp)
-owns the agent loop, tools and model options. A local stream guard exposes two
-reviewed paid GOAT IDs: `deepseek/deepseek-v4.1-flash` (the default) and
-`minimaxai/minimax-m2.7`. These lowercase IDs were confirmed in the native
-1.88.0 ACP catalog; the vendor's [DeepSeek](https://commandcode.ai/models/deepseek-v4-1-flash)
-and [MiniMax](https://commandcode.ai/models/minimax-m2-7) model-page catalogs
-publish positive prices and `zeroDataRetention: true`. The checked sources and
-values live beside the allowlist in `paid-models.json`. GLM-5.2 and Kimi K2.5
-are excluded because the vendor catalog marks their zero-retention flag false.
-The guard lists DeepSeek V4.1 Flash first and requests it through native
-`session/set_model` before returning a new session to T3. If that selection
-fails, session creation still succeeds with the guard recording it as
-unselected: prompts are refused until an approved model selection is
-acknowledged. Unapproved switches during a session still stop it.
-The guard filters both model catalogs and rejects other model selections,
-unknown configuration changes and slash commands that could bypass the picker.
-Native ACP `loadSession` and list/resume/close capabilities pass through unchanged.
-Loaded and resumed sessions record their reported current model and apply the
-same catalog policy before a prompt can run. A missing or unapproved model
-returns an ACP restoration error so T3 can try a fresh session; it never reuses
-a stale paid selection from an earlier session. Use T3's model and mode controls. Native permission
-requests and tool results still pass through ACP.
+| Provider id | OpenCode package | Vendor route |
+| --- | --- | --- |
+| `command-code` | `@ai-sdk/openai-compatible` | `/provider/v1/chat/completions` |
+| `command-code-anthropic` | `@ai-sdk/anthropic` | `/provider/v1/messages` |
 
-Every native process receives `CMD_ZDR=1`. Command Code's [ZDR contract](https://commandcode.ai/docs/resources/zdr)
-requires a ZDR-capable upstream or fails the request; it must never fall back
-to retained processing. An approved model with no ZDR capacity therefore fails.
-Free models are excluded even on a paid account. The
+Both point at `https://api.commandcode.ai/provider/v1`, read the key through
+`{env:COMMAND_CODE_API_KEY}`, and send the vendor's `x-cmd-zdr: 1` header on
+every request. A model appears under a provider when the vendor's
+`GET /provider/v1/models` response names that provider's route in
+`supported_endpoints`; nothing else filters the list, and names and context
+lengths come from that response. Claude models answer only on the Anthropic
+route, so they appear under `command-code-anthropic`; OpenAI and open models
+use the OpenAI-compatible provider. The list refreshes at each server start.
+An unreachable API keeps the previous list, and a missing key adds no provider
+at all.
+
+The startup step is optional and non-fatal (`ExecStartPre=-`). It writes the
+config atomically with mode `0600`, rewrites only changed content, and preserves
+other providers, permissions, MCP servers and defaults. An owner config that
+does not parse is left byte for byte as it was. T3 Code's catalog helper still
+runs afterwards and prunes only models the provider marks deprecated.
+
+The key is the owner's Command Code API key: the same key authenticates the CLI
+and the API. It is kept in Bitwarden (`commandcode.ai`) and in the encrypted
+`command-code` secret unit under `secrets/files/sources/providers/`. The
+`t3code` projection renders `COMMAND_CODE_API_KEY` into
+`/run/secrets/t3code.env`; the value never enters the OpenCode config, a command
+line, a log or the repository. Rotate it in Command Code Studio and update both
+stores.
+
+The old ACP instance is retired. Startup removes the `commandCode` provider
+instance from T3 Code's settings when it is the managed `cmd acp` launcher, and
+the image no longer installs the `command-code` npm package, its pinned lock or
+its launcher. A `~/.local/bin/cmd` left by an earlier image stays in place and
+is no longer managed or probed by T3. Install the CLI separately if it is
+wanted as a terminal tool.
+
+The vendor's [ZDR contract](https://commandcode.ai/docs/resources/zdr) applies:
+`x-cmd-zdr: 1` routes only through zero-retention upstreams and fails with
+`422 cmd_zdr_no_providers` rather than falling back. The
 [privacy policy](https://commandcode.ai/privacy) (checked 2026-10-23) permits up
 to 30 days of request-content retention by default and sharing free-model
 sessions with training partners. It describes no training of its own foundation
-models on source code; default retention includes abuse review. The
-[terms](https://commandcode.ai/terms) reserve monitoring rights and require rights
-to submit inputs; no general ban on private code was found. With ZDR, request
-content is processed transiently and only operational metadata remains. There
-is no separate blanket promise excluding human review in the default terms.
+models on source code, and default retention includes abuse review. The
+[terms](https://commandcode.ai/terms) reserve monitoring rights and require
+rights to submit inputs; no general ban on private code was found. With ZDR,
+request content is processed transiently and only operational metadata remains.
+There is no separate blanket promise excluding human review in the default
+terms. ZDR routing can change which upstream serves the request, so it may cost
+more than the published rates, and a model with no ZDR-capable upstream fails
+instead of falling back. The route adds no model gate of its own.
 
-Authentication uses **native `cmd login` only**, as the T3 user. The CLI manages
-`~/.commandcode/auth.json`; agents must not read, copy or print its token.
-`HOME=/home/t3code` is the writable persisted home bind in `t3code.nix`, so this
-file survives image replacement and container restart. It is never baked into
-the image. Startup preserves native authentication state; the fast tests cover
-the bind, HOME, absence of image credentials and preservation across reinstalls.
-The managed entry forwards `cmd login` directly to the native CLI for the owner
-to complete its browser/device flow. It also supports `cmd --version`.
-
-After exact-head review, use a candidate container to verify CLI startup and
-ACP initialization without login; these checks do **not** establish account,
-model, or inference availability. After deployment and the owner's native
-login, verify T3 lists the paid models and answers a trivial public prompt with
-ZDR enforced. Follow the candidate receipt and guarded deployment workflow.
-A candidate with fresh T3 userdata still needs the matching persisted
-`.t3/runtime` binaries. Omitting that directory can select an older bundled
-runtime and incorrectly report that the ACP registry driver is unregistered.
-
-For later usage integration, the vendor's [usage documentation](https://commandcode.ai/docs/resources/usage-limits)
-names native `/usage` meters for balance and 5-hour/weekly caps and resets;
-Studio Usage reports request cost and tokens. ACP reports per-session usage.
-No machine-readable account-quota endpoint or local quota file is verified by
-this integration. Collection and dashboards are separate work.
+The picker keeps the published GOAT terms and the
+`commandCode/deepseek/deepseek-v4.1-flash` worker identity, while T3 Code now
+reports the route as the `opencode` instance serving
+`command-code/deepseek/deepseek-v4.1-flash`. Eligibility requires the live
+config to name the provider and the `x-cmd-zdr` header and the projection to
+carry `COMMAND_CODE_API_KEY`; a model catalog alone is not evidence. Claude and
+the other Command Code models stay visible with their own unknown or published
+price and access evidence; only the DeepSeek route carries the GOAT terms
+below.
 
 For the DeepSeek comparison and quota integration, the
 [GOAT usage table](https://commandcode.ai/docs/plans/goat#usage-limits) explicitly
@@ -378,8 +370,9 @@ DeepSeek route and its outcome history. It publishes the GOAT table above as
 and remaining capacity come only from native Command Code reporting through T3;
 until reported they stay unknown. The effective published input/output price
 follows the UTC schedule above. CLI and MCP picks read the same published worker
-selection. Eligibility requires the configured managed `cmd acp` launcher with
-`CMD_ZDR=1`; this subscription route is always paid and never a free-route choice.
+selection. Eligibility requires the verified OpenCode route with `x-cmd-zdr`
+and the projected key; this subscription route is always paid and never a
+free-route choice.
 The existing quality evidence and priors remain in force; a successful public
 transport prompt establishes no harness quality claim before the controlled pilot.
 
@@ -390,8 +383,8 @@ setting, its evidence, and the owner decisions it still needs are recorded in
 [provider zero data retention](provider-zdr.md). The managed Claude Code setup
 in `packages/t3code/provider-privacy/setup.py` turns off nonessential traffic,
 telemetry, error reporting, and feedback before T3 starts.
-`scripts/provider-zdr-doctor` re-checks the table, the Command Code `CMD_ZDR`,
-the Claude opt-outs, the Grok upload setting, and the free-pool policy. Add
+`scripts/provider-zdr-doctor` re-checks the table, the Command Code OpenCode
+route, the Claude opt-outs, the Grok upload setting, and the free-pool policy. Add
 `--browser` to re-read the OpenRouter, Groq, ChatGPT, and Mistral account
 toggles through the personal profile.
 

@@ -1868,6 +1868,10 @@ def collect(
     moment = wall_clock() if now is None else now
     catalog = catalog_module.Catalog.load(catalog_path)
     context: dict[str, Any] = {}
+    # The Command Code route is verified from the container's OpenCode config
+    # and the projected secret, both read only.
+    context['t3_home'] = t3_home
+    context['secrets_env'] = secrets_env
     results: list[SourceResult] = []
     results.extend(collect_t3(moment, catalog, context))
     results.append(providers_module.read_grok(f"{t3_home}", moment))
