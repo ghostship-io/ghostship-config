@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.255] - 2026-10-24
+
+- Restore native Command Code ACP session load/resume support so closed worker threads can reopen.
+
+PR #426.
+
 ## [3.17.254] - 2026-10-24
 
 - models: number table rows by position, keep each route's unavailable reason
