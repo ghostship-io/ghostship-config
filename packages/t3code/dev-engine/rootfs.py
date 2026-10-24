@@ -1,6 +1,7 @@
 """Assemble ONLY the dedicated Podman manager's disposable filesystem.
 
-Runs as root during opt-in activation, never against the active T3 container.
+Assembly runs as root during opt-in activation. Live reconciliation only seeds
+the re-exec alias; it never alters mounts or the active T3 container.
 All mounts are below a private /run directory. No ownership/ACL changes to source
 trees are made. The service must be stopped before teardown.
 """
@@ -44,9 +45,25 @@ def install_symlinks(root, links, closure_paths):
             raise ValueError("re-exec alias must target the seeded systemd closure")
         if not destination(root, target).is_dir():
             raise ValueError("re-exec closure is absent from the private store")
-        link = destination(root, path)
+        parent = destination(root, str(Path(path).parent))
+        link = parent / Path(path).name
+        if link.is_symlink():
+            if os.readlink(link) != target:
+                raise ValueError("conflicting re-exec alias")
+            continue
+        if link.exists():
+            raise ValueError("conflicting re-exec alias")
         link.parent.mkdir(parents=True, exist_ok=True)
         link.symlink_to(target)
+
+
+def reconcile_symlinks(root, spec):
+    # Preserved managers keep their mounted root across generation switches.
+    # Seed aliases added since assembly before switch-to-configuration reexecs.
+    if not os.path.ismount(root):
+        return
+    closure_paths = set(Path(spec["closure"]).read_text().splitlines())
+    install_symlinks(root, spec.get("symlinks", {}), closure_paths)
 
 
 def run(*args):
@@ -125,7 +142,7 @@ def assemble(root, spec):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["start", "stop"])
+    parser.add_argument("operation", choices=["start", "stop", "reconcile"])
     parser.add_argument("root", type=Path)
     parser.add_argument("spec", type=Path)
     args = parser.parse_args()
@@ -135,6 +152,8 @@ def main():
         if not Path("/sys/fs/cgroup/cgroup.controllers").exists():
             parser.error("cgroup v2 is required")
         assemble(args.root, json.loads(args.spec.read_text()))
+    elif args.operation == "reconcile":
+        reconcile_symlinks(args.root, json.loads(args.spec.read_text()))
     elif os.path.ismount(args.root):
         run("umount", "--recursive", str(args.root))
 

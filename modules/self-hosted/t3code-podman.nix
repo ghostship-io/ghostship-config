@@ -470,6 +470,14 @@ in
               --userdel ${pkgs.shadow}/bin/userdel --groupdel ${pkgs.shadow}/bin/groupdel
           '';
         };
+        # The manager is deliberately preserved across switches. Migrate its
+        # existing private root before the switch requests a user-manager reexec.
+        system.activationScripts.t3code-podman-reexec-alias = {
+          deps = [ "t3code-podman-identity" ];
+          text = ''
+            ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} reconcile ${root} ${spec}
+          '';
+        };
         users.groups.${user}.gid = cfg.uid;
         users.users.${user} = {
           isSystemUser = true;

@@ -56,6 +56,50 @@ class RootfsSafety(unittest.TestCase):
             ):
                 rootfs.install_symlinks(Path(temporary), links, closure)
 
+    def test_live_root_gets_only_the_reexec_alias_without_mounts_or_restart(self):
+        target = "/nix/store/fixture-systemd"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            (root / target.lstrip("/")).mkdir(parents=True)
+            closure = Path(temporary) / "closure"
+            closure.write_text(target + "\n")
+            spec = {
+                "closure": str(closure),
+                "symlinks": {"/run/current-system/systemd": target},
+            }
+            with (
+                patch.object(rootfs.os.path, "ismount", return_value=True),
+                patch.object(rootfs, "run") as run,
+            ):
+                rootfs.reconcile_symlinks(root, spec)
+                alias = root / "run/current-system/systemd"
+                before = alias.lstat().st_mtime_ns
+                rootfs.reconcile_symlinks(root, spec)
+                self.assertEqual(alias.readlink(), Path(target))
+                self.assertEqual(alias.lstat().st_mtime_ns, before)
+                run.assert_not_called()
+            self.assertEqual(
+                sorted(p.name for p in (root / "run/current-system").iterdir()),
+                ["systemd"],
+            )
+
+    def test_reconciliation_skips_unmounted_roots_and_refuses_conflicting_aliases(self):
+        target = "/nix/store/fixture-systemd"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            with patch.object(rootfs.os.path, "ismount", return_value=False):
+                rootfs.reconcile_symlinks(root, {})
+            self.assertFalse(root.exists())
+            (root / target.lstrip("/")).mkdir(parents=True)
+            alias = root / "run/current-system/systemd"
+            alias.parent.mkdir(parents=True)
+            alias.symlink_to("/nix/store/other-systemd")
+            with self.assertRaises(ValueError):
+                rootfs.install_symlinks(
+                    root, {"/run/current-system/systemd": target}, {target}
+                )
+            self.assertEqual(alias.readlink(), Path("/nix/store/other-systemd"))
+
     def test_failed_mount_assembly_unmounts_partial_tree(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "root"
