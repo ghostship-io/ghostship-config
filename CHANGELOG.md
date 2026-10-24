@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.17.293] - 2026-10-24
+
+- ai-usage: read the OpenCode Free instance's request record; an HTTP 429 is
+  a limit, and a stated retry is published as the reset of a spent route.
+- ai-usage: Antigravity publishes its five-hour and weekly windows
+  separately, with the reset and pace each one carries.
+- ai-usage: a provider's own limits probe state no longer makes every
+  snapshot partial; it is published per provider.
+
+PR #473.
+
 ## [3.17.292] - 2026-10-24
 
 - ai-usage: collect Command Code usage for the opencode and native routes
