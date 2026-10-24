@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 import value_policy
+import allowance
 import model_quality
 import outcomes as outcomes_module
 import quota
@@ -84,6 +85,28 @@ def _trust(row: Mapping[str, Any]) -> str:
     levels = [str(record.get("level") or "trusted") for record in records.values()
               if isinstance(record, Mapping)]
     return max(levels or ["trusted"], key=lambda level: TRUST.get(level, 3))
+
+
+def _data_policy(allowance_record: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The training/retention policy of an allowance-billed route.
+
+    It is read from the provider's own dated table. A table that does not
+    state the policy leaves ``sensitive_ok`` unknown, which never becomes a
+    yes or a no.
+    """
+    if not isinstance(allowance_record, Mapping):
+        return None
+    sensitive = allowance_record.get("sensitive_ok")
+    return {
+        "training": allowance_record.get("training"),
+        "retention": allowance_record.get("retention"),
+        "retention_text": allowance_record.get("retention_text"),
+        "sensitive_ok": sensitive if isinstance(sensitive, bool) else None,
+        "basis": allowance_record.get("basis"),
+        "source": allowance_record.get("source"),
+        "checked_at": allowance_record.get("checked_at"),
+        "stale": bool(allowance_record.get("stale")),
+    }
 
 
 def quality_value(row: Mapping[str, Any]) -> float | None:
@@ -178,8 +201,15 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         quality = row['quality_p']
         free = (row['billing'] in ('free', 'promotion') and quality is not None
                 and quality >= best.get(row['trust_level'], 1) - value_policy.FREE_ROUTE_MARGIN)
+        # An allowance-billed route is ordered by its weighted quality and
+        # affordable allowance; a route without an allowance keeps the quality
+        # order. Both terms are on the same 0..1 scale, so they compare.
+        combined = (row.get('pick_score') or {}).get('score')
+        if combined is None:
+            combined = quality
         return (not row.get('selection_eligible', True), not row['available'], TRUST.get(row['trust_level'], 3),
                 row.get('ranking_pace_state', row['pace_state']) == 'far_behind', not free,
+                -(combined if combined is not None else -1),
                 -(quality if quality is not None else -1),
                 -(row['pace_delta'] if row['pace_delta'] is not None else -2), row['key'])
     return sorted(rows, key=rank)
@@ -331,6 +361,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 effort = [{'id':measured['effort_option'], 'value':effort_value}]
                 options = [item for item in options if item['id'] != measured['effort_option']] + effort
         limit = limiting_window(windows, snapshot.get("generated_at"))
+        allowance_record = source.get("allowance") if isinstance(source.get("allowance"), Mapping) else None
+        data_policy = _data_policy(allowance_record)
+        pick_score = allowance.score(
+            posterior if posterior is not None else (None if quality is None else quality / 100),
+            allowance_record, windows, policy=worker_policy)
         required_build = worker_builds.get(str(source.get('provider') or ''))
         build_allowed = required_build is None or (mapped and model == required_build)
         cost_allowed = ('model_quality' not in snapshot or worker_cost_allowed(source, snapshot.get('candidates') or []))
@@ -347,6 +382,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                                  '' if cost_allowed else 'worker price exceeds reference or is unknown'),
             "billing": billing,
             "quality_basis": measured['basis'] if measured is not None else source.get("quality_basis"),
+            "quality_binding_basis": (measured.get('aa_binding_basis') if measured is not None
+                                      else source.get("quality_binding_basis")) or "",
+            "quality_binding_evidence": (measured.get('aa_binding_evidence') if measured is not None
+                                         else source.get("quality_binding_evidence")) or [],
             "quality_n": measured['n'] if measured is not None else source.get("quality_n"),
             "quality_s": measured['passed'] if measured is not None else source.get("quality_s"),
             "quality_evidence": measured,
@@ -364,6 +403,19 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         if isinstance(source.get('command_code'), Mapping):
             # Published terms do not become a quota reading or a quality score.
             row['provider_terms'] = source['command_code']
+        if allowance_record is not None:
+            row["allowance"] = allowance_record
+            row["data_policy"] = data_policy
+            row["pick_score"] = pick_score
+            row["binding_window"] = (pick_score or {}).get("binding_window")
+            row["pick_reason"] = allowance.reason(pick_score, allowance_record, posterior)
+        if data_policy and data_policy.get("sensitive_ok") is False:
+            # The owner's rule: a model whose prompts train the vendor or whose
+            # data is not zero-retention stays out of internal and sensitive
+            # work. It remains listed with its reason so the exclusion is
+            # auditable rather than silently dropped.
+            row["selection_eligible"] = False
+            row["selection_reason"] = "data policy: training used or not ZDR"
         if row['pool']['id'] in excluded_pools:
             if mapped:
                 role_exclusions.extend({'provider':row['provider'], 'native':row['native'],
@@ -396,11 +448,19 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 score = review_measured['overall']
                 quality_fields = {'quality_score':score, 'quality_p':None if score is None else score / 100,
                     'quality_n':review_measured['n'], 'quality_s':review_measured['passed'],
-                    'quality_basis':review_measured['basis'], 'quality_evidence':review_measured}
+                    'quality_basis':review_measured['basis'], 'quality_evidence':review_measured,
+                    'quality_binding_basis': review_measured.get('aa_binding_basis') or '',
+                    'quality_binding_evidence': review_measured.get('aa_binding_evidence') or []}
             review_native = {'instanceId': str(instance), 'model': str(model),
                              **({'options': review_options} if review_options else {})}
-            categories["orchestrator"].append({**row, 'selection_eligible': True, 'selection_reason': '', 'native': review_native,
-                                               'effort': review_effort[0] if review_effort else None, **quality_fields})
+            orchestrator_row = {**row, 'native': review_native,
+                                'effort': review_effort[0] if review_effort else None, **quality_fields}
+            if not (row.get('data_policy') or {}).get('sensitive_ok') is False:
+                # Review authority is independent of worker eligibility, but a
+                # model the owner excluded from internal work stays out of
+                # internal review too.
+                orchestrator_row.update(selection_eligible=True, selection_reason='')
+            categories["orchestrator"].append(orchestrator_row)
     for category, rows in categories.items():
         rows[:] = ordered(rows)
         native_providers, native_pools = {}, {}
@@ -429,6 +489,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 free_selected.setdefault(row['provider'], row['key'])
             if row["available"] and row["selection_eligible"] and provider["selected"][category] is None:
                 provider["selected"][category] = row["native"]
+                if row.get("pick_reason"):
+                    # The picker surfaces the provider choice's reason. The
+                    # allowance and binding window are already published as
+                    # their own fields; this carries them to the CLI too.
+                    row["reason"] = "pick: " + str(row["pick_reason"])
     # Quality chooses the provider's model. Capacity orders those provider
     # choices across the lane; no provider name has a fixed position.
     for category, rows in categories.items():
@@ -465,6 +530,8 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
             pool = row.get('pool') or {}
             limit = row.get('limiting_window') or {}
             effort = row.get('effort') or {}
+            pick = row.get('pick_score') or {}
+            policy = row.get('data_policy') or {}
             labels = {'category': category, 'provider': row['provider'], 'model': ExactLabel(row['model']),
                       'display_name': ExactLabel(row['display_name']), 'state': row['state'],
                       'picker_eligible': 'true' if row['picker_eligible'] else 'false',
@@ -477,7 +544,16 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'pace_state': str(limit.get('pace_state') or 'unknown'),
                       'reset_source': str(limit.get('reset_source') or 'provider'),
                       'effort': str(effort.get('value') or ''),
-                      'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown'))}
+                      'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown')),
+                      'quality_binding_basis': ExactLabel(str(row.get('quality_binding_basis') or '')),
+                      'allowance_plan': str((row.get('allowance') or {}).get('plan') or ''),
+                      'allowance_basis': ExactLabel(str((row.get('allowance') or {}).get('basis') or '')),
+                      'binding_window': str(row.get('binding_window') or ''),
+                      'pick_basis': ExactLabel(str(pick.get('basis') or '')),
+                      'pick_reason': ExactLabel(str(row.get('pick_reason') or '')),
+                      'data_policy': ExactLabel(str(policy.get('training') or '') + '/' + str(policy.get('retention') or '')),
+                      'sensitive_ok': ('' if policy.get('sensitive_ok') is None
+                                       else 'true' if policy.get('sensitive_ok') else 'false')}
             numbers = {'info': 1.0, 'position': row['position'],
                        'selected': float((row['key'] == (selection.get('free_selected') or {}).get(row['provider'])
                                            if category == 'worker' and row.get('billing') in ('free', 'promotion') else
@@ -493,7 +569,13 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                        'quality_rounds': row.get('quality_n'),
                        'quality_accepted': row.get('quality_s'),
                        'remaining_ratio': limit.get('remaining_ratio'),
-                       'pace_delta': limit.get('pace_delta')}
+                       'pace_delta': limit.get('pace_delta'),
+                       'pick_score': pick.get('score'),
+                       'quality_term': pick.get('quality_term'),
+                       'capacity_term': pick.get('capacity_term'),
+                       'affordable_requests': pick.get('affordable_requests'),
+                       'allowance_requests_5h': (row.get('allowance') or {}).get('requests_5h'),
+                       'allowance_requests_month': (row.get('allowance') or {}).get('requests_month')}
             guard = row.get('worker_pool_guard') or {}
             numbers['guard_remaining_ratio'] = guard.get('remaining_ratio')
             numbers['guard_expected_remaining_ratio'] = guard.get('expected_remaining_ratio')
