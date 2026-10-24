@@ -361,6 +361,9 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "pool": source.get("pool") or pools.record(str(source.get("provider") or ""),
                 str(source.get("model") or ""), (source.get("access") or {}).get("billing") or ""),
         }
+        if isinstance(source.get('command_code'), Mapping):
+            # Published terms do not become a quota reading or a quality score.
+            row['provider_terms'] = source['command_code']
         if row['pool']['id'] in excluded_pools:
             if mapped:
                 role_exclusions.extend({'provider':row['provider'], 'native':row['native'],

@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import aa_3d
+import command_code
 import aa_bind as bind_module
 import facts as facts_module
 import outcomes as outcomes_module
@@ -605,6 +606,7 @@ BILLING_CLASSES = (
 # The providers whose paid routes are covered by a subscription the owner
 # already pays for. The route is not billed per token.
 SUBSCRIPTION_PROVIDERS = (
+    "commandcode",
     "claude",
     "codex",
     "antigravity",
@@ -669,7 +671,10 @@ def _access_record(
     from the pool runs as an inference job.
     """
     pair = (provider, model)
-    if provider == 'opencode-go':
+    if provider == command_code.INSTANCE:
+        kind = ACCESS_PROVIDER_PAID
+        basis = 'Command Code GOAT paid-ZDR route'
+    elif provider == 'opencode-go':
         kind = ACCESS_PROVIDER_PAID
         basis = "the OpenCode Go subscription"
     elif pair in promo_models:
@@ -2246,7 +2251,9 @@ def _fill_value(
     provider = row.get("provider") or ""
     model = row.get("model") or ""
     prices = None
-    if catalog is not None:
+    if command_code.is_worker_route(provider, model):
+        prices = command_code.rates(now) if now is not None else None
+    elif catalog is not None:
         try:
             prices = catalog.price_for(provider, model)
         except Exception:  # pragma: no cover - a catalog without the model
@@ -3786,6 +3793,7 @@ def build_snapshot(
             version=feed_version,
         )
         _fill_value(row, catalog, fact, now, free_set, promo_set, aa_3d_cache)
+        command_code.enrich(row, now, native_models.get((provider, model)))
         row["free_pool"] = _free_pool_record((pool_evidence or {}).get((provider, model)))
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
