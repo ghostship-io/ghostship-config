@@ -18,6 +18,69 @@ heartbeats = load(
 
 
 class MonitoringTests(unittest.TestCase):
+    def test_provisioning_waits_for_the_initial_info_before_setup_rpc(self):
+        import threading
+        import socketio
+
+        class ReachedSettings(Exception):
+            pass
+
+        class DelayedServer:
+            def __init__(self):
+                self.handlers = {}
+                self.ready = False
+                self.disconnected = False
+                self.timer = None
+
+            def on(self, event):
+                def register(handler):
+                    self.handlers[event] = handler
+                    return handler
+                return register
+
+            def connect(self, *args, **kwargs):
+                # Kuma awaits sendInfo before registering public RPC handlers.
+                # A request emitted before that step is not acknowledged.
+                def finish_handshake():
+                    self.ready = True
+                    self.handlers.get('info', lambda _: None)({})
+                self.timer = threading.Timer(0.01, finish_handshake)
+                self.timer.start()
+
+            def call(self, event, *args, **kwargs):
+                if not self.ready:
+                    raise socketio.exceptions.TimeoutError()
+                if event == 'needSetup':
+                    return False
+                raise ReachedSettings()
+
+            def disconnect(self):
+                self.disconnected = True
+                if self.timer:
+                    self.timer.cancel()
+                    self.timer.join()
+
+        client = DelayedServer()
+        with patch.object(provision.socketio, 'Client', return_value=client), patch.dict(
+                provision.os.environ, {'KUMA_URL':'http://example.invalid', 'GHOSTSHIP_KUMA_USERNAME':'fixture'}):
+            with self.assertRaises(ReachedSettings):
+                provision.main()
+        self.assertTrue(client.disconnected)
+
+    def test_missing_initial_info_fails_boundedly_before_any_rpc(self):
+        client = Mock()
+        client.on.side_effect = lambda _event: lambda handler: handler
+        event = Mock()
+        event.wait.return_value = False
+        with patch.object(provision.socketio, 'Client', return_value=client), patch.object(
+                provision.threading, 'Event', return_value=event), patch.dict(
+                provision.os.environ, {'KUMA_URL':'http://example.invalid'}):
+            with self.assertRaisesRegex(RuntimeError, 'initial info handshake'):
+                provision.main()
+        event.wait.assert_called_once_with(20)
+        client.call.assert_not_called()
+        client.disconnect.assert_called_once()
+
     def test_existing_ntfy_notification_is_updated_without_changing_its_id(self):
         api = Mock(return_value={"id": 7})
         notification_id = provision.reconcile_ntfy_notification(
