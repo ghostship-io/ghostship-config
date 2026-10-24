@@ -182,6 +182,52 @@ class SnapshotTests(unittest.TestCase):
             self.assertTrue(record["reason"])
             self.assertTrue(record["superseded_by"])
 
+    def test_pruned_routes_publish_the_obsolete_label_and_reason(self):
+        entries = [
+            self.Ranked("claude", "claude-opus-4-8"),
+            self.Ranked("claude", "claude-opus-5-5"),
+        ]
+        result = main.build_snapshot(
+            [], entries, {"offered_models": [(e.provider, e.model) for e in entries]},
+            1_800_000_000.0, catalog=catalog.Catalog({}))
+        metrics = main.model_selection.samples(result["model_selection"])
+        positions = [(labels, value) for name, labels, value in metrics
+                     if name == "ghostship_ai_picker_model_position"]
+        pruned = next(labels for labels, _value in positions
+                      if labels["model"] == "claude-opus-4-8")
+        self.assertEqual(pruned["obsolete"], "true")
+        self.assertIn("obsolete", pruned["reason"].lower())
+        self.assertEqual(pruned["billing"], "subscription")
+        kept = next(labels for labels, _value in positions
+                    if labels["model"] == "claude-opus-5-5")
+        self.assertEqual(kept["obsolete"], "false")
+        selected = [(labels, value) for name, labels, value in metrics
+                    if name == "ghostship_ai_picker_model_selected"
+                    and labels["model"] == "claude-opus-4-8"]
+        self.assertEqual([value for _labels, value in selected], [0.0])
+
+    def test_a_pruned_free_route_keeps_its_free_billing(self):
+        entries = [
+            self.Ranked("opencode", "old-free"),
+            self.Ranked("opencode", "current-free"),
+        ]
+        document = {"opencode": {"models": {
+            "old-free": {"status": "deprecated",
+                         "cost": {"input": 0, "output": 0}},
+            "current-free": {"cost": {"input": 0, "output": 0}},
+        }}}
+        result = main.build_snapshot(
+            [], entries, {"offered_models": [(e.provider, e.model) for e in entries]},
+            1_800_000_000.0, catalog=catalog.Catalog(document),
+            free_models={("opencode", "old-free"), ("opencode", "current-free")})
+        metrics = main.model_selection.samples(result["model_selection"])
+        pruned = next(labels for name, labels, _value in metrics
+                      if name == "ghostship_ai_picker_model_position"
+                      and labels["model"] == "old-free")
+        self.assertEqual(pruned["obsolete"], "true")
+        self.assertEqual(pruned["billing"], "free")
+        self.assertIn("obsolete", pruned["reason"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
