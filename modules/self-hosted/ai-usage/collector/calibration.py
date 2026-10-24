@@ -146,38 +146,60 @@ def _prediction(
     return {"state": capacity.state, "left": capacity.left, "window": capacity.window}
 
 
-def _count(
+def _provider_counts(
     provider: str,
-    model: str,
-    events: Sequence[Mapping[str, Any]],
+    models: Iterable[str],
+    events_by_model: Mapping[str, Sequence[Mapping[str, Any]]],
     zone,
     since: float,
-) -> dict[str, Any]:
-    """The daily and window counts of one route."""
-    points = _observations(events)
-    observations: list[dict[str, Any]] = []
-    for point in points:
-        if point["at"] < since:
-            continue
-        observations.append(point)
-    truncated = len(observations) > MAX_OBSERVATIONS
-    if truncated:
-        observations = observations[-MAX_OBSERVATIONS:]
+) -> dict[str, dict[str, Any]]:
+    """The daily and window counts of every free route of one provider.
 
+    The replay is provider-wide: the reading of a route can depend on the
+    other routes of its account, so the prefix the inference sees holds every
+    route of the provider, and only the observed route is evaluated.
+    """
     ordered = sorted(
-        (event for event in events if isinstance(event, Mapping)),
+        (
+            event
+            for events in events_by_model.values()
+            for event in events
+            if isinstance(event, Mapping)
+        ),
         key=lambda event: float(event.get("at") or 0.0),
     )
-    days: dict[str, dict[str, int]] = {}
-    totals = _blank_day()
-    for point in observations:
-        at = float(point["at"])
-        day = _day(at, zone)
-        bucket = days.setdefault(day, _blank_day())
-        prefix = [event for event in ordered if float(event.get("at") or 0.0) < at]
+    observations: list[tuple[float, str, dict[str, Any]]] = []
+    truncated: dict[str, bool] = {}
+    for model in models:
+        points = [
+            point
+            for point in _observations(events_by_model.get(model) or ())
+            if float(point["at"]) >= since
+        ]
+        truncated[model] = len(points) > MAX_OBSERVATIONS
+        if truncated[model]:
+            points = points[-MAX_OBSERVATIONS:]
+        for point in points:
+            observations.append((float(point["at"]), model, point))
+    observations.sort(key=lambda item: (item[0], item[1]))
+
+    days: dict[str, dict[str, dict[str, int]]] = {
+        model: {} for model in events_by_model
+    }
+    totals: dict[str, dict[str, int]] = {
+        model: _blank_day() for model in events_by_model
+    }
+    prefix: list[Mapping[str, Any]] = []
+    cursor = 0
+    for at, model, point in observations:
+        while cursor < len(ordered) and float(ordered[cursor].get("at") or 0.0) < at:
+            prefix.append(ordered[cursor])
+            cursor += 1
         prediction = _prediction(provider, model, prefix, at)
+        bucket = days[model].setdefault(_day(at, zone), _blank_day())
+        counts = totals[model]
         if point["kind"] == "limit":
-            totals["refusals"] += 1
+            counts["refusals"] += 1
             bucket["refusals"] += 1
             # A refusal met a reading that offered the route. A prediction
             # with no count at all (no reading yet) is not a claim of
@@ -188,21 +210,24 @@ def _count(
             ):
                 left = prediction.get("left")
                 if left is None or float(left) > 0.0:
-                    totals["false_available"] += 1
+                    counts["false_available"] += 1
                     bucket["false_available"] += 1
             continue
-        totals["successes"] += point["count"]
+        counts["successes"] += point["count"]
         bucket["successes"] += point["count"]
         if prediction is not None and prediction["state"] == "exhausted":
             # Only the first success of a run can contradict the reading: the
             # success itself is the recovery, so every later request of the
             # run met a reading that had already been corrected.
-            totals["false_exhausted"] += 1
+            counts["false_exhausted"] += 1
             bucket["false_exhausted"] += 1
     return {
-        "days": days,
-        "totals": totals,
-        "truncated": truncated,
+        model: {
+            "days": days.get(model) or {},
+            "totals": totals.get(model) or _blank_day(),
+            "truncated": bool(truncated.get(model)),
+        }
+        for model in events_by_model
     }
 
 
@@ -265,31 +290,46 @@ def build(
     last_two = complete[-2:]
     published: dict[str, Any] = {}
     failed: list[str] = []
-    for provider, model in sorted({(str(p), str(m)) for p, m in routes or ()}):
-        route_events = by_provider.get(provider, {}).get((provider, model), [])
-        counted = _count(provider, model, route_events, zone, since)
-        day_rows = counted["days"]
-        totals = counted["totals"]
-        streak = _streak(complete, day_rows)
-        observed = totals["refusals"] + totals["successes"]
-        if streak >= 2:
-            state = STATE_FAIL
-            failed.append(_route_key(provider, model))
-        elif totals["false_available"] or totals["false_exhausted"]:
-            state = STATE_WARN
-        elif observed == 0:
-            state = STATE_UNMEASURED
-        else:
-            state = STATE_OK
-        published[_route_key(provider, model)] = {
-            "provider": provider,
-            "model": model,
-            "state": state,
-            "days": {day: day_rows[day] for day in sorted(day_rows)},
-            "window": dict(totals),
-            "false_available_streak_days": streak,
-            "truncated": bool(counted["truncated"]),
+    routes_by_provider: dict[str, set[str]] = {}
+    for provider, model in routes or ():
+        routes_by_provider.setdefault(str(provider), set()).add(str(model))
+    for provider in sorted(routes_by_provider):
+        models = routes_by_provider[provider]
+        events_by_model = {
+            model: by_provider.get(provider, {}).get((provider, model), [])
+            for model in models
         }
+        counted_by_model = _provider_counts(
+            provider, models, events_by_model, zone, since
+        )
+        for model in sorted(models):
+            counted = counted_by_model.get(model) or {
+                "days": {},
+                "totals": _blank_day(),
+                "truncated": False,
+            }
+            day_rows = counted["days"]
+            totals = counted["totals"]
+            streak = _streak(complete, day_rows)
+            observed = totals["refusals"] + totals["successes"]
+            if streak >= 2:
+                state = STATE_FAIL
+                failed.append(_route_key(provider, model))
+            elif totals["false_available"] or totals["false_exhausted"]:
+                state = STATE_WARN
+            elif observed == 0:
+                state = STATE_UNMEASURED
+            else:
+                state = STATE_OK
+            published[_route_key(provider, model)] = {
+                "provider": provider,
+                "model": model,
+                "state": state,
+                "days": {day: day_rows[day] for day in sorted(day_rows)},
+                "window": dict(totals),
+                "false_available_streak_days": streak,
+                "truncated": bool(counted["truncated"]),
+            }
 
     if failed:
         acceptance = {
