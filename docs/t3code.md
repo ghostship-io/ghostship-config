@@ -125,8 +125,7 @@ filtered `OPENCODE_MODELS_PATH` catalog, so the main `opencode` instance and
 `~/.config/opencode` are untouched. Provider entries name the projected
 environment variables; no key is written to a file. Approved models that cannot
 carry a T3 turn (a provider request/token ceiling or model context below 16,384
-tokens, or no tool support) are skipped, so Groq's 8 k free tier stays in the
-picker and free pool but is not advertised as a T3 worker. With an empty owner
+tokens, or no tool support) are skipped. With an empty owner
 list the instance is disabled and its config and catalog are empty. T3 watches
 `settings.json`, so a reconciler update appears without a restart; the timer
 exists because a one-off manual edit can race a T3 settings write.
@@ -412,7 +411,7 @@ in `packages/t3code/provider-privacy/setup.py` turns off nonessential traffic,
 telemetry, error reporting, and feedback before T3 starts.
 `scripts/provider-zdr-doctor` re-checks the table, the Command Code OpenCode
 route, the Claude opt-outs, the Grok upload setting, and the free-pool policy. Add
-`--browser` to re-read the OpenRouter, Groq, ChatGPT, and Mistral account
+`--browser` to re-read the OpenRouter, ChatGPT, and Mistral account
 toggles through the personal profile.
 
 ## Grok Build CLI and T3 provider

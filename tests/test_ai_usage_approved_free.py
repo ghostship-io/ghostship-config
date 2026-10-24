@@ -188,7 +188,6 @@ class OwnerApprovalFileTests(unittest.TestCase):
                 ('opencode', 'minimax-m3.1-flash-free'),
                 ('opencode', 'glm-5.3-flash-free'),
                 ('opencode', 'mimo-v2.6-flash-free'),
-                ('groq', 'qwen/qwen3.8-27b'),
                 ('nvidia', 'z-ai/glm-5.3'),
                 ('nvidia', 'minimaxai/minimax-m3.1-flash'),
                 ('nvidia', 'z-ai/glm-5.3-flash'),
@@ -199,7 +198,8 @@ class OwnerApprovalFileTests(unittest.TestCase):
     def test_non_us_and_unknown_jurisdictions_are_absent(self):
         entries = {(entry['provider'], entry['model'])
                    for entry in model_selection.load_approved_free_workers(str(self.PATH))}
-        for provider in ('orcarouter', 'mistral', 'ovh', 'zai', 'requesty', 'cohere', 'upstage'):
+        for provider in ('orcarouter', 'mistral', 'ovh', 'zai', 'requesty', 'cohere', 'upstage',
+                         'groq', 'cloudflare-workers-ai'):
             self.assertFalse(any(p == provider for p, _ in entries), provider)
         self.assertFalse(any('muse' in model or 'spark' in model for _, model in entries))
 

@@ -1,16 +1,6 @@
 {
   "max_workers": 8,
   "providers": {
-    "groq": {
-      "enabled": true,
-      "free_only": true,
-      "data_policy_approved": true,
-      "allowed_workloads": [
-        "development",
-        "evaluation",
-        "research"
-      ]
-    },
     "google": {
       "enabled": true,
       "free_only": true,
@@ -24,17 +14,6 @@
     "nvidia": {
       "enabled": true,
       "free_only": true,
-      "data_policy_approved": true,
-      "allowed_workloads": [
-        "development",
-        "evaluation",
-        "research"
-      ]
-    },
-    "cloudflare-workers-ai": {
-      "enabled": true,
-      "free_only": true,
-      "base_url": "https://api.cloudflare.com/client/v4/accounts/@GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID@/ai/v1",
       "data_policy_approved": true,
       "allowed_workloads": [
         "development",

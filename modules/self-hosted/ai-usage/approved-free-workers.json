@@ -4,30 +4,6 @@
   "approval_source": "owner 2026-10-24 US-hosted free providers",
   "entries": [
     {
-      "provider": "cloudflare-workers-ai",
-      "model": "@cf/google/gemma-4-26b-a4b-it",
-      "allow_training": true,
-      "sensitivity": [
-        "public",
-        "internal"
-      ],
-      "approved_at": "2026-10-24",
-      "source": "owner 2026-10-24 US-hosted free providers",
-      "note": "AA 16.67; US-hosted provider; ZDR/training per docs/provider-zdr.md"
-    },
-    {
-      "provider": "cloudflare-workers-ai",
-      "model": "@cf/openai/gpt-oss-120b",
-      "allow_training": true,
-      "sensitivity": [
-        "public",
-        "internal"
-      ],
-      "approved_at": "2026-10-24",
-      "source": "owner 2026-10-24 US-hosted free providers",
-      "note": "AA 11.6; US-hosted provider; ZDR/training per docs/provider-zdr.md"
-    },
-    {
       "provider": "google",
       "model": "gemini-3.5-flash-lite",
       "allow_training": true,
@@ -50,42 +26,6 @@
       "approved_at": "2026-10-24",
       "source": "owner 2026-10-24 US-hosted free providers",
       "note": "AA 39.77; US-hosted provider; ZDR/training per docs/provider-zdr.md"
-    },
-    {
-      "provider": "groq",
-      "model": "openai/gpt-oss-120b",
-      "allow_training": true,
-      "sensitivity": [
-        "public",
-        "internal"
-      ],
-      "approved_at": "2026-10-24",
-      "source": "owner 2026-10-24 US-hosted free providers",
-      "note": "AA 11.6; US-hosted provider; ZDR/training per docs/provider-zdr.md"
-    },
-    {
-      "provider": "groq",
-      "model": "openai/gpt-oss-20b",
-      "allow_training": true,
-      "sensitivity": [
-        "public",
-        "internal"
-      ],
-      "approved_at": "2026-10-24",
-      "source": "owner 2026-10-24 US-hosted free providers",
-      "note": "AA 8.97; US-hosted provider; ZDR/training per docs/provider-zdr.md"
-    },
-    {
-      "provider": "groq",
-      "model": "qwen/qwen3.8-27b",
-      "allow_training": true,
-      "sensitivity": [
-        "public",
-        "internal"
-      ],
-      "approved_at": "2026-10-24",
-      "source": "owner 2026-10-24 US-hosted free providers",
-      "note": "AA 33.68; US-hosted provider; ZDR/training per docs/provider-zdr.md"
     },
     {
       "provider": "nvidia",
