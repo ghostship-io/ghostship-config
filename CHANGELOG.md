@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.264] - 2026-10-24
+
+Reduce cold CI checkout traffic while retaining history checks, and add a second isolated agent runner slot.
+
+PR #436.
+
 ## [3.17.263] - 2026-10-24
 
 - Record the individual-account ZDR opt-outs for Claude, Grok, and Antigravity, and mark the owner-declined paid and contract paths.
