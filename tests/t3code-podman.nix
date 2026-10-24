@@ -70,6 +70,11 @@ assert
 # Relays follow the manager so socket activation can recover after its exit.
 assert builtins.elem "user@62040.service" cfg.systemd.services.t3code-podman.bindsTo;
 assert builtins.elem "user@62040.service" cfg.systemd.services.t3code-podman-ports.bindsTo;
+# Preserved private roots must migrate before the per-user manager reexec.
+assert builtins.elem "t3code-podman-identity"
+  cfg.system.activationScripts.t3code-podman-reexec-alias.deps;
+assert lib.hasInfix "rootfs.py reconcile /run/t3code-podman-rootfs "
+  cfg.system.activationScripts.t3code-podman-reexec-alias.text;
 # Force generation of actual system unit text, including the template drop-in.
 {
   system = cfg.system.build.toplevel.drvPath;
