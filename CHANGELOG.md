@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.254] - 2026-10-24
+
+- models: number table rows by position, keep each route's unavailable reason
+
+PR #423.
+
 ## [3.17.253] - 2026-10-24
 
 - Add the Command Code GOAT DeepSeek latest alias as a distinct paid-ZDR worker route, with published request estimates and UTC pricing.
