@@ -305,6 +305,7 @@ in
           --reuid="$(${pkgs.coreutils}/bin/stat -c %u ${lib.escapeShellArg t3Home})" \
           --regid="$(${pkgs.coreutils}/bin/stat -c %g ${lib.escapeShellArg t3Home})" --clear-groups \
           ${pkgs.coreutils}/bin/env -u GHOSTSHIP_ORCHESTRATOR_FILE \
+          HOME=${lib.escapeShellArg t3Home} \
           XDG_CONFIG_HOME=${lib.escapeShellArg (t3Home + "/.config")} \
           XDG_STATE_HOME=${lib.escapeShellArg (t3Home + "/.local/state")} \
           PYTHONPATH=${inputs.ghostship-private-agent}/tools/python \
