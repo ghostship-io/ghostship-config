@@ -1053,5 +1053,38 @@ class StatedResetTests(unittest.TestCase):
         self.assertAlmostEqual(result.paced_availability, -result.expected_left)
 
 
+class TheRouteThatWasRefusedLast(unittest.TestCase):
+    """The account can have room while a route was just refused.
+
+    A route whose own record ends on a refusal has nothing left, whatever
+    another model of the account did after it: the refusal is this route's
+    last word, and the account's learned window says when it ends.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 8), usage=1000.0),
+            event("acme", "beta", at(0, 8, 5), usage=1000.0),
+            event("acme", "alpha", at(0, 9), usage=1000.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "alpha", at(0, 11), usage=0.0),
+            event("acme", "beta", at(0, 13, 20), usage=1000.0),
+            event("acme", "alpha", at(0, 13), outcome="limit"),
+        ]
+        self.now = at(0, 13, 30)
+
+    def test_the_refused_route_has_nothing_left(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "account")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertIsNotNone(result.reset_at)
+        self.assertGreater(result.reset_at, self.now)
+
+    def test_the_model_that_kept_working_is_unaffected(self):
+        results = inference.infer_capacity(self.events, self.now)
+        self.assertEqual(results[("acme", "beta")].state, "no_failure")
+
+
 if __name__ == "__main__":
     unittest.main()
