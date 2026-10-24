@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.270] - 2026-10-24
+
+Ship `ghostship_policy` in the private MCP source so a host evaluation can build the pinned agent.
+
+PR #442.
+
 ## [3.17.269] - 2026-10-24
 
 Make the deferred Console OAuth cutover an explicit state the auth unit reports and succeeds with, and add a doctor for it, instead of failing every activation and reddening each deploy switch.
