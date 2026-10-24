@@ -517,7 +517,10 @@ def read_antigravity(
             # window on a model whose week is nearly gone. The reset it
             # states is the evidence of which window it is.
             if key == "quotaInfo" and reset is not None:
-                short = reset - now <= 5 * 3600.0 + 300.0
+                # The bucket's reset is at most one short window away. A
+                # quarter of an hour of margin covers the moment the probe
+                # reads a window that has just started.
+                short = reset - now <= 5 * 3600.0 + 900.0
                 kind = "session" if short else "weekly"
                 duration = 5 * 3600.0 if short else 7 * 86400.0
             elif window == "weekly":

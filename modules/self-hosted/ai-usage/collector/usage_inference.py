@@ -588,10 +588,12 @@ def detail_for(capacity: Mapping[str, Any]) -> dict[str, Any]:
         "weights_basis": str(capacity.get("weights_basis") or ""),
         "episodes": int(capacity.get("episodes") or 0),
         "state": str(capacity.get("state") or ""),
-        # A reset the provider stated in its refusal is its estimate, not a
+        # A reset the provider stated in its refusal, or one estimated from
+        # the free allowance period when no window was learned, is not a
         # window the inference measured; the two never read the same.
         "reset_source": str(capacity.get("reset_source") or ""),
-        "reset_estimated": str(capacity.get("reset_source") or "") == "provider_estimate",
+        "reset_estimated": str(capacity.get("reset_source") or "")
+        in ("provider_estimate", "window_estimate"),
         # A window that ends inside the collector's own run interval
         # rolls: it is over before the next reading is taken.
         "rolling": seconds is not None and seconds < ROLLING_BELOW_S,
@@ -618,7 +620,9 @@ def window_for(capacity: Mapping[str, Any], now: float) -> Any:
     reset = capacity.get("reset_at")
     duration = capacity.get("window_seconds")
     detail = detail_for(capacity)
-    reset_source = "provider_estimate" if detail["reset_estimated"] else "inferred"
+    reset_source = detail["reset_source"]
+    if reset_source not in ("provider_estimate", "window_estimate"):
+        reset_source = "inferred"
     if detail["rolling"] and not detail["reset_estimated"]:
         # The window is shorter than the interval the collector runs at:
         # it ends between two readings, and the reset the inference

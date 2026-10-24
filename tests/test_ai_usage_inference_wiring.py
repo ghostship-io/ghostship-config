@@ -897,7 +897,8 @@ class InferredQuotaIdTests(unittest.TestCase):
         ]
         capacity = self.capacity(events, DAY0 + 5000.0)
         self.assertEqual(capacity.state, "exhausted")
-        self.assertIsNone(capacity.reset_at)
+        # No recovery taught the window, so the reset is the estimate it is.
+        self.assertEqual(capacity["reset_at"], DAY0 + 600.0 + 86400.0)
         self.assertEqual(usage().quota_id_for(capacity), "inferred:exhausted")
 
     def test_a_route_never_refused_keeps_the_no_failure_id(self):

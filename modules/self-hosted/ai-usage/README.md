@@ -303,13 +303,14 @@ The rules:
   Once that window has rolled over the route reads available again, with all
   of its allowance and a window that starts at the rollover; a refusal in
   the new window spends it again. A route whose own record ends on a refusal
-  stays spent even when another model of the account worked after it, and a
-  route that never learned a window of its own is spent with no reset rather
-  than taking another route's. When the refusal itself stated its reset,
-  that reset is published as the end of the spent window (`reset_source:
-  provider_estimate`, `inference.reset_estimated: true`) while it is still
-  ahead; otherwise the learned window's end is the estimate
-  (`reset_source: inferred`).
+  stays spent even when another model of the account worked after it, and
+  that spent window is its own, so it never gates a sibling. A route that
+  never learned a window of its own is spent for one day from the refusal:
+  that period is an estimate (`reset_source: window_estimate`), published as
+  one, and it rolls like a learned window. When the refusal itself stated
+  its reset, that reset is published as the end of the spent window
+  (`reset_source: provider_estimate`); otherwise the learned window's end is
+  the estimate (`reset_source: inferred`).
 * The quota id of an inferred window names the window it was learned from
   (`inferred:1h`, `inferred:5h`), not the state of the route. A refusal with
   no learned window reads `inferred:exhausted`, and a route that was never
@@ -1364,7 +1365,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `quota_state` | `available`, `exhausted`, or `unknown` |
 | `probe` | whether the route answered its last live probe: `state` is `works`, `fails` or `unprobed`; `class` names the failure (`success`, `quota`, `auth`, `model_not_found`, `catalog_mismatch`, `policy_parked`, `timeout` or `upstream_error`, and empty when unprobed); `checked_at` is the UTC moment of the newest reading; `source` is `pool_probe` or `t3_probe`; `max_age_seconds` is 172800. The newer of the free pool's own probe and the latest OpenCode request of the route is the reading. A reading older than `max_age_seconds` is kept with its moment and its source, and the state falls back to `unprobed`: a route nothing probed reads `unprobed` with no moment and no source |
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
-| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count and the state. It is empty for a route whose capacity was not inferred |
+| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count, the state, and `reset_source`/`reset_estimated` when the reset is an estimate rather than a measured window's end. It is empty for a route whose capacity was not inferred |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
 | `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
 | `frontier_surplus` | whether a frontier model may carry volume work: the entitlement it comes from (its kind, its length, its reset, its quota id), the surplus, the reserve the review keeps, and the pace. A weekly or monthly allowance that resets within a day is not the same thing as a session window that resets in a few hours, so the window is named |

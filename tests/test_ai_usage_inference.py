@@ -182,7 +182,7 @@ class NoFailure(unittest.TestCase):
 class ExhaustedFirstEpisode(unittest.TestCase):
     """Case 6: the first refusal, with no history behind it."""
 
-    def test_exhausted_without_a_known_window(self):
+    def test_exhausted_with_an_estimated_reset_and_no_learned_window(self):
         events = [
             event("acme", "sonnet", at(0, 8), usage=1000.0),
             event("acme", "sonnet", at(0, 9), outcome="limit"),
@@ -190,12 +190,14 @@ class ExhaustedFirstEpisode(unittest.TestCase):
         result = route(events, at(0, 9, 30))
         self.assertEqual(result.state, "exhausted")
         self.assertEqual(result.left, 0.0)
-        self.assertIsNone(result.reset_at)
+        # No recovery has taught the window yet: the refusal is spent for the
+        # free allowance period, and the reset says it is an estimate.
+        self.assertEqual(result.reset_at, at(1, 9))
+        self.assertEqual(result.reset_source, "window_estimate")
         self.assertIsNone(result.window)
-        self.assertIsNone(result.window_seconds)
-        self.assertIsNone(result.expected_left)
-        self.assertIsNone(result.paced_availability)
-        self.assertAlmostEqual(result.start_at, at(0, 8))
+        self.assertIsNone(result.budget)
+        # The estimated window starts at the refusal itself.
+        self.assertAlmostEqual(result.start_at, at(0, 9))
 
 
 class ExhaustedWithHistory(unittest.TestCase):
@@ -874,18 +876,34 @@ class TheWindowThatRolledOver(unittest.TestCase):
 
 
 class RefusalWithoutALearnedWindow(unittest.TestCase):
-    """A refusal with no completed episode has no window to roll over."""
+    """A refusal with no completed episode has no window to roll over.
 
-    def test_any_reading_is_spent_without_a_reset(self):
+    It is still spent for the free allowance period, with a reset published
+    as the estimate it is. Once that period passes the route reads available
+    again, the same way a learned window rolls.
+    """
+
+    def test_the_refusal_is_spent_for_the_estimated_period(self):
         events = [
             event("acme", "m", DAY0 + 0.0, usage=100.0),
             event("acme", "m", DAY0 + 600.0, outcome="limit"),
         ]
-        for now in (DAY0 + 600.0, DAY0 + 100000.0):
-            result = inference.infer_capacity(events, now)[("acme", "m")]
-            self.assertEqual(result.state, "exhausted", now)
-            self.assertEqual(result.left, 0.0, now)
-            self.assertIsNone(result.reset_at, now)
+        result = inference.infer_capacity(events, DAY0 + 700.0)[("acme", "m")]
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, DAY0 + 600.0 + 86400.0)
+        self.assertEqual(result.reset_source, "window_estimate")
+        self.assertIsNone(result.window)
+
+    def test_the_estimated_period_rolls_without_a_success(self):
+        events = [
+            event("acme", "m", DAY0 + 0.0, usage=100.0),
+            event("acme", "m", DAY0 + 600.0, outcome="limit"),
+        ]
+        result = inference.infer_capacity(events, DAY0 + 90000.0)[("acme", "m")]
+        self.assertEqual(result.state, "in_window")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.reset_at)
 
 
 class NeverRefused(unittest.TestCase):
