@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.272] - 2026-10-24
+
+Pin the private agent to release 0.47.65.
+
+PR #445.
+
 ## [3.17.271] - 2026-10-24
 
 Pin the private agent to release 0.47.62.
