@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "data": [
+    {
+      "model": "deepseek/deepseek-v4.1-flash",
+      "requests": 7115,
+      "requestsFailed": 0,
+      "tokensIn": 1982366602,
+      "tokensOut": 4005807,
+      "tokensTotal": 1986372409,
+      "creditsTotal": 12.657379716,
+      "consumedFreeCredits": 0,
+      "consumedMonthlyCredits": 11.075207379800005,
+      "consumedPurchasedCredits": 0
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "requests": 1,
+      "requestsFailed": 0,
+      "tokensIn": 12087,
+      "tokensOut": 19,
+      "tokensTotal": 12106,
+      "creditsTotal": 0.0304055,
+      "consumedFreeCredits": 0,
+      "consumedMonthlyCredits": 0.2128385,
+      "consumedPurchasedCredits": 0
+    },
+    {
+      "model": "web_search",
+      "requests": 29,
+      "requestsFailed": 0,
+      "tokensIn": 0,
+      "tokensOut": 0,
+      "tokensTotal": 0,
+      "creditsTotal": 0.029,
+      "consumedFreeCredits": 0,
+      "consumedMonthlyCredits": 0.10149999999999999,
+      "consumedPurchasedCredits": 0
+    }
+  ],
+  "window": {
+    "from": "2026-10-23T23:36:32.000Z",
+    "to": "2026-10-24T20:37:02.020Z",
+    "periodBasis": "billing-period"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "credits": {
+    "belowThreshold": false,
+    "creditThreshold": 0,
+    "monthlyCredits": 58.2996974125,
+    "purchasedCredits": 0,
+    "premiumMonthlyCredits": 0,
+    "opensourceMonthlyCredits": 58.2996974125,
+    "monthlyCreditsGranted": 70
+  },
+  "windowLimits": {
+    "limited": true,
+    "exceeded": null,
+    "fiveHour": {
+      "used": 0.8274443007,
+      "cap": 14,
+      "exceeded": false,
+      "resetAt": 1792878138160
+    },
+    "weekly": {
+      "used": 11.7003025875,
+      "cap": 35,
+      "exceeded": false,
+      "resetAt": 1793409249375
+    }
+  },
+  "sandboxAccess": true,
+  "sandboxMinutes": {
+    "usedMinutes": 0,
+    "limitMinutes": 0,
+    "overageUsd": 0,
+    "resetAt": 1793491200000
+  }
+}
