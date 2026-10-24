@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.252] - 2026-10-24
+
+- Keep completed usage collection successful when picker reconciliation temporarily cannot connect to T3.
+
+PR #417.
+
 ## [3.17.251] - 2026-10-24
 
 - Pin the coordinator backend to ghostship-agent 0.47.28, which adds
