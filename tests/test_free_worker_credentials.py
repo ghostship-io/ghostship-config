@@ -14,10 +14,10 @@ spec.loader.exec_module(credentials)
 class ProjectionTests(unittest.TestCase):
     def test_projection_contains_only_declared_free_provider_variables(self):
         source = ('OPENCODE_GO_API_KEY=fixture-paid\nOPENCODE_API_KEY=fixture-console\n'
-                  'OTHER_PASSWORD=fixture-unrelated\nGROQ_API_KEY=old\n'
-                  'export GROQ_API_KEY="fixture with spaces"\n')
-        self.assertEqual(credentials.select(source, ['GROQ_API_KEY']),
-                         'GROQ_API_KEY="fixture with spaces"\n')
+                  'OTHER_PASSWORD=fixture-unrelated\nEXAMPLE_PROVIDER_API_KEY=old\n'
+                  'export EXAMPLE_PROVIDER_API_KEY="fixture with spaces"\n')
+        self.assertEqual(credentials.select(source, ['EXAMPLE_PROVIDER_API_KEY']),
+                         'EXAMPLE_PROVIDER_API_KEY="fixture with spaces"\n')
 
     def test_console_and_subscription_keys_cannot_be_requested(self):
         for name in credentials.FORBIDDEN:
@@ -28,7 +28,7 @@ class ProjectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / 'credentials.env'
             destination.write_text('OLD=fixture\n')
-            credentials.write(destination, 'GROQ_API_KEY=fixture\n', os.getuid(), os.getgid())
-            self.assertEqual(destination.read_text(), 'GROQ_API_KEY=fixture\n')
+            credentials.write(destination, 'EXAMPLE_PROVIDER_API_KEY=fixture\n', os.getuid(), os.getgid())
+            self.assertEqual(destination.read_text(), 'EXAMPLE_PROVIDER_API_KEY=fixture\n')
             self.assertEqual(destination.stat().st_mode & 0o777, 0o400)
             self.assertEqual(list(Path(directory).iterdir()), [destination])
