@@ -179,15 +179,17 @@ class AntigravityTest(unittest.TestCase):
     def test_check_reads_the_panel_state(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
+            workspace = home / "workspace"
+            workspace.mkdir()
             settings = home / ".gemini/antigravity-cli/settings.json"
             settings.parent.mkdir(parents=True)
-            settings.write_text(json.dumps({"trustedWorkspaces": ["/tmp"]}))
+            settings.write_text(json.dumps({"trustedWorkspaces": [str(workspace)]}))
             with patch("shutil.which", return_value="/usr/bin/agy"), \
-                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=Path("/tmp")), \
+                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=workspace), \
                  patch.object(doctor, "_agy_config_panel", return_value="Enable Telemetry off"):
                 self.assertEqual(doctor.check_antigravity(home, True).status, "pass")
             with patch("shutil.which", return_value="/usr/bin/agy"), \
-                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=Path("/tmp")), \
+                 patch.object(doctor, "_trusted_antigravity_workspace", return_value=workspace), \
                  patch.object(doctor, "_agy_config_panel", return_value="Enable Telemetry on"):
                 self.assertEqual(doctor.check_antigravity(home, True).status, "fail")
 
