@@ -65,6 +65,7 @@ TESTS = (
     "test_ai_usage_command_code_usage.py",
     "test_ai_usage_obsolete.py",
     "test_ai_usage_t3_limit_probe.py",
+    "test_ai_usage_calibration.py",
     "test_ai_usage_approved_free.py",
     "test_ai_usage_announced_resets.py",
     "test_ai_usage_reported_limits.py",

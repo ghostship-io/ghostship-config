@@ -928,6 +928,35 @@ provider-reported dollar charge.
   `output`, `cache_read` or `cache_write`.
 * `ghostship_ai_free_model_observed_timestamp_seconds{provider,model,tier,source}`
   - when the free model list was read.
+* `ghostship_ai_free_route_refusals{provider,model,day}` and
+  `ghostship_ai_free_route_successes{provider,model,day}` - the refusals and
+  the successful requests of a free route on a day.
+* `ghostship_ai_free_route_false_available{provider,model,day}` - the refusals
+  that happened while the route's reading showed headroom. The route was
+  offered and it refused.
+* `ghostship_ai_free_route_false_exhausted{provider,model,day}` - the first
+  successes that happened while the reading showed the route spent. The route
+  was withheld and it worked.
+* `ghostship_ai_free_route_calibration_state{provider,model,state}` - 1 for
+  the state of a route's calibration: `ok`, `warn` (a wrong reading on a day),
+  `fail` (falsely available two days running) or `unmeasured` (no evidence).
+* `ghostship_ai_free_route_false_available_streak_days{provider,model}` - the
+  consecutive complete days a route refused while it read available, ending at
+  the last complete day.
+* `ghostship_ai_free_route_calibration_acceptance{state}` - 1 for the owner's
+  acceptance: `ok` when no free route refused while it read available on two
+  consecutive days, `fail` otherwise.
+
+The calibration replays the same request record the inference reads: just
+before every refusal and every run of successes it asks what the reading said,
+and it counts the two ways the reading can be wrong. The counts are bucketed
+per day in Pacific/Honolulu, the zone the usage buckets use. A refusal that
+meets a reading already showing the route spent is not a false available; only
+the first success of a run can be a false exhausted, because the success itself
+corrects the reading. Every free route of the inventory is published; a route
+with no evidence reads `unmeasured`, never `ok`. `ghostship-ai-usage-calibration`
+runs the acceptance probe just after the counts' day rolls over and fails when
+the acceptance is not `ok`.
 
 ### The free inference pool
 
@@ -1351,6 +1380,7 @@ The contract, version 1:
 | `recommendations` | the recommended model per workload class, with its native identity, its role, and the reason |
 | `candidates` | one row per model a consumer may act on |
 | `pending` | the models that wait for their evaluation window |
+| `free_calibration` | how well each free route's reading predicted its refusals: per day, the refusals, the successes, the false-available and the false-exhausted counts, the window totals, the false-available streak, and the owner's acceptance (`ok`/`fail`, the failed routes and the two days checked). A route row also carries the summary as `calibration` |
 | `counts` | how many rows were written and how many were left out |
 
 A candidate row carries the native identity, the tier, the rank, the score,
@@ -1366,6 +1396,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `probe` | whether the route answered its last live probe: `state` is `works`, `fails` or `unprobed`; `class` names the failure (`success`, `quota`, `auth`, `model_not_found`, `catalog_mismatch`, `policy_parked`, `timeout` or `upstream_error`, and empty when unprobed); `checked_at` is the UTC moment of the newest reading; `source` is `pool_probe` or `t3_probe`; `max_age_seconds` is 172800. The newer of the free pool's own probe and the latest OpenCode request of the route is the reading. A reading older than `max_age_seconds` is kept with its moment and its source, and the state falls back to `unprobed`: a route nothing probed reads `unprobed` with no moment and no source |
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
 | `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count, the state, and `reset_source`/`reset_estimated` when the reset is an estimate rather than a measured window's end. It is empty for a route whose capacity was not inferred |
+| `calibration` | how well a free route's reading predicted its refusals: `state`, `refusals`, `successes`, `false_available`, `false_exhausted` and `false_available_streak_days` over the calibration window. Present only for a free route |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
 | `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
 | `frontier_surplus` | whether a frontier model may carry volume work: the entitlement it comes from (its kind, its length, its reset, its quota id), the surplus, the reserve the review keeps, and the pace. A weekly or monthly allowance that resets within a day is not the same thing as a session window that resets in a few hours, so the window is named |
