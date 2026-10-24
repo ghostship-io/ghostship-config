@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.253] - 2026-10-24
+
+- Add the Command Code GOAT DeepSeek latest alias as a distinct paid-ZDR worker route, with published request estimates and UTC pricing.
+
+PR #421.
+
 ## [3.17.252] - 2026-10-24
 
 - Keep completed usage collection successful when picker reconciliation temporarily cannot connect to T3.
