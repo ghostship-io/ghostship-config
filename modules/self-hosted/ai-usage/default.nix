@@ -191,6 +191,49 @@ in
       };
     };
 
+    # The acceptance probe of the free-route calibration (ghostship-agent
+    # #462). It reads the snapshot the collector published and fails when a
+    # free route refused while its reading showed headroom on two consecutive
+    # days. A failing probe reaches operations through ghostship-failure@.
+    systemd.services.ghostship-ai-usage-calibration = {
+      description = "Accept the free-route limit calibration";
+      after = [ "ghostship-ai-usage.service" ];
+      wants = [ "ghostship-ai-usage.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --calibration-probe --snapshot ${routing}";
+        UMask = "0077";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictNamespaces = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        SystemCallArchitectures = "native";
+        ReadOnlyPaths = [ stateDir ];
+        CapabilityBoundingSet = [ "" ];
+        AmbientCapabilities = "";
+        MemoryMax = "128M";
+        TasksMax = 8;
+      };
+    };
+
+    systemd.timers.ghostship-ai-usage-calibration = {
+      description = "Check the free-route calibration after the counts' day rolls over";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        # Midnight in Pacific/Honolulu, the zone the daily counts use.
+        OnCalendar = "*-*-* 10:05:00 UTC";
+        AccuracySec = "1min";
+        Persistent = false;
+      };
+    };
+
     # The Artificial Analysis quality feed is read from the public pages, once
     # a day. There is no key and no account: the pull reads public pages with
     # ordinary GETs, and it keeps the last good snapshot when a page is

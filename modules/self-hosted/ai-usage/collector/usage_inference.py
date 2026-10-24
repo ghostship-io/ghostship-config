@@ -148,6 +148,10 @@ class Inference:
         # The probe of every route the OpenCode record shows, by the route
         # the collector knows it by: the latest request, and what it said.
         self.probes: dict[tuple[str, str], dict[str, Any]] = {}
+        # Every mapped event of the two records, in the order they were read.
+        # The calibration replays them; nothing else consumes them. (The
+        # `events` property above is the count of the record.)
+        self.mapped_events: list[dict[str, Any]] = []
 
     @property
     def unmatched_events(self) -> int:
@@ -527,6 +531,7 @@ def read_and_infer(
             reading.retirements, reading.last_success = retirements_from_events(mapped)
             reading.probes = probes_from_events(mapped)
     reading.unmatched = unmatched
+    reading.mapped_events = list(events)
     reading.capacities = infer(events, now)
     # Every record publishes the events it could not place on a route. The
     # count is published, so an event that is never read is never hidden.

@@ -3675,6 +3675,8 @@ def build_snapshot(
     t3_probes: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     inferred_windows: Iterable[Mapping[str, Any]] | None = None,
     outcomes: Mapping[str, Any] | None = None,
+    outcome_groups: Mapping[str, Any] | None = None,
+    free_calibration: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
     routing_enabled: bool = False,
 ) -> dict[str, Any]:
@@ -4136,6 +4138,24 @@ def build_snapshot(
     elif not frontier_rows:
         frontier_reason = "no model holds the frontier tier right now"
 
+    # How well the reading predicted the refusals of a free route. The route
+    # row carries the summary the Free models page reads; the full daily
+    # series stays in `free_calibration`.
+    calibration_routes = dict((free_calibration or {}).get("routes") or {})
+    if calibration_routes:
+        for row in candidates:
+            entry = calibration_routes.get(f"{row['provider']}/{row['model']}")
+            if not isinstance(entry, Mapping):
+                continue
+            window = entry.get("window") or {}
+            row["calibration"] = {
+                "state": entry.get("state"),
+                "refusals": window.get("refusals"),
+                "successes": window.get("successes"),
+                "false_available": window.get("false_available"),
+                "false_exhausted": window.get("false_exhausted"),
+                "false_available_streak_days": entry.get("false_available_streak_days"),
+            }
     return {
         "schema": SCHEMA,
         "schema_version": SCHEMA_VERSION,
@@ -4257,6 +4277,9 @@ def build_snapshot(
             "pending_identities": pending_identities,
         },
         "pending": pending,
+        # How well each free route's reading predicted its refusals, per day,
+        # with the owner's two-consecutive-day acceptance rule.
+        "free_calibration": dict(free_calibration or {}),
         "value_policy": {
             **VALUE_POLICY,
             **value_policy.policy_document(COST_TRANSFORM),
