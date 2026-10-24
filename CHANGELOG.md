@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.294] - 2026-10-24
+
+- ai-usage: publish the obsolete label on pruned route metrics
+
+PR #483.
+
 ## [3.17.293] - 2026-10-24
 
 - ai-usage: read the OpenCode Free instance's request record; an HTTP 429 is
