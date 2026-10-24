@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.242] - 2026-10-24
+
+- Activate the agent's lazy-window repair and current deploy lifecycle checks on the next main deployment.
+
+PR #410.
+
 ## [3.17.241] - 2026-10-23
 
 - Defer OAuth cutover cleanly while the free authentication probe is unavailable.
