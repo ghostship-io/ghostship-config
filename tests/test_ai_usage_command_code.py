@@ -69,7 +69,7 @@ class Client:
         raise AssertionError(method)
 
 
-def build(now, config=None, key=None, free=False, models=None):
+def build(now, config=None, key=None, free=False, models=None, evidence=None):
     home, secrets = route(config, key)
     context = {'t3_home': home, 'secrets_env': secrets}
     reading = t3source._collect_limits(Client(models), context)
@@ -86,7 +86,7 @@ def build(now, config=None, key=None, free=False, models=None):
     document = snapshot.build_snapshot(now=now, sources=[], ranked=ranked,
         native_models=native, catalog=prices, free_models=[PAIR] if free else [])
     document['model_quality'] = {}
-    document['model_selection'] = model_selection.build(document, [])
+    document['model_selection'] = model_selection.build(document, [], evidence=evidence)
     row = next(r for r in document['candidates'] if (r['provider'], r['model']) == PAIR)
     return document, row, reading
 
@@ -120,6 +120,44 @@ class CommandCodeWorkerTests(unittest.TestCase):
         self.assertIn('not evaluated', row['command_code']['harness_quality'])
         worker = next(r for r in document['model_selection']['worker'] if r['provider'] == 'commandCode')
         self.assertEqual(worker['provider_terms']['estimated_allowances'], estimates)
+
+    def selected_worker(self, document):
+        return document['model_selection']['providers']['commandCode']['selected']['worker']
+
+    def worker_row(self, document):
+        return next(r for r in document['model_selection']['worker']
+                    if r['provider'] == 'commandCode' and r['model'] == MODEL)
+
+    def test_owner_configured_command_code_build_is_admitted_on_the_opencode_route(self):
+        # The owner's configured build is the vendor's route identity; T3 Code
+        # serves it under the OpenCode instance as a harness-prefixed slug.
+        evidence = {'policy': {'model_selection': {'worker_builds': {'commandCode': MODEL}}}}
+        document, candidate, _ = build(epoch('2026-10-24T12:00:00'), evidence=evidence)
+        self.assertTrue(candidate['available'])
+        self.assertTrue(self.worker_row(document)['selection_eligible'])
+        self.assertEqual(self.worker_row(document)['selection_reason'], '')
+        self.assertEqual(document['model_selection']['worker_builds']['commandCode'], MODEL)
+        self.assertEqual(self.selected_worker(document),
+                         {'instanceId': 'opencode', 'model': SLUG})
+
+    def test_native_or_route_model_id_names_the_same_configured_build(self):
+        for configured in (MODEL, SLUG):
+            with self.subTest(configured=configured):
+                evidence = {'policy': {'model_selection': {
+                    'worker_builds': {'commandCode': configured}}}}
+                document, _, _ = build(epoch('2026-10-24T12:00:00'), evidence=evidence)
+                self.assertTrue(self.worker_row(document)['selection_eligible'])
+                self.assertEqual(self.selected_worker(document),
+                                 {'instanceId': 'opencode', 'model': SLUG})
+
+    def test_a_different_configured_build_keeps_the_route_out(self):
+        other = 'deepseek/deepseek-v4.2-flash'
+        evidence = {'policy': {'model_selection': {'worker_builds': {'commandCode': other}}}}
+        document, _, _ = build(epoch('2026-10-24T12:00:00'), evidence=evidence)
+        self.assertFalse(self.worker_row(document)['selection_eligible'])
+        self.assertEqual(self.worker_row(document)['selection_reason'],
+                         'configured worker build: ' + other)
+        self.assertIsNone(self.selected_worker(document))
 
     def test_exact_utc_peak_boundaries_and_weekends(self):
         for when, peak in [('2026-10-23T00:59:59', False), ('2026-10-23T01:00:00', True),

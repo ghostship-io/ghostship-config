@@ -352,7 +352,9 @@ instead of falling back. The route adds no model gate of its own.
 The picker keeps the published GOAT terms and the
 `commandCode/deepseek/deepseek-v4.1-flash` worker identity, while T3 Code now
 reports the route as the `opencode` instance serving
-`command-code/deepseek/deepseek-v4.1-flash`. Eligibility requires the live
+`command-code/deepseek/deepseek-v4.1-flash`. The configured
+`workerBuilds.commandCode` value names that same build in either exact form,
+and the collector admits the route under both. Eligibility requires the live
 config to name the provider and the `x-cmd-zdr` header and the projection to
 carry `COMMAND_CODE_API_KEY`; a model catalog alone is not evidence. Claude and
 the other Command Code models stay visible with their own unknown or published
