@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.258] - 2026-10-24
+
+- Create the OrcaSlicer/Blender application install, workspace and audit roots on the Agent Desktop and document the sandboxed application tools.
+
+PR #433.
+
 ## [3.17.257] - 2026-10-24
 
 Allowance-aware OpenCode Go model picks: the published Go/Plus request table and training/retention policy are read on a schedule, quality is weighed against affordable capacity with an auditable breakdown and binding window, non-ZDR models stay out of internal work, and undated model ids bind to the newest dated quality record.
