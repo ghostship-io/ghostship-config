@@ -30,6 +30,8 @@ class RetailStoreEnvTests(unittest.TestCase):
         t3code = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn("/etc/ghostship/retail-store.env", integrations)
         self.assertIn("environmentFiles", integrations)
+        self.assertIn(
+            '"f /etc/ghostship/retail-store.env 0600 root root -"', integrations)
         self.assertIn("retailStoreEnv", t3code)
         self.assertIn("/etc/ghostship/retail-store.env", t3code)
         self.assertIn("environmentFiles = [ t3codeSecrets retailStoreEnv ]", t3code)
@@ -37,6 +39,8 @@ class RetailStoreEnvTests(unittest.TestCase):
     def test_docs_name_every_setting_and_the_private_source(self):
         docs = (ROOT / "docs/retail-store-runtime.md").read_text()
         self.assertIn("/etc/ghostship/retail-store.env", docs)
+        self.assertIn("systemd.tmpfiles", docs)
+        self.assertIn("sole deployer", docs)
         for setting in SETTINGS:
             self.assertIn(setting, docs)
 
