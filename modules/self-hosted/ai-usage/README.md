@@ -1540,6 +1540,52 @@ binding window, estimate) and `pick_score` (quality term, capacity term,
 weights). The snapshot also carries `limit_models`, `page_limits` and
 `command_code_usage` health blocks.
 
+### Owner-approved free workers
+
+A free route is never a first-choice worker on its own. The collector applies
+the explicit entries in `approved-free-workers.json` beside this module (the
+file is configuration, never a rule that admits a future provider), and merges
+them into the runtime policy's `model_selection.approved_free_workers` list.
+Every entry names its provider and model; a wildcard, a malformed entry or an
+unknown schema fails the collector visibly. An entry that omits `sensitivity`
+defaults to `["public"]`, never to every level. The 2026-10-24 owner approval
+lists the measured free routes of the US-hosted providers (OpenCode, NVIDIA,
+Groq, Google, OpenRouter and Cloudflare Workers AI), with
+`source: "owner 2026-10-24 US-hosted free providers"`, `allow_training: true`
+where the terms allow training or are unknown, and sensitivity up to
+`internal`. OrcaRouter (jurisdiction unpublished), the EU/China-hosted
+providers, and `muse-spark-1.3-contributor-free` (no measured AA score) are not
+in the file.
+
+Each row publishes `sensitivity_eligible` for `public`, `internal` and
+`sensitive`. The picker must call `model_selection.allowed_for(row,
+sensitivity)` (or read that map) before using a row for a request. A
+training-allowed route never admits `sensitive`, even if an entry lists it, and
+the generic data policy stays in force for sensitive work: private owner data
+goes to neither pool. A row's `selection_eligible` is the `internal` default;
+an approval limited to `public` is visible but is not the internal default.
+
+```json
+{"provider": "nvidia", "model": "z-ai/glm-5.3", "allow_training": true,
+ "sensitivity": ["public", "internal"], "approved_at": "2026-10-24",
+ "source": "owner 2026-10-24 US-hosted free providers", "note": "AA 44.78; US-hosted provider; ZDR/training per docs/provider-zdr.md"}
+```
+
+The collector never writes the list and never infers an approval from quality,
+price or a provider name. An approved route is a first-choice worker while it
+is available and not overspent (a route more than twenty points behind its
+binding window's pace is overspent). It then follows every route that is not,
+so the picker falls back to paid instead of spending a limit that is already
+consumed too fast. `allow_training: true` lets the owner approve a route whose
+prompts are used for training; without it the generic
+`data policy: training used or not ZDR` exclusion applies.
+
+Rows carry `approved_free` (source, sensitivity, allow_training, approved_at,
+note), `free_worker` and `overspent`; the picker metrics add the
+`approved_free`, `approval_source` and `overspent` labels and gauges. The
+normal models page shows these rows beside paid models; no separate free-only
+page is required.
+
 An optional runtime file, `--custom-resets` (default
 `/var/lib/ghostship-ai-usage/custom-resets.json`), contains
 `{"schema":1,"windows":[{"provider":"example","quota_id":"weekly","reset_at":"2030-01-01T17:00:00Z"}]}`.

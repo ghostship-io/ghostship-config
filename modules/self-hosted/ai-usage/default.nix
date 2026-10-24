@@ -105,7 +105,7 @@ in
       ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled} --model-selection-preferences ${workerPreferences}${policyArg}${
+        ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection} --routing-enabled ${routingEnabled} --model-selection-preferences ${workerPreferences}${policyArg} --approved-free-workers ${./approved-free-workers.json}${
           lib.optionalString (policy != null) " --reconcile-picker"
         }";
         # The collector finds the T3 Code container's address with the Podman
