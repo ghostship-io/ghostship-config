@@ -60,7 +60,7 @@ class RegistrationTests(unittest.TestCase):
             with patch.object(registration.urllib.request, 'urlopen', side_effect=api), \
                     patch.object(registration.subprocess, 'run', side_effect=configure) as child, \
                     patch.dict(registration.os.environ, {'ACTIONS_RUNNER_INPUT_PAT': pat,
-                                                         'GITHUB_TOKEN': pat}):
+                                                         'GITHUB_TOKEN': pat}, clear=True):
                 registration.prepare(args)
                 self.assertEqual((state / '.registration-token').stat().st_mode & 0o777, 0o600)
                 self.assertEqual((state / '.registration-token').stat().st_uid, owner.st_uid)
