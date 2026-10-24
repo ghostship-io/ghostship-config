@@ -39,7 +39,7 @@ SOURCES = {
     "commandCode": "https://commandcode.ai/docs/plans/goat",
     "ollama": "https://docs.ollama.com/cloud",
     "codex": "T3 Code provider windows",
-    "claude": "T3 Code provider windows",
+    "claude": "Claude Code OAuth usage endpoint",
     "antigravity": "Google cloudcode quota endpoints",
     "grok": "T3 Code provider windows",
     "free_pool": "provider documentation and pool response headers",
@@ -65,6 +65,7 @@ WINDOWS = {
         {"kind": "weekly", "length_seconds": 7 * 86400, "unit": "share"},
     ],
     "claude": [
+        {"kind": "session", "length_seconds": 5 * 3600, "unit": "share", "shared": True},
         {"kind": "weekly", "length_seconds": 7 * 86400, "unit": "share", "shared": True},
     ],
     "antigravity": [

@@ -34,6 +34,7 @@ import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
+import claude_usage  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
 import outcomes as outcomes_module  # noqa: E402
@@ -1850,6 +1851,7 @@ def collect(
     *,
     t3_home: str = T3_HOME,
     secrets_env: str = SECRETS_ENV_FILE,
+    claude_credentials: str = "",
     pool_server: str = POOL_SERVER_FILE,
     pool_token: str = POOL_TOKEN_FILE,
     pool_ledger: str | None = POOL_LEDGER_FILE,
@@ -1874,6 +1876,8 @@ def collect(
     context['secrets_env'] = secrets_env
     results: list[SourceResult] = []
     results.extend(collect_t3(moment, catalog, context))
+    if claude_credentials:
+        results.append(claude_usage.read(moment, claude_credentials))
     results.append(providers_module.read_grok(f"{t3_home}", moment))
     results.append(providers_module.read_opencode_go(f"{t3_home}", moment))
     results.append(providers_module.read_antigravity(f"{t3_home}", moment))
@@ -2464,6 +2468,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--claude-credentials",
+        default=claude_usage.DEFAULT_PATH,
+        help=(
+            "The Claude Code OAuth credential the T3 Code Claude provider "
+            "already holds. The collector reads it and never refreshes or "
+            "changes it."
+        ),
+    )
+    parser.add_argument(
         "--command-code-usage",
         default=command_code_usage.DEFAULT_PATH,
         help=(
@@ -2585,6 +2598,7 @@ def main(argv: list[str] | None = None) -> int:
     results, extra, context = collect(
         now,
         state_path=args.state,
+        claude_credentials=args.claude_credentials,
         window_state_path=args.window_state,
         events_cache=args.events_cache,
         aa_cache=aa_cache,
