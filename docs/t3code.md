@@ -288,10 +288,11 @@ use the OpenAI-compatible provider. The list refreshes at each server start.
 An unreachable API keeps the previous list, and a missing key adds no provider
 at all.
 
-The startup step is optional and non-fatal (`ExecStartPre=-`). It writes the
-config atomically with mode `0600`, rewrites only changed content, and preserves
-other providers, permissions, MCP servers and defaults. An owner config that
-does not parse is left byte for byte as it was. It reads only
+The startup step is optional and non-fatal (`ExecStartPre=-`). It reads the
+OpenCode config as JSONC, so owner comments and trailing commas are valid. It
+writes the config atomically with mode `0600`, rewrites only changed content,
+and preserves other providers, permissions, MCP servers and defaults. A config
+that is not valid JSONC is left byte for byte as it was. It reads only
 `COMMAND_CODE_API_KEY` from the projected file with a plain value parse; the
 file is never sourced into a shell, so no other secret reaches the process and
 no value is evaluated as a command. T3 Code's catalog helper still runs
@@ -305,10 +306,12 @@ and the API. It is kept in Bitwarden (`commandcode.ai`) and in the encrypted
 line, a log or the repository. Rotate it in Command Code Studio and update both
 stores.
 
-The old ACP instance is retired. Startup removes the `commandCode` provider
-instance from T3 Code's settings when it is the managed `cmd acp` launcher, and
-the image no longer installs the `command-code` npm package, its pinned lock or
-its launcher. A `~/.local/bin/cmd` left by an earlier image stays in place and
+The old ACP instance is retired. Startup removes the managed `commandCode`
+provider instance from T3 Code's settings only after both replacement providers
+carry a catalog; a config it cannot read or a start with no catalog keeps the
+instance rather than leaving T3 with no Command Code route at all. The image no
+longer installs the `command-code` npm package, its pinned lock or its
+launcher. A `~/.local/bin/cmd` left by an earlier image stays in place and
 is no longer managed or probed by T3. Install the CLI separately if it is
 wanted as a terminal tool.
 

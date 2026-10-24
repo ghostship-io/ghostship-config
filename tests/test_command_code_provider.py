@@ -129,6 +129,65 @@ class ConfigureTests(unittest.TestCase):
         self.run_main(home)
         self.assertEqual(path.stat().st_mtime_ns, before)
 
+    def managed_settings(self):
+        return {"providerInstances": {
+            "commandCode": {"driver": "acpRegistry", "enabled": True,
+                            "config": {"source": "local",
+                                       "commandPath": "/home/t3code/.local/bin/cmd",
+                                       "commandArgs": ["acp"]}},
+            "unitProvider": {"driver": "unit"}}}
+
+    def test_commented_jsonc_config_is_merged_and_the_acp_instance_retired(self):
+        home = home_with(settings=self.managed_settings())
+        path = home / ".config/opencode/opencode.jsonc"
+        path.write_text("""{
+  // OpenCode accepts comments and trailing commas.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama-cloud/x", /* the owner's default */
+  "enabled_providers": ["ollama-cloud",],
+}
+""")
+        self.assertEqual(self.run_main(home), 0)
+        config = config_of(home)
+        self.assertEqual(config["model"], "ollama-cloud/x")
+        self.assertEqual(set(config["providers"]), {"command-code", "command-code-anthropic"})
+        self.assertEqual(config["enabled_providers"],
+                         ["ollama-cloud", "command-code", "command-code-anthropic"])
+        settings = json.loads((home / ".t3/userdata/settings.json").read_text())
+        self.assertNotIn("commandCode", settings["providerInstances"])
+        self.assertEqual(settings["providerInstances"]["unitProvider"], {"driver": "unit"})
+
+    def test_broken_config_keeps_the_config_and_the_acp_instance(self):
+        home = home_with(settings=self.managed_settings())
+        path = home / ".config/opencode/opencode.jsonc"
+        path.write_text('{"providers": ')
+        self.assertEqual(self.run_main(home), 0)
+        self.assertEqual(path.read_text(), '{"providers": ')
+        settings = json.loads((home / ".t3/userdata/settings.json").read_text())
+        self.assertIn("commandCode", settings["providerInstances"])
+
+    def test_no_replacement_catalog_keeps_the_acp_instance(self):
+        home = home_with(settings=self.managed_settings())
+        self.assertEqual(configure.main(home=home, source=SOURCE, key="",
+                                        fetch=serving(VENDOR), environ={}), 0)
+        settings = json.loads((home / ".t3/userdata/settings.json").read_text())
+        self.assertIn("commandCode", settings["providerInstances"])
+
+    def test_existing_replacement_survives_a_key_outage_and_retires(self):
+        home = home_with(settings=self.managed_settings())
+        self.run_main(home)
+        settings_path = home / ".t3/userdata/settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["providerInstances"]["commandCode"] = self.managed_settings()[
+            "providerInstances"]["commandCode"]
+        settings_path.write_text(json.dumps(settings))
+        self.assertEqual(configure.main(home=home, source=SOURCE, key="",
+                                        fetch=serving(VENDOR), environ={}), 0)
+        config = config_of(home)
+        self.assertEqual(set(config["providers"]), {"command-code", "command-code-anthropic"})
+        settings = json.loads(settings_path.read_text())
+        self.assertNotIn("commandCode", settings["providerInstances"])
+
     def test_retires_only_the_managed_acp_instance(self):
         managed = {"driver": "acpRegistry", "enabled": True,
                    "config": {"source": "local", "commandPath": "/home/t3code/.local/bin/cmd",

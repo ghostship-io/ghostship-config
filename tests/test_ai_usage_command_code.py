@@ -164,6 +164,20 @@ class CommandCodeWorkerTests(unittest.TestCase):
                 self.assertFalse(row['available'])
                 self.assertIsNone(document['model_selection']['providers']['commandCode']['selected']['worker'])
 
+    def test_commented_jsonc_route_is_verified(self):
+        home, secrets = route()
+        path = Path(home) / '.config/opencode/opencode.jsonc'
+        path.write_text('''{ // managed by T3
+  "providers": {"command-code": {
+    "settings": {"baseURL": "https://api.commandcode.ai/provider/v1",
+                  "apiKey": "{env:COMMAND_CODE_API_KEY}"},
+    "headers": {"x-cmd-zdr": "1"}, /* every request */
+  }},
+  "enabled_providers": ["command-code",],
+}
+''')
+        self.assertTrue(command_code.configured(home, secrets))
+
     def test_malformed_or_absent_config_is_unverified(self):
         for config in (False, {'providers': 'malformed'}, {'providers': {'command-code': 'malformed'}}):
             with self.subTest(config=config):

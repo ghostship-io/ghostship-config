@@ -124,6 +124,25 @@ class ConfigTest(unittest.TestCase):
             config.unlink()
             self.assertEqual(doctor.check_command_code(home, projection, False).status, "skip")
 
+    def test_commented_jsonc_route_is_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            (home / ".config/opencode").mkdir(parents=True)
+            config = home / ".config/opencode/opencode.jsonc"
+            projection = Path(directory) / "t3code.env"
+            projection.write_text("COMMAND_CODE_API_KEY=" + "k" * 24 + "\n")
+            config.write_text("""{
+  // OpenCode accepts comments and trailing commas.
+  "enabled_providers": ["command-code",],
+  "providers": {"command-code": {
+    "settings": {"baseURL": "https://api.commandcode.ai/provider/v1",
+                  "apiKey": "{env:COMMAND_CODE_API_KEY}",},
+    "headers": {"x-cmd-zdr": "1"}, /* every request */
+  }},
+}
+""")
+            self.assertEqual(doctor.check_command_code(home, projection, True).status, "pass")
+
     def test_claude_privacy_env_is_required(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"

@@ -13,8 +13,8 @@ Runs before the T3 Code server starts. Two things happen there:
   header. This process reads only that one variable from the projection file,
   with a plain value parse; it never sources the file or runs a shell.
 * the retired ACP ``commandCode`` instance is removed from T3 Code's settings
-  when it is the managed ``cmd acp`` launcher, so the dead provider does not
-  appear beside the OpenCode route.
+  only after both replacement providers carry a catalog, so a broken or
+  unreachable configuration never leaves T3 without any Command Code route.
 
 The script is idempotent and never rewrites a file whose content is unchanged.
 """
@@ -44,15 +44,117 @@ def log(message):
 
 
 def read_json(path):
-    """The parsed file, or None when it is absent or not a JSON object."""
+    """A plain JSON file, or None when it is absent or not an object."""
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
     except (OSError, ValueError) as error:
-        log(f"{path.name} is not readable JSON ({type(error).__name__}); left unchanged")
+        log(f"{path.name} is not readable JSON ({type(error).__name__})")
         return None
     return value if isinstance(value, dict) else None
+
+
+def strip_jsonc(text):
+    """JSONC text as JSON: comments and trailing commas outside strings.
+
+    OpenCode's config is JSONC, so an owner comment or a trailing comma is a
+    valid file, not a broken one. Nothing else is changed.
+    """
+    out = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            out.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            out.append(char)
+            index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "/":
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "*":
+            index += 2
+            while index + 1 < len(text) and not (text[index] == "*" and text[index + 1] == "/"):
+                index += 1
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    stripped = "".join(out)
+    result = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(stripped):
+        char = stripped[index]
+        if in_string:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+        if char == ",":
+            following = index + 1
+            while following < len(stripped) and stripped[following] in " \t\r\n":
+                following += 1
+            if following < len(stripped) and stripped[following] in "}]":
+                index += 1
+                continue
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
+def read_config(path):
+    """An OpenCode config object, parsing valid JSONC, or None."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        log(f"{path.name} is not readable ({type(error).__name__}); left unchanged")
+        return None
+    try:
+        value = json.loads(strip_jsonc(text))
+    except ValueError:
+        log(f"{path.name} is not valid JSONC; left unchanged")
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def replacement_ready(config, fragment):
+    """True when every managed provider carries a nonempty catalog."""
+    providers = config.get("providers")
+    if not isinstance(providers, dict):
+        return False
+    for name in fragment["providers"]:
+        entry = providers.get(name)
+        if not isinstance(entry, dict) or not isinstance(entry.get("models"), dict) or not entry["models"]:
+            return False
+    return True
 
 
 def atomic_json(path, value):
@@ -248,10 +350,12 @@ def main(home=None, source=ROOT, key=None, fetch=fetch_models, environ=None,
 
     path = config_path(home, environ)
     if path.exists():
-        config = read_json(path)
+        config = read_config(path)
         if config is None:
-            # An owner file we cannot parse stays byte for byte as it was.
-            retire(home / ".t3/userdata/settings.json")
+            # A broken owner file stays byte for byte as it was. The dead ACP
+            # instance stays too: removing it without a replacement would
+            # leave T3 with no Command Code route at all.
+            log("kept the managed ACP instance; the replacement route was not configured")
             return 0
     else:
         config = {"$schema": "https://opencode.ai/config.json"}
@@ -259,7 +363,10 @@ def main(home=None, source=ROOT, key=None, fetch=fetch_models, environ=None,
     if updated != config:
         atomic_json(path, updated)
         log(f"configured {', '.join(sorted(fragment['providers']))} providers")
-    retire(home / ".t3/userdata/settings.json")
+    if replacement_ready(updated, fragment):
+        retire(home / ".t3/userdata/settings.json")
+    else:
+        log("replacement route has no catalog; kept the managed ACP instance")
     return 0
 
 
