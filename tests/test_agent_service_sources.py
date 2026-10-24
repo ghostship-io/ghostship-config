@@ -17,7 +17,7 @@ class SourceClosureTests(unittest.TestCase):
             root = Path(tmp)
             packages = ('mcp', 'registry', 'inference', 'runtime', 'browser', 'desktop',
                         'keep', 'hostops', 'services', 'health', 't3', 'sessions',
-                        'delegation', 'deploy', 'github', 'worker', 'workflows')
+                        'delegation', 'deploy', 'github', 'worker', 'workflows', 'policy')
             for name in packages:
                 path = root / 'tools/python' / ('ghostship_' + name)
                 path.mkdir(parents=True)
