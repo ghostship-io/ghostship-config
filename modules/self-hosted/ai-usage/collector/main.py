@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import aa  # noqa: E402
 import model_selection  # noqa: E402
 import model_quality  # noqa: E402
+import opencode_go  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
@@ -1688,6 +1689,36 @@ def read_outcomes(
     }
 
 
+def _attach_opencode_go(snapshot: dict[str, Any], limits: Mapping[str, Any] | None) -> None:
+    """Attach the dated Go allowance to the routes it names.
+
+    The page's own table is the only source of these numbers. A route the
+    table does not name keeps no allowance at all, so a stale or unparsed
+    table never becomes a zero or an invented budget.
+    """
+    if not isinstance(limits, Mapping):
+        return
+    snapshot["opencode_go"] = {
+        "schema": limits.get("schema"),
+        "source": limits.get("source") or opencode_go.PAGE_URL,
+        "checked_at": limits.get("checked_at"),
+        "stale": bool(limits.get("stale")),
+        "reason": str(limits.get("reason") or ""),
+        "models": len(limits.get("models") or {}),
+    }
+    for candidate in snapshot.get("candidates") or []:
+        if str(candidate.get("provider") or "") != "opencode-go":
+            continue
+        entry = opencode_go.lookup(limits, str(candidate.get("model") or ""))
+        if entry is None:
+            continue
+        record = opencode_go.allowance_record(entry)
+        candidate["allowance"] = record
+        # The vendor announcement names a dated build; it is evidence beside
+        # the assumed-latest quality binding, never a score of its own.
+        candidate["aa_evidence"] = record.get("vendor_evidence") or []
+
+
 def build_snapshot(
     results: list[SourceResult],
     ranked: list[Any],
@@ -1705,6 +1736,7 @@ def build_snapshot(
     model_evidence: list[dict] | None = None,
     model_evidence_state: str = 'no_evidence',
     quality_prior_cache: Mapping[str, Any] | None = None,
+    go_limits: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1765,6 +1797,7 @@ def build_snapshot(
     if isinstance(snapshot, dict):
         snapshot["announced_resets"] = context.get("announced_resets") or {
             "schema": 1, "status": "not_checked", "announcements": []}
+        _attach_opencode_go(snapshot, go_limits)
         quota_block = snapshot.setdefault("quota", {})
         if isinstance(quota_block, dict):
             quota_block["entitlements"] = quota_module.entitlements(
@@ -2385,6 +2418,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--opencode-go-limits",
+        default=opencode_go.DEFAULT_STATE_PATH,
+        help=(
+            "The dated OpenCode Go limit table. It refreshes from the provider "
+            "page when old; a failed refresh keeps the last dated values and "
+            "marks them stale."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -2482,6 +2524,7 @@ def main(argv: list[str] | None = None) -> int:
     now = wall_clock() if args.now is None else args.now
     aa_cache = aa.load_cache(args.aa_cache, now)
     aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)
+    go_limits = opencode_go.read(now, args.opencode_go_limits)
     results, extra, context = collect(
         now,
         state_path=args.state,
@@ -2527,6 +2570,7 @@ def main(argv: list[str] | None = None) -> int:
         model_evidence=measured_evidence,
         model_evidence_state=evidence_state,
         quality_prior_cache=aa.load_cache(args.aa_cache,now,allow_stale=True),
+        go_limits=go_limits,
     )
     text = render(
         results,

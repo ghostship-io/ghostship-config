@@ -86,13 +86,22 @@ def build(candidates: list[dict], records: list[dict], now: float, state: str = 
         aa = candidate.get("aa") or {}
         prior = number((aa.get("indices") or {}).get("intelligence")) if aa.get("state") == "measured" else None
         aa_date, aa_state = aa.get('fetched_at'), aa.get('state')
+        binding_basis, binding_evidence, assumed_record = "", [], None
         if (prior is None and (prior_cache or {}).get('status') in ('ok','stale')
                 and prior_cache.get('index_version') == aa_module.INTELLIGENCE_INDEX_VERSION):
+            # The owner's assume-latest rule: an undated or alias model id
+            # binds to the newest dated quality record of its family, and the
+            # binding says so beside any vendor evidence. A dated id stays
+            # exact.
             binding = aa_bind.resolve(prior_cache.get('records') or [], candidate['provider'],
-                                      candidate['model'], mode='reference')
+                                      candidate['model'], mode='reference', latest=True,
+                                      evidence=candidate.get('aa_evidence') or [])
             if binding.get('state') == 'measured':
                 prior = number(((binding.get('record') or {}).get('indices') or {}).get('intelligence_index'))
                 aa_date, aa_state = prior_cache.get('fetched_at'), prior_cache['status']
+                binding_basis = str(binding.get('assumption_basis') or '')
+                binding_evidence = list(binding.get('evidence') or [])
+                assumed_record = binding.get('assumed_record')
         prior = min(100.0, prior) if prior is not None else None
         supported = efforts(candidate)
         actual = [(key[2], key[3]) for key in groups if key[:2] == (provider, model)]
@@ -119,6 +128,9 @@ def build(candidates: list[dict], records: list[dict], now: float, state: str = 
                    **blend(prior, count, passed),
                    "aa_source": AA_SOURCE if prior is not None else None, "aa_date": aa_date,
                    "aa_state": aa_state or 'missing',
+                   "aa_binding_basis": binding_basis,
+                   "aa_binding_evidence": binding_evidence,
+                   "aa_assumed_record": assumed_record,
                    "sources": sorted({task["source"] for task in tasks}),
                    "first_date": min(dates) if dates else None, "date": max(dates) if dates else None,
                    "merged": sum(merged) if merged else None, "merge_n": len(merged),
@@ -243,8 +255,8 @@ def samples(quality: Mapping[str, Any]) -> list:
     values = []
     for row in quality.get("rows") or []:
         labels = {key: ExactLabel(str(row.get(key) or "")) for key in
-                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state", "billing",
-                  "selection", "selection_reason")}
+                  ("provider", "model", "display_name", "effort", "effort_option", "basis", "aa_date", "aa_state",
+                   "aa_binding_basis", "billing", "selection", "selection_reason")}
         labels.update(source=ExactLabel(" + ".join(row["sources"]) or "none"),
                       evidence_state=str(quality.get("state") or "no_evidence"))
         values.append(("ghostship_ai_quality_info", labels, 1.0))

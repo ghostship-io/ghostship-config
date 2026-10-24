@@ -55,6 +55,7 @@ TESTS = (
     "test_ai_usage_collector.py",
     "test_ai_usage_ranking.py",
     "test_ai_usage_model_selection.py",
+    "test_ai_usage_opencode_go.py",
     "test_ai_usage_announced_resets.py",
     "test_ai_usage_reported_limits.py",
     "test_ai_usage_worker_eligibility.py",

@@ -472,7 +472,64 @@ def _dated_tokens(parts: list[str]) -> list[str]:
     return [part for part in parts if part.isdigit() and len(part) in (4, 8)]
 
 
-def _matches(target: Mapping[str, Any], record: Mapping[str, Any]) -> dict[str, Any] | None:
+def _without_checkpoint(parts: list[str]) -> list[str]:
+    """The identity of a dated record without its trailing checkpoint.
+
+    A short checkpoint (``1017``) or a full release date (``20250929``) is the
+    last token of the record's identity. The owner's assume-latest rule lets an
+    undated id bind to the newest dated record of its family; the checkpoint is
+    what makes the record newer, so it is removed only for that comparison.
+    """
+    value = list(parts)
+    while value and value[-1].isdigit() and len(value[-1]) in (4, 8):
+        value.pop()
+    return value
+
+
+def _match_date(match: Mapping[str, Any]) -> tuple[str, int]:
+    """The date a matching record carries, for the newest-record rule.
+
+    A full release date is stronger evidence than a short checkpoint. Within
+    one evidence kind the values sort lexically (ISO date) or numerically
+    (``MMDD``), so the newest record of a family is stable.
+    """
+    record = match.get("record") or {}
+    release = str(record.get("release_date") or "")
+    if len(release) >= 10:
+        return ("release", int(release[:10].replace("-", "")))
+    identities, _variant = _record_identities(record)
+    checkpoints = [
+        int(token)
+        for identity in identities
+        for token in identity["tokens"]
+        if token.isdigit() and len(token) in (4, 8)
+    ]
+    if checkpoints:
+        return ("checkpoint", max(checkpoints))
+    return ("", 0)
+
+
+def _has_checkpoint(target: Mapping[str, Any]) -> bool:
+    """True when the id itself names a checkpoint.
+
+    A short checkpoint (``0929``) stays in the identity instead of becoming a
+    release date, but it still makes the id dated: the assume-latest rule only
+    applies to an id that names no date at all.
+    """
+    return any(
+        key and key[-1].isdigit() and len(key[-1]) in (4, 8)
+        for key in target.get("keys") or ()
+    )
+
+
+def _latest_applies(target: Mapping[str, Any]) -> bool:
+    """True when an undated or alias id may take the newest dated record."""
+    return not target["date"] and not _has_checkpoint(target)
+
+
+def _matches(
+    target: Mapping[str, Any], record: Mapping[str, Any], *, latest: bool = False
+) -> dict[str, Any] | None:
     """Match one record, or return None.
 
     The identity is compared as an ordered sequence, and a record is only
@@ -485,6 +542,13 @@ def _matches(target: Mapping[str, Any], record: Mapping[str, Any]) -> dict[str, 
     marker = tokens(_marker_text(variant)) if variant else []
     for identity in identities:
         parts = identity["tokens"]
+        if latest and _latest_applies(target):
+            # The owner's assume-latest rule: an undated id compares with the
+            # record's family, and the newest dated record of that family wins
+            # after the match. A dated id never takes this path.
+            parts = _without_checkpoint(parts)
+            if not parts:
+                continue
         for key in _key_variants(parts):
             for wanted in target["keys"]:
                 wanted_variants = [wanted]
@@ -570,6 +634,8 @@ def resolve(
     *,
     options: Any = None,
     mode: str = "condition",
+    latest: bool = False,
+    evidence: Any = None,
 ) -> dict[str, Any]:
     """Resolve one model to its exact record, or say why it cannot be.
 
@@ -592,7 +658,7 @@ def resolve(
     for record in records or ():
         if not isinstance(record, Mapping):
             continue
-        found = _matches(target, record)
+        found = _matches(target, record, latest=latest)
         if found is None:
             continue
         if "refused" in found:
@@ -603,6 +669,29 @@ def resolve(
     for match in matches:
         unique.setdefault(match["id"], match)
     matches = [unique[key] for key in sorted(unique)]
+    assumed: dict[str, Any] = {}
+    if latest and _latest_applies(target) and matches:
+        # The owner's assume-latest rule: an undated or alias id binds to the
+        # newest dated record of its family. A dated id never reaches this
+        # branch, and a family with only undated records keeps its exact match.
+        dated = [match for match in matches if _match_date(match) != ("", 0)]
+        if dated:
+            newest = max(_match_date(match) for match in dated)
+            matches = [match for match in matches
+                       if _match_date(match) == ("", 0) or _match_date(match) == newest]
+            chosen = max(dated, key=_match_date)
+            assumed = {
+                "assumed_latest": True,
+                "assumed_record": {
+                    "id": chosen.get("id"),
+                    "slug": chosen.get("slug"),
+                    "name": chosen.get("name"),
+                    "release_date": chosen.get("release_date"),
+                    "date": list(newest),
+                },
+                "assumption_basis": "assumed latest (owner rule)",
+                "evidence": list(evidence or []),
+            }
     if not matches:
         reason = refusals[0] if refusals else "no record with this identity"
         return {
@@ -611,6 +700,7 @@ def resolve(
             "record": None,
             "variant": target["variant"],
             "date": target["date"],
+            **assumed,
         }
     variants = sorted({match["variant"] for match in matches})
     alternatives = _condition_alternatives(matches)
@@ -631,6 +721,7 @@ def resolve(
                     "date": target["date"],
                     "variants": variants,
                     "alternatives": alternatives,
+                    **assumed,
                 }
         valued = [
             (value, match)
@@ -697,6 +788,7 @@ def resolve(
                     "checkpoint": checkpoint,
                     "basis": "the model-selection reference, independent of the native setting",
                 },
+                **assumed,
             }
         # A record exists but no measured value can be computed: the identity
         # and conditions stay visible, and there is no selection reference.
@@ -734,6 +826,7 @@ def resolve(
             "identity_match": matches[0].get("match_kind"),
             "checkpoint": target["date"],
             "provenance": {"provider": provider, "model": model},
+            **assumed,
         }
     chosen = None
     match_kind = ""
@@ -751,6 +844,7 @@ def resolve(
                 "variant": target["variant"],
                 "date": target["date"],
                 "variants": variants,
+                **assumed,
             }
         elif len(matches) == 1:
             chosen = matches[0]
@@ -764,6 +858,7 @@ def resolve(
                 "variant": target["variant"],
                 "date": target["date"],
                 "variants": variants,
+                **assumed,
             }
     elif len(matches) == 1:
         chosen = matches[0]
@@ -787,6 +882,7 @@ def resolve(
                 "variant": target["variant"],
                 "date": target["date"],
                 "variants": variants,
+                **assumed,
             }
     record = chosen
     checkpoint = target["date"]
@@ -831,6 +927,7 @@ def resolve(
                 "after removing routing, promotion and packaging wrappers"
             ),
         },
+        **assumed,
     }
 
 
