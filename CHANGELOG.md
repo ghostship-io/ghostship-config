@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.286] - 2026-10-24
+
+- Project the private retail store settings into client runtimes
+
+PR #461.
+
 ## [3.17.285] - 2026-10-24
 
 Pin the private agent to release 0.47.96.
