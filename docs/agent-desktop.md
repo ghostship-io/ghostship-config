@@ -329,6 +329,37 @@ bubblewrap; bwrap cannot mount inside this container, so sessions put
 glycin run its loaders unsandboxed. OrcaSlicer needs WebKitGTK 4.1, now part of
 the image. App sessions run in the `desktop` AppArmor class.
 
+### Application tools (OrcaSlicer and Blender)
+
+The Ghostship MCP `apps` (read) and `apps_edit` (write) capabilities run
+deterministic OrcaSlicer and Blender work without the app window. The MCP
+runtime uploads a reviewed runner into the calling agent's workspace and runs
+it under `/usr/bin/bwrap` with `--unshare-net`, a read-only root, and only that
+workspace and the caller's audit directory writable. Both application roots
+(`/config/agent-desktop/app-workspaces` and `app-audit`) are replaced with
+empty tmpfs mounts before the caller's subtree is rebound, so another
+session's models, slices, scenes and audit lines are not visible. Browser
+profiles, session sockets, SSH keys, caches, the production application tree
+and the OrcaSlicer token/config are masked too.
+
+- `app-workspaces/<owner>/<workspace>/` holds models, slices, previews, scenes
+  and exports. It is disposable and created on demand by the tool.
+- `app-audit/<owner>/audit.jsonl` records one bounded line per operation
+  (artifacts, hashes, outcome, duration; never file contents).
+- The MCP `apps_edit op=provision` copies the pinned OrcaSlicer 2.4.2 build to
+  `apps/orcaslicer-2.4.2/` and verifies its version and binary hash on every
+  use. The production install, its default configuration and the printer
+  profiles are never modified. Removing that directory rolls back the tool;
+  the app-session GUI remains the fallback.
+- The runners have no printer operation and no network. Physical printing and
+  live printer settings remain denied until a separate owner approval.
+
+The container profile still runs in AppArmor complain mode while learning. The
+top-level `deny mount` rule means moving this class to enforce needs a separate
+mount decision for bubblewrap; bubblewrap is the enforced boundary today. The
+agent repository's `docs/desktop-applications.md` carries the decision record,
+evidence and operator instructions.
+
 The viewer (`viewer/server.py`, s6 `svc-agent-desktop-viewer`, 127.0.0.1:7090
 behind the Selkies nginx) streams pages with DevTools screencasts and never
 enables the Runtime domain. Every request must carry a valid Cloudflare Access
