@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.297] - 2026-10-24
+
+- Refresh the engineering GitHub projection after the credential rotation
+
+PR #482.
+
 ## [3.17.296] - 2026-10-24
 
 - ai-usage: approved free routes are native T3 workers on opencode-free
