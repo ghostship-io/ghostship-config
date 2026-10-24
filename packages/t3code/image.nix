@@ -307,7 +307,7 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStartPre=${managedBin}/t3code-run-hooks before-t3code.d
-      ExecStartPre=${managedBin}/python3 /usr/share/t3code-command-code/setup.py
+      ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/setup.py
       ExecStartPre=-${managedBin}/t3code-opencode-model-catalog
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
       ExecStart=${managedBin}/t3code-server-run

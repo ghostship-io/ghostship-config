@@ -273,12 +273,28 @@ remote catalog changes are disabled; changing the pin or paid allowlist needs
 a reviewed configuration change. Installation is atomic and retries reuse the
 completed release. T3's startup installs the managed `cmd` entry and merges only
 the `commandCode` provider instance before the server reads its settings.
+Setup is an optional, non-fatal `ExecStartPre=-` step: failure logs one sanitized
+line, disables an existing managed instance where its settings remain readable,
+and lets T3 start. Installation and configuration finish before the launcher
+switches, so a failure preserves the previous ready CLI release. With a ready
+release, subsequent startup needs no registry access.
 
 The instance uses T3's [local ACP command support](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-acp.md)
 with `cmd acp`. Command Code's [native ACP server](https://commandcode.ai/docs/acp)
-owns the agent loop, tools and model options. A local stream guard exposes four
-reviewed paid GOAT models initially: DeepSeek V4 Flash, GLM-5.2, MiniMax M2.7 and
-Kimi K2.5. It filters both model catalogs and rejects other model selections,
+owns the agent loop, tools and model options. A local stream guard exposes two
+reviewed paid GOAT IDs: `deepseek/deepseek-v4.1-flash` (the default) and
+`minimaxai/minimax-m2.7`. These lowercase IDs were confirmed in the native
+1.88.0 ACP catalog; the vendor's [DeepSeek](https://commandcode.ai/models/deepseek-v4-1-flash)
+and [MiniMax](https://commandcode.ai/models/minimax-m2-7) model-page catalogs
+publish positive prices and `zeroDataRetention: true`. The checked sources and
+values live beside the allowlist in `paid-models.json`. GLM-5.2 and Kimi K2.5
+are excluded because the vendor catalog marks their zero-retention flag false.
+The guard lists DeepSeek V4.1 Flash first and requests it through native
+`session/set_model` before returning a new session to T3. If that selection
+fails, session creation still succeeds with the guard recording it as
+unselected: prompts are refused until an approved model selection is
+acknowledged. Unapproved switches during a session still stop it.
+The guard filters both model catalogs and rejects other model selections,
 unknown configuration changes, session import/resume, and slash commands that
 could bypass the picker. Use T3's model and mode controls. Native permission
 requests and tool results still pass through ACP.
@@ -316,6 +332,35 @@ names native `/usage` meters for balance and 5-hour/weekly caps and resets;
 Studio Usage reports request cost and tokens. ACP reports per-session usage.
 No machine-readable account-quota endpoint or local quota file is verified by
 this integration. Collection and dashboards are separate work.
+
+For the DeepSeek comparison and quota integration, the
+[GOAT usage table](https://commandcode.ai/docs/plans/goat#usage-limits) explicitly
+labels the DeepSeek V4.1 Flash (latest) row **Requests / 5 hours**, **Requests /
+week**, **Requests / month**: **41,000 / 103,000 / 205,000**. These are estimated
+request counts using a typical cached agent request, not fixed request quotas
+or token allowances. The plan is metered in credits and actual request size and
+model pricing determine usage. Treat these counts as planning estimates rather
+than a provider-reported remaining balance.
+
+The same GOAT model table and [model page](https://commandcode.ai/models/deepseek-v4-1-flash)
+show a **1M-token context** and off-peak **$0.15 input / $0.60 output per million
+tokens**. Peak is **$0.30 input / $1.20 output per million tokens**, during
+**01:00–04:00 and 06:00–10:00 UTC, Monday–Friday**. The remaining 17 hours on
+weekdays, and all weekend hours, are off-peak. These checked public prices can
+change; ZDR routing may cost more depending on the upstream selected.
+
+The exact Command Code alias is `deepseek/deepseek-v4.1-flash`, without a
+`:1017` suffix. In its [October 19 announcement](https://x.com/CommandCodeAI/status/2112215504064819443),
+Command Code states that all V4.1 requests use the latest 1017 version; the
+[upstream October 17 changelog](https://api-docs.deepseek.com/updates/)
+also describes moving its existing Flash API name to 1017. This is a vendor
+announcement, not a per-response checkpoint attestation. The `(latest)` alias
+is not an immutable checkpoint pin and can move. Each comparison run must
+record the requested alias, resolved build if exposed by the native response,
+time, and dated vendor provenance. If only the alias is exposed, record the
+resolved build as unknown and the dated 1017 announcement separately; do not
+claim that the run independently proved checkpoint equality with a pinned
+1017 route. The CLI pin freezes the harness, not hosted model weights.
 
 ## Grok Build CLI and T3 provider
 

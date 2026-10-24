@@ -24,8 +24,9 @@ def load(name):
 
 acp = load("acp")
 setup = load("setup")
-PAID = "zai-org/glm-5.2"
+PAID = "minimaxai/minimax-m2.7"
 FREE = "unreviewed/free-model"
+DEFAULT = "deepseek/deepseek-v4.1-flash"
 
 
 def request(method, params=None, number=1):
@@ -33,23 +34,55 @@ def request(method, params=None, number=1):
 
 
 class PolicyTest(unittest.TestCase):
+    def test_free_native_default_leaves_new_session_unselected_until_paid_pick(self):
+        policy = acp.Policy()
+        policy.request(request("session/new"))
+        response = {"id": 1, "result": {"sessionId": "unit-session", "models": {
+            "currentModelId": FREE, "availableModels": [{"modelId": PAID}, {"modelId": FREE},
+                                                        {"modelId": DEFAULT}]}, "configOptions": [{
+                "id": "model", "category": "model", "currentValue": FREE,
+                "options": [{"value": PAID}, {"value": FREE}, {"value": DEFAULT}]}]}}
+        policy.response(response)
+        self.assertIsNone(policy.sessions["unit-session"])
+        self.assertEqual(response["result"]["models"]["availableModels"][0]["modelId"], DEFAULT)
+        self.assertEqual(response["result"]["configOptions"][0]["options"][0]["value"], DEFAULT)
+        with self.assertRaises(ValueError):
+            policy.request(request("session/prompt", {"sessionId": "unit-session"}, 2))
+        policy.request(request("session/set_model", {"sessionId": "unit-session", "modelId": DEFAULT}, 3))
+        policy.response({"id": 3, "result": {}})
+        policy.request(request("session/prompt", {"sessionId": "unit-session"}, 4))
+
     def test_stdio_process_filters_catalog_rejects_free_and_forwards_paid_prompt(self):
+        self.stdio_exchange(fail_default=False)
+
+    def test_stdio_failed_default_still_opens_session_and_waits_for_paid_selection(self):
+        self.stdio_exchange(fail_default=True)
+
+    def stdio_exchange(self, *, fail_default):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             node = home / "node"
             node.write_text(f'''#!{sys.executable}
 import json, os, sys
 assert os.environ['CMD_ZDR'] == '1'
+selected = {FREE!r}
 for line in sys.stdin:
     message = json.loads(line)
     method = message['method']
     if method == 'session/new':
-        result = {{'sessionId': 'unit-session', 'models': {{'currentModelId': {PAID!r},
-            'availableModels': [{{'modelId': {PAID!r}}}, {{'modelId': {FREE!r}}}]}}}}
+        result = {{'sessionId': 'unit-session', 'models': {{'currentModelId': selected,
+            'availableModels': [{{'modelId': {PAID!r}}}, {{'modelId': {FREE!r}}}, {{'modelId': {DEFAULT!r}}}]}}}}
     elif method == 'session/set_model':
         assert message['params']['modelId'] != {FREE!r}, 'free request crossed boundary'
+        if message['params']['modelId'] == {DEFAULT!r} and {fail_default!r}:
+            print(json.dumps({{'jsonrpc':'2.0', 'id':message['id'], 'error':{{'code':-32000,'message':'synthetic default failure'}}}}), flush=True)
+            continue
+        selected = message['params']['modelId']
+        print(json.dumps({{'jsonrpc':'2.0', 'method':'session/update', 'params':{{'sessionId':'unit-session',
+            'update':{{'sessionUpdate':'current_model_update', 'currentModelId':selected}}}}}}), flush=True)
         result = {{}}
     else:
+        assert selected in ({DEFAULT!r}, {PAID!r}), 'prompt crossed before paid selection'
         result = {{'stopReason': 'end_turn'}}
     print(json.dumps({{'jsonrpc':'2.0', 'id':message['id'], 'result':result}}), flush=True)
 ''')
@@ -60,13 +93,30 @@ for line in sys.stdin:
             def call(message):
                 process.stdin.write(json.dumps(message) + "\n")
                 process.stdin.flush()
-                self.assertTrue(select.select([process.stdout], [], [], 2)[0], "ACP response timed out")
-                return json.loads(process.stdout.readline())
+                while True:
+                    line = b""
+                    while not line.endswith(b"\n"):
+                        self.assertTrue(select.select([process.stdout], [], [], 2)[0], "ACP response timed out")
+                        byte = os.read(process.stdout.fileno(), 1)
+                        self.assertTrue(byte, "ACP stream closed before replying")
+                        line += byte
+                    reply = json.loads(line)
+                    if message["method"] == "session/new":
+                        self.assertEqual(reply.get("id"), message["id"], "native updates preceded session creation")
+                    if reply.get("id") == message["id"]:
+                        return reply
             try:
                 result = call(request("session/new"))["result"]
-                self.assertEqual(result["models"]["availableModels"], [{"modelId": PAID}])
+                self.assertEqual(result["models"]["availableModels"], [{"modelId": DEFAULT}, {"modelId": PAID}])
+                self.assertEqual(result["models"]["currentModelId"], FREE if fail_default else DEFAULT)
+                if fail_default:
+                    unselected = call(request("session/prompt", {"sessionId": "unit-session"}, 4))
+                    self.assertIn("error", unselected)
                 denied = call(request("session/set_model", {"sessionId": "unit-session", "modelId": FREE}, 2))
                 self.assertIn("error", denied)
+                selected = call(request("session/set_model", {"sessionId": "unit-session",
+                                                               "modelId": PAID if fail_default else DEFAULT}, 5))
+                self.assertIn("result", selected)
                 reply = call(request("session/prompt", {"sessionId": "unit-session", "prompt": [
                     {"type": "text", "text": "Reply with OK"}]}, 3))
                 self.assertEqual(reply["result"]["stopReason"], "end_turn")
@@ -149,6 +199,62 @@ for line in sys.stdin:
 
 
 class InstallTest(unittest.TestCase):
+    def test_configure_failure_after_payload_install_preserves_previous_launcher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            previous = home / ".local/share/t3code-tools/command-code/previous/acp.py"
+            previous.parent.mkdir(parents=True)
+            previous.write_text("previous ready CLI")
+            cmd = home / ".local/bin/cmd"
+            cmd.parent.mkdir(parents=True)
+            cmd.symlink_to(previous)
+            setup.configure(home, SOURCE)
+            def run(command, **kwargs):
+                if command[0] == "node":
+                    return subprocess.CompletedProcess(command, 0, "v24.0.0\n")
+                package = Path(command[command.index("--prefix") + 1]) / "node_modules/command-code/package.json"
+                package.parent.mkdir(parents=True)
+                package.write_text(json.dumps({"version": setup.VERSION}))
+                return subprocess.CompletedProcess(command, 0)
+            with patch.object(setup.subprocess, "run", side_effect=run), \
+                 patch.object(setup, "configure", side_effect=ValueError("synthetic configure failure")), \
+                 patch.object(setup.sys, "stderr"):
+                self.assertEqual(setup.startup(home), 1)
+            self.assertEqual(cmd.resolve(), previous)
+            settings = json.loads((home / ".t3/userdata/settings.json").read_text())
+            self.assertFalse(settings["providerInstances"]["commandCode"]["enabled"])
+
+    def test_only_confirmed_paid_zdr_catalog_entries_are_allowlisted(self):
+        policy = json.loads((SOURCE / "paid-models.json").read_text())
+        self.assertEqual(policy["default"], DEFAULT)
+        self.assertIn(DEFAULT, policy["models"])
+        self.assertEqual(set(policy["models"]), set(policy["evidence"]))
+        for model in policy["models"]:
+            evidence = policy["evidence"][model]
+            self.assertTrue(evidence["source"].startswith("https://commandcode.ai/models/"))
+            self.assertGreater(evidence["input_per_million"], 0)
+            self.assertGreater(evidence["output_per_million"], 0)
+            self.assertIs(evidence["zeroDataRetention"], True)
+
+    def test_failed_optional_install_disables_provider_without_losing_ready_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            ready = home / ".local/share/t3code-tools/command-code/previous/acp.py"
+            ready.parent.mkdir(parents=True)
+            ready.write_text("previous ready CLI")
+            cmd = home / ".local/bin/cmd"
+            cmd.parent.mkdir(parents=True)
+            cmd.symlink_to(ready)
+            setup.configure(home, SOURCE)
+            with patch.object(setup, "install", side_effect=RuntimeError("synthetic install error")), \
+                 patch.object(setup.sys, "stderr") as stderr:
+                self.assertEqual(setup.startup(home), 1)
+            self.assertEqual(cmd.resolve(), ready)
+            self.assertEqual(ready.read_text(), "previous ready CLI")
+            settings = json.loads((home / ".t3/userdata/settings.json").read_text())
+            self.assertFalse(settings["providerInstances"]["commandCode"]["enabled"])
+            self.assertEqual(stderr.write.call_count, 2)  # One line plus its newline.
+
     def test_committed_lock_rejects_wrong_integrity_and_mutable_version(self):
         setup.validate_lock(SOURCE)
         with tempfile.TemporaryDirectory() as directory:
@@ -211,7 +317,8 @@ class InstallTest(unittest.TestCase):
     def test_image_installs_provider_before_t3_reads_settings(self):
         image = (ROOT / "packages/t3code/image.nix").read_text()
         self.assertIn("cp -r ${./command-code}/.", image)
-        self.assertLess(image.index("ExecStartPre=${managedBin}/python3 /usr/share/t3code-command-code/setup.py"),
+        directive = "ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/setup.py"
+        self.assertLess(image.index(directive),
                         image.index("ExecStart=${managedBin}/t3code-server-run"))
 
     def test_auth_location_is_under_the_writable_persisted_home_not_the_image(self):
