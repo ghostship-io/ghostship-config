@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.300] - 2026-10-24
+
+- docs: retire the stale Groq and Cloudflare references
+
+PR #496.
+
 ## [3.17.299] - 2026-10-24
 
 - ai-usage: only the best proven free route per provider is a T3 worker
