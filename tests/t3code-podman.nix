@@ -75,10 +75,19 @@ assert builtins.elem "t3code-podman-identity"
   cfg.system.activationScripts.t3code-podman-reexec-alias.deps;
 assert lib.hasInfix "rootfs.py reconcile /run/t3code-podman-rootfs "
   cfg.system.activationScripts.t3code-podman-reexec-alias.text;
-assert builtins.elem "t3code-podman-reexec-alias"
-  cfg.system.activationScripts.t3code-podman-user-activation.deps;
-assert lib.hasInfix "reconcile-activation.py"
-  cfg.system.activationScripts.t3code-podman-user-activation.text;
+# The rendered manager must select the dedicated directory that declares the
+# mandatory activation unit; testing a mock manager cannot prove this contract.
+assert
+  let
+    unitPath = cfg.systemd.services."user@62040".environment.SYSTEMD_UNIT_PATH;
+    manager = cfg.systemd.units."user@62040.service".text;
+    activation = builtins.readFile "${unitPath}/nixos-activation.service";
+  in
+  lib.hasInfix (builtins.unsafeDiscardStringContext "SYSTEMD_UNIT_PATH=${unitPath}") manager
+  && lib.hasInfix "Type=oneshot" activation
+  && lib.hasInfix "RemainAfterExit=yes" activation
+  && lib.hasInfix (builtins.unsafeDiscardStringContext "ExecStart=${base.pkgs.coreutils}/bin/true") activation;
+assert !(cfg.system.activationScripts ? t3code-podman-user-activation);
 # Force generation of actual system unit text, including the template drop-in.
 {
   system = cfg.system.build.toplevel.drvPath;
