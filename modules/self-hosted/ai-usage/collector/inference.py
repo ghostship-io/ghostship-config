@@ -628,27 +628,31 @@ class _Group:
             current += self.window_seconds
         return current
 
-    def tiled_window(self, moment: float) -> tuple[float, float] | None:
+    def tiled_window(self, moment: float, width: float | None = None) -> tuple[float, float] | None:
         """The learned window that holds an instant, and its end.
 
         The windows of a learned limit tile from the first use of the open
         episode, so the refusal that ended one of them spends that window
         and no other.
         """
-        if self.window_seconds is None or self.open_episode is None:
+        width = self.window_seconds if width is None else width
+        if width is None or self.open_episode is None:
             return None
-        width = self.window_seconds
         origin = self.open_episode.start_at
         offset = math.floor((moment - origin) / width)
         start = origin + offset * width
         return start, start + width
 
-    def refused_window(self) -> tuple[float, float] | None:
-        """The learned window that holds the latest refusal, and its end."""
+    def refused_window(self, width: float | None = None) -> tuple[float, float] | None:
+        """The learned window that holds the latest refusal, and its end.
+
+        The width is the route's own learned window, or the account's when a
+        route of an account with a shared budget is measured against it.
+        """
         limits = [event.at for event in self.events if event.outcome == "limit"]
         if not limits:
             return None
-        return self.tiled_window(max(limits))
+        return self.tiled_window(max(limits), width)
 
     def state(self) -> str:
         limits = [event.at for event in self.events if event.outcome == "limit"]
@@ -777,16 +781,42 @@ def _capacity_of(
     model: str,
     scope: str,
     share_model: str | None,
+    route_group: _Group | None = None,
 ) -> RouteCapacity:
     """The capacity one group implies for one route.
 
     `share_model` is the model whose share of the account is reported. It is
     None for a route whose limit is its own, because such a route shares no
     budget with the other models of the provider.
+
+    `route_group` is the route's own events when the account group is what
+    measures the budget. A route whose own record ends on a refusal has
+    nothing left, even when another model of the account succeeded after it:
+    the account may have room, but this route's last word is the refusal, and
+    the account's learned window says when it ends.
     """
     state = group.state()
+    spent_group = group
+    if (
+        route_group is not None
+        and route_group is not group
+        and state != "exhausted"
+        and route_group.state() == "exhausted"
+    ):
+        # The route's own record ends on a refusal. When it learned a window,
+        # that window says whether the refusal still holds; a window that has
+        # already rolled leaves the account's reading in place. With no window
+        # of its own there is nothing that says the refusal has ended, so the
+        # route stays spent with no reset rather than taking another route's.
+        if route_group.window_seconds is None:
+            state = "exhausted"
+            spent_group = route_group
+        else:
+            spent = route_group.refused_window()
+            if spent is not None and group.now < spent[1]:
+                state = "exhausted"
+                spent_group = route_group
     start, window_events = group.current_window()
-    budget = group.budget()
     if scope == "model":
         weights = {model: 1.0}
         weights_basis = "assumed"
@@ -794,8 +824,13 @@ def _capacity_of(
         weights = dict(group.weights)
         weights_basis = group.weights_basis
 
-    window = group.window
-    window_seconds = group.window_seconds
+    # A route that is spent on its own record is measured over that record's
+    # window, not the account's: the reset the account's window would give it
+    # is another route's evidence.
+    measured_group = spent_group if state == "exhausted" else group
+    window = measured_group.window
+    window_seconds = measured_group.window_seconds
+    budget = measured_group.budget()
     reset_at: float | None = None
     reset_source = ""
     expected_left: float | None = None
@@ -829,20 +864,21 @@ def _capacity_of(
         # The last refusal has no recovery behind it: the route is spent
         # until the learned window that holds the refusal resets.
         left = 0.0
-        spent = group.refused_window()
-        if spent is not None and window_seconds is not None:
+        width = spent_group.window_seconds
+        spent = spent_group.refused_window(width) if width is not None else None
+        if spent is not None and width is not None:
             start = spent[0]
             reset_at = spent[1]
             reset_source = "inferred_window"
-            expected_left = _clamp01(1.0 - (group.now - start) / window_seconds)
+            expected_left = _clamp01(1.0 - (group.now - start) / width)
             paced = left - expected_left
-        elif group.open_episode is not None:
+        elif spent_group.open_episode is not None:
             # No window was learned, so nothing says when the refusal ends.
-            start = group.open_episode.start_at
+            start = spent_group.open_episode.start_at
         # The provider's own estimate of the reset is the best evidence
         # there is, and it replaces the end of the learned window while it
         # is still ahead. It never shortens a window that has already rolled.
-        hint = group.open_episode.reset_at if group.open_episode is not None else None
+        hint = spent_group.open_episode.reset_at if spent_group.open_episode is not None else None
         if hint is not None and hint > group.now:
             reset_at = hint
             reset_source = "provider_estimate"
@@ -958,6 +994,6 @@ def infer_capacity(events: Iterable[Any], now: float) -> dict[tuple[str, str], R
             )
             continue
         results[(provider, model)] = _capacity_of(
-            account_group, provider, model, scope, model
+            account_group, provider, model, scope, model, route_group
         )
     return results

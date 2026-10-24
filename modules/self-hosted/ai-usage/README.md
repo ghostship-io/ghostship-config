@@ -302,7 +302,10 @@ The rules:
   window that holds the refusal: it has nothing left until that window ends.
   Once that window has rolled over the route reads available again, with all
   of its allowance and a window that starts at the rollover; a refusal in
-  the new window spends it again. When the refusal itself stated its reset,
+  the new window spends it again. A route whose own record ends on a refusal
+  stays spent even when another model of the account worked after it, and a
+  route that never learned a window of its own is spent with no reset rather
+  than taking another route's. When the refusal itself stated its reset,
   that reset is published as the end of the spent window (`reset_source:
   provider_estimate`, `inference.reset_estimated: true`) while it is still
   ahead; otherwise the learned window's end is the estimate
