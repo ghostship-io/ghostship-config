@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.265] - 2026-10-24
+
+- Pin the coordinator backend to ghostship-agent 0.47.37: owner-request ledger
+  removal, MCP connector stream fix, ebook staging, observation attribution,
+  and worker-to-issue matching in the work listing.
+
+PR #437.
+
 ## [3.17.264] - 2026-10-24
 
 Reduce cold CI checkout traffic while retaining history checks, and add a second isolated agent runner slot.
