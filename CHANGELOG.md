@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.246] - 2026-10-24
+
+- Migrate preserved Podman manager roots before systemd reexec during configuration switches.
+
+PR #414.
+
 ## [3.17.245] - 2026-10-24
 
 - Isolate runner registration credential fixtures from the test caller's environment.
