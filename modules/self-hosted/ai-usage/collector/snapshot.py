@@ -59,6 +59,7 @@ import aa_3d
 import command_code
 import aa_bind as bind_module
 import facts as facts_module
+import obsolete as obsolete_module
 import outcomes as outcomes_module
 import quota as quota_module
 import pools
@@ -3700,6 +3701,18 @@ def build_snapshot(
     for entry in ranked:
         entries.setdefault((entry.provider, entry.model), []).append(entry)
 
+    # The owner's one allowed filter. A model is obsolete when the catalog
+    # marks it deprecated, or when another model of the same provider, family
+    # and variant carries a newer major generation. The record names the
+    # reason and the model that supersedes it; every other model stays.
+    obsolete_records = obsolete_module.classify(
+        ((entry.provider, entry.model) for entry in ranked), catalog
+    )
+    obsolete_keys = {
+        (str(record.get("provider") or ""), str(record.get("model") or ""))
+        for record in obsolete_records
+    }
+
     facts_source = facts or {}
     # The version the feed published for the records it produced. A fact of
     # another version does not bind to it.
@@ -3718,6 +3731,26 @@ def build_snapshot(
                 target = {'instanceId':identity['provider_instance_id'], 'model':identity['model_id']}
                 selection_exclusions.extend({'provider':provider, 'native':target, 'category':category,
                                              'reason':'pool_excluded'} for category in ('orchestrator','worker'))
+    # An obsolete route must not survive as a managed favorite. Its native
+    # identity is kept, with the reason, so reconciliation removes it.
+    for record in obsolete_records:
+        provider = str(record.get("provider") or "")
+        model = str(record.get("model") or "")
+        identity = _native_record(provider, model, native_models.get((provider, model)))
+        if identity["mapped"]:
+            target = {
+                "instanceId": identity["provider_instance_id"],
+                "model": identity["model_id"],
+            }
+            selection_exclusions.extend(
+                {
+                    "provider": provider,
+                    "native": target,
+                    "category": category,
+                    "reason": "obsolete",
+                }
+                for category in ("orchestrator", "worker")
+            )
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
     accounts: dict[str, list[dict[str, Any]]] = {}
@@ -3761,6 +3794,8 @@ def build_snapshot(
         if record not in known:
             known.append(record)
     for (provider, model), model_entries in sorted(entries.items()):
+        if (provider, model) in obsolete_keys:
+            continue
         row = _candidate(
             provider,
             model,
@@ -3937,15 +3972,21 @@ def build_snapshot(
         elif isinstance(entry, Mapping):
             inventory_keys.append((str(entry.get("provider") or ""), str(entry.get("model") or "")))
     inventory_keys = [pair for pair in inventory_keys if pools.usable_route(*pair)]
-    excluded = [list(pair) for pair in inventory_keys if pair not in candidate_keys]
+    excluded = [
+        list(pair)
+        for pair in inventory_keys
+        if pair not in candidate_keys and pair not in obsolete_keys
+    ]
     ranking_coverage = {
         "inventory": len(inventory_keys),
         "candidates": len(candidates),
         "excluded": len(excluded),
         "excluded_models": excluded[:500],
+        "obsolete": len(obsolete_records),
         "basis": (
-            "every offered model is a candidate row; a model missing from the "
-            "candidates is listed here, never silently dropped"
+            "every offered model is a candidate row, except an obsolete model "
+            "listed with its reason; any other missing model is listed here, "
+            "never silently dropped"
         ),
     }
     aa_coverage_rows = []
@@ -4114,6 +4155,9 @@ def build_snapshot(
                 "wait_for": "the frontier model becomes available again",
             },
         },
+        # The owner's one allowed filter. Every removed model is named with
+        # its reason and, for a generation, the model that supersedes it.
+        "obsolete_models": obsolete_records[:500],
         "policy": {
             "frontier_prime_models": list(policy.get("frontierPrimeModels") or ()),
             "excluded_models": list(policy.get(POLICY_EXCLUDED) or ()),

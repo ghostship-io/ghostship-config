@@ -129,6 +129,28 @@ class Catalog:
         entry = self._merged_models(provider).get(model)
         return entry if isinstance(entry, dict) else None
 
+    def model_status(self, provider: str, model: str) -> str:
+        """The status the catalog publishes for one model, or an empty string.
+
+        Every alias is checked, in order, because a provider's own catalog may
+        omit the status while the OpenCode fallback carries it. The first
+        non-empty status wins.
+        """
+        for key in PROVIDER_ALIASES.get(provider, (provider,)):
+            entry = self.document.get(key)
+            if not isinstance(entry, dict):
+                continue
+            models = entry.get("models")
+            if not isinstance(models, dict):
+                continue
+            found = models.get(model)
+            if not isinstance(found, dict):
+                continue
+            status = found.get("status")
+            if isinstance(status, str) and status.strip():
+                return status.strip()
+        return ""
+
     def release_date(self, provider: str, model: str) -> str | None:
         """The release date of a model, from whichever catalog carries it."""
         for key in PROVIDER_ALIASES.get(provider, (provider,)):
