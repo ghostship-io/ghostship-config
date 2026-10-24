@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.257] - 2026-10-24
+
+Allowance-aware OpenCode Go model picks: the published Go/Plus request table and training/retention policy are read on a schedule, quality is weighed against affordable capacity with an auditable breakdown and binding window, non-ZDR models stay out of internal work, and undated model ids bind to the newest dated quality record.
+
+PR #424.
+
 ## [3.17.256] - 2026-10-24
 
 - Pin the coordinator backend to ghostship-agent 0.47.31: append-only tooling
