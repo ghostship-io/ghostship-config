@@ -24,12 +24,16 @@ let
     tag = "t3code-runtime";
     contents = t3codeImageContents;
     extraCommands = ''
-      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/t3code
+      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/ghostship etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/t3code
       mkdir -p mnt/share run/user var/empty var/log/journal var/run
       mkdir -p bin
       mkdir -p usr/share/t3code-command-code usr/share/t3code-provider-privacy
       cp -r ${./command-code}/. usr/share/t3code-command-code/
       cp -r ${./provider-privacy}/. usr/share/t3code-provider-privacy/
+      # The owner's explicit free-worker approvals are the single trust source
+      # for the picker and the one-off T3 instance; it is not a secret.
+      cp ${../../modules/self-hosted/ai-usage/approved-free-workers.json} etc/ghostship/approved-free-workers.json
+      chmod 0644 etc/ghostship/approved-free-workers.json
       # systemd does not inherit the image's PATH for its services. Managed
       # helpers need these commands before their own environment setup runs.
       for manager in system user; do
