@@ -297,8 +297,12 @@ fails, session creation still succeeds with the guard recording it as
 unselected: prompts are refused until an approved model selection is
 acknowledged. Unapproved switches during a session still stop it.
 The guard filters both model catalogs and rejects other model selections,
-unknown configuration changes, session import/resume, and slash commands that
-could bypass the picker. Use T3's model and mode controls. Native permission
+unknown configuration changes and slash commands that could bypass the picker.
+Native ACP `loadSession` and list/resume/close capabilities pass through unchanged.
+Loaded and resumed sessions record their reported current model and apply the
+same catalog policy before a prompt can run. A missing or unapproved model
+returns an ACP restoration error so T3 can try a fresh session; it never reuses
+a stale paid selection from an earlier session. Use T3's model and mode controls. Native permission
 requests and tool results still pass through ACP.
 
 Every native process receives `CMD_ZDR=1`. Command Code's [ZDR contract](https://commandcode.ai/docs/resources/zdr)
