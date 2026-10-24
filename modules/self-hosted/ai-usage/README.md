@@ -13,6 +13,11 @@ listener and no new port: the service is a oneshot job that writes a file.
 
 ## How it runs
 
+After publishing usage outputs, optional picker reconciliation defers connection
+failures and timeouts while T3 is unavailable, then retries on the next collection
+using its ownership journal. Missing connectivity does not invalidate collected
+usage. Authentication, malformed responses and output write errors still fail visibly.
+
 Antigravity can return its quota denial as an entire assistant response on a
 completed T3 run. The collector reads those exact provider notices from the
 read-only message/run projections and publishes a zero-capacity window for the
