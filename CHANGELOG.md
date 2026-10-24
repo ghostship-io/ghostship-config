@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.282] - 2026-10-24
+
+Pin the private agent to release 0.47.83.
+
+PR #457.
+
 ## [3.17.281] - 2026-10-24
 
 The AI usage collector now admits the owner-configured Command Code worker
