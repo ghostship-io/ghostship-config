@@ -23,7 +23,7 @@ State meanings:
 
 | Provider | Surface | Mechanism | State | Evidence | Checked | Detail |
 | --- | --- | --- | --- | --- | --- | --- |
-| Command Code GOAT | T3 ACP | `CMD_ZDR=1` on every native process; ZDR-capable upstream required | ON | `packages/t3code/command-code/provider.json` https://commandcode.ai/docs/resources/zdr | 2026-10-24 | Enforced by `provider.json` and the ACP tests; free models excluded by the existing reviewed policy, not by this work. |
+| Command Code GOAT | T3 OpenCode | `x-cmd-zdr: 1` on every OpenCode request; ZDR-capable upstream required | ON | `packages/t3code/command-code/provider.json` https://commandcode.ai/docs/resources/zdr | 2026-10-24 | Enforced by `provider.json` and the startup provider merge; the API key comes from the projected secret. A model with no ZDR-capable upstream fails instead of falling back. The catalog is not filtered for ZDR. |
 | Anthropic Claude Code | T3 `claudeAgent` | Consumer privacy controls: Help improve our AI models OFF and Location metadata OFF; commercial/API no training by default; ZDR by Claude for Enterprise agreement | ON | https://code.claude.com/docs/en/data-usage https://code.claude.com/docs/en/zero-data-retention https://claude.ai/settings/data-privacy-controls | 2026-10-24 | Live read-back: "Help improve our AI models" false and "Location metadata" false on the signed-in consumer account. ZDR is declined: it needs Claude for Enterprise and Anthropic enablement. The managed setup also adds the nonessential-traffic, telemetry, error-reporting, and feedback opt-outs; it does not create ZDR. |
 | OpenAI Codex | T3 `codex` | ChatGPT Data Controls: Improve the model for everyone OFF; API/Codex commercial training off by default; ZDR for eligible API customers | ON | https://help.openai.com/en/articles/7730893-data-controls-in-chatgpt https://openai.com/index/offering-zero-data-retention-for-frontier-models/ | 2026-10-24 | Live read-back shows the training switch off. No Codex Cloud environments are configured. ZDR is not offered on the personal plan. |
 | OpenCode Go and Zen | T3 `opencode` and free pool | Provider zero-retention agreements; named free-model exceptions | ON | https://opencode.ai/zen https://opencode.ai/v2/docs/console/models/#privacy | 2026-10-24 | Provider default. Exceptions that may collect or train: Big Pickle, Flint 40B Free, MiMo-V2.6-Flash Free, and the NVIDIA Nemotron free endpoints. Those models are recorded, not filtered out here. |
@@ -54,7 +54,7 @@ State meanings:
   nonessential-traffic/telemetry/feedback opt-outs into
   `~/.claude/settings.json` before T3 starts. This reduces logging and telemetry;
   it does not create ZDR, which needs the Anthropic agreement above.
-- `scripts/provider-zdr-doctor` checks the table, the Command Code ZDR
+- `scripts/provider-zdr-doctor` checks the table, the Command Code OpenCode route
   environment, the Claude opt-out, the Grok upload setting, the free-pool policy,
   and with `--browser` the OpenRouter, Groq, ChatGPT, Mistral, Claude, and Grok
   account read-backs. `--antigravity` reads the `agy` `/config` panel. It fails

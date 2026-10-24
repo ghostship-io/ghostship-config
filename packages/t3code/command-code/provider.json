@@ -1,14 +1,30 @@
 {
-  "driver": "acpRegistry",
-  "displayName": "Command Code GOAT (ZDR)",
-  "enabled": true,
-  "environment": [
-    { "name": "CMD_ZDR", "value": "1" }
-  ],
-  "config": {
-    "source": "local",
-    "commandPath": "cmd",
-    "commandArgs": ["acp"],
-    "customModels": []
+  "routes": {
+    "command-code": "/chat/completions",
+    "command-code-anthropic": "/messages"
+  },
+  "providers": {
+    "command-code": {
+      "name": "Command Code GOAT",
+      "package": "@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.commandcode.ai/provider/v1",
+        "apiKey": "{env:COMMAND_CODE_API_KEY}"
+      },
+      "headers": {
+        "x-cmd-zdr": "1"
+      }
+    },
+    "command-code-anthropic": {
+      "name": "Command Code GOAT (Anthropic models)",
+      "package": "@ai-sdk/anthropic",
+      "settings": {
+        "baseURL": "https://api.commandcode.ai/provider/v1",
+        "apiKey": "{env:COMMAND_CODE_API_KEY}"
+      },
+      "headers": {
+        "x-cmd-zdr": "1"
+      }
+    }
   }
 }

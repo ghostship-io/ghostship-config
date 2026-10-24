@@ -43,7 +43,6 @@ INSTANCE_PROVIDERS = {
     "pi": "pi",
     "opencode": "opencode-go",
     "muse": "muse",
-    "commandCode": "commandCode",
 }
 
 # The OpenCode instance reports the Go subscription windows.
@@ -62,6 +61,10 @@ MODEL_PREFIX_PROVIDERS = {
     "ollama-cloud": "ollama",
     "ollama": "ollama",
     "openrouter": "openrouter",
+    # Command Code's models arrive through T3's OpenCode instance. The picker
+    # keeps calling the paid subscription route commandCode.
+    "command-code": "commandCode",
+    "command-code-anthropic": "commandCode",
 }
 
 
@@ -371,16 +374,11 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 reason=codes.RPC_FAILED,
                 duration_s=time.monotonic() - started,
             )
-    command_instance = {}
-    if any(provider.get('instanceId') == command_code.INSTANCE for provider in providers):
-        try:
-            configured = client.call('server.getConfig', {}) or {}
-            settings = configured.get('settings') if isinstance(configured, Mapping) else {}
-            instances = settings.get('providerInstances') if isinstance(settings, Mapping) else {}
-            command_instance = instances.get(command_code.INSTANCE) if isinstance(instances, Mapping) else {}
-        except T3Error:
-            # A model catalog alone does not prove the managed ZDR launcher.
-            status = 'partial'
+    # The Command Code route is verified from the live OpenCode config the
+    # managed startup step writes, never from a model catalog alone.
+    t3_home = str((context or {}).get('t3_home') or '')
+    secrets_env = str((context or {}).get('secrets_env') or '')
+    command_policy = bool(t3_home) and command_code.configured(t3_home, secrets_env)
     samples: list[Sample] = []
 
     windows: list[dict[str, Any]] = []
@@ -412,10 +410,9 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 "name": _model_label(model),
                 "options": _model_options(model),
             }
-            if instance == command_code.INSTANCE:
-                verified = command_code.configured(command_instance, slug)
-                native[pair]['commandCodePolicyVerified'] = verified
-                native[pair]['available'] = native[pair]['available'] and verified
+            if instance == command_code.T3_INSTANCE and command_code.is_model(slug):
+                native[pair]['commandCodePolicyVerified'] = command_policy
+                native[pair]['available'] = native[pair]['available'] and command_policy
         state = str(provider.get("status") or "")
         provider_states[name] = state
         limits = provider.get("usageLimits")
