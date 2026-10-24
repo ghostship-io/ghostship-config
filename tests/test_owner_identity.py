@@ -67,26 +67,25 @@ class OwnerConfigRendererTests(unittest.TestCase):
         template = json.dumps({
             "allowed_user_ids": ["@GHOSTSHIP_GITHUB_USER_ID@"],
             "t3_environment_id": "@GHOSTSHIP_T3_ENVIRONMENT_ID@",
-            "base_url": "https://example.invalid/accounts/@GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID@/ai",
+            "base_url": "https://example.invalid/v1",
             "project_id": "@GHOSTSHIP_T3_PROJECT_AGENT@",
         })
         values = {
             "GHOSTSHIP_GITHUB_USER_ID": "7",
             "GHOSTSHIP_T3_ENVIRONMENT_ID": "fixture-environment",
-            "GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID": "fixture-account",
             "GHOSTSHIP_T3_PROJECT_AGENT": "fixture-project",
         }
         rendered = json.loads(renderer.render(template, values))
         self.assertEqual(rendered, {
             "allowed_user_ids": [7],
             "t3_environment_id": "fixture-environment",
-            "base_url": "https://example.invalid/accounts/fixture-account/ai",
+            "base_url": "https://example.invalid/v1",
             "project_id": "fixture-project",
         })
 
     def test_each_remaining_runtime_identifier_is_required_when_used(self):
         names = ("GHOSTSHIP_GITHUB_USER_ID", "GHOSTSHIP_T3_ENVIRONMENT_ID",
-                 "GHOSTSHIP_CLOUDFLARE_ACCOUNT_ID", "GHOSTSHIP_T3_PROJECT_AGENT",
+                 "GHOSTSHIP_T3_PROJECT_AGENT",
                  "GHOSTSHIP_T3_PROJECT_CONFIG", "GHOSTSHIP_T3_PROJECT_3DPRINTING",
                  "GHOSTSHIP_T3_PROJECT_ROMS", "GHOSTSHIP_T3_PROJECT_XPLUS4",
                  "GHOSTSHIP_T3_PROJECT_NEWSLETTER", "GHOSTSHIP_T3_PROJECT_ORCA")
