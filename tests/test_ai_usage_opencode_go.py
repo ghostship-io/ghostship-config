@@ -56,7 +56,8 @@ def http_fail(url):
 
 
 def read_once(path, now=NOW, http=http_ok):
-    return opencode_go.read(now, path, http=http)
+    opencode_go.refresh(now, path, http=http)
+    return opencode_go.read(now, path)
 
 
 def candidate(state, model, quality, mapped=True):

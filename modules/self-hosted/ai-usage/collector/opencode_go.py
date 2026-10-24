@@ -307,10 +307,43 @@ def read(
     now: float,
     state_path: str | os.PathLike[str] | None = DEFAULT_STATE_PATH,
     *,
+    max_age_seconds: float = MAX_AGE_SECONDS,
+) -> dict[str, Any]:
+    """The dated Go table as last written.
+
+    The collector only reads this file; the scheduled refresh writes it. A
+    missing or old state is stale, and it carries no models until the refresh
+    succeeds. This function never opens a socket.
+    """
+    state = _load(state_path)
+    if not state or state.get("schema") != SCHEMA:
+        return {
+            "schema": SCHEMA,
+            "source": PAGE_URL,
+            "page_url": PAGE_URL,
+            "chunk": "",
+            "checked_at": None,
+            "checked_at_epoch": None,
+            "age_seconds": None,
+            "stale": True,
+            "reason": "no dated reading",
+            "models": {},
+        }
+    age = _age(state, now)
+    result = dict(state)
+    result["age_seconds"] = age
+    result["stale"] = bool(state.get("stale")) or age is None or age > max_age_seconds
+    return result
+
+
+def refresh(
+    now: float,
+    state_path: str | os.PathLike[str] | None = DEFAULT_STATE_PATH,
+    *,
     http: Any = http_request,
     max_age_seconds: float = MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
-    """Read the dated Go table, refreshing it when it is old.
+    """Refresh the dated Go table from the provider page.
 
     A fresh state is returned as it is. A refresh failure keeps the last dated
     values and marks them stale; with no last values the state says so and
@@ -459,3 +492,27 @@ def allowance_record(entry: Mapping[str, Any], plan: str = "go") -> dict[str, An
         "vendor_evidence": (vendor_evidence(entry.get("id") or "")
                             or vendor_evidence(entry.get("name") or "")),
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--state", default=DEFAULT_STATE_PATH)
+    parser.add_argument("--refresh", action="store_true")
+    args = parser.parse_args(argv)
+    now = time.time()
+    state = refresh(now, args.state) if args.refresh else read(now, args.state)
+    print(json.dumps({
+        "schema": state.get("schema"),
+        "checked_at": state.get("checked_at"),
+        "stale": state.get("stale"),
+        "reason": state.get("reason"),
+        "models": len(state.get("models") or {}),
+    }, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
