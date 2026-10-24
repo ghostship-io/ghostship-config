@@ -7,9 +7,10 @@ alone, and a route with a known free window has no unknown headroom to
 explain. A reader saw an unavailable route with no reason at all.
 
 The live examples are the Go free routes `cat-jam-free` and
-`step-5-preview-free`, whose catalog entries are marked deprecated: the
-catalog is the source that says why the model behind the route is gone, so
-the reason names it. A route without a catalog status keeps the bare fact.
+`step-5-preview-free`. When the catalog marks a model deprecated, the
+obsolescence filter removes it before the not-offered reason applies; the
+removal itself is the visible reason. A route without a catalog status keeps
+the bare not-offered fact, and that is the case this test protects.
 
 The tests drive the real ranking inputs, the real ranking and the real
 snapshot builder. A helper-only test would pass while routing.json is wrong.
@@ -149,24 +150,21 @@ class SnapshotFixture:
 class NotOfferedReasonTests(unittest.TestCase, SnapshotFixture):
     """A route the instance does not offer says why it is unusable."""
 
-    def test_a_deprecated_route_the_instance_does_not_offer_names_the_catalog(self):
-        # The live case: the route is in the free list, not in the inventory,
-        # and the catalog marks the model behind it deprecated.
+    def test_a_deprecated_route_is_obsolete_instead_of_a_not_offered_row(self):
+        # The route is in the free list, not in the inventory, and the catalog
+        # marks the model behind it deprecated. The one allowed filter removes
+        # it with the removal as its reason.
         data = self.build(
             [], [go_monthly(1.0)], status="deprecated"
         )
+        candidates = {(row["provider"], row["model"]) for row in data["candidates"]}
         for model in DEPRECATED_ROUTES:
             with self.subTest(model=model):
-                row = self.row(data, model)
-                self.assertFalse(row["available"])
-                self.assertEqual(row["availability"]["state"], "unavailable")
-                self.assertEqual(
-                    row["availability"]["reason"],
-                    "not offered by the T3 instance (deprecated in the catalog)",
-                )
-                # The fix changes the reason alone.
-                self.assertEqual(row["quota_state"], "available")
-                self.assertEqual(row["capacity"]["remaining_ratio"], 1.0)
+                self.assertNotIn(("opencode-go", model), candidates)
+                record = next(row for row in data["obsolete_models"]
+                              if (row["provider"], row["model"]) == ("opencode-go", model))
+                self.assertEqual(record["reason"], "deprecated by the model catalog")
+                self.assertEqual(record["basis"], "deprecated")
 
     def test_a_route_the_instance_does_not_offer_says_so_without_a_catalog_status(self):
         data = self.build([], [go_monthly(1.0)])
