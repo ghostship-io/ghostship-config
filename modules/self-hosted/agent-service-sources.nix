@@ -27,9 +27,11 @@ in
     "tools/lib/ghostship-mcp-wrapper.sh" "config/google-web-services.json"
     "config/agents/runtime-policy.json" "config/agents/model-identities.json"
     "config/sandbox-profiles" ]
+    # Must cover every package the pinned agent's lib/private-integrations.nix
+    # lists in runtimePackages, or that file's assert stops host evaluation.
     ++ map (name: "tools/python/ghostship_${name}") [
       "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep"
       "hostops" "services" "health" "t3"
-      "sessions" "delegation" "deploy" "github" "worker" "workflows"
+      "sessions" "delegation" "deploy" "github" "worker" "workflows" "policy"
     ]);
 }
