@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.266] - 2026-10-24
+
+Reconcile a private `opencode-free` T3 provider instance from the owner's single
+approved-free-workers file, including only models that can carry a T3 turn,
+without touching the main OpenCode configuration.
+
+PR #434.
+
 ## [3.17.265] - 2026-10-24
 
 - Pin the coordinator backend to ghostship-agent 0.47.37: owner-request ledger
