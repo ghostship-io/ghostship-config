@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.281] - 2026-10-24
+
+The AI usage collector now admits the owner-configured Command Code worker
+build served through the `opencode` instance, so `agent models pick` can
+offer the paid default worker.
+
+PR #456.
+
 ## [3.17.280] - 2026-10-24
 
 Failure notifications for a unit whose start job failed on a dependency now name the job outcome and the failing dependency instead of reporting `success (exit status 0)`.
