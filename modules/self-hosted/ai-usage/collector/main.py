@@ -34,6 +34,7 @@ import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
 import catalog as catalog_module  # noqa: E402
+import calibration as calibration_module  # noqa: E402
 import claude_usage  # noqa: E402
 import codes  # noqa: E402
 import free_selection as free_selection_module  # noqa: E402
@@ -198,6 +199,31 @@ METRIC_HELP = {
     "ghostship_ai_free_model_available": "Whether a free model can be selected now.",
     "ghostship_ai_free_model_price_usd_per_mtok": "The catalog price of a free model.",
     "ghostship_ai_free_model_observed_timestamp_seconds": "When the free model list was read.",
+    "ghostship_ai_free_route_refusals": (
+        "The refusals of a free route on a day: the requests the provider "
+        "answered with a limit."
+    ),
+    "ghostship_ai_free_route_successes": "The requests of a free route that succeeded on a day.",
+    "ghostship_ai_free_route_false_available": (
+        "The refusals of a free route that happened while its reading showed "
+        "headroom. A non-zero value is one the limit reading missed."
+    ),
+    "ghostship_ai_free_route_false_exhausted": (
+        "The first successes of a free route that happened while its reading "
+        "showed it spent. A non-zero value is a route that was withheld while "
+        "it worked."
+    ),
+    "ghostship_ai_free_route_calibration_state": (
+        "The calibration state of a free route: ok, warn, fail or unmeasured."
+    ),
+    "ghostship_ai_free_route_false_available_streak_days": (
+        "The consecutive complete days a free route refused while its reading "
+        "showed headroom, ending at the last complete day."
+    ),
+    "ghostship_ai_free_route_calibration_acceptance": (
+        "Whether the owner's acceptance rule holds: no free route refused "
+        "while it read available on two consecutive days."
+    ),
     "ghostship_ai_pool_model_info": "One for a model the free pool may use.",
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
     "ghostship_ai_pool_model_unavailable_reason": (
@@ -805,6 +831,59 @@ def free_model_samples(
         samples.append(("ghostship_ai_free_model_observed_timestamp_seconds", labels, now))
     return samples
 
+
+def calibration_samples(calibration: Mapping[str, Any]) -> list[Sample]:
+    """The daily calibration of every free route, and the acceptance.
+
+    The counts are published per route and day, so the Free models page can
+    show the two ways the limit reading was wrong without recomputing
+    anything. The acceptance metric is one series with the state as its label,
+    so a probe or an alert can read it without a query of its own.
+    """
+    samples: list[Sample] = []
+    routes = calibration.get("routes") or {}
+    for key, row in sorted(routes.items()):
+        if not isinstance(row, Mapping):
+            continue
+        labels = {
+            "provider": str(row.get("provider") or ""),
+            "model": str(row.get("model") or ""),
+        }
+        samples.append(
+            (
+                "ghostship_ai_free_route_calibration_state",
+                {**labels, "state": str(row.get("state") or "")},
+                1.0,
+            )
+        )
+        samples.append(
+            (
+                "ghostship_ai_free_route_false_available_streak_days",
+                labels,
+                float(row.get("false_available_streak_days") or 0.0),
+            )
+        )
+        for day, counts in sorted((row.get("days") or {}).items()):
+            if not isinstance(counts, Mapping):
+                continue
+            day_labels = {**labels, "day": str(day)}
+            for kind in ("refusals", "successes", "false_available", "false_exhausted"):
+                samples.append(
+                    (
+                        f"ghostship_ai_free_route_{kind}",
+                        day_labels,
+                        float(counts.get(kind) or 0.0),
+                    )
+                )
+    acceptance = calibration.get("acceptance") or {}
+    samples.append(
+        (
+            "ghostship_ai_free_route_calibration_acceptance",
+            {"state": str(acceptance.get("state") or "unknown")},
+            1.0,
+        )
+    )
+    return samples
 
 # A cooldown further out than this cannot be true. A millisecond timestamp
 # read as seconds lands tens of thousands of years out, and a value like
@@ -1812,6 +1891,7 @@ def build_snapshot(
         # The trust of the models and the rounds they were measured on.
         # Without them every model is trusted and no round was observed.
         outcomes=outcomes,
+        free_calibration=context.get("free_calibration") or {},
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
@@ -1991,6 +2071,15 @@ def collect(
     )
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
+    # How well the reading predicted the refusals of the free routes. It
+    # replays the request record and reads no other source, so it is computed
+    # from the same events the capacities came from.
+    free_routes = context.get("free_models") or ()
+    if free_routes and inferred.mapped_events:
+        context["free_calibration"] = calibration_module.build(
+            inferred.mapped_events, free_routes, moment
+        )
+        extra.extend(calibration_samples(context["free_calibration"]))
     return results, extra, context
 
 
@@ -2632,7 +2721,25 @@ def main(argv: list[str] | None = None) -> int:
                         help="Public announcements recorded by the bounded Desktop check.")
     parser.add_argument("--picker-state", default="/var/lib/ghostship-ai-usage/picker.json",
                         help="Ownership journal for managed T3 model favorites.")
+    parser.add_argument("--calibration-probe", action="store_true",
+                        help=(
+                            "Check the free-route calibration in the published "
+                            "snapshot and exit non-zero when the owner's "
+                            "acceptance rule fails."
+                        ))
     args = parser.parse_args(argv)
+
+    if args.calibration_probe:
+        # The probe reads what the collector published. A snapshot that cannot
+        # be read is not a passing acceptance: it fails visibly.
+        try:
+            document = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            log("calibration: no snapshot to check")
+            return 1
+        ok, reason = calibration_module.probe(document)
+        log(f"calibration: {'ok' if ok else 'fail'}: {reason}")
+        return 0 if ok else 1
 
     worker_builds = model_selection.load_worker_builds(args.model_selection_preferences)
     started = time.monotonic()
