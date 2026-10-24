@@ -36,8 +36,11 @@ class Policy:
         params = message.get("params", {})
         if method not in {"initialize", "session/new", "session/prompt", "session/cancel",
                           "session/set_model", "session/set_config_option", "session/set_mode",
-                          "session/close"}:
+                          "session/close", "session/load", "session/resume", "session/list"}:
             raise ValueError("method unavailable on the paid ZDR route")
+        if method in {"session/load", "session/resume"}:
+            # A previous paid selection cannot authorize a restored session.
+            self.sessions[params.get("sessionId")] = None
         if method == "session/set_model" and params.get("modelId") not in PAID:
             raise ValueError("model is not in the reviewed paid GOAT allowlist")
         if method == "session/set_config_option":
@@ -81,13 +84,15 @@ class Policy:
         if request and "result" in message:
             method, params = request
             result = message["result"]
-            if method == "initialize":
-                caps = result.get("agentCapabilities", {})
-                caps["loadSession"] = False
-                caps["sessionCapabilities"] = {"close": {}}
-            elif method == "session/new":
+            if method == "session/new":
                 self.catalog(result, result["sessionId"], initial=True)
                 return result["sessionId"]
+            elif method in {"session/load", "session/resume"}:
+                session = params.get("sessionId") or result.get("sessionId")
+                self.sessions[session] = None
+                self.catalog(result, session)
+                if self.sessions[session] not in PAID:
+                    raise ValueError("restored session has no reviewed paid GOAT model")
             elif method in {"session/set_model", "session/set_config_option"}:
                 session = params.get("sessionId")
                 if method == "session/set_model":
@@ -105,6 +110,20 @@ class Policy:
                 self.catalog(update, session)
             if update.get("sessionUpdate") == "available_commands_update":
                 update["availableCommands"] = []
+
+    def agent_response(self, message):
+        pending = self.pending.get(message.get("id")) if "method" not in message else None
+        try:
+            return self.response(message)
+        except ValueError:
+            if not pending or pending[0] not in {"session/load", "session/resume"}:
+                raise
+            # T3 can fall back to session/new on a failed restoration. Keep
+            # the native process alive and never report the unsafe load as OK.
+            message.pop("result", None)
+            message["error"] = {"code": -32602,
+                                "message": "restored session has no reviewed paid GOAT model"}
+            return None
 
 
 async def serve(env):
@@ -169,7 +188,7 @@ async def serve(env):
                 for update in initializing.pop(session, []):
                     await emit(update)
                 continue
-            session = policy.response(message)
+            session = policy.agent_response(message)
             if session:
                 policy.sessions[session] = None
                 identifier = "paid-default-" + uuid.uuid4().hex
