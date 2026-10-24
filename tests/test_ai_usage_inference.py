@@ -1086,5 +1086,26 @@ class TheRouteThatWasRefusedLast(unittest.TestCase):
         self.assertEqual(results[("acme", "beta")].state, "no_failure")
 
 
+    def test_a_pool_daily_limit_is_spent_for_the_day(self):
+        """A pool event that names its day is an estimated reset for the day."""
+        events = [
+            event("openrouter", "example-free", at(0, 8), usage=100.0),
+            event(
+                "openrouter",
+                "example-free",
+                at(0, 9),
+                outcome="limit",
+                window_hint="1d",
+            ),
+        ]
+        result = route(events, at(0, 10), provider="openrouter", model="example-free")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.window, "1d")
+        self.assertEqual(result.reset_source, "inferred_window")
+        self.assertIsNotNone(result.reset_at)
+        self.assertGreater(result.reset_at, at(0, 10))
+
+
 if __name__ == "__main__":
     unittest.main()

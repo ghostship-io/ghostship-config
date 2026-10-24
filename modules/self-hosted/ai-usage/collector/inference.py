@@ -543,6 +543,12 @@ class _Group:
         self.unit = _unit_of(self.events)
         self.completed, self.open_episode = _scan_episodes(self.events, self.unit)
         self.window, self.window_seconds = _choose_window(self.completed)
+        if self.window_seconds is None and self.open_episode is not None:
+            # No episode completed yet, and the refusal that is still open
+            # named its own window: that is the window it spends.
+            if self.open_episode.window_seconds:
+                self.window = self.open_episode.window
+                self.window_seconds = self.open_episode.window_seconds
         self.models = sorted({event.model for event in self.events})
         self.weights: dict[str, float] = {model: 1.0 for model in self.models}
         self.weights_basis = "assumed"
