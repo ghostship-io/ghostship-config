@@ -32,4 +32,8 @@ generated clients. No value is stored in this repository.
 A missing required setting fails locally with a usage error naming the flag and
 the setting; it is not sent upstream as an empty value.
 
-The owner creates the file on the host with the values; it is never committed.
+The deployment creates an empty root-owned file if it is absent
+(`systemd.tmpfiles` rule `f /etc/ghostship/retail-store.env 0600 root root -`,
+which never overwrites existing content). The sole deployer then populates it
+from the values the clients used to hard-code before #411; no value appears in
+any repository, issue or log.

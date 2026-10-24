@@ -253,6 +253,10 @@ in {
     };
     ghostship.secretProjections = serviceProjections;
     systemd.tmpfiles.rules = [
+      # Podman refuses --env-file for a missing path. Create the private retail
+      # settings file empty and root-owned; the deployer fills it in place and
+      # tmpfiles never overwrites existing content.
+      "f /etc/ghostship/retail-store.env 0600 root root -"
       "d ${serviceSecretsDir} 0750 root ghostship-mcp -"
       "d /run/ghostship-keep 0750 ghostship-personal ghostship-mcp -"
       "d /run/ghostship-integrations 0750 root ghostship-mcp -"
