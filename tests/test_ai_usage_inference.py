@@ -39,7 +39,7 @@ def at(day=0, hour=0, minute=0):
     return DAY0 + day * 86400.0 + hour * HOUR + minute * MINUTE
 
 
-def event(provider, model, when, outcome="success", usage=None, window_hint=None):
+def event(provider, model, when, outcome="success", usage=None, window_hint=None, reset_hint=None):
     """One recorded use of a route."""
     return {
         "provider": provider,
@@ -48,6 +48,7 @@ def event(provider, model, when, outcome="success", usage=None, window_hint=None
         "outcome": outcome,
         "usage": usage,
         "window_hint": window_hint,
+        "reset_hint": reset_hint,
     }
 
 
@@ -993,6 +994,63 @@ class PerModelProviders(unittest.TestCase):
         self.assertEqual(refused.episodes, 1)
         self.assertEqual(dict(refused.weights), {"lumen-b": 1.0})
         self.assertIsNone(refused.share)
+
+
+class StatedResetTests(unittest.TestCase):
+    """A refusal that states its reset carries that reset.
+
+    The provider's own estimate is the best evidence of when a refusal
+    ends. It is used while it is still ahead of the reading, it never
+    replaces a measured share, and it is labelled as an estimate.
+    """
+
+    def setUp(self):
+        # The worked episode of the owner rule: use from 08:00, refused at
+        # 10:30, working again at 13:02, so the learned window is 5 hours.
+        self.events = [
+            event("acme", "sonnet", at(0, 8), usage=600000.0),
+            event("acme", "sonnet", at(0, 10, 30), outcome="limit"),
+            event("acme", "sonnet", at(0, 13, 2), usage=0.0),
+            event("acme", "sonnet", at(0, 13, 5), usage=150000.0),
+        ]
+
+    def test_a_stated_reset_is_the_reset_of_the_open_refusal(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 16)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertEqual(result.reset_at, at(0, 16))
+        self.assertEqual(result.reset_source, "provider_estimate")
+
+    def test_an_open_refusal_without_a_stated_reset_uses_the_learned_window(self):
+        events = self.events + [event("acme", "sonnet", at(0, 15), outcome="limit")]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.reset_source, "inferred_window")
+        # The window learned from the completed episode ends five hours
+        # after the first use of the open one.
+        self.assertEqual(result.reset_at, at(0, 18, 5))
+
+    def test_a_stated_reset_that_is_already_past_is_not_published(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 15, 10)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.reset_at, at(0, 18, 5))
+        self.assertEqual(result.reset_source, "inferred_window")
+
+    def test_the_share_left_and_the_pace_are_never_taken_from_the_reset(self):
+        events = self.events + [
+            event("acme", "sonnet", at(0, 15), outcome="limit", reset_hint=at(0, 16)),
+        ]
+        result = route(events, at(0, 15, 20))
+        self.assertEqual(result.left, 0.0)
+        # The pace still reads the learned 5-hour window from 13:05.
+        self.assertAlmostEqual(result.expected_left, 1.0 - (2 * HOUR + 15 * MINUTE) / (5 * HOUR))
+        self.assertAlmostEqual(result.paced_availability, -result.expected_left)
 
 
 if __name__ == "__main__":

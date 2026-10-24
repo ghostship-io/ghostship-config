@@ -450,5 +450,67 @@ class ProviderKeyTests(PublicationTestCase):
         self.assertNotIn("inferred:no-limit-seen", [w.quota_id for w in windows[f"google/{REFUSED_ROUTE}"]])
 
 
+class StatedResetPublicationTests(PublicationTestCase):
+    """A refusal that states its reset publishes that reset.
+
+    The provider's own estimate is published as the reset of an exhausted
+    route, and it says so: an estimate is never read as a measured window.
+    """
+
+    def http_429(self, when, model, wait_ms=None):
+        """A refusal as OpenCode records a bare HTTP 429."""
+        data = {
+            "model": {"providerID": "google", "id": model},
+            "time": {"created": int(when * 1000)},
+            "error": {
+                "type": "provider.rate-limit",
+                "message": "Provider request failed with HTTP 429",
+                "status": 429,
+            },
+        }
+        if wait_ms is not None:
+            data["retryAfterMs"] = wait_ms
+        return {"at": when, "data": data}
+
+    def infer_refused(self, wait_ms=None):
+        records = [
+            record(at(8), model=REFUSED_ROUTE, usage=200000),
+            record(at(10, 30), model=REFUSED_ROUTE, limit=True),
+            record(at(13, 2), model=REFUSED_ROUTE, usage=0),
+            self.http_429(at(14), REFUSED_ROUTE, wait_ms),
+        ]
+        routes = [("google", REFUSED_ROUTE)]
+        return self.infer(records, routes), routes
+
+    def test_the_exhausted_route_carries_the_stated_reset(self):
+        inferred, routes = self.infer_refused(wait_ms=3600 * 1000)
+        window = self.windows(inferred, routes)[f"google/{REFUSED_ROUTE}"][0]
+        self.assertEqual(window.kind, "inferred")
+        self.assertEqual(window.used_ratio, 1.0)
+        self.assertEqual(window.reset_epoch, at(15))
+        self.assertEqual(window.reset_source, "provider_estimate")
+        self.assertEqual(window.inference["state"], "exhausted")
+        self.assertTrue(window.inference["reset_estimated"])
+
+    def test_the_learned_window_estimates_a_reset_the_refusal_does_not_state(self):
+        inferred, routes = self.infer_refused()
+        window = self.windows(inferred, routes)[f"google/{REFUSED_ROUTE}"][0]
+        self.assertEqual(window.used_ratio, 1.0)
+        self.assertEqual(window.reset_source, "inferred")
+        self.assertFalse(window.inference["reset_estimated"])
+        self.assertIsNotNone(window.reset_epoch)
+
+    def test_the_account_section_publishes_the_estimate_as_such(self):
+        inferred, routes = self.infer_refused(wait_ms=3600 * 1000)
+        window = self.windows(inferred, routes)[f"google/{REFUSED_ROUTE}"][0]
+        snapshot = self.snapshot(inferred, routes=routes, now=NOW)
+        account = snapshot["quota"]["accounts"]["google"]
+        record_ = next(row for row in account if row["quota_id"] == "inferred:5h")
+        self.assertEqual(record_["used_ratio"], 1.0)
+        self.assertEqual(record_["reset_source"], "provider_estimate")
+        self.assertEqual(record_["evidence"], "inferred")
+        self.assertTrue(record_["inference"]["reset_estimated"])
+
+
 if __name__ == "__main__":
     unittest.main()
