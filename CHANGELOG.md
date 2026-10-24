@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.243] - 2026-10-24
+
+- Wait for Kuma's initial server handshake before provisioning monitors.
+
+PR #411.
+
 ## [3.17.242] - 2026-10-24
 
 - Activate the agent's lazy-window repair and current deploy lifecycle checks on the next main deployment.
