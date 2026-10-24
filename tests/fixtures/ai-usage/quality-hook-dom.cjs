@@ -2,7 +2,7 @@
 // Element lookup is generic by attributes; no copy of the pager implementation.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const hook=JSON.parse(fs.readFileSync(process.argv[2])).panels.find(p=>p.id===250).options.afterRender;
+const hook=(function find(ps){for(const p of ps){if(p.id===250)return p;const f=find(p.panels||[]);if(f)return f}})(JSON.parse(fs.readFileSync(process.argv[2])).panels).options.afterRender;
 const nodes=[],tableRows=[];
 function tableRow(selected,search){
  const rank={textContent:''};

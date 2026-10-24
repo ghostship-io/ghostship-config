@@ -1,0 +1,65 @@
+{
+  "id": 201,
+  "type": "marcusolsson-dynamictext-panel",
+  "title": "",
+  "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+  },
+  "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 2
+  },
+  "description": "Collector and T3 source health; the selections below are only as fresh as this strip.",
+  "targets": [
+    {
+      "refId": "A",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "expr": "max by (source, status, reason, field) (label_replace((ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"} and (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"}) == on(source) group_left max by (source) (timestamp(ghostship_ai_source_status{source=~\"t3|t3_usage|opencode-go\"})))), \"field\", \"info\", \"\", \"\") or label_replace(ghostship_ai_collection_timestamp_seconds, \"field\", \"collected\", \"\", \"\"))",
+      "instant": true,
+      "range": false,
+      "format": "table"
+    }
+  ],
+  "transformations": [
+    {
+      "id": "organize",
+      "options": {
+        "excludeByName": {
+          "Time": true
+        },
+        "renameByName": {
+          "Value": "value"
+        },
+        "indexByName": {}
+      }
+    }
+  ],
+  "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+  },
+  "options": {
+    "afterRender": "",
+    "content": "<div class=\"source-health\" aria-label=\"Collector source health\">{{#each (sourceHealth data (variable \"__to\"))}}<span class=\"source {{this.state}}\"><strong>{{this.name}}</strong><span class=\"st\"> \u00b7 {{this.text}}</span></span>{{/each}}</div>",
+    "defaultContent": "<div class=\"source-health error\">Collector readings missing \u00b7 check collector service</div>",
+    "editor": {
+      "format": "none",
+      "language": "handlebars"
+    },
+    "editors": [],
+    "externalStyles": [],
+    "contentPartials": [],
+    "helpers": "context.handlebars.registerHelper('sourceHealth', function(rows, now) {\n  const number = Number(now) / 1000;\n  const collected = (rows || []).find(row => row.field === 'collected');\n  const stamp = collected ? Number(collected.value) : NaN;\n  const stale = !Number.isFinite(stamp) || !Number.isFinite(number) || number - stamp > 600;\n  const result = [{name:'Collector', state:stale ? 'error' : 'ok',\n    text:!Number.isFinite(stamp) ? 'missing collection timestamp' : stale ? 'stale \u00b7 last collection over 10m ago' : 'current'}];\n  const names = {t3:'T3 providers',t3_usage:'T3 usage','opencode-go':'OpenCode Go'};\n  for (const [source, name] of Object.entries(names)) {\n    const info = (rows || []).find(row => row.source === source && row.field === 'info');\n    const missing = !info || stale;\n    result.push({name, state:missing || info.status !== 'ok' ? 'error' : 'ok',\n      text:missing ? 'missing or stale reading' : info.status === 'ok' ? 'current' : 'unavailable \u00b7 ' + (info.reason || info.status) + (source === 't3' && info.reason === 'unsupported' ? ' \u00b7 #470' : '')});\n  }\n  return result;\n});\n",
+    "renderMode": "allRows",
+    "status": "",
+    "styles": ".source-health{display:flex;flex-wrap:wrap;gap:2px 10px;font:11px/12px Inter,system-ui,sans-serif;overflow-wrap:anywhere}.source-health .source{min-width:0;color:#9da7b3}.source-health .source:before{content:\"\";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;background:#2f9e5b}.source-health .ok .st{display:none}.source-health .error{color:#e66767}.source-health .error:before{background:#d9534f}",
+    "wrap": false
+  },
+  "transparent": true
+}
