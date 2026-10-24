@@ -79,6 +79,8 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
 | `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
 | `opencode_go_limits` | The complete Go and Go Plus per-model request table, plus each model's training/retention policy, with the date the page was read; a failed refresh keeps the last dated values and marks them stale | `opencode.ai/go` and the hashed JavaScript chunk it names, resolved on every refresh |
+| `limit_pages` | The dated rows a free-pool job extracted from public provider limit and plan pages, with each page's status and the diff against the last reading; a failed or invalid extraction keeps the last good rows and marks them stale | The provider pages listed in `collector/limit_pages.py`, read by a free-inference job with sensitivity `public` |
+| `command_code_usage` | The private Command Code account usage page: the three used shares and their resets, plus per-model requests, tokens and per-request cost; a missing or stale state is never a zero | The owner's signed-in Command Code usage page through the browser path (the workspace slug stays in runtime state) |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
@@ -1495,6 +1497,48 @@ is published with `data_policy.sensitive_ok: false` and stays out of internal
 and sensitive work (`selection_eligible: false`, reason
 `data policy: training used or not ZDR`). It remains visible so the exclusion
 can be audited. A policy the table does not state stays unknown.
+
+### Provider-aware limit models
+
+`limit_models.py` carries one record per provider, with its source and the date
+it was read. A candidate's capacity resolves in this order, and every row
+publishes which basis it used:
+
+1. **discovered** — the provider's own truth: a measured window the provider or
+   the T3 reader reported, the published OpenCode Go/Plus table, Command Code's
+   account usage page, a per-model request limit, or a row the free-pool page
+   job extracted. A measured remaining share multiplies the window's published
+   budget.
+2. **measured** — when no limit is published: the observed remaining share and
+   any budget the inference measured, labelled with low confidence.
+3. **cost** — when neither exists: the published price relative to a fixed
+   reference, labelled as an estimate.
+4. **unknown** — the capacity and the affordable task count stay absent, never
+   zero; the row keeps its quality order.
+
+| Provider | Windows | Per-model |
+| --- | --- | --- |
+| OpenCode Go/Plus | 20% / 5h, 50% / week, 100% / month of the monthly allowance | request figures from the dated Go table |
+| Command Code GOAT | 5h, week, month | 41,000 / 103,000 / 205,000 for DeepSeek; peak and off-peak prices |
+| Ollama Cloud | session and week | — |
+| Codex | 5h and week | — |
+| Claude | one shared weekly pool | Fable is a sub-cap of that pool |
+| Antigravity | shared short window | per-model weekly `runtime-limit:<model>` |
+| Grok | week | — |
+| Free pool | per-route minute, day and daily tokens, with cooldowns | — |
+
+Public limit pages are refreshed every six hours by
+`ghostship-ai-usage-limits`, a free-inference job with sensitivity `public`.
+The job never reads an account page or a credential. Its rows are validated,
+diffed against the last dated values, and written to `page-limits.json`; the
+collector only reads that file. The private Command Code usage page stays on
+the browser path and is read into `command-code-usage.json`; the collector only
+reads it.
+
+A candidate row publishes `limit_model` (basis, windows, affordable tasks,
+binding window, estimate) and `pick_score` (quality term, capacity term,
+weights). The snapshot also carries `limit_models`, `page_limits` and
+`command_code_usage` health blocks.
 
 An optional runtime file, `--custom-resets` (default
 `/var/lib/ghostship-ai-usage/custom-resets.json`), contains

@@ -26,6 +26,25 @@ def parse(post):
     """Ignore reset features/chatter; retain only an announced usage-limit reset."""
     url = str(post.get('url', ''))
     raw = str(post.get('text', ''))[:8000]
+    # The primary author announces a reset day without naming a product or a
+    # window ("...it's reset day today", "...that's a reset!"). That is an
+    # announcement of a Codex reset, but its scope and time are unknown, so it
+    # is recorded as unverified and cannot change capacity.
+    lifestyle = re.search(
+        r"\b(?:it['’]s|that['’]s|today\s+is)\s+(?:a\s+)?reset(?:\s+day)?\b",
+        raw, re.I)
+    if lifestyle:
+        published = timestamp(post.get('published_at'))
+        if published and POST_URL.fullmatch(url) and len(url) <= 512:
+            return {
+                'event_version': VERSION, 'source_url': url,
+                'published_at': iso(published),
+                'quote': re.sub(r'\s+', ' ', raw).strip()[:240],
+                'scope': 'codex', 'products': ['codex'], 'plans': ['all'],
+                'windows': ['unknown'], 'reset_at': None, 'confidence': 'low',
+                'reason': 'ambiguous_reset_scope',
+            }
+        return None
     # Scope comes from the announcement clause, not unrelated launch prose.
     clauses = [part for part in re.split(r'(?<=[.!?;])\s+|\n\n', raw)
                if re.search(r'\b(?:codex|chatgpt)\b', part, re.I)

@@ -27,6 +27,9 @@ import aa  # noqa: E402
 import model_selection  # noqa: E402
 import model_quality  # noqa: E402
 import opencode_go  # noqa: E402
+import command_code_usage  # noqa: E402
+import limit_models  # noqa: E402
+import limit_pages  # noqa: E402
 import aa_3d  # noqa: E402
 import account_availability as account_availability_module  # noqa: E402
 import card_order as card_order_module  # noqa: E402
@@ -544,6 +547,9 @@ for field in ('info', *model_quality.FIELDS):
     METRIC_HELP['ghostship_ai_quality_' + field] = 'Canonical AA and verified observed model quality: ' + field + '.'
 
 METRIC_HELP['ghostship_ai_announced_reset_info'] = 'Recorded public reset announcement, including unverified relays awaiting confirmation.'
+METRIC_HELP['ghostship_ai_announcements_health'] = 'The reset-announcement monitor state: ok, blocked, stale or unknown.'
+METRIC_HELP['ghostship_ai_announcements_last_success_timestamp_seconds'] = 'When the reset-announcement monitor last read the primary timeline successfully.'
+METRIC_HELP['ghostship_ai_announcements_events'] = 'The recorded reset announcements the monitor retains.'
 METRIC_HELP['ghostship_ai_t3_usage_bucket_timestamp_seconds'] = 'Start of the UTC-offset day of one T3 daily usage bucket, as T3 reports it.'
 METRIC_HELP['ghostship_ai_t3_usage_bucket_tokens'] = 'Tokens of one T3 daily usage bucket by kind; total is T3 usage-page tokens (reasoning is part of output).'
 METRIC_HELP['ghostship_ai_t3_usage_bucket_cost_usd'] = 'T3 costUsd of one daily usage bucket; provider_reported or api_equivalent, never locally repriced.'
@@ -694,7 +700,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
     try:
         base_url = resolve_t3_base_url(T3_SERVER_FILE)
         token = read_session_token(T3_SESSION_FILE)
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, json.JSONDecodeError):
         return [
             SourceResult(
                 source="t3",
@@ -715,7 +721,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
         # Keep the transport default (sixty seconds), bounded per request.
         with T3Client(base_url, token, timeout=60) as client:
             return t3source.collect(client, now, catalog=catalog, context=context)
-    except (T3Error, OSError) as error:
+    except (T3Error, OSError):
         return [
             SourceResult(
                 source="t3",
@@ -1737,6 +1743,8 @@ def build_snapshot(
     model_evidence_state: str = 'no_evidence',
     quality_prior_cache: Mapping[str, Any] | None = None,
     go_limits: Mapping[str, Any] | None = None,
+    page_limits: Mapping[str, Any] | None = None,
+    command_usage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1771,7 +1779,8 @@ def build_snapshot(
         native_models=context.get("native_models") or {},
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
-        measured_windows=measured_windows,
+        measured_windows=(list(measured_windows or [])
+                          + command_code_usage.windows(command_usage)),
         catalog=catalog,
         facts=facts,
         aa_3d_cache=aa_3d_cache,
@@ -1797,7 +1806,20 @@ def build_snapshot(
     if isinstance(snapshot, dict):
         snapshot["announced_resets"] = context.get("announced_resets") or {
             "schema": 1, "status": "not_checked", "announcements": []}
+        snapshot["announced_resets"]["health"] = announced_resets.health(
+            snapshot["announced_resets"], now)
         _attach_opencode_go(snapshot, go_limits)
+        if page_limits is not None:
+            snapshot["page_limits"] = {
+                key: page_limits.get(key) for key in
+                ("schema", "checked_at", "stale", "age_seconds", "sources", "changed")
+            }
+        if command_usage is not None:
+            snapshot["command_code_usage"] = {
+                key: command_usage.get(key) for key in
+                ("schema", "status", "checked_at", "stale", "age_seconds", "source", "windows", "models")
+            }
+        snapshot["limit_models"] = limit_models.attach(snapshot, now, page_limits)
         quota_block = snapshot.setdefault("quota", {})
         if isinstance(quota_block, dict):
             quota_block["entitlements"] = quota_module.entitlements(
@@ -2298,6 +2320,9 @@ def render(
         add(name, labels, value)
     for name, labels, value in announced_resets.samples((snapshot or {}).get("announced_resets") or {}):
         add(name, labels, value)
+    for name, labels, value in announced_resets.health_samples(
+            (snapshot or {}).get("announced_resets") or {}, now):
+        add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
@@ -2427,6 +2452,23 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--page-limits",
+        default=limit_pages.DEFAULT_STATE_PATH,
+        help=(
+            "The dated rows the free-pool page refresh extracted from public "
+            "provider limit pages. The collector only reads it."
+        ),
+    )
+    parser.add_argument(
+        "--command-code-usage",
+        default=command_code_usage.DEFAULT_PATH,
+        help=(
+            "The private Command Code usage page read through the browser "
+            "path. The collector only reads the dated state; a missing or "
+            "stale state is never a zero."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -2525,6 +2567,8 @@ def main(argv: list[str] | None = None) -> int:
     aa_cache = aa.load_cache(args.aa_cache, now)
     aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)
     go_limits = opencode_go.read(now, args.opencode_go_limits)
+    page_limits = limit_pages.read(now, args.page_limits)
+    command_usage = command_code_usage.read(now, args.command_code_usage)
     results, extra, context = collect(
         now,
         state_path=args.state,
@@ -2571,6 +2615,8 @@ def main(argv: list[str] | None = None) -> int:
         model_evidence_state=evidence_state,
         quality_prior_cache=aa.load_cache(args.aa_cache,now,allow_stale=True),
         go_limits=go_limits,
+        page_limits=page_limits,
+        command_usage=command_usage,
     )
     text = render(
         results,
