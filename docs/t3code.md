@@ -383,6 +383,18 @@ selection. Eligibility requires the configured managed `cmd acp` launcher with
 The existing quality evidence and priors remain in force; a successful public
 transport prompt establishes no harness quality claim before the controlled pilot.
 
+## Provider zero-data-retention state
+
+Every inference provider's strongest available zero-retention or no-training
+setting, its evidence, and the owner decisions it still needs are recorded in
+[provider zero data retention](provider-zdr.md). The managed Claude Code setup
+in `packages/t3code/provider-privacy/setup.py` turns off nonessential traffic,
+telemetry, error reporting, and feedback before T3 starts.
+`scripts/provider-zdr-doctor` re-checks the table, the Command Code `CMD_ZDR`,
+the Claude opt-outs, the Grok upload setting, and the free-pool policy. Add
+`--browser` to re-read the OpenRouter, Groq, ChatGPT, and Mistral account
+toggles through the personal profile.
+
 ## Grok Build CLI and T3 provider
 
 Run `python3 packages/t3code/setup-grok.py` to install the official
