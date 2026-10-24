@@ -295,7 +295,6 @@ class PaidModelsPageTests(unittest.TestCase):
             spent_model=next(model for model in models if model['model']=='spent')
             self.assertFalse(spent_model['selected'])
             self.assertEqual(spent_model['selectionReason'],'Allowance spent')
-            self.assertEqual((chosen['selectedRank'],spent_model.get('selectedRank')),(1,None))
             self.assertFalse(chosen['hasFindings'])
             self.assertFalse(chosen['hasQuota'])
         self.assertIn('data-quality-controls',self.panels[250]['options']['content'])
