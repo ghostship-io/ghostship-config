@@ -37,9 +37,11 @@ let
           ]
           (builtins.readFile ./ghostship-notify.py);
   };
-  # Unit outcomes for ghostship-failure@ and ghostship-success@. A failure goes
-  # to operations; a success summary goes silently to informational and quotes
-  # only restic summary lines, so it never forwards arbitrary journal output.
+  # Unit outcomes for ghostship-failure@ and ghostship-success@; see
+  # unit-notify.sh, quoted verbatim so the unit tests can stub systemctl and
+  # ghostship-notify. A failure goes to operations; a success summary goes
+  # silently to informational and quotes only restic summary lines, so it
+  # never forwards arbitrary journal output.
   unitNotify = pkgs.writeShellApplication {
     name = "ghostship-unit-notify";
     runtimeInputs = [
@@ -48,37 +50,10 @@ let
       pkgs.coreutils
       notify
     ];
-    text = ''
-      outcome=$1
-      unit=$2
-      host=${config.networking.hostName}
-      description=$(systemctl show -P Description "$unit")
-      case $outcome in
-        failure)
-          result=$(systemctl show -P Result "$unit")
-          status=$(systemctl show -P ExecMainStatus "$unit")
-          exec ghostship-notify --topic operations --priority 4 --source systemd --incident \
-            --dedupe "$unit" --title "Service $unit failed on $host" \
-            "$description: $result (exit status $status). Inspect: journalctl -b -u $unit"
-          ;;
-        success)
-          invocation=$(systemctl show -P InvocationID "$unit")
-          if [ -n "$invocation" ]; then
-            log=$(journalctl -o cat --no-pager "_SYSTEMD_INVOCATION_ID=$invocation")
-          else
-            log=$(journalctl -o cat --no-pager -n 200 -u "$unit")
-          fi
-          summary=$(grep -E '^(Added to the repository|processed |snapshot [0-9a-f]+ saved|keep [0-9]+ snapshots|remove [0-9]+ snapshots|no errors were found|this removes|unused size after prune)' <<<"$log" | tail -n 8 || true)
-          exec ghostship-notify --topic informational --priority 2 --source systemd \
-            --state resolved --dedupe "$unit" --title "$description succeeded on $host" \
-            "''${summary:-$unit finished without a summary.}"
-          ;;
-        *)
-          echo "Usage: ghostship-unit-notify failure|success UNIT" >&2
-          exit 2
-          ;;
-      esac
-    '';
+    text = builtins.replaceStrings
+      [ "@host@" ]
+      [ config.networking.hostName ]
+      (builtins.readFile ./unit-notify.sh);
   };
 in
 {
