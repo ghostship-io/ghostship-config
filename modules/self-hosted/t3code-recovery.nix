@@ -102,7 +102,11 @@ in
       ExecStart = lib.getExe controller;
       Restart = "always";
       RestartSec = 30;
-      RuntimeMaxSec = 1200;
+      # This controller is a persistent observer, not one bounded repair task.
+      # A finite unit lifetime kills healthy observation every 20 minutes and
+      # creates an avoidable recovery gap. Commands and the advisor retain
+      # their own deadlines; resource and stop bounds still apply here.
+      RuntimeMaxSec = "infinity";
     };
   };
   systemd.services.t3code-recovery-advisor-auth = {
