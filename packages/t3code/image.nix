@@ -27,6 +27,8 @@ let
       mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/t3code
       mkdir -p mnt/share run/user var/empty var/log/journal var/run
       mkdir -p bin
+      mkdir -p usr/share/t3code-command-code
+      cp -r ${./command-code}/. usr/share/t3code-command-code/
       # systemd does not inherit the image's PATH for its services. Managed
       # helpers need these commands before their own environment setup runs.
       for manager in system user; do
@@ -305,6 +307,7 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStartPre=${managedBin}/t3code-run-hooks before-t3code.d
+      ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/setup.py
       ExecStartPre=-${managedBin}/t3code-opencode-model-catalog
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
       ExecStart=${managedBin}/t3code-server-run
