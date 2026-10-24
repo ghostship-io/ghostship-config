@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.262] - 2026-10-24
+
+Owner-approved trusted-free routes become first-choice workers until their limit is overspent, with a pace-aware reason and a paid fallback; the normal models page can show them beside paid models.
+
+PR #429.
+
 ## [3.17.261] - 2026-10-24
 
 Provider-aware limit calculations with a discovered → measured → cost → unknown chain, free-pool refresh of public limit pages, Command Code usage via the browser path, and visible reset-announcement monitor health with a three-hour alert.
