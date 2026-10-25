@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.330] - 2026-10-25
+
+Recognize structured OpenCode allowance errors returned inside HTTP 200 application envelopes while leaving unrecognized failures as non-quota errors.
+
+PR #565.
+
 ## [3.17.329] - 2026-10-25
 
 Picker route remaining gauges now use the effective route quota after shared account limits. Exhausted shared accounts publish zero with the account reset and spent state, even when the local route window still has headroom.
