@@ -29,6 +29,24 @@ class OpenCodeBillingTests(unittest.TestCase):
         zen = snapshot._access_record('opencode', 'example-free', {('opencode', 'example-free')}, set(), {})
         self.assertEqual(zen['billing'], 'free')
 
+    def test_native_catalog_is_embedded_as_a_versioned_go_readable_record_set(self):
+        records = [{
+            "provider_instance_id": "account-one",
+            "model_id": "shared-model",
+            "effort_option_id": "reasoningEffort",
+            "effort_value": "high",
+            "source": "t3.server.refreshProviders",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "price": None,
+            "price_status": "unknown",
+            "limit": None,
+            "limit_status": "unknown",
+        }]
+        result = snapshot.build_snapshot(now=NOW, sources=[], ranked=[], native_catalog=records)
+        self.assertEqual(result["native_catalog"]["schema_version"], 1)
+        self.assertEqual(result["native_catalog"]["source"], "t3.server.refreshProviders")
+        self.assertEqual(result["native_catalog"]["records"], records)
+
 
 class Ranked:
     """A ranked model, shaped like the ranking engine's own entry."""

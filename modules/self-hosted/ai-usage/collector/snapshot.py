@@ -3662,6 +3662,7 @@ def build_snapshot(
     sources: Iterable[Mapping[str, Any]],
     ranked: Iterable[Any],
     native_models: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+    native_catalog: Iterable[Mapping[str, Any]] | None = None,
     policy: Mapping[str, Any] | None = None,
     aa_cache: Mapping[str, Any] | None = None,
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
@@ -3715,6 +3716,7 @@ def build_snapshot(
         if provider and model:
             free_set.add(("opencode-free", f"{provider}/{model}"))
     native_models = native_models or {}
+    native_catalog_records = [dict(record) for record in (native_catalog or ())]
     policy = dict(policy or {})
     entries: dict[tuple[str, str], list[Any]] = {}
     for entry in ranked:
@@ -4181,6 +4183,18 @@ def build_snapshot(
         "schema": SCHEMA,
         "schema_version": SCHEMA_VERSION,
         "generated_at": _iso(now),
+        "native_catalog": {
+            "schema_version": 1,
+            "source": (
+                native_catalog_records[0].get("source")
+                if native_catalog_records else "unknown"
+            ),
+            "fetched_at": (
+                native_catalog_records[0].get("fetched_at")
+                if native_catalog_records else None
+            ),
+            "records": native_catalog_records,
+        },
         "max_age_seconds": max_age_seconds,
         "partial": bool(incomplete),
         # The owner's routing switch, published as it is. The collector never

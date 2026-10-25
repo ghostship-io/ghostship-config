@@ -1964,6 +1964,7 @@ def build_snapshot(
         sources=sources,
         ranked=ranked,
         native_models=native_models,
+        native_catalog=context.get("native_catalog") or [],
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
         measured_windows=list(measured_windows or []),

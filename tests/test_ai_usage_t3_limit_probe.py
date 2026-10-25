@@ -123,6 +123,37 @@ class LimitProbeTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertNotIn(("muse", "failed"), self.probes(result))
 
+    def test_native_catalog_keeps_instances_efforts_provenance_and_unknowns(self):
+        shared_model = {
+            "slug": "shared-model",
+            "capabilities": {"optionDescriptors": [{
+                "id": "thinkingLevel",
+                "type": "select",
+                "options": [{"id": "tiny"}, {"id": "maximum"}],
+            }]},
+        }
+        context = {}
+        t3source._collect_limits(Client([
+            provider("account-one", models=[shared_model]),
+            provider("account-two", models=[shared_model]),
+            provider("no-effort", models=[{"slug": "unknown-effort"}]),
+        ]), context)
+        records = context["native_catalog"]
+        shared = [r for r in records if r["model_id"] == "shared-model"]
+        self.assertEqual(
+            {(r["provider_instance_id"], r["effort_value"]) for r in shared},
+            {("account-one", "tiny"), ("account-one", "maximum"),
+             ("account-two", "tiny"), ("account-two", "maximum")},
+        )
+        unknown = next(r for r in records if r["model_id"] == "unknown-effort")
+        self.assertIsNone(unknown["effort_value"])
+        self.assertIsNone(unknown["price"])
+        self.assertEqual(unknown["price_status"], "unknown")
+        self.assertIsNone(unknown["limit"])
+        self.assertEqual(unknown["limit_status"], "unknown")
+        self.assertEqual(unknown["source"], "t3.server.refreshProviders")
+        self.assertTrue(unknown["fetched_at"].endswith("Z"))
+
 
 if __name__ == "__main__":
     unittest.main()
