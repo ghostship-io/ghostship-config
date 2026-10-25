@@ -8,6 +8,20 @@ from pathlib import Path
 import sys
 
 
+def safe_failure_code(result):
+    """Project prove() failures to a bounded category without exposing detail."""
+    detail = result.get("detail")
+    outcome = result.get("outcome")
+    if isinstance(detail, str) and "model unavailable" in detail.lower().replace("-", " ").replace("_", " "):
+        return "model-unavailable"
+    if isinstance(outcome, str) and outcome.lower().replace("_", "-") in {
+        "execution", "timeout", "provider-schema", "invalid-request", "quota",
+        "no-tool-call",
+    }:
+        return outcome.lower().replace("_", "-")
+    return "proof-failed"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("route")
@@ -29,14 +43,17 @@ def main():
             return super().submit(prompt, **kwargs)
 
     result = prove({"route": args.route, "wait": args.wait}, client=CandidateBridge())
-    print(json.dumps({
+    output = {
         "provider": result.get("provider"),
         "model": result.get("model"),
         "instance": result.get("instance"),
         "outcome": result.get("outcome"),
         "elapsed_s": result.get("elapsed_s"),
         "settled": result.get("settled"),
-    }, sort_keys=True))
+    }
+    if result.get("outcome") != "passed" or result.get("settled") is not True:
+        output["error"] = {"code": safe_failure_code(result)}
+    print(json.dumps(output, sort_keys=True))
     return 0 if result.get("outcome") == "passed" and result.get("settled") is True else 1
 
 

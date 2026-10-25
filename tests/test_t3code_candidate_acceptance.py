@@ -16,6 +16,11 @@ spec = importlib.util.spec_from_file_location(
 )
 acceptance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(acceptance)
+probe_spec = importlib.util.spec_from_file_location(
+    "t3code_provider_turn_probe", ROOT / "packages/t3code/provider-turn-probe.py"
+)
+provider_probe = importlib.util.module_from_spec(probe_spec)
+probe_spec.loader.exec_module(provider_probe)
 
 
 class CandidateDeploymentPackagingTest(unittest.TestCase):
@@ -549,7 +554,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
             if any(item.endswith("provider-turn-probe.py") for item in args):
                 route = next(item for item in args if item.startswith("opencode-free/"))
                 if route.endswith("/first"):
-                    return Mock(returncode=1, stderr='{"data":{"error":"model unavailable"}}')
+                    return Mock(returncode=1, stderr="", stdout=json.dumps({
+                        "outcome": "execution",
+                        "error": {"code": provider_probe.safe_failure_code({
+                            "outcome": "execution", "detail": "model unavailable"
+                        })},
+                    }))
                 return Mock(returncode=0, stdout="passed")
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": first}}))
@@ -566,6 +576,13 @@ class CandidateAcceptanceTest(unittest.TestCase):
                   for call in calls
                   if any(item.endswith("provider-turn-probe.py") for item in call)]
         self.assertEqual(proved, ["opencode-free/nvidia/first", "opencode-free/nvidia/fallback"])
+
+    def test_provider_probe_carries_safe_model_unavailable_category(self):
+        result = {"outcome": "execution", "detail": "model unavailable: private provider response"}
+        self.assertEqual(provider_probe.safe_failure_code(result), "model-unavailable")
+        self.assertNotIn("private provider response", json.dumps({
+            "error": {"code": provider_probe.safe_failure_code(result)},
+        }))
 
     def test_provider_projection_excludes_github_and_bitwarden_secrets(self):
         projection = self.root / "provider.env"
