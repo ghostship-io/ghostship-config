@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.311] - 2026-10-25
+
+- Pin the managed agent to 0.47.146 for the exit-4 applied-with-warning deploy path.
+
+PR #521.
+
 ## [3.17.310] - 2026-10-25
 
 - Classify complete announced-reset batches through durable free inference.
