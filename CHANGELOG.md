@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.356] - 2026-10-25
+
+- Route policy now expresses fast-tier denial as data for all roles.
+
+PR #589.
+
 ## [3.17.355] - 2026-10-25
 
 - Pin ghostship-agent main after #928
