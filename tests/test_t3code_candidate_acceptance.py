@@ -35,6 +35,11 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
                 self.assertIn(f"packages/t3code/{name}", module)
         self.assertIn('${t3codeDeploymentScripts}/deploy-when-idle.py', module)
 
+    def test_t3code_image_exposes_systemd_as_oci_entrypoint(self):
+        image = (ROOT / "packages/t3code/image.nix").read_text()
+        self.assertIn('Entrypoint = [ "${pkgs.systemd}/lib/systemd/systemd" ];', image)
+        self.assertIn("Cmd = [ ];", image)
+
 
 class CandidateAcceptanceTest(unittest.TestCase):
     def setUp(self):
@@ -48,7 +53,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.home.mkdir()
         (self.home / "agent-config").write_text("fixture")
         self.archive = self.root / "image.tar"
-        config = b'{"rootfs":{"diff_ids":["candidate"]}}'
+        config = b'{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["candidate"]}}'
         self.image_id = hashlib.sha256(config).hexdigest()
         with tarfile.open(self.archive, "w") as image:
             for name, content in (
@@ -110,10 +115,24 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertNotIn(str(self.home), [volume.split(":", 1)[0] for volume in run_volumes])
         self.assertIn(":/candidate-home:rw", run_volumes[0])
         self.assertTrue(any("/run/t3code-candidate-inputs:ro" in v for v in run_volumes))
-        unit_option = run.index("--unit=t3code-server.service")
         image_tag = run.index("localhost/t3:test")
-        self.assertLess(unit_option, image_tag)
+        unit_option = run.index("--unit=t3code-server.service")
+        self.assertGreater(unit_option, image_tag)
+        self.assertEqual(run[image_tag + 1:], ("--unit=t3code-server.service",))
         self.assertNotIn("--unit=multi-user.target", run)
+
+    def test_image_details_rejects_a_missing_systemd_entrypoint(self):
+        archive_path = self.root / "image-without-entrypoint.tar"
+        with tarfile.open(archive_path, "w") as image:
+            for name, content in (
+                ("manifest.json", b'[{"Config":"config.json","RepoTags":["localhost/t3:test"]}]'),
+                ("config.json", b'{"config":{"Cmd":["/nix/store/test-systemd"]},"rootfs":{"diff_ids":["candidate"]}}'),
+            ):
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                image.addfile(member, io.BytesIO(content))
+        with self.assertRaisesRegex(RuntimeError, "systemd entrypoint"):
+            acceptance.image_details(archive_path)
 
     def test_staging_never_copies_oauth_credentials_and_keeps_only_agent_skills(self):
         oauth_paths = (

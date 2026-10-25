@@ -6,14 +6,8 @@ let
   managedBin = "/home/t3code/.local/state/ghostship-t3-tools/current/bin";
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
-  t3codeEntrypoint = pkgs.writeShellScriptBin "t3code-systemd-entrypoint" ''
-    set -eu
-
-    exec ${pkgs.systemd}/lib/systemd/systemd
-  '';
 
   t3codeImageContents = t3codePackages ++ [
-    t3codeEntrypoint
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
@@ -669,7 +663,8 @@ let
       chmod 4755 usr/bin/sudo
     '';
     config = {
-      Cmd = [ "${t3codeEntrypoint}/bin/t3code-systemd-entrypoint" ];
+      Entrypoint = [ "${pkgs.systemd}/lib/systemd/systemd" ];
+      Cmd = [ ];
       Env = [
         "HOME=/home/t3code"
         "USER=t3code"
