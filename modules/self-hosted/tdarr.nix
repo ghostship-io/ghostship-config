@@ -309,7 +309,7 @@ in
     ++ map (file: "${file.path}:/bootstrap/${file.name}:ro") libraryFiles;
     extraOptions = [
       "--network=ghostship_net"
-      "--cpus=8"
+      "--cpus=2"
       "--memory=12g"
       "--health-cmd=curl -fsS --max-time 5 http://127.0.0.1:8265/ >/dev/null || exit 1"
       "--health-interval=30s"
