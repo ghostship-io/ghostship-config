@@ -16,6 +16,10 @@ let
   ingressImage = base "ghostship-github-ingress" "62030";
   coordinatorImage = base "ghostship-github-coordinator" "62031";
   goCoordinatorImage = inputs.ghostship-private-agent.packages.${system}.github-go-coordinator-image;
+  goCoordinatorHeartbeat = pkgs.pkgsStatic.runCommandCC "ghostship-go-coordinator-heartbeat" { } ''
+    mkdir -p $out
+    $CC -O2 -static -o $out/read-file ${./siem/heartbeat.c}
+  '';
   # Under /var/lib: tmpfiles refuses root-owned children of the apps-owned /srv/apps.
   root = "/var/lib/ghostship-github";
   t3Home = lib.removeSuffix ":/home/t3code:rw" (lib.findFirst
@@ -360,7 +364,10 @@ in
       cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
       environmentFiles = [ config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path ];
       ports = [ "127.0.0.1:18765:18765" ];
-      volumes = [ "${root}/go-state:/state:rw,noexec,nosuid,nodev" ];
+      volumes = [
+        "${root}/go-state:/state:rw,noexec,nosuid,nodev"
+        "${goCoordinatorHeartbeat}:/opt/ghostship-go-coordinator-heartbeat:ro"
+      ];
       extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=256m" "--cpus=0.5" ];
     };
     systemd.services.podman-ghostship-go-coordinator = {

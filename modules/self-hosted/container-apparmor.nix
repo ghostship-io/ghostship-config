@@ -112,6 +112,7 @@ let
     };
     go-coordinator = {
       container = "ghostship-go-coordinator";
+      heartbeat = [ "/opt/ghostship-go-coordinator-heartbeat/read-file" "/proc/sys/kernel/random/boot_id" ];
     };
     ghostship.container = "ghostship-private-integrations";
     chaptarr = {

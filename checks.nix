@@ -176,6 +176,11 @@ in
     assert builtins.elem "127.0.0.1:18765:18765" goCoordinator.ports;
     assert builtins.elem "/var/lib/ghostship-github/go-state:/state:rw,noexec,nosuid,nodev"
       goCoordinator.volumes;
+    assert t3codeConfig.ghostship.apps.go-coordinator.apparmorHeartbeat
+      == [ "/opt/ghostship-go-coordinator-heartbeat/read-file" "/proc/sys/kernel/random/boot_id" ];
+    assert builtins.any (volume: builtins.match ".*:ro" volume != null)
+      (builtins.filter (volume: builtins.match ".*ghostship-go-coordinator-heartbeat.*" volume != null)
+        goCoordinator.volumes);
     assert builtins.elem "/run/ghostship-secrets/ghostship-github/go-coordinator.env"
       goCoordinator.environmentFiles;
     assert builtins.elem
