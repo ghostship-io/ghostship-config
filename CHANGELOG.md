@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.327] - 2026-10-25
+
+Provide host tools on PATH to the T3 candidate acceptance service.
+
+PR #554.
+
 ## [3.17.326] - 2026-10-25
 
 Preserve provider-reported quota scope and treat malformed quota values as unknown in picker inputs.
