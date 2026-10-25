@@ -1,4 +1,4 @@
-"""Deploy changed T3 Code container images and apply restarts safely when idle."""
+"""Deploy changed T3 Code container images after exact-image candidate acceptance."""
 
 import argparse
 import fcntl
@@ -19,7 +19,7 @@ DEPLOYMENT_LABEL = "io.ghostship.t3code.deployment"
 TOOL_LOCK = Path(".local/state/t3code-tool-update/tool-update.lock")
 # Restarting cannot repair a broken image; stop after this many failed starts.
 MAX_DEPLOY_ATTEMPTS = 3
-# The ledger of the restarts that interrupted T3 Code without waiting for idle.
+# The ledger of restarts performed after candidate image acceptance.
 RESTART_LEDGER = "/var/lib/t3code-restarts/ledger.jsonl"
 
 
@@ -86,7 +86,7 @@ def write_live_inputs_receipt(state_dir, podman_bin, deployment_id,
 
 def require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision=None,
                       provider_secrets_file=None, tooling_path=None,
-                      container_home="/candidate-home"):
+                      container_home="/candidate-home", deployment_id=None):
     """An owner request bypasses idle, never candidate acceptance."""
     if not image_archive:
         raise RuntimeError("image archive missing; refusing an unverified image change")
@@ -96,7 +96,7 @@ def require_candidate(state_dir, image_archive, podman_bin, expected_agent_revis
     image_id = hashlib.sha256(config).hexdigest()
     running = container_identity(podman_bin)
     state_dir = Path(state_dir)
-    desired = (state_dir / "desired").read_text().strip()
+    desired = deployment_id or (state_dir / "desired").read_text().strip()
     current = running.get("image", "").removeprefix("sha256:")
     expected_secret_inode = None
     if provider_secrets_file:
@@ -128,19 +128,59 @@ def require_candidate(state_dir, image_archive, podman_bin, expected_agent_revis
         raise RuntimeError("candidate receipt does not approve this exact T3 image")
 
 
+def verify_candidate_receipt(state_dir, image_archive, deployment_id,
+                             expected_agent_revision=None, provider_secrets_file=None,
+                             tooling_path=None, candidate_home_target="/candidate-home"):
+    """Return the passing receipt only when it approves this exact built image."""
+    if not deployment_id or not image_archive:
+        raise RuntimeError("candidate deployment ID or image archive is missing")
+    with tarfile.open(image_archive) as archive:
+        manifest = json.load(archive.extractfile("manifest.json"))
+        config = archive.extractfile(manifest[0]["Config"]).read()
+    image_id = hashlib.sha256(config).hexdigest()
+    receipt_path = Path(state_dir) / "receipts" / f"{deployment_id}.json"
+    try:
+        receipt = json.loads(receipt_path.read_text())
+    except (OSError, ValueError):
+        raise RuntimeError("candidate acceptance receipt is missing or invalid") from None
+    expected_inode = None
+    if provider_secrets_file:
+        try:
+            expected_inode = str(Path(provider_secrets_file).stat().st_ino)
+        except OSError:
+            raise RuntimeError("candidate provider projection is missing") from None
+    checks = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")
+    approved = (
+        receipt.get("deployment_id") == deployment_id
+        and receipt.get("image_id", "").removeprefix("sha256:") == image_id
+        and receipt.get("candidate_name", "").startswith("t3code-candidate-")
+        and bool(receipt.get("live_before"))
+        and receipt.get("live_before") == receipt.get("live_after")
+        and (expected_agent_revision is None or receipt.get("agent_revision") == expected_agent_revision)
+        and (tooling_path is None or receipt.get("agent_path") == str(Path(tooling_path).resolve()))
+        and (expected_inode is None or receipt.get("provider_secret_inode") == expected_inode)
+        and all(receipt.get("checks", {}).get(name) is True for name in checks)
+    )
+    if not approved:
+        raise RuntimeError("candidate receipt does not approve this exact T3 image")
+    return {**receipt, "verified": True}
+
+
 def produce_candidate_receipt(state_dir, image_archive, podman_bin, candidate_socket,
                              home_dir, volumes=(), candidate_uid=62041,
                              candidate_runtime_dir="/var/lib/t3code-podman-candidate/acceptance",
                              provider_secrets_file=None, tooling_path=None,
                              expected_agent_revision=None,
-                             candidate_home_target="/candidate-home"):
+                             candidate_home_target="/candidate-home", deployment_id=None,
+                             force_test=False):
     """Run acceptance once when the desired image has no approved receipt."""
-    try:
-        require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision,
-                          provider_secrets_file, tooling_path, candidate_home_target)
-        return
-    except RuntimeError:
-        pass
+    if not force_test:
+        try:
+            require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision,
+                              provider_secrets_file, tooling_path, candidate_home_target, deployment_id)
+            return
+        except RuntimeError:
+            pass
     script = Path(__file__).with_name("candidate-acceptance.py")
     spec = importlib.util.spec_from_file_location("t3code_candidate_acceptance", script)
     module = importlib.util.module_from_spec(spec)
@@ -154,9 +194,10 @@ def produce_candidate_receipt(state_dir, image_archive, podman_bin, candidate_so
         tooling_path=tooling_path,
         expected_agent_revision=expected_agent_revision,
         candidate_home_target=candidate_home_target,
+        deployment_id=deployment_id,
     )
     require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision,
-                      provider_secrets_file, tooling_path, candidate_home_target)
+                      provider_secrets_file, tooling_path, candidate_home_target, deployment_id)
 
 
 def utcnow_iso():
@@ -174,68 +215,6 @@ def log(audit_log, message):
                 f.write(f"{ts} source=host-deployment {message}\n")
         except Exception as e:
             print(f"{ts} warn: failed writing audit log: {e}", file=sys.stderr)
-
-
-def is_live_idle(home_dir, state_db, probe_bin, podman_bin, require_web=True):
-    """Check if T3 Code is definitely idle and safe to restart.
-
-    1. Checks if internal tool-update lock is held.
-    2. Requires the activity probe to positively confirm idle, including when
-       the configured database is missing or a newer schema exists.
-    3. Verifies container web endpoint responds, unless retrying a container
-       already known to be unhealthy.
-    """
-    tool_lock = home_dir / TOOL_LOCK
-    if tool_lock.exists():
-        try:
-            with open(tool_lock, "r") as f:
-                try:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                except (BlockingIOError, OSError):
-                    return False
-        except Exception:
-            pass
-
-    env = dict(os.environ, T3CODE_STATE_DB=str(state_db))
-    try:
-        res = subprocess.run(
-            [probe_bin],
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-        )
-        if res.returncode != 0:
-            return False
-    except Exception:
-        return False
-
-    if not require_web:
-        return True
-
-    try:
-        res = subprocess.run(
-            [
-                podman_bin,
-                "exec",
-                "t3code",
-                "curl",
-                "-fsS",
-                "--max-time",
-                "5",
-                "http://127.0.0.1:3773/",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-        )
-        if res.returncode != 0:
-            return False
-    except Exception:
-        return False
-
-    return True
 
 
 def acquire_tool_lock(home_dir):
@@ -259,6 +238,29 @@ def acquire_tool_lock(home_dir):
 def release_tool_lock(fd):
     if fd in (None, False):
         return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def acquire_deployment_lock(state_dir, *, blocking):
+    """Serialize candidate acceptance and deployment state transitions."""
+    state_dir = Path(state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(state_dir / "deploy.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        flags = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
+        fcntl.flock(fd, flags)
+    except (BlockingIOError, OSError):
+        os.close(fd)
+        if blocking:
+            raise
+        return None
+    return fd
+
+
+def release_deployment_lock(fd):
     try:
         fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
@@ -349,15 +351,11 @@ def read_failures(failures_file, desired):
 def run_deployment(
     state_dir,
     home_dir,
-    probe_bin="t3code-activity-probe",
     podman_bin="podman",
     systemctl_bin="systemctl",
     audit_log=None,
-    confirm_idle_seconds=30,
     health_timeout_seconds=120,
-    idle_checker=None,
     healthy_waiter=None,
-    sleep_fn=time.sleep,
     deployment_reader=None,
     tool_lock_acquirer=None,
     health_reader=None,
@@ -382,16 +380,11 @@ def run_deployment(
     failures_file = state_dir / "failures"
     desired_inputs_file = state_dir / "desired-inputs"
     applied_inputs_file = state_dir / "applied-inputs"
-    state_db = home_dir / ".t3/userdata/state.sqlite"
 
     state_dir.mkdir(parents=True, exist_ok=True)
 
-    lock_file = state_dir / "deploy.lock"
-    lock_fd = os.open(str(lock_file), os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (BlockingIOError, OSError):
-        os.close(lock_fd)
+    lock_fd = acquire_deployment_lock(state_dir, blocking=False)
+    if lock_fd is None:
         return 0
 
     try:
@@ -466,18 +459,12 @@ def run_deployment(
             if read_failures(failures_file, desired) >= max_attempts:
                 return 0
 
-        check_idle = idle_checker or (
-            lambda: is_live_idle(
-                home_dir, state_db, probe_bin, podman_bin,
-                require_web=not retry_unhealthy,
-            )
-        )
         wait_for_health = healthy_waiter or (
             lambda: wait_healthy(podman_bin, timeout_seconds=health_timeout_seconds)
         )
 
-        # Only a stopped or failed unit may restart without the idle gate. A
-        # unit mid-start or mid-stop belongs to another restart; restarting it
+        # Only a stopped or failed unit may restart directly. A unit mid-start
+        # or mid-stop belongs to another restart; restarting it
         # again kills the container it is bringing up.
         try:
             res = subprocess.run(
@@ -495,16 +482,7 @@ def run_deployment(
             return 0
 
         if is_active:
-            if not check_idle():
-                log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=active-or-unknown")
-                return 0
-
-            log(audit_log, f"action=idle-confirmation desired={desired} restart_pending={restart_pending} wait_seconds={confirm_idle_seconds}")
-            sleep_fn(confirm_idle_seconds)
-
-            if not check_idle():
-                log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=activity-resumed")
-                return 0
+            log(audit_log, f"action=candidate-accepted desired={desired} restart_pending={restart_pending}")
 
         # Keep container tool maintenance from starting between the idle
         # check and the restart, and never restart in the middle of it.
@@ -567,8 +545,7 @@ def run_deployment(
         return 0
     finally:
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            os.close(lock_fd)
+            release_deployment_lock(lock_fd)
         except OSError:
             pass
 
@@ -629,7 +606,7 @@ def journal_message(journal_bin, message):
         pass
 
 
-def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin, audit_log,
+def force_restart(systemctl_bin, podman_bin, ledger_path, journal_bin, audit_log,
                   state_dir, image_archive, candidate_socket="/run/t3code-podman-candidate/podman.sock",
                   home_dir="/srv/apps/t3code/home",
                   volumes=(), candidate_acceptor=produce_candidate_receipt,
@@ -638,58 +615,62 @@ def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin
                   provider_secrets_file=None, tooling_path=None,
                   expected_agent_revision=None,
                   candidate_home_target="/candidate-home"):
-    """Restart T3 Code now, on the owner's explicit instruction."""
-    candidate_acceptor(
-        state_dir, image_archive, podman_bin, candidate_socket, home_dir,
-        volumes, candidate_uid,
-        candidate_runtime_dir, provider_secrets_file,
-        tooling_path,
-        expected_agent_revision,
-        candidate_home_target,
-    )
-    require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision,
-                      provider_secrets_file, tooling_path, candidate_home_target)
-    pre = container_identity(podman_bin)
-    print(f"Forcing immediate restart of podman-t3code.service (owner request: {reference})...",
-          flush=True)
-    subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True)
-    post = container_identity(podman_bin)
-    if not live_inputs_match(podman_bin, tooling_path, provider_secrets_file,
-                             candidate_home_target):
-        raise RuntimeError("forced T3 pickup did not load the desired agent or secret projection")
-    desired_file = Path(state_dir) / "desired"
-    desired = desired_file.read_text().strip() if desired_file.is_file() else ""
-    if expected_agent_revision or tooling_path or provider_secrets_file:
-        if not desired:
-            raise RuntimeError("forced T3 pickup is missing the desired deployment identity")
-        write_live_inputs_receipt(
-            state_dir, podman_bin, desired,
-            expected_agent_revision, tooling_path, provider_secrets_file, candidate_home_target,
+    """Restart T3 Code immediately after the exact image passes acceptance."""
+    lock_fd = acquire_deployment_lock(state_dir, blocking=True)
+    try:
+        candidate_acceptor(
+            state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+            volumes, candidate_uid,
+            candidate_runtime_dir, provider_secrets_file,
+            tooling_path,
+            expected_agent_revision,
+            candidate_home_target,
         )
-    if desired:
-        tmp_applied = Path(state_dir) / "applied.tmp"
-        tmp_applied.write_text(desired)
-        tmp_applied.replace(Path(state_dir) / "applied")
-    desired_inputs_file = Path(state_dir) / "desired-inputs"
-    if desired_inputs_file.is_file():
-        tmp_inputs = Path(state_dir) / "applied-inputs.tmp"
-        tmp_inputs.write_text(desired_inputs_file.read_text().strip() + "\n")
-        tmp_inputs.replace(Path(state_dir) / "applied-inputs")
-    entry = {"time": utcnow_iso(), "mode": "forced", "actor": actor(),
-             "reference": reference, "pre": pre, "post": post}
-    record_restart(ledger_path, entry)
-    journal_message(journal_bin,
-                    f"forced T3 Code restart by {entry['actor']['user']}@{entry['actor']['host']}: "
-                    f"{reference} (before {pre.get('id', 'unknown')}, "
-                    f"after {post.get('id', 'unknown')})")
-    log(audit_log, f"action=forced-restart reference={reference!r} "
-                   f"before={pre.get('id', '')} after={post.get('id', '')}")
-    print("Restart issued.", flush=True)
-    return 0
+        require_candidate(state_dir, image_archive, podman_bin, expected_agent_revision,
+                          provider_secrets_file, tooling_path, candidate_home_target)
+        pre = container_identity(podman_bin)
+        print("Restarting podman-t3code.service after candidate acceptance...", flush=True)
+        subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True)
+        post = container_identity(podman_bin)
+        if not live_inputs_match(podman_bin, tooling_path, provider_secrets_file,
+                                 candidate_home_target):
+            raise RuntimeError("forced T3 pickup did not load the desired agent or secret projection")
+        desired_file = Path(state_dir) / "desired"
+        desired = desired_file.read_text().strip() if desired_file.is_file() else ""
+        if expected_agent_revision or tooling_path or provider_secrets_file:
+            if not desired:
+                raise RuntimeError("forced T3 pickup is missing the desired deployment identity")
+            write_live_inputs_receipt(
+                state_dir, podman_bin, desired,
+                expected_agent_revision, tooling_path, provider_secrets_file, candidate_home_target,
+            )
+        if desired:
+            tmp_applied = Path(state_dir) / "applied.tmp"
+            tmp_applied.write_text(desired)
+            tmp_applied.replace(Path(state_dir) / "applied")
+        desired_inputs_file = Path(state_dir) / "desired-inputs"
+        if desired_inputs_file.is_file():
+            tmp_inputs = Path(state_dir) / "applied-inputs.tmp"
+            tmp_inputs.write_text(desired_inputs_file.read_text().strip() + "\n")
+            tmp_inputs.replace(Path(state_dir) / "applied-inputs")
+        entry = {"time": utcnow_iso(), "mode": "candidate-accepted", "actor": actor(),
+                 "pre": pre, "post": post}
+        record_restart(ledger_path, entry)
+        journal_message(journal_bin,
+                        f"candidate-accepted T3 Code restart by {entry['actor']['user']}@{entry['actor']['host']}: "
+                        f"before {pre.get('id', 'unknown')}, "
+                        f"after {post.get('id', 'unknown')})")
+        log(audit_log, "action=candidate-accepted-restart "
+                       f"before={pre.get('id', '')} after={post.get('id', '')}")
+        print("Restart issued.", flush=True)
+        return 0
+    finally:
+        release_deployment_lock(lock_fd)
 
 
 def main():
     parser = argparse.ArgumentParser(description="T3 Code deploy when idle")
+    parser.add_argument("--json", action="store_true", help="print structured acceptance output")
     parser.add_argument("--state-dir", default="/var/lib/ghostship/t3code-deployment")
     parser.add_argument("--image-archive", help="the exact Nix-built image archive")
     parser.add_argument("--candidate-socket", default="/run/t3code-podman-candidate/podman.sock")
@@ -698,20 +679,22 @@ def main():
     parser.add_argument("--provider-secrets-file")
     parser.add_argument("--tooling-path")
     parser.add_argument("--agent-revision")
+    parser.add_argument("--expected-deployment-id", default="",
+                        help="the target configuration's T3 deployment identity")
     parser.add_argument("--candidate-home-target", default="/candidate-home")
     parser.add_argument("--volume", action="append", default=[])
     parser.add_argument("--home-dir", default="/srv/apps/t3code/home")
-    parser.add_argument("--probe-bin", default="t3code-activity-probe")
     parser.add_argument("--podman-bin", default="podman")
     parser.add_argument("--systemctl-bin", default="systemctl")
     parser.add_argument("--audit-log", default="/srv/apps/t3code/home/.t3code-container/logs/restart-audit.log")
-    parser.add_argument("--confirm-idle-seconds", type=int, default=30)
     parser.add_argument("--health-timeout-seconds", type=int, default=120)
     parser.add_argument("--safe-restart", action="store_true", help="Schedule a safe restart")
     parser.add_argument("--force", "--now", action="store_true", help="Force immediate restart")
+    parser.add_argument("--verify-candidate", action="store_true",
+                        help="verify and print the receipt for this build's exact T3 image")
+    parser.add_argument("--accept-candidate", action="store_true",
+                        help="test this build's exact T3 image without restarting production")
     parser.add_argument("--wait", action="store_true", help="Wait for scheduled restart to finish")
-    parser.add_argument("--owner-request", default="",
-                        help="The owner's deploy or activate instruction that authorizes a forced restart")
     parser.add_argument("--restart-ledger", default=RESTART_LEDGER,
                         help="The ledger of restarts that interrupted T3 Code")
     parser.add_argument("--journal-bin", default="systemd-cat",
@@ -719,22 +702,46 @@ def main():
 
     args = parser.parse_args()
 
+    if args.verify_candidate or args.accept_candidate:
+        lock_fd = None
+        try:
+            if args.accept_candidate:
+                lock_fd = acquire_deployment_lock(args.state_dir, blocking=True)
+            try:
+                if args.accept_candidate:
+                    produce_candidate_receipt(
+                        args.state_dir, args.image_archive, args.podman_bin,
+                        args.candidate_socket, args.home_dir, args.volume,
+                        candidate_uid=args.candidate_uid,
+                        candidate_runtime_dir=args.candidate_runtime_dir,
+                        provider_secrets_file=args.provider_secrets_file,
+                        tooling_path=args.tooling_path,
+                        expected_agent_revision=args.agent_revision,
+                        candidate_home_target=args.candidate_home_target,
+                        deployment_id=args.expected_deployment_id,
+                        force_test=True,
+                    )
+                receipt = verify_candidate_receipt(
+                    args.state_dir, args.image_archive, args.expected_deployment_id,
+                    args.agent_revision, args.provider_secrets_file, args.tooling_path,
+                    args.candidate_home_target,
+                )
+            finally:
+                if lock_fd is not None:
+                    release_deployment_lock(lock_fd)
+        except (OSError, RuntimeError, tarfile.TarError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print(json.dumps(receipt, sort_keys=True))
+        return 0
+
     state_dir = Path(args.state_dir)
     pending_file = state_dir / "restart.pending"
     audit_path = Path(args.audit_log) if args.audit_log else None
 
-    if args.force and not args.owner_request.strip():
-        # A forced restart interrupts the work in flight. Only the owner's own
-        # deploy or activate instruction authorizes one.
-        print("Refusing to force a T3 Code restart: the owner's instruction is missing.", flush=True)
-        print("A forced restart interrupts active work. It needs the owner's deploy or activate",
-              flush=True)
-        print("instruction, recorded with --owner-request \"<short quote or reference>\".", flush=True)
-        return 2
-
     if args.safe_restart or args.force:
         if args.force:
-            return force_restart(args.systemctl_bin, args.podman_bin, args.owner_request.strip(),
+            return force_restart(args.systemctl_bin, args.podman_bin,
                                  args.restart_ledger, args.journal_bin, audit_path,
                                  args.state_dir, args.image_archive, args.candidate_socket,
                                  args.home_dir, args.volume,
@@ -770,11 +777,9 @@ def main():
         run_deployment(
             state_dir=args.state_dir,
             home_dir=args.home_dir,
-            probe_bin=args.probe_bin,
             podman_bin=args.podman_bin,
             systemctl_bin=args.systemctl_bin,
             audit_log=audit_path,
-            confirm_idle_seconds=args.confirm_idle_seconds,
             health_timeout_seconds=args.health_timeout_seconds,
             image_archive=args.image_archive,
             candidate_socket=args.candidate_socket,

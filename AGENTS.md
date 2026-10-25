@@ -19,11 +19,8 @@
   with narrowly scoped resources. Enforce only after the documented learning gate.
 - Deploy through committed Git changes and direct root SSH on the target host.
   If push or SSH access fails, report the blocker. Do not call `sudo`.
-- Every use of this repository must preserve the active T3 Code session:
-  do not force a busy restart. An owner request to deploy or activate permits
-  its necessary restart; record that request through the guarded helper.
-  Before activation, follow the session guard in
-  [container workflow](docs/container-workflow.md#preserve-the-active-t3-code-session).
+- T3 Code may restart after candidate acceptance passes for the exact image
+  being activated. Deploys must verify that receipt before switching.
 
 Read on demand:
 

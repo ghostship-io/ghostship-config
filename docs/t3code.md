@@ -3,9 +3,9 @@
 T3 Code runs in a persistent systemd container with an independent Nix store.
 `packages/t3code/image.nix` alone defines its image: base packages, boot units and
 image parameters. Host switches, agent pins and tooling changes preserve the
-container; only an image change queues replacement after sustained idle.
+container; image changes replace it after isolated candidate acceptance passes.
 Ghostship-agent owns and refreshes tools, CLIs and skills in the persistent home.
-T3 app releases update there too, restarting only the app when idle. Provider
+T3 app releases update there too, restarting only the app after its release check. Provider
 CLI and skill updates do not queue an app or container restart.
 
 For the staged unprivileged runtime and separate development Podman engine, use
@@ -20,8 +20,8 @@ The minimal image sets the system and user service `PATH` before managed helpers
 run; helpers need `sed` and `head` during early desktop environment discovery.
 Image replacement requires a candidate receipt for the exact image and deployment
 ID at `/var/lib/ghostship/t3code-deployment/receipts/<deployment-id>.json`, including
-signed-in app, provider turn, CLI, skills and desktop checks. An owner force request
-bypasses idle only; it does not bypass that receipt.
+signed-in app, provider turn, CLI, skills and desktop checks. The image may restart
+immediately after those checks pass.
 
 ## Projects and state
 
@@ -79,7 +79,7 @@ Open `https://t3code.ghostship.io` and complete Cloudflare sign-in.
 The container hostname is the internal name `t3code`: assigning its public
 hostname would also register that name in Podman DNS and `/etc/hosts`, shadowing
 the Cloudflare HTTPS edge with the HTTP-only origin. Container hostname changes
-apply at the next idle swap; never restart an active session to change one.
+apply with an image activation after its candidate acceptance passes.
 
 No separate T3 account is required for this web interface. The internal gateway supplies a
 native T3 bearer session for HTTP and WebSocket requests. The credential stays
@@ -498,8 +498,8 @@ only the session leaving the running state settles the turn. No conversation rec
 ## Maintenance
 
 Deploy merged changes with `agent deploy run`; `--agent-rev REV` pins an agent
-revision first. Its gates preserve busy T3 sessions, record the generation and
-verify live health. Image updates wait for idle when a restart is needed.
+revision first. Its gates require passing candidate acceptance for the target
+T3 image, record the generation and verify live health.
 
 The four-hour timer checks official T3 standalone releases and provider registry
 versions. It verifies T3's SHA-256 checksum, executable version, web client and
@@ -513,13 +513,13 @@ running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
 activity defers maintenance and recovery. Deferred tool checks retry on the
 one-minute maintenance timer once work becomes idle. Each provider update is
 attempted even if another fails. Cursor reads the release pinned by its
-installer and downloads only when that release is not already active. Only a changed T3 app release queues a server restart after sustained idle.
+installer and downloads only when that release is not already active. Only a changed T3 app release queues a server restart after its release check passes.
 Provider tools, settings, skills and Ghostship package updates take effect on
 their next invocation without an app or container restart.
 
 The `~/.local/bin/t3` wrapper keeps its Nix library environment and resolves the
 selected standalone release through the persistent `current` link. App updates
-change that link and restart only the app after sustained idle.
+change that link and restart only the app after its release check passes.
 
 T3 shows a provider "Update available" notice when the npm registry's `latest`
 tag is newer than the installed Codex, Claude, OpenCode or Grok version. The
@@ -552,7 +552,7 @@ remain reachable through one of those roots.
 The managed tooling package includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
 Container health reports web/server failures as unhealthy. The server monitor
-restarts only after work is idle; provider authentication failures do not
+restarts only after its candidate image passes acceptance; provider authentication failures do not
 trigger restart loops.
 
 `t3code-apply-config` validates JSON/TOML and OpenCode configuration, restarts the
@@ -569,35 +569,23 @@ skip the fetch so recovery never waits on GitHub. Sync output is in
 `~/.t3code-container/logs/t3code-hooks.log`. Update output is in
 `t3code-tool-auto-update.log` in the same directory.
 
-The host unit preserves running work across rebuilds. Image updates do not
-interrupt active tasks: `nixos-rebuild switch` stages the desired deployment ID,
-and `t3code-deploy-when-idle.timer` (running every minute) automatically applies
-the update after 30 seconds of sustained idle. The V1 activity probe reads
-`state.sqlite`: idle means no running or recently pending turn, no starting or
-running provider session, no user message in 15 minutes, no thread activity in
-10 minutes, and no unsettled Claude background task (shell, subagent, or
-monitor) started in the last 12 hours. Background tasks outlive the turn that
-started them, so a settled turn alone does not prove idle. Orchestrator V2 keeps
-that V1 database after switching to `statev2.sqlite`; its stale projections
-cannot establish idle. The probe uses the V2 adapter when that state exists,
-including active runs, subagents and pending launches. Missing state
-also returns unknown. The deployer leaves a
-unit that is starting or stopping alone; only a stopped or failed unit is
-started without the idle gate. The deployer holds the container's tool-maintenance lock
+The host unit preserves production while it builds and accepts a candidate. The
+candidate uses the target image, deployment inputs, credentials and tooling in an
+isolated runtime; production identity must be unchanged before the receipt is
+written. Once the exact receipt passes, the deployer holds the container's
+tool-maintenance lock
 (`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
 bind mount) across the restart. Each container carries its deployment ID in the
 `io.ghostship.t3code.deployment` label, so after a reboot, an interrupted
 deploy, or a slow health check, a container already running the desired image
 is recorded as applied once healthy instead of restarted again; one still in
 its health start period is left alone. An unhealthy new image gets at most
-three idle-gated restarts. Each failed start alerts through
+three candidate-accepted restarts. Each failed start alerts through
 `ghostship-failure@`; after the third the deployer stops, whether that image is running, exited, or
 never started, until a new image is desired or an operator runs `t3code-safe-restart`. A host switch does not
-restart an in-flight deploy. Operators can also queue a safe idle-aware restart at any time
-with `t3code-safe-restart`. A forced restart bypasses the idle gate and interrupts the work in
-flight, so it needs the owner's own deploy or activate instruction, recorded with
-`--owner-request "<short quote or reference>"`; without it the tool refuses the restart. Backups include the
-home and projects but exclude the development engine and Nix stores.
+restart an in-flight deploy. Operators can request an immediate restart with
+`t3code-safe-restart`; candidate acceptance is required in all cases. Backups
+include the home and projects but exclude the development engine and Nix stores.
 
 ```sh
 systemctl status podman-t3code.service --no-pager

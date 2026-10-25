@@ -578,6 +578,8 @@ in
         };
         systemd.services.t3code-podman-candidate = {
           description = "Isolated disposable T3 image candidate Podman manager";
+          restartIfChanged = false;
+          stopIfChanged = false;
           requires = [ "t3code-podman-network.service" ];
           after = [ "t3code-podman-network.service" ];
           # Rootless Podman must use NixOS's capability-bearing mapping
