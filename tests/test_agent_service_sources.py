@@ -16,7 +16,7 @@ class SourceClosureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             packages = ('mcp', 'registry', 'inference', 'runtime', 'browser', 'desktop',
-                        'keep', 'hostops', 'services', 'health', 't3', 'sessions',
+                        'keep', 'hostops', 'ownermemory', 'services', 'health', 't3', 'sessions',
                         'delegation', 'deploy', 'github', 'worker', 'workflows', 'policy')
             for name in packages:
                 path = root / 'tools/python' / ('ghostship_' + name)
