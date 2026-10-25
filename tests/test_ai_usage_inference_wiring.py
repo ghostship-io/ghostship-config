@@ -653,6 +653,33 @@ class ReportedWindowTests(WiringTestCase):
         self.assertEqual(labels["basis"], "reported")
         self.assertEqual(labels["state"], "")
 
+    def test_explicit_account_and_model_scopes_reach_the_picker(self):
+        measured = [
+            {**self.measured[0], "applies_to": ["claude", "gpt"]},
+            {**self.measured[0], "quotaId": "model-limit", "model": "example-model",
+             "appliesTo": ["example-family"]},
+        ]
+        windows = self.windows(self.inferred, self.routes, measured)
+        self.assertEqual(windows["opencode-go"][0].applies_to, ("claude", "gpt"))
+        self.assertEqual(
+            windows["opencode-go/example-model"][0].applies_to,
+            ("example-family",),
+        )
+
+    def test_malformed_reported_values_remain_unknown(self):
+        measured = [{
+            **self.measured[0],
+            "usedRatio": True,
+            "resetEpoch": "not-a-timestamp",
+            "durationSeconds": float("inf"),
+            "observedAtEpoch": False,
+        }]
+        window = self.windows(self.inferred, self.routes, measured)["opencode-go"][0]
+        self.assertIsNone(window.used_ratio)
+        self.assertIsNone(window.reset_epoch)
+        self.assertIsNone(window.duration_seconds)
+        self.assertIsNone(window.observed_at)
+
 
 class AccountScopeTests(WiringTestCase):
     """A limit that belongs to the account is filed under the provider."""
