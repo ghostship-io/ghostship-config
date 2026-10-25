@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.322] - 2026-10-25
+
+Package the T3 deployment and candidate acceptance scripts with their sibling inputs.
+
+PR #549.
+
 ## [3.17.321] - 2026-10-25
 
 - Publish and consume canonical per-provider quota headroom, reset, and exhaustion.
