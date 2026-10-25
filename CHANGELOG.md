@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.332] - 2026-10-25
+
+Keep verified quota resets from restoring capacity before their effective time, preserve provider reading provenance, and bound reset evidence by freshness.
+
+PR #566.
+
 ## [3.17.331] - 2026-10-25
 
 Publish native T3 provider catalog records with provenance for the Go coordinator.
