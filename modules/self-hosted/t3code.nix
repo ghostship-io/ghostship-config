@@ -151,6 +151,11 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = builtins.readFile ../../packages/t3code/deploy-image.sh;
   };
+  t3codeActivateDeployment = pkgs.writeShellApplication {
+    name = "ghostship-t3code-activate-deployment";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
+    text = builtins.readFile ../../packages/t3code/activate-deployment.sh;
+  };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
   # podman-t3code seeds it from the image closure on every deployment (nix copy)
@@ -414,16 +419,12 @@ in
 
   system.activationScripts.t3code-deployment = {
     text = ''
-      install -d -m 0755 ${t3codeDeploymentState}
-      printf '%s\n' ${lib.escapeShellArg t3codeDeploymentId} \
-        > ${t3codeDeploymentState}/desired.tmp
-      mv ${t3codeDeploymentState}/desired.tmp ${t3codeDeploymentState}/desired
-      secret_inode=$(${pkgs.coreutils}/bin/stat -Lc %i ${t3codeSecrets})
-      printf 'agent=%s secret_inode=%s\n' ${lib.escapeShellArg t3codeAgentRevision} "$secret_inode" \
-        > ${t3codeDeploymentState}/desired-inputs.tmp
-      mv ${t3codeDeploymentState}/desired-inputs.tmp ${t3codeDeploymentState}/desired-inputs
-      rm -f ${t3codeDeploymentState}/restart.pending ${t3codeDeploymentState}/restart.pending.tmp
-      ${pkgs.systemd}/bin/systemctl start --no-block ghostship-t3code-deploy.service
+      STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
+        DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
+        AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \
+        PROVIDER_SECRETS_FILE=${lib.escapeShellArg t3codeSecrets} \
+        SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl \
+        ${lib.getExe t3codeActivateDeployment}
     '';
     supportsDryActivation = false;
   };

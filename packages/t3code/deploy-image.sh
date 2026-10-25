@@ -121,6 +121,14 @@ container_identity() {
 }
 
 pre=$(container_identity)
+# Activation writes desired under the same lock, so a completed acceptance
+# cannot restart a unit for a newer image using this image's receipt.
+current_desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
+current_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
+if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_inputs" ]]; then
+  echo "T3 deployment request was superseded before restart; refusing stale image" >&2
+  exit 0
+fi
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
 

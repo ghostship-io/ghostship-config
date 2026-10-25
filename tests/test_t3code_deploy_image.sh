@@ -31,6 +31,10 @@ if [[ ${CANDIDATE_FAIL:-0} == 1 ]]; then
   exit 2
 fi
 printf '%s\n' candidate-accepted >> "$EVENTS"
+if [[ -n ${SUPERSEDE_TO:-} ]]; then
+  printf '%s\n' "$SUPERSEDE_TO" > "$STATE_DIR/desired"
+  printf '%s\n' 'agent=new secret_inode=new' > "$STATE_DIR/desired-inputs"
+fi
 config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
 jq -cn \
@@ -113,5 +117,22 @@ grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
 [[ $(wc -l < "$EVENTS") == 3 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
 
+# A target changed while acceptance ran must not be restarted with the old
+# image's receipt. Activation normally serializes this mutation on deploy.lock;
+# this guard also fails safely if an out-of-band writer changes desired.
+export DEPLOYMENT_ID=deployment-3 SUPERSEDE_TO=deployment-4 CANDIDATE_FAIL=0
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/superseded.log" 2>&1
+superseded_status=$?
+set -e
+[[ $superseded_status == 0 ]]
+grep -q 'superseded before restart; refusing stale image' "$tmp/superseded.log"
+[[ $(wc -l < "$EVENTS") == 4 ]]
+[[ $(cat "$tmp/state/applied") == deployment-1 ]]
+[[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
+
 echo 'V1 shell proof: candidate acceptance PASS precedes the immediate restart.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
+echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
