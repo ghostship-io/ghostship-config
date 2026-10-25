@@ -153,6 +153,14 @@ COVERAGE = (
     ("pi", "t3_usage"),
 )
 
+# T3's access probe does not itself measure Claude quota; its separate reader
+# supplies that account's windows. Derive the account inventory from COVERAGE.
+QUOTA_SOURCE_OVERRIDES = {"claude": "claude_usage"}
+QUOTA_COVERAGE = tuple(
+    (provider, QUOTA_SOURCE_OVERRIDES.get(provider, source))
+    for provider, source in COVERAGE
+)
+
 METRIC_HELP = {
     "ghostship_ai_source_success": "Whether the last collection of this source succeeded.",
     "ghostship_ai_source_status": "One for the current status of a source.",
@@ -448,6 +456,12 @@ METRIC_HELP = {
     ),
     "ghostship_ai_provider_capacity_windows": (
         "The account windows of a provider, split into known and unknown."
+    ),
+    "ghostship_ai_provider_quota_evidence": (
+        "Quota evidence health for each configured provider account; state and reason name gaps."
+    ),
+    "ghostship_ai_provider_quota_source_age_seconds": (
+        "Age of the freshest quota reading for a configured provider account and source."
     ),
     "ghostship_ai_picker_quota_capacity_missing": (
         "A live picker candidate whose account key has no provider capacity record."
@@ -2573,6 +2587,11 @@ def render(
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
+        add(name, labels, value)
+    for name, labels, value in snapshot_module.provider_quota_evidence_samples(
+        snapshot or {}, QUOTA_COVERAGE,
+        ((snapshot or {}).get("coverage") or {}).get("sources", []), now
+    ):
         add(name, labels, value)
     for name, labels, value in snapshot_module.account_window_samples(snapshot or {}):
         add(name, labels, value)

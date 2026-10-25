@@ -14,6 +14,7 @@ spec = importlib.util.spec_from_file_location("ai_usage_snapshot", ROOT / "snaps
 snapshot = importlib.util.module_from_spec(spec)
 sys.modules["ai_usage_snapshot"] = snapshot
 spec.loader.exec_module(snapshot)
+import main
 
 NOW = 1_800_000_000.0
 HOUR = 3600.0
@@ -46,6 +47,71 @@ class OpenCodeBillingTests(unittest.TestCase):
         self.assertEqual(result["native_catalog"]["schema_version"], 1)
         self.assertEqual(result["native_catalog"]["source"], "t3.server.refreshProviders")
         self.assertEqual(result["native_catalog"]["records"], records)
+
+
+class ProviderQuotaEvidenceTests(unittest.TestCase):
+    def test_configured_accounts_report_measured_stale_unknown_and_unavailable(self):
+        data = {"quota": {"accounts": {
+            "codex": [
+                {"source": "t3", "check_at": snapshot._iso(NOW - 60),
+                 "remaining_ratio": 0.5},
+                {"source": "t3", "check_at": snapshot._iso(NOW - 100),
+                 "remaining_ratio": 0.7},
+            ],
+            "antigravity": [{"source": "antigravity", "check_at": snapshot._iso(NOW - 3600),
+                              "remaining_ratio": 0.8}],
+            "ollama": [{"source": "ollama", "check_at": None,
+                        "remaining_ratio": None}],
+            "openrouter": [{"source": "openrouter", "check_at": snapshot._iso(NOW - 5),
+                            "remaining_ratio": 0.0}],
+        }}}
+        coverage = (("codex", "t3"), ("claude", "claude_usage"),
+                    ("ollama", "ollama"), ("grok", "grok"), ("cursor", "t3"),
+                    ("openrouter", "openrouter"),
+                    ("antigravity", "antigravity"), ("opencode", "t3_usage"))
+        sources = [
+            {"id": "claude_usage", "status": "missing_credentials",
+             "reason": "missing_credentials", "observed_at_epoch": None},
+            {"id": "grok", "status": "error", "reason": "rpc_failed",
+             "observed_at_epoch": None},
+            {"id": "t3", "status": "ok", "reason": "ok",
+             "observed_at_epoch": NOW - 30},
+            {"id": "opencode_events", "status": "ok", "reason": "ok",
+             "observed_at_epoch": NOW - 15},
+            {"id": "pool_events", "status": "unreadable", "reason": "ledger_missing",
+             "observed_at_epoch": None},
+        ]
+        samples = snapshot.provider_quota_evidence_samples(data, coverage, sources, NOW)
+        evidence = {
+            labels["provider"]: (labels["state"], labels["reason"])
+            for name, labels, _value in samples
+            if name == "ghostship_ai_provider_quota_evidence"
+        }
+        self.assertEqual(evidence, {
+            "codex": ("measured", ""),
+            "claude": ("unavailable", "missing_credentials"),
+            "ollama": ("unknown", "unknown_window"),
+            "grok": ("unavailable", "rpc_failed"),
+            "cursor": ("unknown", "no_quota_window"),
+            "openrouter": ("exhausted", "spent_window"),
+            "antigravity": ("stale", "stale_reading"),
+            "opencode": ("partial", "source_partial"),
+        })
+        ages = {
+            labels["provider"]: value
+            for name, labels, value in samples
+            if name == "ghostship_ai_provider_quota_source_age_seconds"
+        }
+        self.assertEqual(ages, {"codex": 60, "cursor": 30, "antigravity": 3600,
+                                "openrouter": 5, "opencode": 15})
+        data["coverage"] = {"sources": sources}
+        rendered = main.render([], [], NOW, 1.0, data)
+        self.assertIn("# HELP ghostship_ai_provider_quota_evidence", rendered)
+        self.assertIn(
+            'ghostship_ai_provider_quota_evidence{provider="claude",reason="missing_credentials",source="claude_usage",state="unavailable"} 1',
+            rendered,
+        )
+        self.assertIn("ghostship_ai_provider_quota_source_age_seconds", rendered)
 
 
 class Ranked:

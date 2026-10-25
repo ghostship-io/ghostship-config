@@ -412,6 +412,24 @@ subtract rolling gauges. VictoriaMetrics does keep the recorded history, so
 as-of and range queries over the gauges above (quota filling, resets, decision
 changes) are correct.
 
+### Provider quota evidence health
+
+`ghostship_ai_provider_quota_evidence` emits one state for each configured
+provider account. `measured` means every applicable window has a fresh numeric
+reading; `exhausted` means a fresh window is spent; `partial` means some
+windows are unknown or stale; `stale` means none of the readings are current;
+`unknown` means no usable quota window was published; and `unavailable` names
+the configured reader's fixed failure reason. The `reason` label is a bounded
+code, never provider error text. A missing account window is visible as
+`no_quota_window`, even when its reader completed successfully.
+
+`ghostship_ai_provider_quota_source_age_seconds` reports the age of the
+freshest quota window reading per provider and source. When no window exists,
+it reports the age of the configured reader's own observation when available.
+No age series is emitted without an observation timestamp. These health gauges
+supplement the canonical `quota.provider_capacity` record; they never turn an
+unknown or stale capacity into available headroom.
+
 ### The AA-3D contract
 
 The 3D tier ranks the measured Artificial Analysis AA-3D evaluation
