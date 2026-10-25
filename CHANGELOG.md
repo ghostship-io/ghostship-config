@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.313] - 2026-10-25
+
+Install the owner route policy for T3 at `/etc/ghostship/route-policy.json` and pass its path to the agent runtime. Generate approved free worker entries from the existing approved-free-workers source and deny Claude Fable routes in each role. The worker allow list includes only the owner-approved Codex and Antigravity routes plus those approved free routes; no temporary authorization is configured.
+
+Release: patch
+
+PR #523.
+
 ## [3.17.312] - 2026-10-25
 
 - Record the Walmart coordinate settings in the retail inventory
