@@ -1,5 +1,6 @@
 """The picker and provider cards must agree on availability and selection."""
 import importlib.util
+from datetime import datetime
 from pathlib import Path
 import unittest
 import sys
@@ -82,6 +83,53 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(all(not row['available'] for row in value['worker']))
         self.assertTrue(all(row['state'] == 'exhausted' for row in value['worker']))
         self.assertTrue(all(row['remaining_ratio'] == 0.0 for row in value['worker']))
+
+    def test_exhausted_account_window_overrides_route_remaining_metric(self):
+        reset = '2026-10-26T12:00:00Z'
+        account_reset = '2026-10-27T06:00:00Z'
+        rows = [candidate('nvidia', model, remaining=0.9995)
+                for model in ('nvidia/route-a', 'nvidia/route-b')]
+        for row in rows:
+            row['account'] = 'nvidia'
+            row['windows'] = [{
+                'kind': '1h', 'quota_id': 'inferred:1h', 'remaining_ratio': 0.9995,
+                'reset_at': reset, 'seconds_to_reset': 3600, 'duration_seconds': 3600,
+                'evidence': 'inferred',
+            }]
+        account_window = {
+            'kind': 'account', 'quota_id': 'inferred:exhausted', 'remaining_ratio': 0.0,
+            'reset_at': account_reset, 'evidence': 'inferred',
+        }
+        provider_capacity = {
+            'left': 0.0, 'remaining_ratio': 0.0, 'reset': account_reset, 'exhausted': True,
+            'binding': {'kind': account_window['kind'], 'quota': account_window['quota_id'],
+                        'reset_at': account_reset},
+        }
+        value = self.build(rows, {'nvidia': provider_capacity})
+
+        # This is the observed split: the shared inferred window is exhausted,
+        # while each local inferred:1h route window still reads 99.95%.
+        self.assertEqual(account_window['quota_id'], 'inferred:exhausted')
+        self.assertEqual(account_window['remaining_ratio'], 0.0)
+        self.assertTrue(all(row['limiting_window']['quota_id'] == 'inferred:1h'
+                            for row in value['worker']))
+        route_samples = [
+            (labels, number) for name, labels, number in selection.samples(value)
+            if name == 'ghostship_ai_picker_model_remaining_ratio'
+            and labels.get('provider') == 'nvidia'
+        ]
+        self.assertEqual(len(route_samples), 2)
+        self.assertTrue(all(number == 0.0 and labels['state'] == 'exhausted'
+                            for labels, number in route_samples))
+        self.assertTrue(all(labels['quota_id'] == 'inferred:1h'
+                            and labels['pace_state'] == 'spent'
+                            for labels, _number in route_samples))
+        reset_timestamp = datetime.fromisoformat(account_reset.replace('Z', '+00:00')).timestamp()
+        self.assertTrue(all(labels.get('reset_source') == 'account_window'
+                            for labels, _number in route_samples))
+        self.assertTrue(all(number == reset_timestamp for name, labels, number in selection.samples(value)
+                            if name == 'ghostship_ai_picker_model_reset_timestamp_seconds'
+                            and labels.get('provider') == 'nvidia'))
 
     def test_model_scoped_exhaustion_does_not_block_sibling(self):
         opus = candidate('example', 'opus-route', remaining=0.8)
