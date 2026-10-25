@@ -140,10 +140,20 @@ let
       --home-dir "${t3codeHome}" \
       --probe-bin "${t3codeActivityProbe}/bin/t3code-activity-probe" \
       --podman-bin "${pkgs.podman}/bin/podman" \
+      --candidate-socket "/run/t3code-podman-candidate/podman.sock" \
+      --candidate-uid "${toString (config.ghostship.t3codePodman.uid + 1)}" \
       --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
       --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
       --restart-ledger "/var/lib/t3code-restarts/ledger.jsonl" \
       --journal-bin "${pkgs.systemd}/bin/systemd-cat" \
+      --environment-file "${t3codeSecrets}" \
+      --environment-file "${retailStoreEnv}" \
+      --volume "${t3codeTmp}:/tmp:rw" \
+      --volume "${t3codeWorkspace}:/workspace:rw" \
+      --volume "${t3codeNixRoot}/nix:/nix:rw" \
+      --volume "${t3codeSecrets}:${t3codeSecretsFile}:ro" \
+      --volume "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro" \
+      --volume "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro" \
       "$@"
   '';
 

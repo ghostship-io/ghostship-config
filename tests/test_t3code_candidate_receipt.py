@@ -69,7 +69,8 @@ class CandidateReceipt(unittest.TestCase):
         with patch.object(deployer.subprocess, 'run') as run:
             with self.assertRaisesRegex(RuntimeError, str(self.path)):
                 deployer.force_restart('systemctl', 'podman', 'activate reviewed image',
-                    self.root/'ledger', 'journal', None, self.root, self.archive)
+                    self.root/'ledger', 'journal', None, self.root, self.archive,
+                    candidate_acceptor=lambda *_: deployer.require_candidate(self.root, self.archive, 'podman'))
         run.assert_not_called()
 
     def test_raw_force_is_effective_and_receipt_is_checked(self):
@@ -77,7 +78,7 @@ class CandidateReceipt(unittest.TestCase):
         argv = ['deployer', '--force', '--owner-request', 'activate reviewed image',
             '--state-dir', str(self.root), '--image-archive', str(self.archive),
             '--restart-ledger', str(self.root/'ledger'), '--audit-log', str(self.root/'audit')]
-        with patch.object(sys, 'argv', argv), patch.object(deployer.subprocess, 'run',
+        with patch.object(sys, 'argv', argv), patch.object(deployer, 'produce_candidate_receipt', return_value=None), patch.object(deployer.subprocess, 'run',
                 return_value=Mock(returncode=0)), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(deployer.main(), 0)
         self.assertEqual(json.loads((self.root/'ledger').read_text())['mode'], 'forced')
@@ -88,9 +89,26 @@ class CandidateReceipt(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, str(self.path)):
                 deployer.run_deployment(self.root, self.root, image_archive=self.archive,
                     idle_checker=lambda: True, sleep_fn=lambda _: None,
-                    deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None)
-        self.assertEqual([call.args[0] for call in run.call_args_list],
-                         [['systemctl', 'is-active', 'podman-t3code.service']])
+                    deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None,
+                    candidate_acceptor=lambda *_: deployer.require_candidate(self.root, self.archive, 'podman'))
+        run.assert_not_called()
+
+    def test_acceptance_receipt_allows_idle_pickup(self):
+        (self.root / 'desired').write_text('candidate-definition')
+        (self.root / 'applied').write_text('old-definition')
+        def accept(*_args):
+            self.path.write_text(json.dumps(self.receipt))
+        with patch.object(deployer.subprocess, 'run',
+                side_effect=[Mock(returncode=0, stdout='active'), Mock(returncode=0)]) as run:
+            result = deployer.run_deployment(
+                self.root, self.root, image_archive=self.archive,
+                idle_checker=lambda: True, sleep_fn=lambda _: None,
+                deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None,
+                candidate_acceptor=accept, healthy_waiter=lambda: True,
+            )
+        self.assertEqual(result, 0)
+        self.assertTrue(any(call.args[0][-2:] == ['restart', 'podman-t3code.service']
+                            for call in run.call_args_list))
 
     def test_same_image_restart_needs_no_migration_receipt(self):
         with patch.object(deployer, 'container_identity', return_value={'image': 'sha256:'+self.image}):

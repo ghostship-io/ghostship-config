@@ -14,6 +14,12 @@ let
   workspace = config.ghostship.agentHost.workspacePath;
   worktrees = "/srv/apps/t3code/home/.t3/worktrees";
   graphRoot = "${state}/${if cfg.candidate then "candidate" else "storage"}";
+  candidateUser = "t3code-podman-candidate";
+  candidateUid = cfg.uid + 1;
+  candidateSubIdStart = cfg.subIdStart + 65536;
+  candidateState = "${state}/candidate";
+  candidateHome = "/var/lib/t3code-podman-candidate/home";
+  candidateRunRoot = "/run/t3code-podman-candidate/containers";
   containersConfig = (pkgs.formats.toml { }).generate "t3code-podman.conf" {
     containers = {
       dns_servers = cfg.dns;
@@ -44,6 +50,36 @@ let
       graphroot = graphRoot;
       rootless_storage_path = graphRoot;
       options.overlay.mount_program = "${pkgs.fuse-overlayfs}/bin/fuse-overlayfs";
+    };
+  };
+  candidateStorageConfig = (pkgs.formats.toml { }).generate "t3code-podman-candidate-storage.conf" {
+    storage = {
+      driver = "overlay";
+      runroot = candidateRunRoot;
+      graphroot = candidateState;
+      rootless_storage_path = candidateState;
+      options.overlay.mount_program = "${pkgs.fuse-overlayfs}/bin/fuse-overlayfs";
+    };
+  };
+  candidateContainersConfig = (pkgs.formats.toml { }).generate "t3code-podman-candidate.conf" {
+    containers = {
+      dns_servers = cfg.dns;
+      log_driver = "k8s-file";
+      log_size_max = 10485760;
+    };
+    engine = {
+      cgroup_manager = "cgroupfs";
+      runtime = "crun";
+      runtimes.crun = [ "${pkgs.crun}/bin/crun" ];
+      helper_binaries_dir = [
+        "${pkgs.podman}/libexec/podman"
+        "${pkgs.podman.passthru.helpersBin}/bin"
+      ];
+    };
+    network = {
+      network_backend = "netavark";
+      default_rootless_network_cmd = "slirp4netns";
+      default_subnet = "172.29.0.0/16";
     };
   };
   registriesConfig = pkgs.writeText "t3code-podman-registries.conf" ''
@@ -439,6 +475,26 @@ in
             message = "T3 Podman candidate requires integration with the host forward firewall before filterForward can be enabled.";
           }
           {
+            assertion = candidateUid != 3000 && candidateUid != cfg.uid;
+            message = "T3 Podman candidate needs a distinct non-app UID.";
+          }
+          {
+            assertion = candidateSubIdStart + 65536 <= 4294901760;
+            message = "T3 Podman candidate subordinate ID range exceeds the supported range.";
+          }
+          {
+            assertion = lib.all (u: u.name == candidateUser || u.uid != candidateUid) (
+              builtins.attrValues config.users.users
+            );
+            message = "T3 Podman candidate UID collides with an existing account.";
+          }
+          {
+            assertion = lib.all (g: g.name == candidateUser || g.gid != candidateUid) (
+              builtins.attrValues config.users.groups
+            );
+            message = "T3 Podman candidate GID collides with an existing group.";
+          }
+          {
             assertion = lib.all (u: u.name == user || u.uid != cfg.uid) (
               builtins.attrValues config.users.users
             );
@@ -510,6 +566,46 @@ in
             }
           ];
         };
+        users.groups.${candidateUser}.gid = candidateUid;
+        users.users.${candidateUser} = {
+          isSystemUser = true;
+          uid = candidateUid;
+          group = candidateUser;
+          home = "/var/lib/t3code-podman-candidate";
+          createHome = false;
+          autoSubUidGidRange = false;
+          subUidRanges = [ { startUid = candidateSubIdStart; count = 65536; } ];
+          subGidRanges = [ { startGid = candidateSubIdStart; count = 65536; } ];
+        };
+        systemd.services.t3code-podman-candidate = {
+          description = "Isolated disposable T3 image candidate Podman manager";
+          requires = [ "t3code-podman-network.service" ];
+          after = [ "t3code-podman-network.service" ];
+          environment = {
+            HOME = "/var/lib/t3code-podman-candidate";
+            XDG_RUNTIME_DIR = "/run/t3code-podman-candidate";
+            CONTAINERS_CONF = candidateContainersConfig;
+            CONTAINERS_STORAGE_CONF = candidateStorageConfig;
+            CONTAINERS_REGISTRIES_CONF = registriesConfig;
+            PATH = lib.makeBinPath runtimePaths;
+          };
+          serviceConfig = {
+            Type = "simple";
+            User = candidateUser;
+            Group = candidateUser;
+            RuntimeDirectory = "t3code-podman-candidate";
+            RuntimeDirectoryMode = "0700";
+            NetworkNamespacePath = "/run/netns/t3code-podman";
+            ExecStart = "${pkgs.podman}/bin/podman system service --time=0 unix:///run/t3code-podman-candidate/podman.sock";
+            Restart = "on-failure";
+            RestartSec = 2;
+            KillMode = "mixed";
+            TasksMax = cfg.tasksMax;
+            MemoryMax = cfg.memoryMax;
+            CPUQuota = cfg.cpuQuota;
+          };
+        };
+        environment.etc."ghostship/t3code-podman-candidate-storage.conf".source = candidateStorageConfig;
         # NixOS shadow already supplies capability-limited newuidmap/newgidmap.
         boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
         boot.kernelModules = [
@@ -517,8 +613,11 @@ in
           "fuse"
         ];
         systemd.tmpfiles.rules = [
-          "d ${state} 0700 ${user} ${user} -"
+          "d ${state} 0711 ${user} ${user} -"
           "d ${state}/home 0700 ${user} ${user} -"
+          "d ${candidateState} 0700 ${candidateUser} ${candidateUser} -"
+          "d /var/lib/t3code-podman-candidate 0700 ${candidateUser} ${candidateUser} -"
+          "d ${candidateHome} 0700 ${candidateUser} ${candidateUser} -"
           "d /run/t3code-podman 0750 root apps -"
         ];
         systemd.services.t3code-podman-network = {

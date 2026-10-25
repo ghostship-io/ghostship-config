@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -51,6 +52,26 @@ def require_candidate(state_dir, image_archive, podman_bin):
         and all(receipt.get("checks", {}).get(name) is True for name in checks)
     ):
         raise RuntimeError("candidate receipt does not approve this exact T3 image")
+
+
+def produce_candidate_receipt(state_dir, image_archive, podman_bin, candidate_socket,
+                             home_dir, environment_files=(), volumes=(), candidate_uid=62041):
+    """Run acceptance once when the desired image has no approved receipt."""
+    try:
+        require_candidate(state_dir, image_archive, podman_bin)
+        return
+    except RuntimeError:
+        pass
+    script = Path(__file__).with_name("candidate-acceptance.py")
+    spec = importlib.util.spec_from_file_location("t3code_candidate_acceptance", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.accept(
+        state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+        environment_files, volumes,
+        candidate_uid=candidate_uid,
+    )
+    require_candidate(state_dir, image_archive, podman_bin)
 
 
 def utcnow_iso():
@@ -257,6 +278,11 @@ def run_deployment(
     health_reader=None,
     max_attempts=MAX_DEPLOY_ATTEMPTS,
     image_archive=None,
+    candidate_socket="/run/t3code-podman-candidate/podman.sock",
+    environment_files=(),
+    volumes=(),
+    candidate_acceptor=produce_candidate_receipt,
+    candidate_uid=62041,
 ):
     state_dir = Path(state_dir)
     home_dir = Path(home_dir)
@@ -285,6 +311,13 @@ def run_deployment(
 
         if not restart_pending and (not desired or desired == applied):
             return 0
+
+        if desired and image_archive and candidate_acceptor:
+            candidate_acceptor(
+                state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+                environment_files, volumes,
+                candidate_uid,
+            )
 
         # A reboot, an interrupted deploy, or a slow health check can leave the
         # desired image already running. Record it once it is healthy instead
@@ -463,8 +496,15 @@ def journal_message(journal_bin, message):
 
 
 def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin, audit_log,
-                  state_dir, image_archive):
+                  state_dir, image_archive, candidate_socket="/run/t3code-podman-candidate/podman.sock",
+                  home_dir="/srv/apps/t3code/home",
+                  environment_files=(), volumes=(), candidate_acceptor=produce_candidate_receipt,
+                  candidate_uid=62041):
     """Restart T3 Code now, on the owner's explicit instruction."""
+    candidate_acceptor(
+        state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+        environment_files, volumes, candidate_uid,
+    )
     require_candidate(state_dir, image_archive, podman_bin)
     pre = container_identity(podman_bin)
     print(f"Forcing immediate restart of podman-t3code.service (owner request: {reference})...",
@@ -488,6 +528,10 @@ def main():
     parser = argparse.ArgumentParser(description="T3 Code deploy when idle")
     parser.add_argument("--state-dir", default="/var/lib/ghostship/t3code-deployment")
     parser.add_argument("--image-archive", help="the exact Nix-built image archive")
+    parser.add_argument("--candidate-socket", default="/run/t3code-podman-candidate/podman.sock")
+    parser.add_argument("--candidate-uid", type=int, default=62041)
+    parser.add_argument("--environment-file", action="append", default=[])
+    parser.add_argument("--volume", action="append", default=[])
     parser.add_argument("--home-dir", default="/srv/apps/t3code/home")
     parser.add_argument("--probe-bin", default="t3code-activity-probe")
     parser.add_argument("--podman-bin", default="podman")
@@ -524,7 +568,9 @@ def main():
         if args.force:
             return force_restart(args.systemctl_bin, args.podman_bin, args.owner_request.strip(),
                                  args.restart_ledger, args.journal_bin, audit_path,
-                                 args.state_dir, args.image_archive)
+                                 args.state_dir, args.image_archive, args.candidate_socket,
+                                 args.home_dir, args.environment_file, args.volume,
+                                 candidate_uid=args.candidate_uid)
 
         state_dir.mkdir(parents=True, exist_ok=True)
         tmp = state_dir / "restart.pending.tmp"
@@ -558,6 +604,10 @@ def main():
             confirm_idle_seconds=args.confirm_idle_seconds,
             health_timeout_seconds=args.health_timeout_seconds,
             image_archive=args.image_archive,
+            candidate_socket=args.candidate_socket,
+            candidate_uid=args.candidate_uid,
+            environment_files=args.environment_file,
+            volumes=args.volume,
         )
     )
 
