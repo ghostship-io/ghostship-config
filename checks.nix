@@ -60,6 +60,15 @@ let
   actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
   expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" ];
   actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
+  sonnetWorkerEntry = pkgs.lib.findFirst
+    (entry: entry.provider == "claudeAgent" && entry.model == "claude-sonnet-5-5")
+    null routePolicy.roles.worker.allow;
+  fastBillingDenied = role: builtins.any
+    (entry: entry.provider == "*" && entry.model == "*"
+      && entry.billing_tier == "priority"
+      && builtins.all (tier: builtins.elem tier entry.tiers)
+        [ "fastMode=true" "serviceTier=fast" ])
+    routePolicy.roles.${role}.deny;
   fableDenied =
     role:
     builtins.all
@@ -155,6 +164,8 @@ in
       builtins.sort builtins.lessThan actualOrchestratorRoutes
       == builtins.sort builtins.lessThan expectedOrchestratorRoutes;
     assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
+    assert sonnetWorkerEntry.kinds == [ "ui" ];
+    assert fastBillingDenied "worker" && fastBillingDenied "orchestrator" && fastBillingDenied "reviewer";
     assert routePolicy.authorizations == [ ];
     # Fail host evaluation if either process cannot read the policy at the
     # path its CLI uses. This checks evaluated container definitions, not
