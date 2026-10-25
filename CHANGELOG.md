@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.301] - 2026-10-25
+
+- Declare BW_ORGANIZATION_ID and BW_COLLECTION_ID as runtime Bitwarden config (for ghostship-agent#514)
+
+PR #497.
+
 ## [3.17.300] - 2026-10-24
 
 - docs: retire the stale Groq and Cloudflare references
