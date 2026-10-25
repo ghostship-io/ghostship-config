@@ -362,6 +362,10 @@ in
       pull = "never";
       user = "62033:62033";
       cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
+      environment = {
+        T3_SERVER_URL = "http://t3code:3773";
+        GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
+      };
       environmentFiles = [ config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path ];
       ports = [ "127.0.0.1:18765:18765" ];
       volumes = [
@@ -371,10 +375,21 @@ in
       extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=256m" "--cpus=0.5" ];
     };
     systemd.services.podman-ghostship-go-coordinator = {
-      after = [ "init-ghostship-net.service" ];
-      requires = [ "init-ghostship-net.service" ];
+      after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
+      requires = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
       preStart = ''
+        set -eu
+        umask 077
         ${config.ghostship.selfHostedSecrets.renderFor "ghostship-go-coordinator"}/bin/ghostship-secret-project ghostship-go-coordinator
+        token="$(${pkgs.coreutils}/bin/cat /run/ghostship-github/t3-token)"
+        ${pkgs.coreutils}/bin/test -n "$token"
+        env_file=${lib.escapeShellArg config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path}
+        tmp="$env_file.new"
+        ${pkgs.coreutils}/bin/cat "$env_file" > "$tmp"
+        printf 'T3_BRIDGE_TOKEN=%s\n' "$token" >> "$tmp"
+        ${pkgs.coreutils}/bin/chown 62033:62033 "$tmp"
+        ${pkgs.coreutils}/bin/chmod 0400 "$tmp"
+        ${pkgs.coreutils}/bin/mv -f "$tmp" "$env_file"
       '';
     };
   };
