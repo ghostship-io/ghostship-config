@@ -15,6 +15,12 @@ class FreeWorkerPolicyTests(unittest.TestCase):
                 self.assertFalse({'workload_grant', 'china_hosting_workloads',
                                   'china_hosting_opt_in', 'authorization'} & account.keys())
 
+    def test_inception_is_not_admitted_without_live_billing_and_data_policy_evidence(self):
+        inception = json.loads((DIRECTORY / 'inference-pool.json').read_text())['providers']['inception']
+        self.assertFalse(inception['data_policy_approved'])
+        self.assertTrue(inception['free_only'])
+        self.assertNotIn('billing_verified', inception)
+
     def test_native_worker_catalog_enables_only_explicit_zero_price_zen_models(self):
         scope = json.loads((DIRECTORY / 'free-worker-models.json').read_text())
         catalog = json.loads((DIRECTORY / 'free-worker-native-catalog.json').read_text())
