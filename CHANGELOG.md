@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.346] - 2026-10-25
+
+- Require exact-image candidate acceptance before restarting T3 Code.
+
+Release: patch
+
+PR #575.
+
 ## [3.17.345] - 2026-10-25
 
 - Raise the GitHub coordinator container memory limit to 1 GiB.
