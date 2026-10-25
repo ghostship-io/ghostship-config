@@ -38,10 +38,12 @@ If a future bump is not primed, the host's upgrade fails with the
 
 The private source is `ghostship-io/ghostship-agent`; the flake URL and both
 lock owners use that canonical namespace. The current pin is
-`97923468aa18458e3552f9b122b3619b359c8fe4` (0.47.212). It descends from the
-previous pin and includes #745, #746, #763 and #783: native prerequisite
-reconciliation for `Work.split`, revision-keyed scope wake deduplication,
-the work-start override schema fix, and bounded coordinator memory.
+`62ea16e0d24cd1f8a309827e43d0d37092129b35` (0.47.222). It descends from the
+previous pin and includes #745, #746, #763, #783, #805, #816 and #824: native
+prerequisite reconciliation for `Work.split`, revision-keyed scope wake
+deduplication, the work-start override schema fix, bounded coordinator memory,
+work listing pagination, coordinator-memory accounting and the coordinator
+transport hotfix.
 
 The repository moved from `nixos-config` to `ghostship-config`, and the former
 `orca-advanced-calibration` repository became `ghostship-orca`. Existing issue
