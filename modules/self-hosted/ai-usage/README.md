@@ -1699,19 +1699,23 @@ overrides fail visibly. Keep owner-specific reset times in runtime state.
 ### Announced resets
 
 The hourly `ghostship-ai-usage-announcements` check uses the persistent personal
-Agent Desktop profile and reads at most twenty visible recent posts without
-scrolling. Walls record blocked, notify once per episode and back off eight
-hours; transport failures record unavailable. Community prose is no longer an event input; legacy relay receipts migrate to
-their primary post URLs. No wall or protection is
-handled or bypassed, and no new service or credential copy is involved.
+Agent Desktop profile to read the primary account's visible `with_replies`
+timeline and same-author post threads for the last 75 minutes. It sends the
+whole public batch to the shared durable free-pool classifier with a stable
+request key and strict JSON schema. The pool retries other approved free routes
+after provider errors and invalid JSON; the checker stores unanswered batches
+as pending and does not classify them by guess. The health series reports the
+pending count. Walls record blocked, notify once per episode and back off eight
+hours; transport failures record unavailable. No wall or protection is handled
+or bypassed, and no credential copy is involved.
 
 Only Codex/ChatGPT usage-limit reset announcements become events. Each keeps
 its primary post URL, post time, short public quote, products, plans, windows,
 effective time and confidence. Unrelated reset mentions are discarded.
-Explicit primary announcements are confirmed; ambiguous announcements remain
-unverified. Legacy keyword matches are removed from usable events and their
-primary links are queued for bounded rechecks. Notice receipts survive this
-migration and deduplicate by primary status URL.
+The model supplies the judgement, scope and exact evidence quote. Code checks
+the author, status URL, publication time, quote, scope and seven-day reset
+bound. An unanswered or rejected batch stays unclassified and pending. Notice
+receipts remain append-only and deduplicate by primary status URL.
 
 Confirmed events affect only matching product/plan/window scopes. A weekly
 Codex event cannot reset a five-hour window. A completed event supersedes only

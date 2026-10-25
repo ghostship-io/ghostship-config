@@ -1,6 +1,8 @@
 # Public reset discovery has its own cadence; the five-minute collector only reads its cache.
-{ config, pkgs, ... }:
+{ config, lib, pkgs, inputs ? { }, ... }:
 let
+  agentInput = inputs.ghostship-private-agent or null;
+  tools = if agentInput == null then null else agentInput.packages.${pkgs.stdenv.hostPlatform.system};
   desktop = pkgs.writeShellScript "ai-usage-announcement-desktop" ''
     exec ${pkgs.podman}/bin/podman --remote exec -i ghostship-private-integrations \
       /bin/ghostship-mcp ghostship
@@ -16,12 +18,12 @@ let
 in
 {
   environment.systemPackages = [ confirm ];
-  systemd.services.ghostship-ai-usage-announcements = {
+  systemd.services.ghostship-ai-usage-announcements = lib.mkIf (tools != null) {
     description = "Check public Codex reset announcements through Agent Desktop";
     after = [ "network-online.target" "podman-ghostship-private-integrations.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${python}/bin/python3 ${./collector}/announced_resets.py --notify-command ${config.ghostship.notify.package}/bin/ghostship-notify ${desktop}";
+      ExecStart = "${python}/bin/python3 ${./collector}/announced_resets.py --agent ${tools.agent}/bin/agent --notify-command ${config.ghostship.notify.package}/bin/ghostship-notify ${desktop}";
       TimeoutStartSec = "10min";
       UMask = "0077";
       NoNewPrivileges = true;
@@ -29,12 +31,16 @@ in
       ProtectSystem = "strict";
       ProtectHome = true;
       ReadWritePaths = [ "/var/lib/ghostship-ai-usage" "/var/lib/ghostship-notify" ];
-      Environment = "CONTAINER_HOST=unix:///run/podman/podman.sock";
+      Environment = [
+        "CONTAINER_HOST=unix:///run/podman/podman.sock"
+        "HOME=/var/lib/ghostship-ai-usage"
+        "GHOSTSHIP_INFERENCE_BRIDGE_REQUIRED=1"
+      ];
       MemoryMax = "128M";
       TasksMax = 32;
     };
   };
-  systemd.timers.ghostship-ai-usage-announcements = {
+  systemd.timers.ghostship-ai-usage-announcements = lib.mkIf (tools != null) {
     description = "Check primary reset announcements hourly with wall backoff";
     wantedBy = [ "timers.target" ];
     timerConfig = {

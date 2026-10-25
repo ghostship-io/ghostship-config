@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 POST_URL = re.compile(r"https://x\.com/thsottiaux/status/\d+$")
 VERSION = 2
-CLOCK = re.compile(r'\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(am|pm)?\s*(PT|PDT|PST|UTC)\b', re.I)
 
 
 def timestamp(value):
@@ -22,116 +20,51 @@ def iso(at):
     return at.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-def parse(post):
-    """Ignore reset features/chatter; retain only an announced usage-limit reset."""
+def from_classification(post, classification, now, primary_author):
+    """Build a bounded receipt from a code-validated model judgement."""
+    if not isinstance(post, dict) or not isinstance(classification, dict):
+        return None
     url = str(post.get('url', ''))
-    raw = str(post.get('text', ''))[:8000]
-    # The primary author announces a reset day without naming a product or a
-    # window ("...it's reset day today", "...that's a reset!"). That is an
-    # announcement of a Codex reset, but its scope and time are unknown, so it
-    # is recorded as unverified and cannot change capacity.
-    lifestyle = re.search(
-        r"\b(?:it['’]s|that['’]s|today\s+is)\s+(?:a\s+)?reset(?:\s+day)?\b",
-        raw, re.I)
-    if lifestyle:
-        published = timestamp(post.get('published_at'))
-        if published and POST_URL.fullmatch(url) and len(url) <= 512:
-            return {
-                'event_version': VERSION, 'source_url': url,
-                'published_at': iso(published),
-                'quote': re.sub(r'\s+', ' ', raw).strip()[:240],
-                'scope': 'codex', 'products': ['codex'], 'plans': ['all'],
-                'windows': ['unknown'], 'reset_at': None, 'confidence': 'low',
-                'reason': 'ambiguous_reset_scope',
-            }
+    author = str(post.get('author', '')).lstrip('@').lower()
+    if (not POST_URL.fullmatch(url) or len(url) > 512 or author != primary_author.lower()
+            or classification.get('source_url') != url
+            or classification.get('is_reset_announcement') is not True):
         return None
-    # Scope comes from the announcement clause, not unrelated launch prose.
-    clauses = [part for part in re.split(r'(?<=[.!?;])\s+|\n\n', raw)
-               if re.search(r'\b(?:codex|chatgpt)\b', part, re.I)
-               and re.search(r'\breset(?:ting|s)?\b', part, re.I)
-               and re.search(r'\b(?:limits?|quotas?|usage|weekly|daily|monthly|5h|5[ -]hours?|five[ -]hours?)\b', part, re.I)]
-    if not clauses:
-        return None
-    text = ' '.join(clauses)
     published = timestamp(post.get('published_at'))
-    products = [p for p in ('codex', 'chatgpt') if re.search(r'\b' + p + r'\b', text, re.I)]
-    if (len(url) > 512 or not POST_URL.fullmatch(url) or not published or not products
-            or not re.search(r'\b(?:limits?|quotas?|usage|weekly|daily|monthly|5h|5[ -]hours?|five[ -]hours?)\b', text, re.I)
-            or not re.search(r'\breset(?:ting|s)?\b', text, re.I)):
+    moment = float(now)
+    if not published or not moment - 75 * 60 <= published.timestamp() <= moment + 60:
         return None
-    # A reset button, recurring schedule, question or troubleshooting mention
-    # does not announce that a provider is resetting usage limits.
-    if (re.search(r'\b(?:banked|manual|button|restart|reboot|dashboard|display|graph|chart|preferences|settings|cache|context)\b', text, re.I)
-            or re.search(r'\b(?:every|each)\s+(?:day|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', text, re.I)
-            or '?' in text
-            or re.search(r'\b(?:not|never|no)\s+(?:\w+\s+){0,3}reset', text, re.I)):
+    quote = classification.get('evidence_quote')
+    raw = str(post.get('text', ''))
+    if not isinstance(quote, str) or not 0 < len(quote) <= 240 or quote not in raw:
         return None
-    claim = re.search(r"\b(?:we(?:'re|'ve| are| will| have| just|’re|’ve)?\s+(?:\w+\s+){0,4}reset(?:ting)?"
-                      r"|resetting\b|(?:codex|chatgpt)\b[^.!?]{0,40}\b(?:weekly|daily|monthly|5h)\s+reset\b|(?:limits?|quotas?|usage)\s+(?:(?:will|have|has|are|were|be|been|just)\s+)*reset(?:s)?\b)", text, re.I)
-    occasion = re.search(r'\b(?:today|tomorrow|now|just|soon|later|\d{4}-\d{2}-\d{2})\b', text, re.I)
-    clock = CLOCK.search(text)
-    has_clock = clock is not None and (clock[2] is not None or clock[3] is not None)
-    if not claim or not (occasion or has_clock or re.search(r'\b(?:have|has)\s+reset\b|\b\d{4}-\d{2}-\d{2}T', text, re.I)):
+    products, plans, windows = (classification.get(name) for name in ('products', 'plans', 'windows'))
+    if (not isinstance(products, list) or not products or any(x not in ('codex', 'chatgpt') for x in products)
+            or not isinstance(plans, list) or not plans or any(x not in ('all', 'paid', 'free', 'plus', 'pro', 'business', 'enterprise', 'edu') for x in plans)
+            or not isinstance(windows, list) or not windows or any(x not in ('all', 'unknown', 'weekly', 'session', 'daily', 'monthly') for x in windows)):
         return None
-    windows = []
-    for kind, pattern in (('weekly', r'\b(?:weekly|7[ -]?days?)\b'),
-                          ('session', r'\b(?:5\s*(?:h|hours?)|five[ -]hours?|5[ -]hour)\b'),
-                          ('daily', r'\b(?:daily|24[ -]?hours?)\b'),
-                          ('monthly', r'\bmonthly\b')):
-        if re.search(pattern, text, re.I):
-            windows.append(kind)
-    if not windows:
-        windows = ['all'] if re.search(r'\ball\b[^.!?]{0,60}\b(?:limits|quotas)\b', text, re.I) else ['unknown']
-    plans = [p for p in ('free', 'plus', 'pro', 'business', 'enterprise', 'edu')
-             if re.search(r'\b(?:codex|chatgpt|for|on)\s+(?:all\s+)?' + p + r'\b|' +
-                          r'\b' + p + r'\s+(?:plans?|users|accounts|subscribers|codex|chatgpt)\b', text, re.I)]
-    if not plans:
-        plans = ['paid'] if re.search(r'\bpaid\b', text, re.I) else ['all']
-    event = {'event_version': VERSION, 'source_url': url, 'published_at': iso(published),
-             'quote': re.sub(r'\s+', ' ', text).strip()[:240],
-             'scope': ','.join(products), 'products': products, 'plans': plans, 'windows': windows,
-             'reset_at': None, 'confidence': 'low', 'reason': 'ambiguous_reset_announcement'}
-    if len(clauses) > 1 or (len(products) > 1 and len(windows) > 1) or re.search(r'\b(?:maybe|might|could|hope|plan|before|by|except|excluding)\b', text, re.I):
-        return event
-    at = None
-    absolute = re.search(r'\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})\b', text)
-    if absolute:
-        at = timestamp(absolute[0])
-    if has_clock and at is None:
-        zone = timezone.utc if clock[4].upper() == 'UTC' else ZoneInfo('America/Los_Angeles')
-        day = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', text)
-        try:
-            date = datetime.strptime(day[1], '%Y-%m-%d').date() if day else published.astimezone(zone).date()
-            if not day and re.search(r'\btomorrow\b', text, re.I):
-                date += timedelta(days=1)
-            hour = int(clock[1])
-            if clock[3]:
-                if not 1 <= hour <= 12:
-                    return event
-                hour = hour % 12 + (12 if clock[3].lower() == 'pm' else 0)
-            candidate = datetime.combine(date, datetime.min.time(), zone).replace(hour=hour, minute=int(clock[2] or 0))
-            if (clock[4].upper() in ('PT', 'UTC') or clock[4].upper() == candidate.tzname()) and (
-                    candidate.replace(fold=1).utcoffset() == candidate.utcoffset()):
-                at = candidate
-        except ValueError:
-            pass
-    if at is None and re.search(r'\b(?:now|just|have\s+reset|has\s+reset)\b', text, re.I):
-        at = published
-    if at is not None:
-        event['reset_at'] = iso(at)
-        if windows != ['unknown']:
-            event.update(confidence='confirmed', reason='primary_explicit_reset')
-        else:
-            event['reason'] = 'ambiguous_reset_scope'
-    return event
-
+    confidence = classification.get('confidence')
+    if confidence not in ('low', 'high'):
+        return None
+    reset = classification.get('reset_at')
+    parsed = timestamp(reset) if isinstance(reset, str) else None
+    if reset is not None and (not parsed or not moment < parsed.timestamp() <= moment + 7 * 86400):
+        return None
+    if reset is None or 'unknown' in windows:
+        confidence = 'low'
+    products = list(dict.fromkeys(products))
+    return {'event_version': VERSION, 'source_url': url, 'published_at': iso(published),
+            'quote': quote, 'scope': ','.join(products), 'products': products,
+            'plans': list(dict.fromkeys(plans)), 'windows': list(dict.fromkeys(windows)),
+            'reset_at': iso(parsed) if parsed else None, 'confidence': confidence,
+            'reason': 'free_model_classification'}
 
 def valid(entry):
     return (isinstance(entry, dict) and entry.get('event_version') == VERSION
             and POST_URL.fullmatch(str(entry.get('source_url', '')))
             and timestamp(entry.get('published_at')) is not None
             and isinstance(entry.get('quote'), str) and 0 < len(entry['quote']) <= 240
-            and entry.get('confidence') in ('low', 'confirmed')
+            and entry.get('confidence') in ('low', 'high', 'confirmed')
             and isinstance(entry.get('products'), list) and bool(entry['products'])
             and all(p in ('codex', 'chatgpt') for p in entry['products'])
             and isinstance(entry.get('plans'), list) and bool(entry['plans'])
@@ -143,7 +76,7 @@ def valid(entry):
 
 
 def matches(entry, window):
-    if not valid(entry) or entry['confidence'] != 'confirmed' or window.get('provider') not in entry['products']:
+    if not valid(entry) or entry['confidence'] not in ('high', 'confirmed') or window.get('provider') not in entry['products']:
         return False
     plans = entry['plans']
     plan = str(window.get('plan') or '').lower()

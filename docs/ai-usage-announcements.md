@@ -1,29 +1,24 @@
 # Announced usage-limit resets
 
-The checker reads Tibo's recent visible X posts hourly through the persistent
-personal Agent Desktop profile, without scrolling. A sign-in wall or challenge
-records blocked, sends one operations notice per blocked episode, and delays
-the next read eight hours. It never handles or bypasses protection. A locked deadline
-covers timer/manual starts; a crash reserves eight hours.
+The checker reads the primary account's visible X `with_replies` timeline and
+each same-author post thread hourly through the persistent personal Agent
+Desktop profile. It collects posts and replies published in the last 75 minutes,
+so adjacent runs overlap. A sign-in wall or challenge records blocked, sends one
+operations notice per blocked episode, and delays the next read eight hours. It
+never handles or bypasses protection. A locked deadline covers timer/manual
+starts; before classification, the batch is saved with its stable request key
+so a process restart can resume the same durable free-pool job.
 
-Only an announcement of a Codex or ChatGPT usage-limit reset becomes an event.
-Generic reset mentions, reset buttons, banked resets, recurring schedules,
-questions and unrelated posts are ignored. Each event records the primary post
-URL, publication time, a short public quote (at most 240 characters), products,
-plans, limit windows and effective reset time. Explicit reset times with clear window scope, including "now" relative to the
-publication time, are confirmed from the primary post.
-An announcement with ambiguous timing or scope stays unverified and cannot
-change capacity. Only direct primary posts become new events; community prose is no longer an
-announcement input. Legacy relay URLs are used only to recover their primary
-post URLs and notice receipts. Evidence without a publication time is insufficient
-to record an event.
-
-The cache migration removes the old keyword-only records from usable events
-and queues their primary permalinks for rechecking, at most five per hourly
-read. Notice receipts survive independently, so direct reclassification of an
-already-notified post does not send another notice. Notifications use the
-primary status URL as their deduplication key. Failed publications retry;
-at most twenty new-post publications are attempted per run.
+The whole public batch is classified once by the shared free-pool helper using
+a strict JSON schema and request-key idempotency. Provider errors and invalid
+JSON retry on other approved free routes with backoff. No paid route is used.
+The worker returns a judgement for every supplied post and reply, including
+non-reset items. Code validates the author, exact post URL, publication time,
+source quote (at most 240 characters), scope and seven-day reset bound. Missing,
+malformed or unanswered results stay unclassified and pending; no regex guess
+can create an event. Notice receipts remain append-only and deduplicate by
+primary status URL. Failed publications retry; at most twenty new-post
+publications are attempted per run.
 
 A confirmed event affects only its products, plans and windows. An unqualified
 product-wide announcement covers that product's plans; an explicitly limited
@@ -50,18 +45,13 @@ ghostship_ai_announced_reset_info{provider="codex"}
 
 Each row has value 1 and labels `source_url`, `provider`, `scope`, `plans`,
 `windows`, `published_at`, `quote`, `reset_at`, `confidence` and `label`.
-Confidence is `confirmed` or `low`; the latter displays **announced (unverified)**.
+Confidence is `high`, `low` or operator-set `confirmed`; low displays **announced (unverified)**.
 `reset_at` is a UTC ISO timestamp or "time needs confirmation". The series emits
 one row per product per event, with at most 100 retained events. `source_url`
 is always the primary post link. The routing snapshot carries the same event
 under `announced_resets.announcements`. Effective quota windows expose
 `announcement_url`, `announced_reset_at`, `provider_used_ratio` and
 `provider_check_at` beside their reset provenance.
-
-The primary author's reset-day phrasing ("...it's reset day today",
-"...that's a reset!") is recorded as a **low-confidence, unverified** Codex
-event with an unknown window. It is visible in the evidence table and can
-never change capacity until an operator confirms a time and scope.
 
 ## Monitor health
 
@@ -76,6 +66,7 @@ state is also published as:
 ghostship_ai_announcements_health{state,reason}
 ghostship_ai_announcements_last_success_timestamp_seconds
 ghostship_ai_announcements_events
+ghostship_ai_announcements_classification_pending
 ```
 
 `AnnouncementMonitorStale` fires after three hours without a successful read,
@@ -89,7 +80,7 @@ An operator can confirm an existing ambiguous event's reset time as root:
 ghostship-ai-confirm-reset SOURCE_URL RESET_AT_WITH_TIMEZONE
 ```
 
-This preserves its parsed product, plans and windows; confirmation cannot
+This preserves its classified product, plans and windows; confirmation cannot
 broaden an unknown scope to all Codex windows. The time must be timezone-qualified,
 in the future and within seven days. The next collector run applies it.
 
