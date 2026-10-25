@@ -22,6 +22,10 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
     def test_host_packages_acceptance_scripts_with_their_sibling_inputs(self):
         module = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn('t3codeDeploymentScripts = pkgs.runCommand', module)
+        self.assertIn(
+            'path = [ pkgs.podman pkgs.systemd pkgs.su-exec pkgs.coreutils ];',
+            module,
+        )
         for name in (
             "deploy-when-idle.py", "candidate-acceptance.py",
             "hardening-probe.py", "runtime-caps.json",

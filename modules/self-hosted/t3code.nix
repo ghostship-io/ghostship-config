@@ -461,6 +461,7 @@ in
   systemd.services.t3code-deploy-when-idle = {
     description = "Deploy a changed T3 Code image after sustained idle";
     after = [ "podman.service" ];
+    path = [ pkgs.podman pkgs.systemd pkgs.su-exec pkgs.coreutils ];
     # Let an in-flight deploy finish during a host switch; the timer runs the
     # new script on its next tick.
     restartIfChanged = false;
