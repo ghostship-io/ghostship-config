@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.344] - 2026-10-25
+
+Pin ghostship-agent main at v0.47.222, including the coordinator work-operation transport fix from #824, and update the pinning guide.
+
+Refs #504, #594, #548, ghostship-io/ghostship-agent#824.
+
+PR #578.
+
 ## [3.17.343] - 2026-10-25
 
 Keep generated candidate container hostnames within Linux's 64-byte limit by hashing overlong deployment identifiers. This prevents candidate creation from failing with `sethostname: Invalid argument` before systemd starts.
