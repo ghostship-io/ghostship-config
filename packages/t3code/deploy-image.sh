@@ -66,7 +66,7 @@ candidate_args=(
 )
 candidate_args+=(--volume /etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro)
 candidate_args+=(--volume /etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro)
-candidate_args+=(--volume /nix/store:/nix/store:ro)
+candidate_args+=(--volume /nix/store:/nix/store:O)
 
 if ! "$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}"; then
   mark_candidate_failed

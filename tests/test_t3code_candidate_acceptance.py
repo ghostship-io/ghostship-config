@@ -23,7 +23,8 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         module = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn('t3codeDeploymentScripts = pkgs.runCommand', module)
         for name in (
-            "candidate-acceptance.py", "hardening-probe.py", "runtime-caps.json",
+            "candidate-acceptance.py", "hardening-probe.py",
+            "provider-turn-probe.py", "runtime-caps.json",
         ):
             with self.subTest(name=name):
                 self.assertIn(f"$out/{name}", module)
@@ -31,7 +32,8 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         self.assertIn('name = "ghostship-t3code-deploy-image"', module)
         self.assertIn('builtins.readFile ../../packages/t3code/deploy-image.sh', module)
         self.assertIn('CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py"', module)
-        self.assertIn('systemctl start --no-block ghostship-t3code-deploy.service', module)
+        activation = (ROOT / "packages/t3code/activate-deployment.sh").read_text()
+        self.assertIn('start --no-block ghostship-t3code-deploy.service', activation)
         self.assertNotIn('t3code-deploy-when-idle', module)
         self.assertNotIn('t3code-safe-restart', module)
 
@@ -52,6 +54,30 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.home = self.root / "home"
         self.home.mkdir()
         (self.home / "agent-config").write_text("fixture")
+        settings = self.home / ".t3/userdata/settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(json.dumps({"providerInstances": {
+            "opencode-free": {
+                "driver": "opencode", "enabled": True,
+                "config": {"binaryPath": "opencode", "apiKey": "do-not-copy"},
+                "environment": [
+                    {"name": "OPENCODE_MODELS_PATH", "value": "/home/t3code/.local/state/t3code-opencode/models.json"},
+                    {"name": "XDG_CONFIG_HOME", "value": "/home/t3code/.config/opencode-free"},
+                    {"name": "OPENCODE_AUTH_CONTENT", "value": "do-not-copy"},
+                ],
+            },
+            "private-provider": {"driver": "private", "config": {"token": "do-not-copy"}},
+        }}))
+        model_catalog = self.home / ".cache/opencode/models.json"
+        model_catalog.parent.mkdir(parents=True)
+        model_catalog.write_text(json.dumps({"openrouter": {
+            "name": "OpenRouter", "models": {"provider/model": {}}
+        }}))
+        filtered_catalog = self.home / ".local/state/t3code-opencode/models.json"
+        filtered_catalog.parent.mkdir(parents=True)
+        filtered_catalog.write_text(json.dumps({"openrouter": {
+            "name": "OpenRouter", "models": {"provider/model": {}}
+        }}))
         self.archive = self.root / "image.tar"
         config = b'{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["candidate"]}}'
         self.image_id = hashlib.sha256(config).hexdigest()
@@ -97,6 +123,175 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 identity_fn=lambda: self.identity,
             )
 
+    def add_installed_toolchain(self, home=None):
+        home = Path(home or self.home)
+        t3 = home / ".local/share/t3code-tools/t3"
+        (t3 / "releases/0.1.1/bin").mkdir(parents=True)
+        runtime_t3 = home / ".t3/runtime/versions/0.1.1/t3"
+        runtime_t3.parent.mkdir(parents=True)
+        runtime_t3.write_text("#!/bin/sh\nexit 0\n")
+        runtime_t3.chmod(0o755)
+        cursor_sdk = home / ".t3/runtime/versions/0.1.1/node_modules/@cursor/sdk"
+        cursor_sdk.mkdir(parents=True)
+        (cursor_sdk / "package.json").write_text('{"name":"@cursor/sdk"}\n')
+        (t3 / "releases/0.1.1/bin/t3").symlink_to(
+            "/home/t3code/.t3/runtime/versions/0.1.1/t3"
+        )
+        (t3 / "current").symlink_to("releases/0.1.1")
+
+        npm = home / ".local/share/t3code-tools/npm"
+        codex = npm / "lib/node_modules/@openai/codex"
+        (codex / "bin").mkdir(parents=True)
+        (codex / "package.json").write_text('{"version":"1.2.3"}\n')
+        (codex / "bin/codex.js").write_text("#!/usr/bin/env node\n")
+        (codex / "bin/codex.js").chmod(0o755)
+        (npm / "bin").mkdir(parents=True)
+        (npm / "bin/codex").symlink_to("../lib/node_modules/@openai/codex/bin/codex.js")
+
+        opencode = home / ".local/share/t3code-tools/opencode"
+        (opencode / "releases/2.1.4/bin").mkdir(parents=True)
+        executable = opencode / "releases/2.1.4/bin/opencode"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        (opencode / "current").symlink_to("releases/2.1.4")
+        (npm / "bin/opencode").symlink_to(
+            "/home/t3code/.local/share/t3code-tools/opencode/current/bin/opencode"
+        )
+
+        shared = home / ".local/state/t3code-shared-agents/bin"
+        shared.mkdir(parents=True)
+        for name in ("agent", "ghostship", "ghostship-bladebro"):
+            launcher = shared / name
+            launcher.write_text(
+                "#!/bin/sh\nexec /nix/store/0123456789abcdefghijklmnopqrstuv-agent-runtime/bin/"
+                + name + " \"$@\"\n"
+            )
+            launcher.chmod(0o755)
+        local_bin = home / ".local/bin"
+        local_bin.mkdir(parents=True)
+        for name in ("agent", "ghostship", "ghostship-bladebro"):
+            (local_bin / name).symlink_to(
+                f"../state/t3code-shared-agents/bin/{name}"
+            )
+
+    def test_candidate_stages_only_the_active_production_cli_runtimes(self):
+        self.add_installed_toolchain()
+        candidate_home = self.root / "candidate-home"
+        candidate_inputs = self.root / "candidate-inputs"
+
+        toolchain = acceptance.stage_candidate_inputs(
+            self.home, candidate_home, candidate_inputs, os.getuid(),
+            tooling_path="/nix/store/pinned-agent-tools",
+            stage_toolchain=True,
+        )
+
+        t3_root = candidate_home / ".local/share/t3code-tools/t3"
+        self.assertEqual(os.readlink(t3_root / "current"), "releases/0.1.1")
+        self.assertTrue((candidate_home / ".t3/runtime/versions/0.1.1/t3").is_file())
+        self.assertTrue(os.access(candidate_home / ".t3/runtime/versions/0.1.1/t3", os.X_OK))
+        self.assertTrue((candidate_home / ".t3/runtime/versions/0.1.1/node_modules/@cursor/sdk/package.json").is_file())
+        npm = candidate_home / ".local/share/t3code-tools/npm"
+        self.assertTrue((npm / "bin/codex").is_symlink())
+        self.assertTrue((npm / "lib/node_modules/@openai/codex/bin/codex.js").is_file())
+        self.assertTrue((npm / "bin/opencode").is_symlink())
+        self.assertTrue((candidate_home / ".local/share/t3code-tools/opencode/releases/2.1.4/bin/opencode").is_file())
+        for name in ("agent", "ghostship", "ghostship-bladebro"):
+            self.assertTrue((candidate_home / ".local/state/t3code-shared-agents/bin" / name).is_file())
+            self.assertTrue((candidate_home / ".local/bin" / name).is_symlink())
+        self.assertEqual(toolchain, {"t3": "0.1.1", "codex": "1.2.3", "opencode": "2.1.4"})
+        for link in (t3_root / "current", npm / "bin/codex", npm / "bin/opencode"):
+            owner = link.stat(follow_symlinks=False)
+            self.assertEqual((owner.st_uid, owner.st_gid), (os.getuid(), os.getuid()))
+        self.assertFalse((candidate_home / ".codex").exists())
+
+    def test_candidate_provider_auth_contains_only_owner_approved_provider_entries(self):
+        auth = self.home / ".local/share/opencode/auth.json"
+        auth.parent.mkdir(parents=True)
+        auth.write_text(json.dumps({
+            "openrouter": {"type": "api", "key": "auth-fixture"},
+            "openai": {"type": "oauth", "refresh": "private-fixture"},
+        }))
+        approved = self.root / "approved-free-workers.json"
+        approved.write_text(json.dumps({"entries": [{"provider": "openrouter"}]}))
+        candidate_home = self.root / "candidate-home"
+        candidate_home.mkdir()
+        self.assertTrue(acceptance.stage_candidate_provider_auth(
+            self.home, candidate_home, approved
+        ))
+        projected = json.loads((candidate_home / ".local/share/opencode/auth.json").read_text())
+        self.assertEqual(projected, {"openrouter": {"type": "api", "key": "auth-fixture"}})
+        self.assertEqual((candidate_home / ".local/share/opencode/auth.json").stat().st_mode & 0o777, 0o600)
+        self.assertNotIn("private-fixture", json.dumps(projected))
+
+    def test_candidate_model_routing_snapshot_is_validated_and_staged_read_only(self):
+        source = self.root / "routing.json"
+        source.write_text(json.dumps({
+            "schema": "ghostship.ai-usage.routing", "schema_version": 1,
+            "partial": False, "candidates": [],
+        }))
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        self.assertEqual(target.read_text(), source.read_text())
+        self.assertEqual(target.stat().st_mode & 0o777, 0o444)
+        self.assertEqual(target.stat().st_uid, os.getuid())
+
+    def test_candidate_stages_missing_shared_agent_store_paths_from_production(self):
+        self.add_installed_toolchain()
+        agent_wrapper = self.home / ".local/state/t3code-shared-agents/bin/agent"
+        agent_wrapper.write_text(
+            "#!/bin/sh\nexec /home/t3code/.local/state/ghostship/hotfix/test/agent-wrapper \"$@\"\n"
+        )
+        candidate_home = self.root / "candidate-home"
+        candidate_inputs = self.root / "candidate-inputs"
+        acceptance.stage_candidate_inputs(
+            self.home, candidate_home, candidate_inputs, os.getuid(),
+            tooling_path="/nix/store/pinned-agent-tools", stage_toolchain=True,
+        )
+        store_path = "/nix/store/0123456789abcdefghijklmnopqrstuv-agent-runtime"
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append(tuple(args))
+            if "path-info" in args:
+                return Mock(returncode=0, stdout=json.dumps({store_path: {"narSize": 1}}))
+            if len(args) > 2 and str(args[2]).startswith("t3code:/home/t3code/"):
+                copied_wrapper = candidate_home / ".local/state/ghostship/hotfix/test/agent-wrapper"
+                copied_wrapper.parent.mkdir(parents=True, exist_ok=True)
+                copied_wrapper.write_text(
+                    "#!/bin/sh\nexec /nix/store/0123456789abcdefghijklmnopqrstuv-agent-runtime/bin/agent \"$@\"\n"
+                )
+                copied_wrapper.chmod(0o755)
+                return Mock(returncode=0, stdout="")
+            staged = self.root / "candidate-runtime/nix-store-overlay" / Path(store_path).name
+            staged.mkdir(parents=True)
+            return Mock(returncode=0, stdout="")
+
+        candidate_tmp = self.root / "candidate-runtime"
+        candidate_tmp.mkdir()
+        with patch.object(acceptance.subprocess, "run", side_effect=run):
+            overlays = acceptance.stage_candidate_agent_store(
+                "podman", self.home, candidate_tmp, candidate_home, os.getuid()
+            )
+        self.assertEqual(overlays, [(str(candidate_tmp / "nix-store-overlay" / Path(store_path).name), store_path)])
+        self.assertEqual(len([call for call in calls if "path-info" in call]), 1)
+        self.assertTrue(any("t3code:" + store_path in call for call in calls))
+        self.assertTrue((candidate_home / ".local/state/ghostship/hotfix/test/agent-wrapper").is_file())
+        for path in (
+            candidate_home / ".local/state/ghostship",
+            candidate_home / ".local/state/ghostship/hotfix",
+            candidate_home / ".local/state/ghostship/hotfix/test",
+        ):
+            self.assertEqual(path.stat().st_uid, os.getuid())
+
+    def test_candidate_mount_policy_allows_only_ephemeral_store_overlay(self):
+        self.assertEqual(
+            acceptance.validate_candidate_mounts(["/nix/store:/nix/store:O"]),
+            ["/nix/store:/nix/store:O"],
+        )
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            acceptance.validate_candidate_mounts(["/nix/store:/nix/store:rw"])
+
     def test_pass_writes_exact_receipt_and_removes_the_candidate(self):
         receipt = self.run_acceptance()
         path = self.state / "receipts/generation-502.json"
@@ -108,15 +303,22 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(set(receipt["checks"]), set(acceptance.CHECKS))
         self.assertTrue(all(receipt["checks"].values()))
         self.assertIn(("rm", "--force", "--time", "10", receipt["candidate_name"]), self.commands)
+        self.assertTrue(any("/run/secrets/t3code.env:ro" in str(command)
+                            for command in self.commands))
         self.assertFalse(any("production" in str(command) for command in self.commands))
         self.assertFalse(any(command[:1] == ("stop",) for command in self.commands))
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
         run = next(command for command in self.commands if command[:1] == ("run",))
+        self.assertIn("--user=0:0", run)
+        self.assertLess(run.index("--user=0:0"), run.index("localhost/t3:test"))
         run_volumes = [run[index + 1] for index, token in enumerate(run[:-1])
                        if token == "--volume"]
         targets = [volume.split(":", 2)[1] for volume in run_volumes]
-        self.assertNotIn("/workspace", targets)
+        workspace_volume = next(volume for volume in run_volumes
+                                if volume.split(":", 2)[1] == "/workspace")
+        self.assertTrue(workspace_volume.endswith(":/workspace:rw"))
+        self.assertNotEqual(workspace_volume.split(":", 1)[0], str(self.home))
         self.assertNotIn("/tmp", targets)
         self.assertNotIn("/nix", targets)
         self.assertNotIn(":/nix/store:rw", run_volumes)
@@ -144,6 +346,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_early_candidate_exit_reports_its_exit_code(self):
         def command(engine, *args, **kwargs):
+            if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                return Mock(returncode=0, stdout="")
             if args[:1] == ("exec",):
                 return Mock(returncode=1, stdout="")
             if args[:1] == ("inspect",):
@@ -153,6 +357,34 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command):
             with self.assertRaisesRegex(RuntimeError, r"exited before app readiness \(exit code 255\)"):
                 acceptance.check_candidate(["podman"], "candidate", "provider.env")
+
+    def test_candidate_readiness_starts_the_frontend_proxy_unit(self):
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                return Mock(returncode=0, stdout="")
+            if args[:4] == ("exec", "candidate", "curl", "-fsS"):
+                return Mock(returncode=0, stdout="ok")
+            if args[:3] == ("exec", "candidate", "agent"):
+                return Mock(returncode=0, stdout="ok")
+            return Mock(returncode=0, stdout=json.dumps({"data": {"pick": {
+                "provider": "openrouter", "model": "cohere/north-mini-code:free",
+                "billing": "free", "approved_free": True, "execution": "t3",
+                "available": True,
+            }}}))
+
+        with patch.object(acceptance, "command", side_effect=command), \
+             patch.object(acceptance, "check_provider_turn", return_value=True):
+            checks = acceptance.check_candidate(
+                ["podman"], "candidate", "provider.env", tooling_path="/nix/store/test-agent"
+            )
+        self.assertTrue(all(checks.values()))
+        self.assertIn(("exec", "candidate", "systemctl", "start",
+                       "t3code-access-proxy.service"), calls)
+        self.assertIn(("exec", "--user=3000:3000", "candidate", "t3", "project",
+                       "add", "/workspace", "--title", "Candidate acceptance"), calls)
 
     def test_staging_never_copies_oauth_credentials_and_keeps_only_agent_skills(self):
         oauth_paths = (
@@ -167,78 +399,173 @@ class CandidateAcceptanceTest(unittest.TestCase):
         skill = self.home / ".agents/skills/candidate-check/SKILL.md"
         skill.parent.mkdir(parents=True)
         skill.write_text("skill fixture")
-        (self.home / ".t3/userdata").mkdir(parents=True)
+        (self.home / ".t3/userdata").mkdir(parents=True, exist_ok=True)
         (self.home / ".t3/userdata/state.sqlite").write_text("live threads")
         (self.home / ".t3/worktrees/project").mkdir(parents=True)
         (self.home / ".t3/worktrees/project/file").write_text("live checkout")
         candidate_home = self.root / "candidate-home"
         candidate_inputs = self.root / "candidate-inputs"
-        acceptance.stage_candidate_inputs(self.home, candidate_home, candidate_inputs, os.getuid())
+        acceptance.stage_candidate_inputs(
+            self.home, candidate_home, candidate_inputs, os.getuid(),
+            tooling_path="/nix/store/pinned-agent-tools",
+        )
         for relative in oauth_paths:
             with self.subTest(path=relative):
                 self.assertFalse((candidate_inputs / relative).exists())
                 self.assertFalse((candidate_home / relative).is_symlink())
         self.assertEqual((candidate_inputs / ".agents/skills/candidate-check/SKILL.md").read_text(),
                          "skill fixture")
+        staged_probe = candidate_inputs / "provider-turn-probe.py"
+        self.assertEqual(staged_probe.read_bytes(),
+                         (ROOT / "packages/t3code/provider-turn-probe.py").read_bytes())
+        self.assertEqual(staged_probe.stat().st_mode & 0o777, 0o444)
         self.assertFalse((candidate_inputs / ".t3").exists())
-        self.assertFalse((candidate_home / ".t3").exists())
+        candidate_settings = json.loads(
+            (candidate_home / ".t3/userdata/settings.json").read_text()
+        )
+        self.assertEqual(list(candidate_settings["providerInstances"]), ["opencode-free"])
+        projected = candidate_settings["providerInstances"]["opencode-free"]
+        self.assertEqual(projected["config"], {"binaryPath": "opencode"})
+        self.assertEqual([item["name"] for item in projected["environment"]], [
+            "OPENCODE_MODELS_PATH", "XDG_CONFIG_HOME",
+        ])
+        self.assertNotIn("do-not-copy", json.dumps(candidate_settings))
+        self.assertFalse((candidate_home / ".t3/userdata/state.sqlite").exists())
+        self.assertEqual(
+            json.loads((candidate_home / ".cache/opencode/models.json").read_text()),
+            {"openrouter": {"name": "OpenRouter", "models": {"provider/model": {}}}},
+        )
+        self.assertEqual(
+            json.loads((candidate_home / ".local/state/t3code-opencode/models.json").read_text()),
+            {"openrouter": {"name": "OpenRouter", "models": {"provider/model": {}}}},
+        )
+        for relative in (
+            ".agents/skills",
+            ".local/state/ghostship-t3-tools/current",
+        ):
+            link = candidate_home / relative
+            self.assertTrue(link.is_symlink())
+            owner = link.stat(follow_symlinks=False)
+            self.assertEqual((owner.st_uid, owner.st_gid), (os.getuid(), os.getuid()))
 
-    def test_provider_turn_uses_only_picker_approved_free_api_key_routes(self):
+    def test_provider_turn_proves_the_native_opencode_free_t3_route(self):
         provider_env = self.root / "provider.env"
-        provider_env.write_text("OPENROUTER_API_KEY=static-key-fixture\n")
+        provider_env.write_text("")
         calls = []
 
         def command(engine, *args, **kwargs):
             calls.append(tuple(args))
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": {
-                    "provider": "openrouter", "model": "cohere/north-mini-code:free",
+                    "provider": "opencode-free", "model": "nvidia/minimaxai/minimax-m3.1-flash",
                     "billing": "free", "approved_free": True, "execution": "t3",
                     "available": True,
                 }}}))
             return Mock(returncode=0, stdout="passed")
 
         with patch.object(acceptance, "command", side_effect=command):
-            self.assertTrue(acceptance.check_provider_turn(
-                ["podman"], "candidate", provider_env
-            ))
-        self.assertTrue(any("--provider" in call and "openrouter" in call for call in calls))
-        self.assertTrue(any("prove" in call and "openrouter/cohere/north-mini-code:free" in call
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env,
+                tooling_path="/nix/store/test-agent",
+            ), "opencode-free/nvidia/minimaxai/minimax-m3.1-flash")
+        self.assertTrue(any("pick" in call and "--role" in call and "worker" in call
+                            and "--kind" in call and "code" in call for call in calls))
+        self.assertTrue(any(any(item.endswith("provider-turn-probe.py") for item in call) and
+                            "opencode-free/nvidia/minimaxai/minimax-m3.1-flash" in call
                             for call in calls))
 
-    def test_provider_turn_fails_closed_when_no_static_api_key_is_projected(self):
-        provider_env = self.root / "provider.env"
-        provider_env.write_text("AGENT_DESKTOP_API_TOKEN=desktop-only\n")
-        with patch.object(acceptance, "command") as command:
-            with self.assertRaisesRegex(RuntimeError, "no static API key"):
-                acceptance.check_provider_turn(["podman"], "candidate", provider_env)
-        command.assert_not_called()
+    def test_candidate_error_classification_does_not_include_command_output(self):
+        self.assertEqual(acceptance.candidate_error_category(Mock(
+            returncode=1, stderr="PermissionError: runtime ownership denied"
+        )), "exception-permissionerror")
+        self.assertEqual(acceptance.candidate_error_category(Mock(
+            returncode=1, stderr="RuntimeError: provider request failed"
+        )), "exception-runtimeerror")
+        self.assertEqual(acceptance.candidate_error_category(Mock(
+            returncode=1, stderr="", stdout='{"status":"error","message":"private"}'
+        )), "api-error")
+        detail = acceptance.candidate_error_summary(Mock(
+            returncode=1,
+            stderr="OPENROUTER_API_KEY=do-not-print\nRuntimeError: failed under /tmp/private-path",
+        ))
+        self.assertNotIn("do-not-print", detail)
+        self.assertNotIn("private-path", detail)
+        detail = acceptance.candidate_error_summary(Mock(
+            returncode=1,
+            stderr='{"data":{"error":"Unauthorized request using private-token"}}',
+        ))
+        self.assertEqual(detail, "api-error-request-unauthorized")
+        self.assertNotIn("private-token", detail)
 
-    def test_missing_static_api_key_leaves_no_accepting_receipt_and_tears_down(self):
-        with patch.object(acceptance, "command", side_effect=self.command), \
+    def test_missing_native_t3_route_leaves_no_accepting_receipt_and_tears_down(self):
+        def no_route(engine, *args, **kwargs):
+            self.commands.append(tuple(args))
+            if "pick" in args:
+                return Mock(returncode=1, stderr='{"data":{"error":"model unavailable"}}')
+            return self.command(engine, *args, **kwargs)
+
+        with patch.object(acceptance, "command", side_effect=no_route), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
-            with self.assertRaisesRegex(RuntimeError, "no static API key"):
+            with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
                 acceptance.accept(
                     self.state, self.archive, "podman",
                     "/run/t3code-podman-candidate/podman.sock", self.home,
-                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    command_fn=no_route, identity_fn=lambda: self.identity,
                 )
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
         self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
                       self.commands)
 
-    def test_provider_turn_refuses_paid_or_unapproved_picker_results(self):
+    def test_provider_turn_refuses_free_pool_routes_for_t3_execution(self):
         provider_env = self.root / "provider.env"
-        provider_env.write_text("NVIDIA_API_KEY=static-key-fixture\n")
+        provider_env.write_text("")
         pick = {"data": {"pick": {
-            "provider": "nvidia", "model": "model", "billing": "subscription",
-            "approved_free": False, "execution": "t3", "available": True,
+            "provider": "opencode-free", "model": "model", "billing": "free",
+            "approved_free": True, "execution": "free_pool", "available": True,
         }}}
         with patch.object(acceptance, "command", return_value=Mock(
                 returncode=0, stdout=json.dumps(pick))) as command:
-            with self.assertRaisesRegex(RuntimeError, "no available trusted free T3 route"):
-                acceptance.check_provider_turn(["podman"], "candidate", provider_env)
-        self.assertFalse(any("prove" in str(call.args) for call in command.call_args_list))
+            with self.assertRaisesRegex(RuntimeError, "no approved available free T3 route"):
+                acceptance.check_provider_turn(
+                    ["podman"], "candidate", provider_env,
+                    tooling_path="/nix/store/test-agent",
+                )
+        self.assertFalse(any("models" in call.args and "prove" in call.args
+                             for call in command.call_args_list))
+
+    def test_provider_turn_falls_back_after_model_unavailable_and_records_route(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        first = {"provider": "opencode-free", "model": "nvidia/first",
+                 "billing": "free", "approved_free": True,
+                 "execution": "t3", "available": True}
+        fallback = {"provider": "opencode-free", "model": "nvidia/fallback",
+                    "billing": "free", "approved_free": True,
+                    "execution": "t3", "available": True}
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if any(item.endswith("provider-turn-probe.py") for item in args):
+                route = next(item for item in args if item.startswith("opencode-free/"))
+                if route.endswith("/first"):
+                    return Mock(returncode=1, stderr='{"data":{"error":"model unavailable"}}')
+                return Mock(returncode=0, stdout="passed")
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": first}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [first, fallback]}}))
+            return Mock(returncode=0, stdout="present")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env,
+                tooling_path="/nix/store/test-agent",
+            ), "opencode-free/nvidia/fallback")
+        proved = [next(item for item in call if item.startswith("opencode-free/"))
+                  for call in calls
+                  if any(item.endswith("provider-turn-probe.py") for item in call)]
+        self.assertEqual(proved, ["opencode-free/nvidia/first", "opencode-free/nvidia/fallback"])
 
     def test_provider_projection_excludes_github_and_bitwarden_secrets(self):
         projection = self.root / "provider.env"
@@ -275,11 +602,16 @@ class CandidateAcceptanceTest(unittest.TestCase):
     def test_candidate_receipt_binds_the_agent_pin_and_provider_inode(self):
         secrets = self.root / "t3code.env"
         secrets.write_text("OPENROUTER_API_KEY=provider-fixture\nGITHUB_TOKEN=excluded\n")
+        self.add_installed_toolchain()
         pinned_tooling = "/nix/store/pinned-agent-tools"
+        staged = str(self.root / "agent-runtime")
         with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
                  name: True for name in acceptance.CHECKS
              }), patch.object(acceptance, "candidate_agent_path", return_value=pinned_tooling), \
+             patch.object(acceptance, "stage_candidate_agent_store", return_value=[
+                 (staged, "/nix/store/0123456789abcdefghijklmnopqrstuv-agent-runtime")
+             ]), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             receipt = acceptance.accept(
                 self.state, self.archive, "podman",
@@ -287,10 +619,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 command_fn=self.command, identity_fn=lambda: self.identity,
                 candidate_uid=os.getuid(), provider_secrets_file=secrets,
                 tooling_path=pinned_tooling, expected_agent_revision="a" * 40,
+                candidate_home_target="/home/t3code",
             )
         self.assertEqual(receipt["agent_revision"], "a" * 40)
         self.assertEqual(receipt["agent_path"], pinned_tooling)
         self.assertEqual(receipt["provider_secret_inode"], str(secrets.stat().st_ino))
+        self.assertIn(("cp", staged, f"{receipt['candidate_name']}:/nix/store/"), self.commands)
 
     def test_a_failed_acceptance_never_leaves_an_approving_receipt(self):
         failing = {name: True for name in acceptance.CHECKS}
