@@ -1213,6 +1213,17 @@ def ranking_inputs(
         reset = measured.get("resetEpoch")
         duration = measured.get("durationSeconds")
         quota_id = str(measured.get("quotaId") or "default")
+        used_value = quota_module._finite(used)
+        if used_value is not None and not 0.0 <= used_value <= 1.0:
+            used_value = None
+        reset_value = quota_module._finite(reset)
+        duration_value = quota_module._finite(duration)
+        observed_value = quota_module._finite(measured.get("observedAtEpoch"))
+        applies = measured.get("applies_to", measured.get("appliesTo"))
+        if isinstance(applies, str):
+            applies = (applies,)
+        elif not isinstance(applies, (tuple, list)):
+            applies = ()
         # A window the source publishes but does not read is visible and it
         # does not constrain the route: an unknown reading is not evidence
         # that the account is exhausted. The provider stays visible, and the
@@ -1220,19 +1231,17 @@ def ranking_inputs(
         gating = measured.get("gating")
         window = ranking_module.QuotaWindow(
             kind=str(measured.get("kind") or "other"),
-            used_ratio=float(used) if isinstance(used, (int, float)) else None,
-            reset_epoch=float(reset) if isinstance(reset, (int, float)) else None,
-            applies_to=_window_scope(quota_id),
+            used_ratio=used_value,
+            reset_epoch=reset_value,
+            applies_to=tuple(str(token) for token in applies) or _window_scope(quota_id),
             quota_id=quota_id,
             duration_seconds=(
-                float(duration) if isinstance(duration, (int, float)) and duration else None
+                duration_value if duration_value is not None and duration_value > 0 else None
             ),
             # When the provider last reported the window. A reading that is
             # old is not headroom.
             observed_at=(
-                float(measured.get("observedAtEpoch"))
-                if isinstance(measured.get("observedAtEpoch"), (int, float))
-                else None
+                observed_value
             ),
             basis=str(measured.get("basis") or ""),
             source=str(measured.get("source") or ""),
