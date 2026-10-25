@@ -20,6 +20,82 @@ let
   # WALMART_*, HOMEDEPOT_*, BESTBUY_*). Root-owned and outside the repository;
   # the generated clients fail with a usage error when a required value is unset.
   retailStoreEnv = "/etc/ghostship/retail-store.env";
+  approvedFreeWorkers = ./ai-usage/approved-free-workers.json;
+  approvedFreeWorkerRoutes = builtins.fromJSON (builtins.readFile approvedFreeWorkers);
+  ownerRoutePolicy = pkgs.writeText "ghostship-route-policy.json" (
+    builtins.toJSON {
+      schema = "ghostship.route-policy/v1";
+      roles = {
+        worker = {
+          allow = [
+            {
+              provider = "codex";
+              model = "gpt-6-luna";
+              rule = "owner-approved Codex worker route";
+            }
+            {
+              provider = "antigravity";
+              model = "gemini-3.8-flash";
+              rule = "owner-approved Antigravity worker route";
+            }
+            {
+              provider = "antigravity";
+              model = "gemini-3.8-flash-high";
+              rule = "owner-approved Antigravity worker route";
+            }
+            {
+              provider = "antigravity";
+              model = "gemini-4-argon";
+              rule = "owner-approved Antigravity worker route";
+            }
+          ]
+          ++ map (entry: {
+            provider = "opencode-free";
+            model = "${entry.provider}/${entry.model}";
+            rule = "listed in approved-free-workers.json";
+          }) approvedFreeWorkerRoutes.entries;
+          deny = [
+            {
+              provider = "claudeAgent";
+              model = "claude-fable-5";
+              rule = "Claude Fable denied by owner";
+            }
+            {
+              provider = "claudeAgent";
+              model = "claude-fable-5-1";
+              rule = "Claude Fable denied by owner";
+            }
+          ];
+          allow_rule = "not in the owner-approved worker routes";
+        };
+        orchestrator.deny = [
+          {
+            provider = "claudeAgent";
+            model = "claude-fable-5";
+            rule = "Claude Fable denied by owner";
+          }
+          {
+            provider = "claudeAgent";
+            model = "claude-fable-5-1";
+            rule = "Claude Fable denied by owner";
+          }
+        ];
+        reviewer.deny = [
+          {
+            provider = "claudeAgent";
+            model = "claude-fable-5";
+            rule = "Claude Fable denied by owner";
+          }
+          {
+            provider = "claudeAgent";
+            model = "claude-fable-5-1";
+            rule = "Claude Fable denied by owner";
+          }
+        ];
+      };
+      authorizations = [ ];
+    }
+  );
   engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
@@ -190,6 +266,8 @@ in
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
+      "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"
+      "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw"
       "/run/t3code-podman/ports.sock:/var/run/t3code-podman-ports.sock:rw"
     ]
@@ -210,6 +288,7 @@ in
       # The picker and the probe recorder must read one store: the T3 home's
       # model evidence, not a provider sandbox or another HOME (#403).
       GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence/model-evidence.jsonl";
+      GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
     };
     environmentFiles = [ t3codeSecrets retailStoreEnv ];
   };
@@ -226,6 +305,9 @@ in
     "d ${t3codeNixRoot}/nix 0755 root root -"
     "d ${t3codeWorkspace} 0755 3000 3000 -"
   ];
+
+  environment.etc."ghostship/route-policy.json".source = ownerRoutePolicy;
+  environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
 
   systemd.services.podman-t3code = {
     restartIfChanged = false;

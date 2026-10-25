@@ -32,6 +32,36 @@ let
     name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}.restartIfChanged
   ) (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codePreStartSeedsTooling = pkgs.lib.hasInfix "ghostship-t3code-tools" t3codePreStart;
+  t3codeConfig = self.nixosConfigurations.chill-penguin.config;
+  routePolicy = builtins.fromJSON (
+    builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
+  );
+  routeKey = route: "${route.provider}/${route.model}";
+  expectedFreeRoutes =
+    map (entry: "opencode-free/${entry.provider}/${entry.model}")
+      (builtins.fromJSON (builtins.readFile ./modules/self-hosted/ai-usage/approved-free-workers.json))
+      .entries;
+  expectedWorkerRoutes = [
+    "codex/gpt-6-luna"
+    "antigravity/gemini-3.8-flash"
+    "antigravity/gemini-3.8-flash-high"
+    "antigravity/gemini-4-argon"
+  ]
+  ++ expectedFreeRoutes;
+  actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
+  fableDenied =
+    role:
+    builtins.all
+      (
+        model:
+        builtins.any (
+          entry: entry.provider == "claudeAgent" && entry.model == model
+        ) routePolicy.roles.${role}.deny
+      )
+      [
+        "claude-fable-5"
+        "claude-fable-5-1"
+      ];
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
   ) hosts;
@@ -78,6 +108,20 @@ in
     ) agentUnits;
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
+    assert routePolicy.schema == "ghostship.route-policy/v1";
+    assert
+      builtins.sort builtins.lessThan actualWorkerRoutes
+      == builtins.sort builtins.lessThan expectedWorkerRoutes;
+    assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
+    assert routePolicy.authorizations == [ ];
+    assert
+      t3codeConfig.virtualisation.oci-containers.containers.t3code.environment.GHOSTSHIP_ROUTE_POLICY_PATH
+      == "/etc/ghostship/route-policy.json";
+    assert builtins.elem "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"
+      t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
+    assert builtins.elem
+      "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
+      t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
     assert t3codePreStartSeedsTooling;
     assert !(builtins.elem "podman-t3code" t3codeRestartedBySwitch);
     # Temporary CAD checkouts once filled a 32 GiB tmpfs and stalled the
