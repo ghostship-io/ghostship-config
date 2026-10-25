@@ -362,6 +362,58 @@ class SelectionTests(unittest.TestCase):
         two['windows'][0]['remaining_ratio']=1
         self.assertEqual(self.build([one,two])['default_worker']['model'],'other')
 
+    def test_published_worker_order_matches_picker_after_free_route_gates(self):
+        from types import SimpleNamespace
+        import main
+
+        approvals = [
+            {'provider': 'nvidia', 'model': 'glm-flash', 'allow_training': False,
+             'sensitivity': ['public', 'internal']},
+            {'provider': 'nvidia', 'model': 'other', 'allow_training': False,
+             'sensitivity': ['public', 'internal']},
+        ]
+        proven_routes = main.best_free_t3_models(
+            [SimpleNamespace(provider='nvidia', model='glm-flash', rank=1, quality=70),
+             SimpleNamespace(provider='nvidia', model='other', rank=2, quality=99)],
+            {'policy': {'model_selection': {'approved_free_workers': approvals}}},
+            [{'source': 'probe', 'provider': 'opencode-free', 'model': 'nvidia/glm-flash',
+              'passed': True}],
+        )
+        paid = candidate('codex', 'reviewer', quality=90)
+        approved = candidate('opencode-free', 'nvidia/glm-flash', quality=70)
+        approved['native'] = ({
+            'mapped': True, 'provider_instance_id': 'opencode-free',
+            'model_id': 'nvidia/glm-flash',
+        } if 'nvidia/glm-flash' in proven_routes else {})
+        approved['access'] = {'billing': 'free'}
+        unproven = candidate('opencode-free', 'nvidia/other', quality=99)
+        unproven['native'] = ({
+            'mapped': True, 'provider_instance_id': 'opencode-free',
+            'model_id': 'nvidia/other',
+        } if 'nvidia/other' in proven_routes else {})
+        unproven['access'] = {'billing': 'free'}
+        snapshot = {
+            'generated_at': '2026-10-23T12:00:00Z',
+            'candidates': [paid, unproven, approved],
+            'quota': {'provider_capacity': {}},
+        }
+        value = selection.build(snapshot, [], evidence={
+            'policy': {'model_selection': {'approved_free_workers': approvals}},
+        })
+
+        published = [(labels['provider'], labels['model'])
+                     for name, labels, number in selection.samples(value)
+                     if name == 'ghostship_ai_picker_model_position']
+        first_available = next(
+            (row for row in value['worker']
+             if row['available'] and row['picker_eligible'] and row['selection_eligible']),
+            None,
+        )
+        self.assertTrue(next(row for row in value['worker'] if row['model'] == 'nvidia/glm-flash')['approved_free'])
+        self.assertFalse(next(row for row in value['worker'] if row['model'] == 'nvidia/other')['picker_eligible'])
+        self.assertEqual(value['default_worker'], first_available['native'])
+        self.assertEqual(published[0], (first_available['provider'], first_available['model']))
+
     def test_untiered_gemini_inherits_its_live_family_limit_and_stays_listed_at_zero(self):
         row=candidate('antigravity','gemini-example',remaining=None)
         window={'kind':'session','quota_id':'gemini-5h','remaining_ratio':.15,

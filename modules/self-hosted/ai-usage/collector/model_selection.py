@@ -347,8 +347,10 @@ def native_options(descriptors: list[Mapping[str, Any]], preferred: str = 'high'
             options.append({'id': 'serviceTier', 'value': 'standard'})
     return options
 
-def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The preference used by picker defaults, pools and dashboard ranks."""
+def ordered(rows: list[dict[str, Any]], *, category: str | None = None,
+            providers: Mapping[str, Mapping[str, Any]] | None = None,
+            free_selected: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+    """Shared candidate and lane ordering for picker defaults and published positions."""
     best = {}
     for row in rows:
         if row['available'] and row.get('selection_eligible', True) and row['quality_p'] is not None:
@@ -380,7 +382,32 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 -(combined if combined is not None else -1),
                 -(quality if quality is not None else -1),
                 -(row['pace_delta'] if row['pace_delta'] is not None else -2), row['key'])
-    return sorted(rows, key=rank)
+    ranked = sorted(rows, key=rank)
+    if category is None:
+        return ranked
+
+    # Provider choices use the model order above. This shared function then
+    # orders those choices for the worker lane, preserving the picker policy:
+    # approved free choices lead, followed by live capacity and route rank.
+    providers = providers or {}
+    free_selected = free_selected or {}
+    displayed_choices = {provider: group['selected'][category] or next(
+        (item['native'] for item in ranked if item['provider'] == provider
+         and item['picker_eligible'] and item['selection_eligible']), None)
+        for provider, group in providers.items()}
+
+    def lane_rank(row):
+        displayed = displayed_choices[row['provider']]
+        free_pick = category != 'worker' or bool(row.get('approved_free'))
+        picked = ((row['native'] is not None and row['native'] == displayed)
+                  or (category == 'worker' and free_pick
+                      and row['key'] == free_selected.get(row['provider'])))
+        capacity = row['remaining_ratio']
+        return (not picked, not row['available'], TRUST.get(row['trust_level'], 3),
+                row.get('ranking_pace_state', row['pace_state']) == 'far_behind',
+                -(capacity if capacity is not None else -1), row['position'])
+
+    return sorted(ranked, key=lane_rank)
 
 
 def worker_cost_allowed(source: Mapping[str, Any], candidates: list[Mapping[str, Any]]) -> bool:
@@ -744,24 +771,10 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                     # allowance and binding window are already published as
                     # their own fields; this carries them to the CLI too.
                     row["reason"] = "pick: " + str(row["pick_reason"])
-    # Quality chooses the provider's model. Capacity orders those provider
-    # choices across the lane; no provider name has a fixed position.
+    # The picker and published series consume the same lane order.
     for category, rows in categories.items():
-        displayed_choices = {provider: group['selected'][category] or next(
-            (item['native'] for item in rows if item['provider'] == provider
-             and item['picker_eligible'] and item['selection_eligible']), None)
-            for provider, group in providers.items()}
-        def lane_key(row):
-            displayed = displayed_choices[row['provider']]
-            free_pick = (category != 'worker' or bool(row.get('approved_free')))
-            picked = ((row['native'] is not None and row['native'] == displayed)
-                      or (category == 'worker' and free_pick
-                          and row['key'] == free_selected.get(row['provider'])))
-            capacity = row['remaining_ratio']
-            return (not picked, not row['available'], TRUST.get(row['trust_level'],3),
-                    row.get('ranking_pace_state', row['pace_state']) == 'far_behind', -(capacity if capacity is not None else -1),
-                    row['position'])
-        rows.sort(key=lane_key)
+        rows[:] = ordered(rows, category=category, providers=providers,
+                          free_selected=free_selected)
         for index, row in enumerate(rows,1):
             row['position'] = index
     obsolete = []
