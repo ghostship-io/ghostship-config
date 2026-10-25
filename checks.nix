@@ -85,7 +85,11 @@ in
         GHOSTSHIP_TEST_AGENT_SOURCE = agentSource;
         nativeBuildInputs = [
           python
+          pkgs.gnutar
+          pkgs.inetutils
           pkgs.git
+          pkgs.jq
+          pkgs.coreutils
           pkgs.php
           pkgs.util-linux
           pkgs.nodejs_24
@@ -98,6 +102,8 @@ in
         chmod -R u+w source
         cd source
         python modules/common/scripts/ghostship-config.py --test
+        bash tests/test_t3code_deploy_image.sh
+        bash tests/test_t3code_activate_deployment.sh
         python -m unittest discover -s tests -v
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v1-sqlite.test.cjs
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v2-sqlite.test.cjs
@@ -112,8 +118,12 @@ in
       && !unit.stopIfChanged
       && !(builtins.elem "init-ghostship-net.service" unit.requires)
     ) agentUnits;
-    assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
-    assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
+    assert !(self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle);
+    assert !(self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle);
+    assert self.nixosConfigurations.chill-penguin.config.systemd.services ? ghostship-t3code-deploy;
+    assert !(self.nixosConfigurations.chill-penguin.config.systemd.timers ? ghostship-t3code-deploy);
+    assert builtins.elem "ghostship-failure@%n.service"
+      self.nixosConfigurations.chill-penguin.config.systemd.services.ghostship-t3code-deploy.onFailure;
     assert builtins.head (pkgs.lib.splitString ":" t3codeCandidatePodmanPath)
       == "/run/wrappers/bin";
     assert routePolicy.schema == "ghostship.route-policy/v1";

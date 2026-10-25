@@ -590,7 +590,7 @@ class Host:
                 self.command([self.config["systemctl_bin"], "stop", unit])
 
     def ledger(self, entry):
-        # Same host ledger and pre/post/reference format as deploy-when-idle.py.
+        # Same host ledger and pre/post/reference format as the image deployer.
         path = Path(RESTART_LEDGER)
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)

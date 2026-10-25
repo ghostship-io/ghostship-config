@@ -16,7 +16,6 @@ let
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
     mkdir -p "$out"
-    cp ${../../packages/t3code/deploy-when-idle.py} "$out/deploy-when-idle.py"
     cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
@@ -147,35 +146,16 @@ let
     image = runtimeImage.deploymentId;
     agent = t3codeAgentRevision;
   });
-  t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
-    set -eu
-    exec ${pkgs.python3}/bin/python3 ${t3codeDeploymentScripts}/deploy-when-idle.py \
-      --state-dir "${t3codeDeploymentState}" \
-      --image-archive "${t3codeImage}" \
-      --home-dir "${t3codeHome}" \
-      --podman-bin "${pkgs.podman}/bin/podman" \
-      --candidate-socket "/run/t3code-podman-candidate/podman.sock" \
-      --candidate-uid "${toString (config.ghostship.t3codePodman.uid + 1)}" \
-      --candidate-runtime-dir "/var/lib/t3code-podman-candidate/acceptance" \
-      --candidate-home-target "${t3codeContainerHome}" \
-      --provider-secrets-file "${t3codeSecrets}" \
-      --tooling-path "${tooling}" \
-      --agent-revision "${t3codeAgentRevision}" \
-      --expected-deployment-id "${t3codeDeploymentId}" \
-      --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
-      --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
-      --restart-ledger "/var/lib/t3code-restarts/ledger.jsonl" \
-      --journal-bin "${pkgs.systemd}/bin/systemd-cat" \
-      --volume "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro" \
-      --volume "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro" \
-      --volume "/nix/store:/nix/store:ro" \
-      "$@"
-  '';
-
-  t3codeSafeRestart = pkgs.writeShellScriptBin "t3code-safe-restart" ''
-    set -eu
-    exec ${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle --safe-restart "$@"
-  '';
+  t3codeImmediateDeploy = pkgs.writeShellApplication {
+    name = "ghostship-t3code-deploy-image";
+    runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
+    text = builtins.readFile ../../packages/t3code/deploy-image.sh;
+  };
+  t3codeActivateDeployment = pkgs.writeShellApplication {
+    name = "ghostship-t3code-activate-deployment";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
+    text = builtins.readFile ../../packages/t3code/activate-deployment.sh;
+  };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
   # podman-t3code seeds it from the image closure on every deployment (nix copy)
@@ -437,50 +417,46 @@ in
     '';
   };
 
-  environment.systemPackages = [
-    t3codeDeployWhenIdleScript
-    t3codeSafeRestart
-  ];
-
   system.activationScripts.t3code-deployment = {
     text = ''
-      install -d -m 0755 ${t3codeDeploymentState}
-      printf '%s\n' ${lib.escapeShellArg t3codeDeploymentId} \
-        > ${t3codeDeploymentState}/desired.tmp
-      mv ${t3codeDeploymentState}/desired.tmp ${t3codeDeploymentState}/desired
-      secret_inode=$(${pkgs.coreutils}/bin/stat -Lc %i ${t3codeSecrets})
-      printf 'agent=%s secret_inode=%s\n' ${lib.escapeShellArg t3codeAgentRevision} "$secret_inode" \
-        > ${t3codeDeploymentState}/desired-inputs.tmp
-      mv ${t3codeDeploymentState}/desired-inputs.tmp ${t3codeDeploymentState}/desired-inputs
-      ${pkgs.systemd}/bin/systemctl start --no-block t3code-deploy-when-idle.service || true
+      STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
+        DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
+        AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \
+        PROVIDER_SECRETS_FILE=${lib.escapeShellArg t3codeSecrets} \
+        SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl \
+        ${lib.getExe t3codeActivateDeployment}
     '';
     supportsDryActivation = false;
   };
 
-  systemd.services.t3code-deploy-when-idle = {
-    description = "Deploy a changed T3 Code image after sustained idle";
+  systemd.services.ghostship-t3code-deploy = {
+    description = "Accept and deploy a changed T3 Code image immediately";
     after = [ "podman.service" ];
-    path = [ pkgs.podman pkgs.systemd pkgs.su-exec pkgs.coreutils ];
-    # Let an in-flight deploy finish during a host switch; the timer runs the
-    # new script on its next tick.
+    environment = {
+      STATE_DIR = t3codeDeploymentState;
+      IMAGE_ARCHIVE = toString t3codeImage;
+      DEPLOYMENT_ID = t3codeDeploymentId;
+      HOME_DIR = t3codeHome;
+      CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py";
+      PODMAN_BIN = "${pkgs.podman}/bin/podman";
+      SYSTEMCTL_BIN = "${pkgs.systemd}/bin/systemctl";
+      CANDIDATE_SOCKET = "/run/t3code-podman-candidate/podman.sock";
+      CANDIDATE_UID = toString (config.ghostship.t3codePodman.uid + 1);
+      CANDIDATE_RUNTIME_DIR = "/var/lib/t3code-podman-candidate/acceptance";
+      CANDIDATE_HOME_TARGET = t3codeContainerHome;
+      PROVIDER_SECRETS_FILE = t3codeSecrets;
+      TOOLING_PATH = toString tooling;
+      AGENT_REVISION = t3codeAgentRevision;
+      PYTHON_BIN = "${pkgs.python3}/bin/python3";
+      JQ_BIN = "${pkgs.jq}/bin/jq";
+      RESTART_LEDGER = "/var/lib/t3code-restarts/ledger.jsonl";
+      AUDIT_LOG = "${t3codeHome}/.t3code-container/logs/restart-audit.log";
+    };
     restartIfChanged = false;
-    # Its central failure path (notify-coverage.nix) fires only on a failed
-    # start attempt, which is bounded per image.
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";
+      ExecStart = lib.getExe t3codeImmediateDeploy;
       TimeoutStartSec = "25m";
-    };
-  };
-
-  systemd.timers.t3code-deploy-when-idle = {
-    description = "Check for a queued T3 Code image deployment";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "2m";
-      OnUnitActiveSec = "1m";
-      Persistent = true;
-      Unit = "t3code-deploy-when-idle.service";
     };
   };
 

@@ -2,8 +2,10 @@
 
 T3 Code runs in a persistent systemd container with an independent Nix store.
 `packages/t3code/image.nix` alone defines its image: base packages, boot units and
-image parameters. Host switches, agent pins and tooling changes preserve the
-container; image changes replace it after isolated candidate acceptance passes.
+image parameters. A host switch does not restart the container by itself. A
+changed image or Ghostship agent pin starts immediate isolated candidate
+acceptance; the container restarts in that activation only after the exact
+candidate passes.
 Ghostship-agent owns and refreshes tools, CLIs and skills in the persistent home.
 T3 app releases update there too, restarting only the app after its release check. Provider
 CLI and skill updates do not queue an app or container restart.
@@ -572,20 +574,15 @@ skip the fetch so recovery never waits on GitHub. Sync output is in
 The host unit preserves production while it builds and accepts a candidate. The
 candidate uses the target image, deployment inputs, credentials and tooling in an
 isolated runtime; production identity must be unchanged before the receipt is
-written. Once the exact receipt passes, the deployer holds the container's
-tool-maintenance lock
+written. `ghostship-t3code-deploy.service` accepts the exact image and runtime
+inputs, then holds the container's tool-maintenance lock
 (`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
-bind mount) across the restart. Each container carries its deployment ID in the
-`io.ghostship.t3code.deployment` label, so after a reboot, an interrupted
-deploy, or a slow health check, a container already running the desired image
-is recorded as applied once healthy instead of restarted again; one still in
-its health start period is left alone. An unhealthy new image gets at most
-three candidate-accepted restarts. Each failed start alerts through
-`ghostship-failure@`; after the third the deployer stops, whether that image is running, exited, or
-never started, until a new image is desired or an operator runs `t3code-safe-restart`. A host switch does not
-restart an in-flight deploy. Operators can request an immediate restart with
-`t3code-safe-restart`; candidate acceptance is required in all cases. Backups
-include the home and projects but exclude the development engine and Nix stores.
+bind mount) across the immediate restart. Each container carries its deployment
+ID in the `io.ghostship.t3code.deployment` label. A successful run records the
+deployment as applied only after the new container is healthy and its runtime
+inputs match. Failed candidate acceptance raises the service failure incident
+once and marks that image blocked; it is not retried or queued. Backups include
+the home and projects but exclude the development engine and Nix stores.
 
 ```sh
 systemctl status podman-t3code.service --no-pager

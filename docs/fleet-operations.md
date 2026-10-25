@@ -191,7 +191,7 @@ a reason.
 | `ghostship-*` (security, AppArmor, flow, Cloudflare, Seerr, bridges, brokers, skills, inference, provisioning, storage) | Failure to operations |
 | `podman-*` containers, `podman-auto-update`, `podman-prune` | Failure to operations once systemd stops restarting; Uptime Kuma heartbeats also alert operations |
 | `ghostship-storage-check` (daily) | Failure to operations when the root filesystem is read-only or any Btrfs device error counter is nonzero |
-| `nixos-upgrade`, `t3code-deploy-when-idle`, `t3code-nix-store-gc`, `tdarr-staged-guard`, `tdarr-language-policy`, `pyload-restart-failed`, `qbittorrent-auto-resume`, `romm-recovery`, `gluetun-pia-selector`, `gluetun-network-monitor`, `homepage-podman-broker`, `agent-desktop-mcp`, `agent-desktop-ssh`, `flaresolverr-egress`, `init-*-net`, `chill-penguin-retired-artifact-cleanup` | Failure to operations |
+| `nixos-upgrade`, `ghostship-t3code-deploy`, `t3code-nix-store-gc`, `tdarr-staged-guard`, `tdarr-language-policy`, `pyload-restart-failed`, `qbittorrent-auto-resume`, `romm-recovery`, `gluetun-pia-selector`, `gluetun-network-monitor`, `homepage-podman-broker`, `agent-desktop-mcp`, `agent-desktop-ssh`, `flaresolverr-egress`, `init-*-net`, `chill-penguin-retired-artifact-cleanup` | Failure to operations |
 | `ghostship-synology-health` (every 10 minutes) | NAS disk health, RAID, temperature, fan, power and volume-usage findings to operations; a failed poll to operations as well |
 | `ghostship-security-check`, GitHub coordinator, Cloudflare alerts | Publish their own findings to security or operations as well |
 
@@ -450,8 +450,9 @@ Registry-labeled applications keep native Podman automatic updates with health
 readiness and rollback. Database digests require review. Recyclarr stays on
 supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
-refresh. Host changes follow the gated deployment procedure below. The T3 Code container is never restarted by the
-switch; its image change waits for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
+refresh. Host changes follow the gated deployment procedure below. The T3 Code container is never restarted as part of the
+switch itself; a changed image is accepted and restarted immediately by the
+deploy service (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
 switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
 second workflow run; use the update workflow's validation and explicitly run
@@ -507,15 +508,12 @@ than ten minutes reaches operations through `ghostship-notify` with the
 `boot-generation-drift` dedupe key, because a reboot would revert to the
 profile's generation.
 
-T3 Code may restart as soon as the candidate image passes acceptance for the
-exact deployment and image. Candidate acceptance runs in isolation and verifies
-the application, provider turn, CLI, skills, and desktop transport while
-confirming that the production container identity stayed unchanged. The
-deployer records that receipt before restarting:
-
-```bash
-t3code-safe-restart --force
-```
+T3 Code restarts immediately after the isolated candidate passes acceptance for
+the exact deployment and image. The acceptance checks cover the application,
+provider turn, CLI, skills, and desktop transport while confirming that the
+production container identity stayed unchanged. Image updates trigger this
+path directly from host activation; there is no manual safe-restart command or
+idle queue.
 
 Every candidate-accepted restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl`
 with the time, actor, and container identity before and after the restart, and

@@ -22,18 +22,18 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
     def test_host_packages_acceptance_scripts_with_their_sibling_inputs(self):
         module = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn('t3codeDeploymentScripts = pkgs.runCommand', module)
-        self.assertIn(
-            'path = [ pkgs.podman pkgs.systemd pkgs.su-exec pkgs.coreutils ];',
-            module,
-        )
         for name in (
-            "deploy-when-idle.py", "candidate-acceptance.py",
-            "hardening-probe.py", "runtime-caps.json",
+            "candidate-acceptance.py", "hardening-probe.py", "runtime-caps.json",
         ):
             with self.subTest(name=name):
                 self.assertIn(f"$out/{name}", module)
                 self.assertIn(f"packages/t3code/{name}", module)
-        self.assertIn('${t3codeDeploymentScripts}/deploy-when-idle.py', module)
+        self.assertIn('name = "ghostship-t3code-deploy-image"', module)
+        self.assertIn('builtins.readFile ../../packages/t3code/deploy-image.sh', module)
+        self.assertIn('CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py"', module)
+        self.assertIn('systemctl start --no-block ghostship-t3code-deploy.service', module)
+        self.assertNotIn('t3code-deploy-when-idle', module)
+        self.assertNotIn('t3code-safe-restart', module)
 
     def test_t3code_image_exposes_systemd_as_oci_entrypoint(self):
         image = (ROOT / "packages/t3code/image.nix").read_text()

@@ -29,7 +29,7 @@ let
     "qbittorrent-auto-resume"
     "romm-recovery"
     "siem-egress"
-    "t3code-deploy-when-idle"
+    "ghostship-t3code-deploy"
     "t3code-nix-store-gc"
     "tdarr-language-policy"
     "tdarr-staged-guard"
