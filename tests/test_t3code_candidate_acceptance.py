@@ -110,7 +110,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertNotIn(str(self.home), [volume.split(":", 1)[0] for volume in run_volumes])
         self.assertIn(":/candidate-home:rw", run_volumes[0])
         self.assertTrue(any("/run/t3code-candidate-inputs:ro" in v for v in run_volumes))
-        self.assertIn("--unit=t3code-server.service", run)
+        unit_option = run.index("--unit=t3code-server.service")
+        image_tag = run.index("localhost/t3:test")
+        self.assertLess(unit_option, image_tag)
         self.assertNotIn("--unit=multi-user.target", run)
 
     def test_staging_never_copies_oauth_credentials_and_keeps_only_agent_skills(self):

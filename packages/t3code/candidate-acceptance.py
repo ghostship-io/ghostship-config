@@ -333,7 +333,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         args.extend(("--volume", f"{candidate_socket}:/var/run/podman/podman.sock:rw"))
         created = True
         # This leaf unit does not pull in multi-user.target's timers and automations.
-        args.extend((image_tag, "--unit=t3code-server.service"))
+        args.extend(("--unit=t3code-server.service", image_tag))
         assert_ok(engine, *args, timeout=300)
         checks = check_candidate(engine, name, provider_env)
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
