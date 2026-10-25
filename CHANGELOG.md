@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.315] - 2026-10-25
+
+- Constrain orchestrator route to owner policy
+
+PR #525.
+
 ## [3.17.314] - 2026-10-25
 
 - Pin the agent input to `main` commit `891be0c97ce78b3efa971adf8daf80d9cef2955f` (0.47.156), carrying ghostship-agent issues #609, #610, #613, #614, #617, #618, #593, and #608.
