@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.339] - 2026-10-25
+
+Prepend NixOS's privileged uid/gid mapping helper directory to the isolated candidate Podman service PATH. The unit journal showed the plain store `newuidmap` failing to write `uid_map`, which prevented the candidate API manager from staying up and made `podman load` fail before a receipt could be written. Add a host-evaluation assertion for helper ordering.
+
+PR #571.
+
 ## [3.17.338] - 2026-10-25
 
 Pin ghostship-agent to 0.47.212 after #783 merged. This revision descends from the current pin and includes #745, #746, #763 and #783. Refresh the private flake source narHash from that exact commit and keep the pinning guide current.
