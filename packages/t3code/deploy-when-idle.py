@@ -657,11 +657,15 @@ def force_restart(systemctl_bin, podman_bin, reference, ledger_path, journal_bin
     if not live_inputs_match(podman_bin, tooling_path, provider_secrets_file,
                              candidate_home_target):
         raise RuntimeError("forced T3 pickup did not load the desired agent or secret projection")
-    write_live_inputs_receipt(
-        state_dir, podman_bin, (Path(state_dir) / "desired").read_text().strip(),
-        expected_agent_revision, tooling_path, provider_secrets_file, candidate_home_target,
-    )
-    desired = (Path(state_dir) / "desired").read_text().strip()
+    desired_file = Path(state_dir) / "desired"
+    desired = desired_file.read_text().strip() if desired_file.is_file() else ""
+    if expected_agent_revision or tooling_path or provider_secrets_file:
+        if not desired:
+            raise RuntimeError("forced T3 pickup is missing the desired deployment identity")
+        write_live_inputs_receipt(
+            state_dir, podman_bin, desired,
+            expected_agent_revision, tooling_path, provider_secrets_file, candidate_home_target,
+        )
     if desired:
         tmp_applied = Path(state_dir) / "applied.tmp"
         tmp_applied.write_text(desired)
