@@ -1,4 +1,4 @@
-"""Paid models page: the picker selections and the quality ranking follow the owner's design."""
+"""Paid models page: what is picked next, and why every other route is or is not picked."""
 import json
 import re
 import subprocess
@@ -9,123 +9,346 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'modules/self-hosted/ai-usage/collector'))
 import model_selection
-import snapshot
 from metrics import MetricWriter
 
 PAGE = ROOT / 'modules/self-hosted/siem/dashboards/paid-models.json'
+NOW = 1767268800000
+SECONDS = NOW / 1000
 
 
-def helper(panel, name, rows, now=1767268800000):
+def call(panel, name, *args):
     script = 'const helpers={};const context={handlebars:{registerHelper:(key,fn)=>helpers[key]=fn}};'
     script += "new Function('context'," + json.dumps(panel['options']['helpers']) + ')(context);'
-    script += 'console.log(JSON.stringify(helpers[' + json.dumps(name) + '](' + json.dumps(rows) + ',' + str(now) + ')));'
+    script += 'console.log(JSON.stringify(helpers[' + json.dumps(name) + '](...' + json.dumps(list(args)) + ')));'
     return json.loads(subprocess.check_output(['node', '-e', script], text=True))
 
 
-def selection_rows(quality=80, left=.55, delta=-17, state='behind', custom=False):
-    candidate = {'provider':'claude', 'model':'example-model', 'display_name':'Example Model',
-        'available':True, 'quality_score':quality, 'quality_n':5, 'quality_s':4,
-        'quality_basis':'AA + outcomes', 'capacity':{'remaining_ratio':left},
-        'native':{'mapped':True,'provider_instance_id':'claudeAgent','model_id':'example-model',
-                  'options':[{'id':'effort','values':['medium','high','max']}]},
-        'pool':{'id':'claude:all','label':'All models','basis':'audit'},
-        'access':{'billing':'subscription'}}
-    value=model_selection.build({'generated_at':'2026-01-01T12:00:00Z','candidates':[candidate],
-        'quota': {'accounts': {'claude': [{'kind': 'weekly', 'remaining_ratio': .9,
-            'check_at': '2026-01-01T12:00:00Z', 'reset_at': '2026-01-02T12:00:00Z',
-            'duration_seconds': 604800}]}}}, [], evidence={'policy': {'model_selection': {
-                'worker_pool_guards': {'claude': {'kind': 'weekly', 'minimum_remaining_ratio': .2,
-                                                'require_pace_headroom': True}}}}})
-    value['worker'][0]['limiting_window']={'kind':'weekly','quota_id':'seven_day','remaining_ratio':left,
-        'pace_delta':delta,'pace_state':state,'reset_at':'2026-01-01T13:00:00Z',
-        'reset_source':'custom' if custom else 'provider'}
-    samples=model_selection.samples(value)
-    return [{**labels,'field':name.removeprefix('ghostship_ai_picker_model_'),'value':number}
-            for name,labels,number in samples]
+def helper(panel, name, rows, now=NOW):
+    return call(panel, name, rows, now)
 
 
-class PaidModelsPageTests(unittest.TestCase):
+def walk(panels):
+    for panel in panels:
+        yield panel
+        yield from walk(panel.get('panels') or [])
+
+
+def route(provider, model, position, category='worker', billing='subscription', state='available', left=None,
+          pace=None, pace_state='unknown', window='weekly', overspent='false', reset=None, trust='trusted'):
+    labels = {'category': category, 'provider': provider, 'model': model, 'display_name': model, 'effort': '',
+              'state': state, 'trust': trust, 'billing': billing, 'overspent': overspent, 'pace_state': pace_state,
+              'window': window, 'sensitivity_sensitive': 'true'}
+    rows = [{**labels, 'field': 'position', 'value': position}]
+    for field, value in (('left', left), ('pace', pace), ('resetAt', reset)):
+        if value is not None:
+            rows.append({**labels, 'field': field, 'value': value})
+    return rows
+
+
+def census(provider, count, category='worker', state='available', trust='trusted', overspent='false',
+           pace_state='on_pace', sensitive='true', reason='every applicable window has headroom'):
+    return {'category': category, 'provider': provider, 'state': state, 'trust': trust, 'overspent': overspent,
+            'pace_state': pace_state, 'sensitivity_sensitive': sensitive, 'reason': reason, 'field': 'census',
+            'value': count}
+
+
+class PaidPageShapeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.page=json.loads(PAGE.read_text())
-        cls.panels={}
-        def walk(panels):
-            for p in panels:
-                cls.panels[p['id']]=p
-                walk(p.get('panels') or [])
-        walk(cls.page['panels'])
+        cls.page = json.loads(PAGE.read_text())
+        cls.panels = {p['id']: p for p in walk(cls.page['panels'])}
 
-    def test_page_identity_navigation_and_layout(self):
-        self.assertEqual((self.page['uid'],self.page['title']),('ghostship-paid-models','Paid models'))
-        self.assertEqual([link['title'] for link in self.page['links']],['Providers','Paid models','Free models'])
-        order=[p['id'] for p in self.page['panels']]
-        self.assertEqual(order,[201,231,233,250,240])
-        self.assertLess(order.index(231),order.index(250))
+    def test_identity_navigation_and_top_band_order(self):
+        self.assertEqual((self.page['uid'], self.page['title']), ('ghostship-paid-models', 'Paid models'))
+        self.assertEqual([link['title'] for link in self.page['links']], ['Providers', 'Paid models', 'Free models'])
+        top = [p for p in self.page['panels'] if p['type'] != 'row']
+        # The orchestrator is one row across the page; the worker lane and the reasons list share the next row.
+        self.assertEqual([p['id'] for p in top], [201, 260, 263, 261, 262])
+        self.assertEqual([p['id'] for p in sorted(top, key=lambda p: (p['gridPos']['y'], p['gridPos']['x']))],
+                         [201, 260, 263, 261, 262])
+        self.assertEqual({v['name'] for v in self.page['templating']['list']}, {'provider'})
         self.assertNotRegex(json.dumps(self.page), r'(?i)\b(3d|frontier|chief|delegate|bulk)\b')
-        self.assertEqual({v['name'] for v in self.page['templating']['list']},{'provider','orchestrator_model','worker_model'})
 
-    def test_selection_lanes_are_single_panels_not_repeats(self):
-        # A repeat leaves an empty first card and one tall card per row; a single
-        # panel lays the cards out as a dense grid (two per row on a phone).
-        for panel_id, category, width in ((231,'orchestrator',7),(233,'worker',17)):
-            panel=self.panels[panel_id]
-            self.assertNotIn('repeat',panel)
-            self.assertEqual(panel['gridPos']['w'],width)
-            self.assertIn('category="'+category+'"',panel['targets'][0]['expr'])
-            self.assertIn('picker_eligible="true"',panel['targets'][0]['expr'])
-            self.assertIn('${'+category+'_model:regex}',panel['targets'][0]['expr'])
-            self.assertIn('grid-template-columns:1fr 1fr',panel['options']['styles'])
+    def test_every_table_is_in_the_one_collapsed_evidence_row(self):
+        rows = [p for p in self.page['panels'] if p['type'] == 'row']
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['collapsed'])
+        self.assertEqual([p['id'] for p in rows[0]['panels']], [270, 250, 241, 242])
+        for panel in self.page['panels']:
+            self.assertNotIn(panel['type'], ('table', 'logs'))
+        self.assertGreater(rows[0]['gridPos']['y'], max(p['gridPos']['y'] for p in self.page['panels'] if p['type'] != 'row'))
 
-    def test_lane_cards_are_ranked_in_lane_order_and_name_paced_availability(self):
-        panel=self.panels[233]
-        rows=[]
-        for model,position,left,delta,state in (('a',7,.5,-12.34,'behind'),('b',3,None,None,None),('c',9,0,-50,'spent')):
-            labels={'provider':'codex','model':model,'category':'worker','display_name':model.upper(),
-                    'state':'available' if model!='c' else 'exhausted','window':'weekly','pace_state':state or ''}
-            rows.append({**labels,'field':'position','value':position})
-            if left is not None:rows.append({**labels,'field':'remaining_ratio','value':left})
-            if delta is not None:rows.append({**labels,'field':'pace_delta','value':delta})
-        models=helper(panel,'selectionModels',rows)
-        self.assertEqual([m['model'] for m in models],['b','a','c'])
-        self.assertEqual([m['rank'] for m in models],[1,2,3])
-        self.assertEqual([m['next'] for m in models],[True,False,False])
-        self.assertEqual(models[1]['paText'],'Paced Availability −12.3')
-        self.assertEqual(models[2]['paText'],'✕ spent')
-        self.assertTrue(models[0]['noLimit'])
-        self.assertFalse(models[1]['noLimit'])
-        content=panel['options']['content']
-        self.assertIn('{{else}}<div class="capacity-graph"',content)
-        self.assertIn('{{#if this.noLimit}}<div class="nolimit"',content)
-        self.assertEqual(content.count('class="capacity-track"'),1)
-        self.assertIn('next pick',content)
+    def test_top_panels_are_scoped_dynamic_text_without_inner_scroll(self):
+        for panel_id in (260, 261, 262):
+            panel = self.panels[panel_id]
+            self.assertNotIn('repeat', panel)
+            self.assertTrue(panel['transparent'])
+            self.assertEqual(panel['options']['renderMode'], 'allRows')
+            self.assertNotRegex(panel['options']['styles'], r'overflow(?:-y)?\s*:\s*(?:auto|scroll)')
+            # A name is never cut short: it wraps.
+            self.assertNotRegex(panel['options']['styles'], r'text-overflow\s*:\s*ellipsis')
+            css = re.sub(r'@(?:media|container)[^{]*\{', '', panel['options']['styles'])
+            for head in re.findall(r'(?:^|[}\n])\s*([^{}@]+)\{', css):
+                for selector in head.split(','):
+                    # The Business Text wrapper row is only styled where it holds this page's panel.
+                    self.assertRegex(selector.strip(), r'^(?:\.gx|\.dt-row:has\(>\.gx\)|\.dt-row>\.gx)', selector)
+            self.assertIn('latest snapshot', panel['options']['defaultContent'])
 
-    def test_a_reserved_claude_worker_shows_the_guard_numbers_muted(self):
-        panel = self.panels[233]
-        labels = {'provider': 'claude', 'model': 'claude-sonnet-5-5', 'category': 'worker', 'state': 'reserved',
-                  'display_name': 'claude-sonnet-5-5', 'window': 'weekly'}
-        rows = [{**labels, 'field': 'position', 'value': 5},
-                {**labels, 'field': 'guard_remaining_ratio', 'value': .51},
-                {**labels, 'field': 'guard_expected_remaining_ratio', 'value': .74}]
-        model = helper(panel, 'selectionModels', rows)[0]
-        self.assertTrue(model['reserved'])
-        self.assertTrue(model['restricted'])
-        self.assertEqual(model['reasonText'], 'reserved · Claude under pace (51% vs 74% expected)')
-        rows[1]['value'], rows[2]['value'] = .6, .5
-        self.assertEqual(helper(panel, 'selectionModels', rows)[0]['reasonText'],
-                         'reserved · Claude below its review reserve (60% vs 50% expected)')
-        for field in ('guard_remaining_ratio', 'guard_expected_remaining_ratio'):
-            self.assertIn('ghostship_ai_picker_model_' + field, panel['targets'][0]['expr'])
-        self.assertIn('selection-card {{#if this.restricted}}restricted{{/if}}{{#if this.reserved}} reserved{{/if}}',
-                      panel['options']['content'])
+    def test_queries_read_fresh_series_for_the_scope_and_the_selected_route(self):
+        tolerance = '> scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90'
+        for panel_id in (260, 261, 262):
+            expr = self.panels[panel_id]['targets'][0]['expr']
+            self.assertIn(tolerance, expr, panel_id)
+            self.assertNotIn('== scalar(max(timestamp', expr, panel_id)
+            # A pruned (obsolete) route is published with picker_eligible="false": the paid scope is its billing class.
+            self.assertIn('billing!~"free|promotion"', expr, panel_id)
+            self.assertNotIn('picker_eligible', expr, panel_id)
+            self.assertIn('provider!="openrouter"', expr, panel_id)
+            self.assertIn('provider!="opencode-free"', expr, panel_id)
+            self.assertIn('provider!="pi"', expr, panel_id)
+            self.assertIn('provider=~"$provider"', expr, panel_id)
+            self.assertNotIn('billing=~"free|promotion"', expr, panel_id)
+        for panel_id in (260, 261, 263):
+            expr = self.panels[panel_id]['targets'][0]['expr']
+            self.assertIn('on(category, provider, model, effort) ghostship_ai_picker_model_selected', expr)
+            for field in ('position', 'left', 'pace', 'resetAt'):
+                self.assertIn('"field", "%s"' % field, expr)
+        for panel_id in (260, 261, 262, 263):
+            expr = self.panels[panel_id]['targets'][0]['expr']
+            self.assertIn('"field", "census"', expr)
+            self.assertIn('"reason", "pick", "reason", "pick: .*"', expr)
+        self.assertIn('category="orchestrator"', self.panels[263]['targets'][0]['expr'])
+        self.assertNotIn('category="worker"', self.panels[263]['targets'][0]['expr'])
+        self.assertIn('category="worker"', self.panels[261]['targets'][0]['expr'])
+        self.assertNotIn('category="orchestrator"', self.panels[261]['targets'][0]['expr'])
 
-    def test_estimated_limits_show_a_muted_line_instead_of_a_full_bar(self):
-        panel = self.panels[233]
-        labels = {'provider': 'nvidia', 'model': 'm', 'category': 'worker', 'window': 'inferred', 'state': 'available'}
-        model = helper(panel, 'selectionModels', [{**labels, 'field': 'remaining_ratio', 'value': 1}])[0]
-        self.assertTrue(model['noLimit'])
-        self.assertIn('no published limit', panel['options']['content'])
-        real = helper(panel, 'selectionModels', [{**labels, 'window': 'weekly', 'field': 'remaining_ratio', 'value': .4}])[0]
-        self.assertFalse(real['noLimit'])
+    def test_opencode_free_is_not_a_paid_route_or_a_paid_filter_choice(self):
+        variable = self.page['templating']['list'][0]
+        self.assertIn('provider!="opencode-free"', variable['definition'])
+        self.assertIn('provider!="opencode-free"', self.panels[270]['targets'][0]['expr'])
+
+    def test_pi_is_absent_from_dashboard_queries(self):
+        for variable in self.page['templating']['list']:
+            self.assertIn('provider!="pi"', variable.get('definition', ''))
+        for panel in walk(self.page['panels']):
+            for target in panel.get('targets', []):
+                query = target.get('expr', '')
+                if 'provider!=' in query:
+                    self.assertIn('provider!="pi"', query)
+
+    def test_the_ordering_measure_is_named_paced_availability_where_it_is_drawn(self):
+        self.assertIn('Paced Availability', self.panels[261]['options']['content'])
+
+    def test_the_t3_strip_names_the_issue_that_ends_its_permanent_partial(self):
+        rows = [{'field': 'collected', 'value': SECONDS}, {'source': 't3', 'field': 'info', 'status': 'partial', 'reason': 'unsupported'}]
+        status = {r['name']: r for r in helper(self.panels[201], 'sourceHealth', rows)}
+        self.assertEqual(status['T3 providers']['text'], 'unavailable · unsupported · #470')
+
+    def test_source_failures_and_stale_collection_are_visible_above_models(self):
+        panel = self.panels[201]
+        rows = [{'field': 'collected', 'value': SECONDS},
+                {'source': 't3_usage', 'field': 'info', 'status': 'error', 'reason': 'timeout'},
+                {'source': 't3', 'field': 'info', 'status': 'ok'}]
+        status = {row['name']: row for row in helper(panel, 'sourceHealth', rows)}
+        self.assertEqual(status['T3 usage']['text'], 'unavailable · timeout')
+        self.assertEqual(status['T3 providers']['text'], 'current')
+        self.assertTrue(all(row['state'] == 'error' for row in helper(panel, 'sourceHealth', rows, NOW + 601000)))
+        self.assertEqual(helper(panel, 'sourceHealth', [], NOW)[0]['text'], 'missing collection timestamp')
+
+
+class LaneTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.panel = next(p for p in walk(json.loads(PAGE.read_text())['panels']) if p['id'] == 261)
+
+    def rows(self, rows, lane='paid', limit=0):
+        return call(self.panel, 'modelRows', rows, NOW, lane, limit)['rows']
+
+    def test_providers_follow_the_picker_order_and_the_first_pickable_route_is_next(self):
+        rows = (route('antigravity', 'a', 9, state='exhausted', left=0, pace_state='spent', window='quota')
+                + route('claude', 'c', 11, state='reserved')
+                + route('ollama', 'o', 5, left=.5, pace=-12.34, pace_state='behind')
+                + route('codex', 'x', 7, left=.21, pace=-63.85, pace_state='far_behind', overspent='true'))
+        lane = self.rows(rows)
+        self.assertEqual([r['provider'] for r in lane], ['ollama', 'codex', 'antigravity', 'claude'])
+        # The rank is the picker's own position among all workers, so a paid worker reads 5th behind the free routes.
+        self.assertEqual([r['first'] for r in lane], [True, False, False, False])
+        self.assertEqual([r['next'] for r in lane], [False, False, False, False])
+        self.assertEqual([r['rank'] for r in lane], [5, 7, 9, 11])
+        by = {r['provider']: r for r in lane}
+        self.assertEqual((by['ollama']['kind'], by['ollama']['word'], by['ollama']['paText']), ('warn', 'Behind pace', '−12.3'))
+        self.assertEqual((by['codex']['kind'], by['codex']['word']), ('bad', 'Overspent'))
+        self.assertEqual((by['antigravity']['kind'], by['antigravity']['word']), ('out', 'Out of quota'))
+        self.assertEqual((by['claude']['kind'], by['claude']['word']), ('held', 'Held for review'))
+
+    def test_a_provider_with_routes_but_no_selected_route_stays_visible_and_says_why(self):
+        rows = [census('grok', 5, state='exhausted', overspent='true', pace_state='spent', reason='quota_exhausted')]
+        lane = self.rows(rows)
+        self.assertEqual((lane[0]['name'], lane[0]['noRoute'], lane[0]['word'], lane[0]['next']), ('Grok', True, 'All out of quota', False))
+        self.assertEqual(lane[0]['census']['text'], '0 of 5 pickable')
+        self.assertTrue(lane[0]['many'])
+        self.assertFalse(lane[0]['pace'])
+
+    def test_the_obsolete_label_wins_and_the_reason_text_is_the_fallback(self):
+        labelled = census('p', 1, reason='superseded by a newer family model')
+        labelled['obsolete'] = 'true'
+        text = census('p', 1, state='unavailable', reason='not offered by the T3 instance (deprecated in the catalog)')
+        absent = census('p', 1, state='unavailable', reason='not offered by the T3 instance')
+        keys = lambda rows: {p['key']: p['count'] for p in self.rows(rows)[0]['census']['parts']}
+        self.assertEqual(keys([labelled]), {'obsolete': 1})
+        self.assertEqual(keys([text]), {'obsolete': 1})
+        self.assertEqual(keys([absent]), {'unavailable': 1})
+        self.assertIn('obsolete, reason', self.panel['targets'][0]['expr'])
+
+    def test_pickable_routes_with_no_selected_route_are_unknown_not_out(self):
+        lane = self.rows([census('opencode-free', 34), census('opencode-free', 1, trust='untrusted')])
+        self.assertEqual((lane[0]['kind'], lane[0]['word'], lane[0]['capacity'], lane[0]['out']), ('unk', '', 'no route selected', False))
+        self.assertFalse(lane[0]['next'])
+
+    def test_every_route_is_counted_once_by_the_first_reason_that_applies(self):
+        cases = {
+            'excluded': dict(state='excluded', trust='excluded', reason='model_excluded'),
+            'obsolete': dict(state='unavailable', reason='not offered by the T3 instance (deprecated in the catalog)'),
+            'unavailable': dict(state='unavailable', reason='not offered by the T3 instance'),
+            'cooling': dict(state='unavailable', reason='cooling down in the free pool until 2026-10-25T00:00:02Z'),
+            'exhausted': dict(state='exhausted', overspent='true', pace_state='spent', reason='quota_exhausted'),
+            'untrusted': dict(trust='untrusted', overspent='true'),
+            'held': dict(state='reserved', reason='current shared weekly review headroom is unknown'),
+            'overspent': dict(overspent='true', pace_state='far_behind'),
+            'pickable': dict(),
+        }
+        rows = [census('p', 1, **kw) for kw in cases.values()]
+        parts = self.rows(rows)[0]['census']['parts']
+        self.assertEqual({p['key']: p['count'] for p in parts}, {key: 1 for key in cases})
+        self.assertEqual([p['key'] for p in parts],
+                         ['pickable', 'overspent', 'exhausted', 'untrusted', 'held', 'cooling', 'unavailable', 'obsolete', 'excluded'])
+        self.assertEqual(self.rows(rows)[0]['census']['pickable'], 1)
+
+    def test_the_stacked_bar_widths_sum_to_the_whole_and_one_route_has_no_bar(self):
+        rows = [census('ollama', 8), census('ollama', 14, state='exhausted', reason='quota_exhausted'),
+                census('ollama', 1, state='excluded', trust='excluded', reason='model_excluded'),
+                census('codex', 1, reason='pick')] + route('codex', 'x', 3, left=.4, pace_state='on_pace')
+        by = {r['provider']: r for r in self.rows(rows)}
+        self.assertAlmostEqual(sum(p['pct'] for p in by['ollama']['census']['parts']), 100, delta=.2)
+        self.assertEqual(by['ollama']['census']['skipped'], '14 out of quota · 1 excluded by policy')
+        self.assertTrue(by['ollama']['many'])
+        self.assertFalse(by['codex']['many'])
+
+    def test_unknown_capacity_never_reads_as_a_full_bar(self):
+        inferred = self.rows(route('google', 'g', 8, billing='free', left=1, window='inferred', pace_state='on_pace'), 'free')[0]
+        self.assertEqual((inferred['kind'], inferred['capacity'], inferred['leftText']), ('unk', 'no limit seen', ''))
+        self.assertFalse(inferred['pace'])
+        silent = self.rows(route('claude', 'c', 1, category='orchestrator'), 'orchestrator')[0]
+        self.assertEqual((silent['kind'], silent['capacity']), ('unk', 'capacity unknown · #465'))
+        self.assertIn('{{#if (eq kind "unk")}}', self.panel['options']['content'])
+
+    def test_only_a_long_window_is_paced_a_daily_window_shows_its_reset_alone(self):
+        daily = self.rows(route('openrouter', 'm', 2, billing='free', left=1, window='daily', pace_state='on_pace',
+                                reset=SECONDS + 3 * 3600), 'free')[0]
+        self.assertEqual((daily['pace'], daily['paceLong'], daily['when']), (True, False, 'resets in 3h 0m'))
+        weekly = self.rows(route('ollama', 'm', 1, left=.5, window='weekly', pace_state='behind', pace=-9))[0]
+        self.assertEqual((weekly['pace'], weekly['paceLong'], weekly['paKnown']), (True, True, True))
+        unknown = self.rows(route('codex', 'm', 1, left=.5, window='weekly'))[0]
+        self.assertEqual((unknown['paceLong'], unknown['paKnown']), (True, False))
+        self.assertIn('pace unknown', self.panel['options']['content'])
+
+    def test_sensitivity_limit_is_noted_only_when_it_splits_a_provider(self):
+        rows = [census('a', 3, sensitive='false'), census('b', 2, sensitive='false'), census('b', 2, sensitive='true')]
+        by = {r['provider']: r for r in self.rows(rows)}
+        self.assertFalse(by['a']['census']['partial'])
+        self.assertTrue(by['b']['census']['partial'])
+        self.assertEqual((by['a']['census']['limited'], by['b']['census']['limited']), (3, 2))
+
+    def test_lanes_split_by_category(self):
+        rows = route('claude', 'o', 1, category='orchestrator') + route('codex', 'w', 2) + [census('codex', 1, category='orchestrator')]
+        # Only the picker's first orchestrator is the orchestrator: its other candidates are not listed.
+        self.assertEqual([r['provider'] for r in self.rows(rows, 'orchestrator')], ['claude'])
+        self.assertEqual([r['provider'] for r in self.rows(rows, 'paid')], ['codex'])
+
+    def test_the_configured_orchestrator_alone_is_counted_in_the_summary_and_the_reasons(self):
+        rows = (route('claude', 'o', 1, category='orchestrator') + route('codex', 'o', 2, category='orchestrator')
+                + [census('claude', 1, category='orchestrator'), census('codex', 1, category='orchestrator'), census('ollama', 2)])
+        summary = call(self.panel, 'modelSummary', rows, NOW, 'paid')
+        self.assertEqual(summary['pickable'], {'count': 3, 'of': 3})
+        self.assertEqual(summary['orchestrator']['name'], 'Claude')
+        reasons = call(self.panel, 'modelReasons', rows)
+        self.assertEqual(reasons['total'], 3)
+
+    def test_the_summary_and_the_reasons_read_the_same_orchestrator_positions(self):
+        # Without the positions the reasons panel cannot drop the orchestrators the picker does not use, so its counts
+        # exceed the summary's by those routes.
+        panels = {p['id']: p for p in walk(json.loads(PAGE.read_text())['panels'])}
+        for panel_id in (260, 262):
+            expr = panels[panel_id]['targets'][0]['expr']
+            self.assertIn('category="orchestrator"', expr, panel_id)
+            self.assertIn('"field", "position"', expr, panel_id)
+
+    def test_a_paid_worker_says_where_the_picker_tries_it(self):
+        rows = route('ollama', 'o', 4, left=.5, pace=-12.34, pace_state='behind')
+        worker = call(self.panel, 'modelSummary', rows, NOW, 'paid')['worker']
+        self.assertIn('tried 4th, after the free routes', worker['detail'])
+
+    def test_the_reset_text_says_back_for_a_spent_route_and_resets_for_a_live_one(self):
+        spent = self.rows(route('a', 'm', 1, state='exhausted', left=0, pace_state='spent', reset=SECONDS + 6 * 3600))[0]
+        live = self.rows(route('b', 'm', 2, left=.5, reset=SECONDS + 90 * 60))[0]
+        self.assertEqual((spent['when'], live['when']), ('back in 6h 0m', 'resets in 1h 30m'))
+
+
+class SummaryAndReasonTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(PAGE.read_text())
+        cls.panels = {p['id']: p for p in walk(cls.page['panels'])}
+
+    def test_summary_names_the_next_picks_and_counts_pickable_and_skipped(self):
+        rows = (route('claude', 'opus', 1, category='orchestrator') + route('ollama', 'o', 5, left=.5, pace=-12, pace_state='behind')
+                + [census('claude', 1, category='orchestrator', pace_state='unknown'),
+                   census('ollama', 3), census('ollama', 4, state='exhausted', reason='quota_exhausted'),
+                   census('codex', 2, overspent='true', pace_state='far_behind'), census('claude', 1, state='reserved')])
+        summary = call(self.panels[260], 'modelSummary', rows, NOW, 'paid')
+        self.assertEqual((summary['orchestrator']['name'], summary['worker']['name']), ('Claude', 'Ollama'))
+        self.assertEqual(summary['pickable'], {'count': 4, 'of': 11})
+        self.assertEqual((summary['skipped']['count'], summary['skipped']['text']), (7, '4 out of quota · 2 overspent'))
+
+    def test_no_pickable_route_says_none_available_instead_of_naming_one(self):
+        rows = route('a', 'm', 1, state='exhausted', left=0, pace_state='spent')
+        summary = call(self.panels[260], 'modelSummary', rows, NOW, 'paid')
+        self.assertIsNone(summary['worker'])
+        self.assertIn('None available', self.panels[260]['options']['content'])
+
+    def test_reasons_count_every_category_and_name_the_providers_behind_each_count(self):
+        rows = [census('codex', 7, overspent='true', pace_state='far_behind'), census('claude', 1, category='orchestrator'),
+                census('ollama', 14, state='exhausted', reason='quota_exhausted'),
+                census('grok', 5, state='exhausted', reason='quota_exhausted'),
+                census('x', 4, sensitive='false')]
+        reasons = call(self.panels[262], 'modelReasons', rows, NOW)
+        self.assertEqual(reasons['total'], 31)
+        self.assertEqual(reasons['limited'], 4)
+        by = {r['key']: r for r in reasons['list']}
+        self.assertEqual((by['exhausted']['count'], by['exhausted']['who']), (19, 'Ollama 14 · Grok 5'))
+        self.assertEqual(by['overspent']['count'], 7)
+        self.assertEqual(max(r['width'] for r in reasons['list']), 100)
+        self.assertEqual(call(self.panels[262], 'modelReasons', [], NOW)['empty'], True)
+
+    def test_a_missing_tool_loop_proof_is_drawn_as_unknown_not_as_a_count(self):
+        content = self.panels[262]['options']['content']
+        self.assertIn('No tool-loop proof', content)
+        self.assertIn('not reported yet · #479', content)
+        self.assertIn('class="bar hatch"', content)
+
+
+class EvidenceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(PAGE.read_text())
+        cls.panels = {p['id']: p for p in walk(cls.page['panels'])}
+
+    def test_the_route_table_lists_every_candidate_with_its_reason(self):
+        table = self.panels[270]
+        expr = table['targets'][0]['expr']
+        self.assertIn('ghostship_ai_picker_model_position{category=~"orchestrator|worker"', expr)
+        self.assertIn('provider=~"$provider"', expr)
+        self.assertEqual(table['transformations'][0]['options']['renameByName']['reason'], 'Reason')
 
     def test_tokens_per_pass_are_formatted_like_t3(self):
         panel = self.panels[250]
@@ -135,113 +358,6 @@ class PaidModelsPageTests(unittest.TestCase):
             rows = [{**labels, 'field': 'info', 'value': 1}, {**labels, 'field': 'tokens_per_pass', 'value': raw}]
             self.assertEqual(helper(panel, 'qualityRows', rows)[0]['tokens'], text)
 
-    def test_free_provider_names_are_human_on_the_model_cards(self):
-        row={'provider':'cloudflare-workers-ai','model':'m','category':'worker','field':'position','value':1}
-        self.assertEqual(helper(self.panels[233],'selectionModels',[row])[0]['providerName'],'Cloudflare')
-        row['provider']='opencode'
-        self.assertEqual(helper(self.panels[233],'selectionModels',[row])[0]['providerName'],'OpenCode Zen')
-
-    def test_lane_styles_are_scoped_so_they_cannot_restyle_grafana(self):
-        for panel_id in (231, 233):
-            css = re.sub(r'@media[^{]*\{', '', self.panels[panel_id]['options']['styles'])
-            for head in re.findall(r'(?:^|[}\n])\s*([^{}@]+)\{', css):
-                for selector in head.split(','):
-                    self.assertRegex(selector.strip(), r'^\.(lane|selection-card)', selector)
-
-    def test_every_dashboard_panel_has_room_for_its_content(self):
-        for panel in self.page['panels']:
-            if panel['type']=='row':
-                self.assertTrue(panel['collapsed'])
-                continue
-            self.assertLessEqual(panel['gridPos']['x']+panel['gridPos']['w'],24)
-
-
-    def test_repeat_variables_use_published_order_and_freshness(self):
-        variables={v['name']:v for v in self.page['templating']['list']}
-        for category in ('orchestrator','worker'):
-            query=variables[category+'_model']['query']['query']
-            self.assertIn('sort(',query)
-            self.assertIn('ghostship_ai_picker_model_position',query)
-            self.assertIn('ghostship_ai_picker_model_selected',query)
-            self.assertIn('ghostship_ai_collection_duration_seconds',query)
-            self.assertEqual(variables[category+'_model']['sort'],0)
-        self.assertIn('provider!="openrouter"',variables['provider']['definition'])
-
-    def test_repeated_model_regex_survives_query_string_parsing(self):
-        # Grafana :regex emits one slash before punctuation. Quoted MetricsQL
-        # strings consume escapes; raw literals must preserve the exact pattern.
-        selected = r'ollama\|deepseek-v4\.1-flash:1017'
-        for panel_id, category in ((231, 'orchestrator'), (233, 'worker')):
-            query = self.panels[panel_id]['targets'][0]['expr']
-            query = query.replace('${' + category + '_model:regex}', selected)
-            for literal in re.findall(r'"selection_key",\s*(`[^`]*`|"[^"\n]*")', query):
-                if literal == '"|"':
-                    continue
-                decoded = literal[1:-1] if literal.startswith('`') else json.loads(literal)
-                self.assertEqual(decoded, selected)
-                self.assertIsNotNone(re.fullmatch(decoded, 'ollama|deepseek-v4.1-flash:1017'))
-                self.assertIsNone(re.fullmatch(decoded, 'ollama|deepseek-v4X1-flash:1017'))
-
-    def test_source_failures_and_stale_collection_are_visible_above_models(self):
-        panel = self.panels[201]
-        now = 1767268800000
-        rows = [{'field':'collected','value':now / 1000},
-                {'source':'t3_usage','field':'info','status':'error','reason':'timeout'},
-                {'source':'opencode-go','field':'info','status':'error','reason':'http_forbidden'},
-                {'source':'t3','field':'info','status':'ok'}]
-        status = helper(panel, 'sourceHealth', rows, now)
-        by_name = {row['name']:row for row in status}
-        self.assertEqual(by_name['T3 usage']['text'], 'unavailable · timeout')
-        self.assertEqual(by_name['OpenCode Go']['text'], 'unavailable · http_forbidden')
-        self.assertEqual(by_name['T3 providers']['text'], 'current')
-        self.assertTrue(all(row['state']=='error' for row in helper(panel,'sourceHealth',rows,now+601000)))
-        self.assertEqual(helper(panel,'sourceHealth',[],now)[0]['text'],'missing collection timestamp')
-        self.assertLess(self.page['panels'].index(panel), self.page['panels'].index(self.panels[231]))
-        self.assertIn('Collector readings missing',panel['options']['defaultContent'])
-
-    def test_text_only_model_details_come_from_real_canonical_samples(self):
-        panel=self.panels[233]
-        model=helper(panel,'selectionModels',selection_rows(custom=True))[0]
-        self.assertEqual((model['quality'],model['rounds']),('80','4/5 accepted'))
-        self.assertEqual(model['percent'],'55% left')
-        self.assertEqual(model['paceText'],'▼ 17 behind')
-        self.assertEqual(model['paceClass'],'behind')
-        self.assertEqual(model['customReset'],'custom reset')
-        self.assertEqual(model['resetText'],'resets in 1h 0m')
-        self.assertEqual(model['effortText'],'high')
-        self.assertTrue(model['defaultWorker'])
-        self.assertEqual((model['providerPosition'],model['poolPosition']),(1,1))
-        self.assertNotIn('class="bar"',panel['options']['content'])
-        self.assertIn('data-field="remaining"',panel['options']['content'])
-        self.assertIn('custom reset',panel['options']['content'])
-
-    def test_selected_models_have_exactly_one_binding_graph_and_spent_models_remain_grey(self):
-        panel=self.panels[233]
-        self.assertEqual(panel['options']['content'].count('class="capacity-track"'),1)
-        self.assertIn('.selection-card.restricted{opacity:.5}',panel['options']['styles'])
-        model=helper(panel,'selectionModels',selection_rows(left=0,state='spent'))[0]
-        self.assertEqual(model['fill'],0)
-        self.assertTrue(model['restricted'])
-        variables={v['name'] for v in self.page['templating']['list']}
-        self.assertNotIn('free_model',variables)
-
-    def test_healthy_capacity_is_neutral_and_pace_does_not_colour_the_bar(self):
-        panel=self.panels[233]
-        rows=selection_rows(left=.76,delta=-23,state='far_behind')
-        for row in rows:
-            row['reason']='every applicable window has headroom'
-        model=helper(panel,'selectionModels',rows)[0]
-        self.assertEqual(model['graphClass'],'')
-        self.assertEqual(model['paceClass'],'far_behind')
-        self.assertEqual(model['reasonClass'],'')
-        self.assertEqual(model['reasonText'],'every applicable window has headroom')
-        self.assertIn('.selection-card .reason{font-size:10.5px;margin-top:4px;color:#8b8f99',panel['options']['styles'])
-        for row in rows:
-            row['provider']='antigravity'
-            row['reason']='the provider publishes no quota window for this account'
-        model=helper(panel,'selectionModels',rows)[0]
-        self.assertEqual(model['reasonText'],'Applicable reported quota has headroom')
-        self.assertEqual(model['windowName'],'weekly')
 
     def test_unmeasured_aa_has_neither_source_link_nor_date(self):
         panel=self.panels[250]
@@ -251,6 +367,7 @@ class PaidModelsPageTests(unittest.TestCase):
         self.assertFalse(model['hasAA'])
         self.assertEqual(model['aaDate'],'')
         self.assertIn('{{#if this.hasAA}}<a href=',panel['options']['content'])
+
 
     def test_quality_table_uses_published_scores_and_preserves_missing_evidence(self):
         panel=self.panels[250]
@@ -269,7 +386,7 @@ class PaidModelsPageTests(unittest.TestCase):
         empty=helper(panel,'qualityRows',[{**labels,'evidence_state':'producer_unavailable','field':'info','value':1}])[0]
         self.assertEqual((empty['overall'],empty['observed'],empty['passes']),('—','—','no evidence yet'))
         self.assertTrue(empty['evidenceMissing'])
-        self.assertLess(self.page['panels'].index(self.panels[233]),self.page['panels'].index(panel))
+
 
     def test_quality_collapses_efforts_and_only_offers_comparison_when_observations_differ(self):
         import model_quality
@@ -299,42 +416,11 @@ class PaidModelsPageTests(unittest.TestCase):
             self.assertFalse(chosen['hasQuota'])
         self.assertIn('data-quality-controls',self.panels[250]['options']['content'])
 
+
     def test_quality_hook_builds_controls_after_grafana_sanitization(self):
         subprocess.run(['node',str(ROOT/'tests/fixtures/ai-usage/quality-hook-dom.cjs'),str(PAGE)],check=True)
         self.assertNotIn('<input',self.panels[250]['options']['content'])
 
-    def test_pi_is_absent_from_dashboard_queries(self):
-        for variable in self.page['templating']['list']:
-            query=variable.get('definition','')
-            if 'provider!=' in query:self.assertIn('provider!="pi"',query)
-            if 'account!=' in query:self.assertIn('account!="pi"',query)
-        for panel in self.page['panels']:
-            for target in panel.get('targets',[]):
-                query=target.get('expr','')
-                if 'provider!=' in query:self.assertIn('provider!="pi"',query)
-                if 'account!=' in query:self.assertIn('account!="pi"',query)
-
-    def test_model_pace_reads_the_published_band_without_rounding_it_again(self):
-        for state, delta, text in (('ahead',5.1,'▲ 5.1 ahead'),('on_pace',5,'● on pace'),
-                                   ('behind',-5.1,'▼ 5.1 behind'),('behind',-20,'▼ 20 behind'),
-                                   ('far_behind',-20.1,'▼ 20.1 behind')):
-            with self.subTest(state=state,delta=delta):
-                model=helper(self.panels[233],'selectionModels',selection_rows(delta=delta,state=state))[0]
-                self.assertEqual((model['paceClass'],model['paceText']),(state,text))
-        model=helper(self.panels[233],'selectionModels',selection_rows(left=0,state='spent'))[0]
-        self.assertEqual(model['paceText'],'✕ spent')
-        styles=self.panels[233]['options']['styles']
-        self.assertIn('.selection-card .on_pace,.selection-card .unknown{color:#8b8f99}',styles)
-
-    def test_cards_sort_by_published_position_and_keep_unknowns_honest(self):
-        rows=[{'provider':'p','model':'a','category':'worker','display_name':'A','field':'position','value':2},
-              {'provider':'p','model':'z','category':'worker','display_name':'Z','field':'position','value':1}]
-        models=helper(self.panels[233],'selectionModels',rows)
-        self.assertEqual([m['model'] for m in models],['z','a'])
-        self.assertEqual(models[0]['quality'],'Unknown')
-        self.assertEqual(models[0]['percent'],'No published limit')
-        self.assertEqual(models[0]['rounds'],'rounds unknown')
-        self.assertNotIn('NaN',json.dumps(models))
 
     def test_public_model_identity_is_not_changed_by_metric_rendering(self):
         source={'provider':'example','model':'family/model','display_name':'Example',
@@ -345,6 +431,7 @@ class PaidModelsPageTests(unittest.TestCase):
         for name,labels,number in model_selection.samples(value):writer.add(name,labels,number)
         self.assertIn('model="family/model"',writer.render())
         self.assertNotIn('model="family_model"',writer.render())
+
 
 
 if __name__ == "__main__":

@@ -1,0 +1,41 @@
+{
+  "uid": "ghostship-paid-models",
+  "title": "Paid models",
+  "tags": [
+    "ghostship",
+    "ai",
+    "usage"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 41,
+  "version": 7,
+  "editable": false,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "links": [
+    {
+      "title": "Providers",
+      "type": "link",
+      "url": "/d/ghostship-ai-usage",
+      "targetBlank": false
+    },
+    {
+      "title": "Paid models",
+      "type": "link",
+      "url": "/d/ghostship-paid-models",
+      "targetBlank": false
+    },
+    {
+      "title": "Free models",
+      "type": "link",
+      "url": "/d/ghostship-free-workers",
+      "targetBlank": false
+    }
+  ],
+  "description": "Selected paid models and measured quality \u00b7 canonical collector snapshot",
+  "graphTooltip": 1,
+  "fiscalYearStartMonth": 0
+}
