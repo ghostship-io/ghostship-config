@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.314] - 2026-10-25
+
+- Pin the agent input to `main` commit `891be0c97ce78b3efa971adf8daf80d9cef2955f` (0.47.156), carrying ghostship-agent issues #609, #610, #613, #614, #617, #618, #593, and #608.
+
+PR #524.
+
 ## [3.17.313] - 2026-10-25
 
 Install the owner route policy for T3 at `/etc/ghostship/route-policy.json` and pass its path to the agent runtime. Generate approved free worker entries from the existing approved-free-workers source and deny Claude Fable routes in each role. The worker allow list includes only the owner-approved Codex and Antigravity routes plus those approved free routes; no temporary authorization is configured.
