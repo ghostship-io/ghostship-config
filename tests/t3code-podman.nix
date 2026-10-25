@@ -24,11 +24,19 @@ let
         }).assertions
     );
   cfg = candidate enabled;
+  candidateRuntime = candidate {
+    ghostship.t3codePodman = {
+      enable = true;
+      candidate = true;
+    };
+  };
 in
 # The dedicated rootless engine replaces the legacy inner daemon.
 assert (candidate { }).ghostship.t3codePodman.enable;
 assert !(candidate { }).ghostship.t3codePodman.candidate;
 assert failures { } == [ ];
+# The systemd PID 1 inside candidate containers needs a delegated cgroup tree.
+assert candidateRuntime.systemd.services.t3code-podman-candidate.serviceConfig.Delegate;
 # Admission: UID reuse or subordinate overlap turns dev access into apps access.
 assert builtins.elem "T3 Podman must not reuse the apps UID/GID." (failures {
   ghostship.t3codePodman.uid = 3000;

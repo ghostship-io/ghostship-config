@@ -205,9 +205,17 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300):
         if command(engine, "exec", name, "curl", "-fsS", "--max-time", "5",
                    "http://127.0.0.1:3773/").returncode == 0:
             break
-        state = command(engine, "inspect", name, "--format", "{{.State.Running}}")
-        if state.returncode or state.stdout.strip() != "true":
+        state = command(engine, "inspect", name, "--format", "{{json .State}}")
+        if state.returncode:
             raise RuntimeError("candidate container exited before app readiness")
+        try:
+            state_data = json.loads(state.stdout)
+        except (TypeError, ValueError):
+            state_data = {}
+        if state_data.get("Running") is not True:
+            exit_code = state_data.get("ExitCode")
+            detail = f" (exit code {exit_code})" if isinstance(exit_code, int) else ""
+            raise RuntimeError(f"candidate container exited before app readiness{detail}")
         time.sleep(2)
     else:
         raise RuntimeError("candidate app did not become ready")
