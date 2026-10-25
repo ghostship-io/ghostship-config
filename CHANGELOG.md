@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.316] - 2026-10-25
+
+Pin Ghostship Agent runtime to 0.47.165.
+
+Release: patch
+
+PR #532.
+
 ## [3.17.315] - 2026-10-25
 
 - Constrain orchestrator route to owner policy
