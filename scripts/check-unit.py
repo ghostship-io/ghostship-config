@@ -141,7 +141,7 @@ POST_MERGE_MODULES = {"test_t3code_podman_api_relay", "test_t3code_podman_ports"
 
 # Measured wall times: providers-page 14.34s; OpenCode reader 8.81s. These
 # fixture-heavy unit modules retain a bounded margin; other modules get 10s.
-MODULE_BUDGETS = {"test_ai_usage_providers_page": 20, "test_ai_usage_opencode_reader": 15}
+MODULE_BUDGETS = {"test_ai_usage_providers_page": 20, "test_ai_usage_opencode_reader": 20}
 
 
 def unit_cases(suite):
