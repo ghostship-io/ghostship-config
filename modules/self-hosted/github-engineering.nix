@@ -276,6 +276,7 @@ in
       environment = {
         GHOSTSHIP_REVIEW_STORE = "/reviews";
         GHOSTSHIP_ORCHESTRATOR_FILE = "/run/ghostship-orchestrator/pointer.env";
+        GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
       };
       volumes = [
         "${reviewStore}:/reviews:ro,noexec,nosuid,nodev"
@@ -285,6 +286,7 @@ in
         "${root}/state:/state:rw,noexec,nosuid,nodev"
         "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
         "${root}/config.json:/etc/ghostship-github/config.json:ro"
+        "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"

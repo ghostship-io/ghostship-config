@@ -32,6 +32,10 @@ let
   ownerRoutePolicy = pkgs.writeText "ghostship-route-policy.json" (
     builtins.toJSON {
       schema = "ghostship.route-policy/v1";
+      worker_capacity = {
+        default = 8;
+        p0_override = 10;
+      };
       roles = {
         worker = {
           allow = [
