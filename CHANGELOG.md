@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.17.341] - 2026-10-25
+
+Pin ghostship-agent main at v0.47.219, including the coordinator memory fix (#783), paged issue listing and claim backfill (#805), and coordinator message origin checks (#816).
+
+Refs #504, #594, #800.
+
+PR #574.
+
+## [3.17.340] - 2026-10-25
+
+Fix the candidate service PATH so NixOS resolves `/run/wrappers/bin` as intended, and guard the effective generated PATH.
+
+Refs #504, #594.
+
+PR #573.
+
 ## [3.17.339] - 2026-10-25
 
 Prepend NixOS's privileged uid/gid mapping helper directory to the isolated candidate Podman service PATH. The unit journal showed the plain store `newuidmap` failing to write `uid_map`, which prevented the candidate API manager from staying up and made `podman load` fail before a receipt could be written. Add a host-evaluation assertion for helper ordering.
