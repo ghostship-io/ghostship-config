@@ -28,6 +28,13 @@ let
   retailStoreEnv = "/etc/ghostship/retail-store.env";
   approvedFreeWorkers = ./ai-usage/approved-free-workers.json;
   approvedFreeWorkerRoutes = builtins.fromJSON (builtins.readFile approvedFreeWorkers);
+  fastBillingTierDeny = {
+    provider = "*";
+    model = "*";
+    billing_tier = "priority";
+    tiers = [ "fastMode=true" "serviceTier=fast" ];
+    rule = "fast billing options denied by owner policy";
+  };
   ownerRoutePolicy = pkgs.writeText "ghostship-route-policy.json" (
     builtins.toJSON {
       schema = "ghostship.route-policy/v1";
@@ -46,8 +53,6 @@ let
             {
               provider = "claudeAgent";
               model = "claude-sonnet-5-5";
-              # The route-policy schema has no task-kind dimension. The model
-              # picker continues to enforce that this route is for UI work only.
               rule = "owner: UI work only";
             }
             {
@@ -87,7 +92,7 @@ let
               model = "claude-fable-5-1";
               rule = "Claude Fable denied by owner";
             }
-          ];
+          ] ++ [ fastBillingTierDeny ];
           allow_rule = "not in the owner-approved worker routes";
         };
         orchestrator = {
@@ -109,7 +114,7 @@ let
               model = "claude-fable-5-1";
               rule = "Claude Fable denied by owner";
             }
-          ];
+          ] ++ [ fastBillingTierDeny ];
           allow_rule = "not in the owner-approved orchestrator routes";
         };
         reviewer.deny = [
@@ -123,6 +128,7 @@ let
             model = "claude-fable-5-1";
             rule = "Claude Fable denied by owner";
           }
+          fastBillingTierDeny
         ];
       };
       authorizations = [ ];
