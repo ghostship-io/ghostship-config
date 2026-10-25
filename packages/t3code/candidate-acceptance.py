@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -18,7 +19,145 @@ _probe_spec = importlib.util.spec_from_file_location(
 _probe = importlib.util.module_from_spec(_probe_spec)
 _probe_spec.loader.exec_module(_probe)
 
-CHECKS = ("authenticated_app", "provider_turn", "agent_cli", "skills", "desktop_transport")
+CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")
+HOME_FILES = (
+    ".codex/auth.json", ".codex/config.toml", ".claude/.credentials.json",
+    ".gemini/oauth_creds.json", ".gemini/antigravity-cli/oauth_creds.json",
+    ".config/opencode/auth.json", ".local/share/opencode/auth.json",
+)
+HOME_DIRS = (".agents/skills",)
+PROVIDER_ENV = (
+    "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN", "COHERE_API_KEY",
+    "COMMAND_CODE_API_KEY", "AI_GATEWAY_API_KEY", "OLLAMA_API_KEY", "OPENROUTER_API_KEY",
+    "KILO_API_KEY", "REQUESTY_API_KEY", "ORCAROUTER_API_KEY", "INCEPTION_API_KEY",
+    "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY", "POOLSIDE_API_KEY",
+    "AGENT_DESKTOP_API_TOKEN",
+)
+ALLOWED_CANDIDATE_MOUNTS = {
+    "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
+    "/etc/ghostship/approved-free-workers.json": "/etc/ghostship/approved-free-workers.json",
+    "/nix/store": "/nix/store",
+}
+
+
+def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candidate_uid,
+                           tooling_path=None):
+    """Stage a fresh HOME plus a read-only tree with only provider/agent inputs."""
+    source_home = Path(source_home)
+    candidate_home = Path(candidate_home)
+    candidate_inputs = Path(candidate_inputs)
+    candidate_home.mkdir(mode=0o700)
+    candidate_inputs.mkdir(mode=0o700)
+    for relative in HOME_FILES:
+        source = source_home / relative
+        if not source.is_file() or source.is_symlink():
+            continue
+        target = candidate_inputs / relative
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        target.chmod(0o400)
+    for relative in HOME_DIRS:
+        source = source_home / relative
+        if not source.is_dir() or source.is_symlink():
+            continue
+        target = candidate_inputs / relative
+        target.mkdir(mode=0o700, parents=True, exist_ok=True)
+        for current, directories, files in os.walk(source, followlinks=False):
+            current_path = Path(current)
+            target_dir = target / current_path.relative_to(source)
+            target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            directories[:] = [name for name in directories if not (current_path / name).is_symlink()]
+            for name in files:
+                item = current_path / name
+                if item.is_symlink() or not item.is_file():
+                    continue
+                copied = target_dir / name
+                shutil.copyfile(item, copied)
+                copied.chmod(0o444)
+    for relative in HOME_FILES + HOME_DIRS:
+        if (candidate_inputs / relative).exists():
+            link = candidate_home / relative
+            link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            link.symlink_to(Path("/run/t3code-candidate-inputs") / relative)
+    if tooling_path:
+        managed = candidate_home / ".local/state/ghostship-t3-tools/current"
+        managed.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        managed.symlink_to(tooling_path)
+    for path in (candidate_home, candidate_inputs, *candidate_home.rglob("*"),
+                 *candidate_inputs.rglob("*")):
+        if not path.is_symlink():
+            os.chown(path, candidate_uid, candidate_uid)
+
+
+def write_provider_env(source_file, target_file):
+    """Copy only provider/desktop keys; never forward GitHub or Bitwarden secrets."""
+    values = {}
+    if source_file and Path(source_file).is_file():
+        for raw_line in Path(source_file).read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            if "=" not in line:
+                continue
+            key, raw = line.split("=", 1)
+            key, raw = key.strip(), raw.strip()
+            if key not in PROVIDER_ENV:
+                continue
+            if raw.startswith(("'", '"')):
+                parsed = shlex.split(raw, comments=False)
+                if len(parsed) != 1:
+                    raise ValueError(f"invalid quoting in candidate provider value {key}")
+                raw = parsed[0]
+            if any(char in raw for char in ("\n", "\r", "\x00")):
+                raise ValueError(f"unsupported multiline candidate provider value {key}")
+            values[key] = raw
+    target_file = Path(target_file)
+    target_file.write_text("".join(f"{key}={values[key]}\n" for key in PROVIDER_ENV if key in values))
+    target_file.chmod(0o400)
+    return target_file
+
+
+def write_candidate_systemd_overrides(candidate_tmp):
+    """Keep container setup, but skip home hooks/bootstrap that can run automation."""
+    overrides = Path(candidate_tmp) / "systemd-overrides"
+    server_dir = overrides / "t3code-server.service.d"
+    bootstrap_dir = overrides / "t3code-bootstrap.service.d"
+    server_dir.mkdir(parents=True)
+    bootstrap_dir.mkdir(parents=True)
+    (server_dir / "10-candidate.conf").write_text(
+        "[Service]\nExecStartPre=\nExecStartPost=\n"
+    )
+    (bootstrap_dir / "10-candidate.conf").write_text(
+        "[Service]\nExecStart=\nExecStart=/bin/true\n"
+    )
+    for path in (overrides, server_dir, bootstrap_dir,
+                 server_dir / "10-candidate.conf", bootstrap_dir / "10-candidate.conf"):
+        path.chmod(0o555 if path.is_dir() else 0o444)
+    return server_dir, bootstrap_dir
+
+
+def remove_candidate_workspace(path):
+    path = Path(path)
+    if not path.exists():
+        return
+    for item in (path, *path.rglob("*")):
+        if item.is_symlink():
+            continue
+        item.chmod(0o700 if item.is_dir() else 0o600)
+    shutil.rmtree(path)
+
+
+def validate_candidate_mounts(volumes):
+    for volume in volumes:
+        parts = str(volume).split(":", 2)
+        if len(parts) != 3:
+            raise ValueError("candidate mounts must specify source, target and read-only mode")
+        source, target, mode = parts
+        if ALLOWED_CANDIDATE_MOUNTS.get(source) != target or mode != "ro":
+            raise ValueError("candidate mount is outside the read-only acceptance allowlist")
+    return list(volumes)
 
 
 def candidate_name(deployment_id):
@@ -69,7 +208,7 @@ def check_candidate(engine, name, timeout_s=300):
         raise RuntimeError("candidate app did not become ready")
 
     checks = {}
-    checks["authenticated_app"] = command(
+    checks["app_ready"] = command(
         engine, "exec", name, "curl", "-fsS", "--max-time", "10",
         "http://127.0.0.1:3773/"
     ).returncode == 0
@@ -95,9 +234,19 @@ def check_candidate(engine, name, timeout_s=300):
     return checks
 
 
+def candidate_agent_path(engine, name, candidate_home_target):
+    result = command(
+        engine, "exec", name, "readlink", "-f",
+        f"{candidate_home_target}/.local/state/ghostship-t3-tools/current",
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
 def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
-           environment_files=(), volumes=(), systemctl_bin="systemctl",
-           command_fn=command, identity_fn=None, candidate_uid=None):
+           volumes=(), systemctl_bin="systemctl",
+           command_fn=command, identity_fn=None, candidate_uid=None,
+           candidate_runtime_dir=None, provider_secrets_file=None, tooling_path=None,
+           expected_agent_revision=None, candidate_home_target="/candidate-home"):
     """Boot, check, record and remove one candidate without changing production."""
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
@@ -111,40 +260,51 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     receipt_path.unlink(missing_ok=True)
     before = identity_fn()
     engine = [podman_bin, "--remote", "--url", f"unix://{candidate_socket}"]
-    candidate_home_root = state_dir / "candidate-home"
-    candidate_home_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    home_copy = Path(tempfile.mkdtemp(prefix="t3code-candidate-home-",
-                                      dir=candidate_home_root))
+    candidate_runtime_dir = Path(candidate_runtime_dir or tempfile.gettempdir())
+    candidate_runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    candidate_tmp = Path(tempfile.mkdtemp(prefix="t3code-candidate-", dir=candidate_runtime_dir))
+    os.chown(candidate_tmp, candidate_uid, candidate_uid)
+    home_copy = candidate_tmp / "home"
+    input_copy = candidate_tmp / "inputs"
+    provider_env = candidate_tmp / "provider.env"
     created = False
     manager_started = False
     checks = {}
     try:
-        subprocess.run(["cp", "-a", "--reflink=auto", f"{Path(home_dir)}/.", str(home_copy)],
-                       check=True, timeout=300)
-        for path in (home_copy, *home_copy.rglob("*")):
-            if not path.is_symlink():
-                os.chown(path, candidate_uid, candidate_uid)
+        stage_candidate_inputs(home_dir, home_copy, input_copy, candidate_uid, tooling_path)
+        write_provider_env(provider_secrets_file, provider_env)
+        server_overrides, bootstrap_overrides = write_candidate_systemd_overrides(candidate_tmp)
+        manager_started = True
         subprocess.run([systemctl_bin, "start", "t3code-podman-candidate.service"],
                        check=True, timeout=30)
-        manager_started = True
         assert_ok(engine, "load", "--input", str(image_archive), timeout=300)
-        volumes = list(volumes) + [f"{home_copy}:/home/t3code:rw"]
+        volumes = validate_candidate_mounts(volumes) + [
+            f"{home_copy}:{candidate_home_target}:rw",
+            f"{input_copy}:/run/t3code-candidate-inputs:ro",
+            f"{server_overrides}:/etc/systemd/system/t3code-server.service.d:ro",
+            f"{bootstrap_overrides}:/etc/systemd/system/t3code-bootstrap.service.d:ro",
+        ]
         args = ["run", "--detach", "--name", name, "--hostname", name,
                 "--userns=keep-id:uid=3000,gid=3000",
                 "--systemd=always", "--cap-drop=ALL", "--security-opt=unmask=/proc/*",
-                "--pids-limit=2048", "--network=slirp4netns"]
+                "--pids-limit=2048", "--network=slirp4netns",
+                "--env=GHOSTSHIP_ROUTE_POLICY_PATH=/etc/ghostship/route-policy.json",
+                "--env=GHOSTSHIP_MODEL_EVIDENCE_PATH=/tmp/t3code-candidate-model-evidence.jsonl",
+                "--env-file", str(provider_env)]
         caps = json.loads(Path(__file__).with_name("runtime-caps.json").read_text())
         for cap in caps:
             args.extend(("--cap-add", cap))
-        for item in environment_files:
-            args.extend(("--env-file", str(item)))
         for item in volumes:
             args.extend(("--volume", str(item)))
         args.extend(("--volume", f"{candidate_socket}:/var/run/podman/podman.sock:rw"))
         created = True
-        args.extend((image_tag, "--unit=multi-user.target"))
+        # This leaf unit does not pull in multi-user.target's timers and automations.
+        args.extend((image_tag, "--unit=t3code-server.service"))
         assert_ok(engine, *args, timeout=300)
         checks = check_candidate(engine, name)
+        agent_path = candidate_agent_path(engine, name, candidate_home_target)
+        if tooling_path and agent_path != str(Path(tooling_path).resolve()):
+            checks["agent_cli"] = False
         after = identity_fn()
         if before != after:
             raise RuntimeError("production T3 identity changed during candidate acceptance")
@@ -153,6 +313,10 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         receipt = {
             "deployment_id": desired,
             "image_id": image_id,
+            "agent_revision": expected_agent_revision,
+            "agent_path": agent_path,
+            "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)
+                                      if provider_secrets_file else None),
             "candidate_name": name,
             "live_before": before,
             "live_after": after,
@@ -164,18 +328,29 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         os.replace(temporary, receipt_path)
         return receipt
     finally:
+        cleanup_error = None
         if created:
             removed = command_fn(engine, "rm", "--force", "--time", "10", name, timeout=30)
             if removed.returncode:
-                receipt_path.unlink(missing_ok=True)
-                raise RuntimeError("candidate container teardown failed")
+                cleanup_error = "candidate container teardown failed"
         if manager_started:
-            subprocess.run([systemctl_bin, "stop", "t3code-podman-candidate.service"],
-                           check=True, timeout=30)
-        shutil.rmtree(home_copy, ignore_errors=True)
+            try:
+                subprocess.run([systemctl_bin, "stop", "t3code-podman-candidate.service"],
+                               check=True, timeout=30)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                cleanup_error = "candidate Podman manager teardown failed"
+        try:
+            remove_candidate_workspace(candidate_tmp)
+        except OSError:
+            cleanup_error = "candidate acceptance workspace teardown failed"
+        if candidate_tmp.exists():
+            cleanup_error = "candidate acceptance workspace teardown failed"
         after = identity_fn()
-        if before != after:
+        if before != after or cleanup_error:
             receipt_path.unlink(missing_ok=True)
+        if cleanup_error:
+            raise RuntimeError(cleanup_error)
+        if before != after:
             raise RuntimeError("production T3 identity changed during candidate teardown")
 
 
@@ -186,14 +361,23 @@ def main():
     parser.add_argument("--podman-bin", default="podman")
     parser.add_argument("--candidate-socket", default="/run/t3code-podman-candidate/podman.sock")
     parser.add_argument("--home-dir", required=True)
-    parser.add_argument("--environment-file", action="append", default=[])
+    parser.add_argument("--candidate-runtime-dir", required=True)
+    parser.add_argument("--provider-secrets-file")
+    parser.add_argument("--tooling-path")
+    parser.add_argument("--agent-revision")
+    parser.add_argument("--candidate-home-target", required=True)
     parser.add_argument("--volume", action="append", default=[])
     parser.add_argument("--systemctl-bin", default="systemctl")
     parser.add_argument("--candidate-uid", type=int, required=True)
     args = parser.parse_args()
     accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
-           args.home_dir, args.environment_file, args.volume, args.systemctl_bin,
-           candidate_uid=args.candidate_uid)
+           args.home_dir, args.volume, args.systemctl_bin,
+           candidate_uid=args.candidate_uid,
+           candidate_runtime_dir=args.candidate_runtime_dir,
+           provider_secrets_file=args.provider_secrets_file,
+           tooling_path=args.tooling_path,
+           expected_agent_revision=args.agent_revision,
+           candidate_home_target=args.candidate_home_target)
 
 
 if __name__ == "__main__":

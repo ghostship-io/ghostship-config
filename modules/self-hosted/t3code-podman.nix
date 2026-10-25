@@ -17,8 +17,7 @@ let
   candidateUser = "t3code-podman-candidate";
   candidateUid = cfg.uid + 1;
   candidateSubIdStart = cfg.subIdStart + 65536;
-  candidateState = "${state}/candidate";
-  candidateHome = "/var/lib/t3code-podman-candidate/home";
+  candidateState = "/var/lib/t3code-podman-candidate/storage";
   candidateRunRoot = "/run/t3code-podman-candidate/containers";
   containersConfig = (pkgs.formats.toml { }).generate "t3code-podman.conf" {
     containers = {
@@ -613,11 +612,11 @@ in
           "fuse"
         ];
         systemd.tmpfiles.rules = [
-          "d ${state} 0711 ${user} ${user} -"
+          "d ${state} 0700 ${user} ${user} -"
           "d ${state}/home 0700 ${user} ${user} -"
-          "d ${candidateState} 0700 ${candidateUser} ${candidateUser} -"
           "d /var/lib/t3code-podman-candidate 0700 ${candidateUser} ${candidateUser} -"
-          "d ${candidateHome} 0700 ${candidateUser} ${candidateUser} -"
+          "d /var/lib/t3code-podman-candidate/acceptance 0700 ${candidateUser} ${candidateUser} -"
+          "d ${candidateState} 0700 ${candidateUser} ${candidateUser} -"
           "d /run/t3code-podman 0750 root apps -"
         ];
         systemd.services.t3code-podman-network = {

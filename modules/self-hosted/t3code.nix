@@ -122,6 +122,7 @@ let
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
   tooling = inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.t3code-tools;
+  t3codeContainerHome = builtins.elemAt (lib.splitString "/.local/state/" managedBin) 0;
   t3codeToolMaintenance = tooling;
   t3codeToolAutoUpdate = tooling;
   t3codeProcessMemoryGuard = tooling;
@@ -131,7 +132,11 @@ let
   t3codeImage = runtimeImage.image;
   t3codeImageArgs = runtimeImage.imageArgs;
   t3codeImageContents = runtimeImage.contents;
-  t3codeDeploymentId = runtimeImage.deploymentId;
+  t3codeAgentRevision = inputs.ghostship-private-agent.rev;
+  t3codeDeploymentId = builtins.hashString "sha256" (builtins.toJSON {
+    image = runtimeImage.deploymentId;
+    agent = t3codeAgentRevision;
+  });
   t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
     set -eu
     exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/deploy-when-idle.py} \
@@ -142,18 +147,18 @@ let
       --podman-bin "${pkgs.podman}/bin/podman" \
       --candidate-socket "/run/t3code-podman-candidate/podman.sock" \
       --candidate-uid "${toString (config.ghostship.t3codePodman.uid + 1)}" \
+      --candidate-runtime-dir "/var/lib/t3code-podman-candidate/acceptance" \
+      --candidate-home-target "${t3codeContainerHome}" \
+      --provider-secrets-file "${t3codeSecrets}" \
+      --tooling-path "${tooling}" \
+      --agent-revision "${t3codeAgentRevision}" \
       --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
       --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
       --restart-ledger "/var/lib/t3code-restarts/ledger.jsonl" \
       --journal-bin "${pkgs.systemd}/bin/systemd-cat" \
-      --environment-file "${t3codeSecrets}" \
-      --environment-file "${retailStoreEnv}" \
-      --volume "${t3codeTmp}:/tmp:rw" \
-      --volume "${t3codeWorkspace}:/workspace:rw" \
-      --volume "${t3codeNixRoot}/nix:/nix:rw" \
-      --volume "${t3codeSecrets}:${t3codeSecretsFile}:ro" \
       --volume "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro" \
       --volume "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro" \
+      --volume "/nix/store:/nix/store:ro" \
       "$@"
   '';
 
@@ -433,6 +438,10 @@ in
       printf '%s\n' ${lib.escapeShellArg t3codeDeploymentId} \
         > ${t3codeDeploymentState}/desired.tmp
       mv ${t3codeDeploymentState}/desired.tmp ${t3codeDeploymentState}/desired
+      secret_inode=$(${pkgs.coreutils}/bin/stat -Lc %i ${t3codeSecrets})
+      printf 'agent=%s secret_inode=%s\n' ${lib.escapeShellArg t3codeAgentRevision} "$secret_inode" \
+        > ${t3codeDeploymentState}/desired-inputs.tmp
+      mv ${t3codeDeploymentState}/desired-inputs.tmp ${t3codeDeploymentState}/desired-inputs
       ${pkgs.systemd}/bin/systemctl start --no-block t3code-deploy-when-idle.service || true
     '';
     supportsDryActivation = false;
