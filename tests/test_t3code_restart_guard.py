@@ -1,8 +1,10 @@
 """A T3 restart proceeds immediately after candidate image acceptance."""
 import contextlib
+import fcntl
 import importlib.util
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -52,12 +54,29 @@ class CandidateRestartTests(unittest.TestCase):
         receipt = {"verified": True, "deployment_id": "target", "image_id": "image",
                    "checks": {name: True for name in (
                        "app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")}}
-        with patch.object(sys, "argv", ["t3code-deploy-when-idle", "--accept-candidate", "--json"]), \
-             patch.object(deployer, "produce_candidate_receipt"), \
+        def accept_while_locked(*_args, **_kwargs):
+            competing_fd = os.open(self.state_dir / "deploy.lock", os.O_RDWR)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(competing_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(competing_fd)
+
+        with patch.object(sys, "argv", ["t3code-deploy-when-idle", "--accept-candidate", "--json",
+                                        "--state-dir", str(self.state_dir),
+                                        "--image-archive", str(self.root / "image.tar"),
+                                        "--expected-deployment-id", "target"]), \
+             patch.object(deployer, "produce_candidate_receipt", side_effect=accept_while_locked), \
              patch.object(deployer, "verify_candidate_receipt", return_value=receipt), \
              contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(deployer.main(), 0)
         self.assertEqual(json.loads(output.getvalue()), receipt)
+        competing_fd = os.open(self.state_dir / "deploy.lock", os.O_RDWR)
+        try:
+            fcntl.flock(competing_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(competing_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(competing_fd)
 
 if __name__ == "__main__":
     unittest.main()
