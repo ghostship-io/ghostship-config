@@ -417,11 +417,13 @@ changes) are correct.
 `ghostship_ai_provider_quota_evidence` emits one state for each configured
 provider account. `measured` means every applicable window has a fresh numeric
 reading; `exhausted` means a fresh window is spent; `partial` means some
-windows are unknown or stale; `stale` means none of the readings are current;
-`unknown` means no usable quota window was published; and `unavailable` names
-the configured reader's fixed failure reason. The `reason` label is a bounded
-code, never provider error text. A missing account window is visible as
-`no_quota_window`, even when its reader completed successfully.
+windows are unknown, stale, or mix inferred and provider reported evidence;
+`inferred` means current capacity comes only from bounded refusal inference;
+`stale` means none of the readings are current; `unknown` means no usable
+quota window was published; and `unavailable` names the configured reader's
+fixed failure reason. The `reason` label is a bounded code, never provider
+error text. A missing account window is visible as `no_quota_window`, even
+when its reader completed successfully.
 
 `ghostship_ai_provider_quota_source_age_seconds` reports the age of the
 freshest quota window reading per provider and source. When no window exists,
