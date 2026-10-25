@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.353] - 2026-10-25
+
+- fix(t3code): stage provider context for candidate acceptance
+
+PR #586.
+
 ## [3.17.352] - 2026-10-25
 
 - Pin T3 Code restarts to the last candidate-accepted image and promote a new image only after its exact-image PASS receipt.
