@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.306] - 2026-10-25
+
+- Pin the agent revision with the token-history doctor and message guard
+
+PR #512.
+
 ## [3.17.305] - 2026-10-25
 
 - Paid models and Free models: the picker's own order, only the approved free workers listed, OpenCode Free routes under their provider, calibration and account-window state on free rows; names wrap and no panel scrolls.
