@@ -597,6 +597,15 @@ model only and never the provider's overall capacity. The metrics are
 `ghostship_ai_provider_capacity_remaining_ratio{provider,binding}` (known
 values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 
+The snapshot's `quota.provider_capacity[provider]` is the canonical
+provider quota record. `left` is the remaining share, `reset` is the
+binding window's verified reset time, and `exhausted` is true or false
+when known and null when the account capacity is unknown. The legacy
+`remaining_ratio` field remains an alias of `left`. The managed picker
+reads this record by account before it selects a route, so a spent shared
+account window suppresses every model on that account. A model-scoped window
+still applies only to its model.
+
 ### Account windows
 
 The card of a provider holds one row per capacity window of the account.

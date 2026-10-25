@@ -158,6 +158,13 @@ class SnapshotContractTests(unittest.TestCase):
         canonical=model_selection.build(result,[],evidence={'policy':{'model_selection':{'excluded_pools':['antigravity:3p','claude:fable']}}})
         self.assertIn({'instanceId':'claudeAgent','model':'claude-fable-5'},
                       [row['native'] for row in canonical['role_exclusions']])
+        claude_route=next(row for row in result['candidates']
+                          if row['provider']=='claude' and row['model']=='claude-opus-5-5')
+        self.assertEqual(claude_route['account'], 'claude')
+        claude_picker=next(row for row in canonical['worker']
+                           if row['provider']=='claude' and row['model']=='claude-opus-5-5')
+        self.assertEqual(claude_picker['provider_quota']['left'],
+                         result['quota']['provider_capacity']['claude']['left'])
         accounts = result['quota']['accounts']['antigravity']
         self.assertEqual({row['quota_id'] for row in accounts}, {'3p-5h','3p-weekly','gemini-5h'})
         self.assertTrue(all(row.get('not_used') for row in accounts if row['quota_id'].startswith('3p-')))
