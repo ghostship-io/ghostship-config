@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.310] - 2026-10-25
+
+- Classify complete announced-reset batches through durable free inference.
+
+PR #517.
+
 ## [3.17.309] - 2026-10-25
 
 - Keep the host-published managed agent package available through Nix garbage collection.
