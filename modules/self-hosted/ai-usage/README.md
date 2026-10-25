@@ -414,16 +414,20 @@ changes) are correct.
 
 ### Provider quota evidence health
 
-`ghostship_ai_provider_quota_evidence` emits one state for each configured
-provider account. `measured` means every applicable window has a fresh numeric
-reading; `exhausted` means a fresh window is spent; `partial` means some
-windows are unknown, stale, or mix inferred and provider reported evidence;
-`inferred` means current capacity comes only from bounded refusal inference;
-`stale` means none of the readings are current; `unknown` means no usable
-quota window was published; and `unavailable` names the configured reader's
-fixed failure reason. The `reason` label is a bounded code, never provider
-error text. A missing account window is visible as `no_quota_window`, even
-when its reader completed successfully.
+`ghostship_ai_provider_quota_evidence` emits one state for each account in the
+collector's configured quota coverage (`QUOTA_COVERAGE` in `collector/main.py`).
+`measured` means every applicable window has a fresh numeric reading;
+`exhausted` means a fresh window is spent; `partial` means some windows are
+unknown, stale, or mix inferred and provider reported evidence; `inferred`
+means current capacity comes only from bounded refusal inference; `stale` means
+none of the readings are current; `unknown` means no usable quota window was
+published; and `unavailable` names the configured reader's fixed failure
+reason. Unsupported readers are reported as `unavailable` with reason
+`unsupported`; a successful read without a quota window is `unknown` with
+reason `no_quota_window`. Neither state implies available headroom. The
+`reason` label is a bounded code, never provider error text. This coverage is
+the configured reader inventory, not a claim that every provider has a reader
+or a live measurement.
 
 `ghostship_ai_provider_quota_source_age_seconds` reports the age of the
 freshest quota window reading per provider and source. When no window exists,
@@ -609,22 +613,42 @@ dropped, so a UI can group by `entitlement` and still show both readings.
 
 ### Provider capacity
 
-`quota.provider_capacity{provider}` is the lowest applicable account window,
-with the binding window's id. A spent window publishes zero and blocks the
-provider; an unknown window suppresses a positive reading, because an
-unknown window is not room. A model-scoped subordinate window constrains that
-model only and never the provider's overall capacity. The metrics are
-`ghostship_ai_provider_capacity_remaining_ratio{provider,binding}` (known
-values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
+`quota.provider_capacity[account]` is the canonical account quota record used
+by the managed picker. It summarizes only applicable account windows: a
+window with `applies_to` set constrains those models and is not folded into the
+account record. If multiple models share an account, a spent account window
+blocks each sibling; a model-scoped window constrains only the named model.
 
-The snapshot's `quota.provider_capacity[provider]` is the canonical
-provider quota record. `left` is the remaining share, `reset` is the
-binding window's verified reset time, and `exhausted` is true or false
-when known and null when the account capacity is unknown. The legacy
-`remaining_ratio` field remains an alias of `left`. The managed picker
-reads this record by account before it selects a route, so a spent shared
-account window suppresses every model on that account. A model-scoped window
-still applies only to its model.
+The canonical fields are `left` (remaining share from 0 to 1), `reset` (the
+binding window's effective reset timestamp, or null when there is no binding
+window), and `exhausted` (true for zero left, false for known positive left,
+or null when left is unknown). Any known spent account window binds with
+`left: 0` even when another window is unknown. Otherwise, any unknown,
+unmeasured, stale, or expired applicable window makes `left` and `exhausted`
+null; unknown is never headroom or proof of exhaustion. The collector retains
+`remaining_ratio` as an alias of `left` during migration. The record also
+contains `binding` (kind, quota id, reset), `windows`, `unknown_windows`, and
+`basis` to explain the aggregation.
+
+Each source window remains in `quota.accounts[account]` with its own `source`,
+`evidence`, `quota_id`, `kind`, remaining share, reset and observation time,
+and optional `applies_to` model scope. `reset_source` and `provider_reset_at`
+preserve where an effective reset came from; a provider reset, a validated
+announced reset, and a configured custom reset remain distinguishable. The
+effective reset on the capacity record comes from its binding window, not an
+independent guess. A verified reset restores capacity only after its effective
+time has passed; a future reset does not yet replenish capacity, and stale or
+malformed reset values do not create headroom.
+
+`ghostship_ai_provider_capacity_remaining_ratio{provider,binding}` publishes
+known `left` values only, and
+`ghostship_ai_provider_capacity_windows{provider,evidence}` counts known and
+unknown account windows. The picker resolves a live candidate's account key
+against `quota.provider_capacity`, then combines known account left with the
+candidate's own model-scoped capacity by taking the lower value. A missing
+account key is a visible `model_selection.quota_findings` entry and
+`ghostship_ai_picker_quota_capacity_missing{provider,account,model,code}`;
+it is never a silent no-op.
 
 ### Account windows
 
