@@ -39,6 +39,8 @@ let
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
+  goCoordinator =
+    t3codeConfig.virtualisation.oci-containers.containers.ghostship-go-coordinator;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
@@ -170,6 +172,12 @@ in
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;
+    assert goCoordinator.imageFile != null;
+    assert builtins.elem "127.0.0.1:18765:18765" goCoordinator.ports;
+    assert builtins.elem "/var/lib/ghostship-github/go-state:/state:rw,noexec,nosuid,nodev"
+      goCoordinator.volumes;
+    assert builtins.elem "/run/ghostship-secrets/ghostship-github/go-coordinator.env"
+      goCoordinator.environmentFiles;
     assert builtins.elem
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
