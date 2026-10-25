@@ -493,6 +493,25 @@ class AccountWindowTests(unittest.TestCase):
                         if item["check_at"]
                     ],
                 )
+            elif name == "ghostship_ai_account_window_pace_delta_points":
+                self.assertIn(
+                    value,
+                    [
+                        round(
+                            100.0 * (
+                                item["remaining_ratio"]
+                                - min(1.0, max(0.0, item["seconds_to_reset"] / item["duration_seconds"]))
+                            ),
+                            6,
+                        )
+                        for item in windows
+                        if item["remaining_ratio"] is not None
+                        and item["seconds_to_reset"] is not None
+                        and item["duration_seconds"]
+                        and snapshot.quota_module.is_paced_window(item)
+                        and not item.get("not_used")
+                    ],
+                )
             elif name == "ghostship_ai_account_window_rolling":
                 self.assertEqual(value, 1.0)
             else:

@@ -4447,7 +4447,7 @@ def provider_quota_evidence_samples(
             record for record in (accounts.get(provider) or ())
             if isinstance(record, Mapping) and not record.get("not_used")
         ]
-        fresh: list[float] = []
+        fresh: list[tuple[float, str]] = []
         stale = 0
         unknown = 0
         source_ages: dict[str, float] = {}
@@ -4467,14 +4467,20 @@ def provider_quota_evidence_samples(
             elif remaining is None:
                 unknown += 1
             else:
-                fresh.append(remaining)
+                fresh.append((remaining, str(window.get("evidence") or "unknown")))
         if windows:
-            if any(remaining <= 0.0 for remaining in fresh):
+            if any(remaining <= 0.0 for remaining, _evidence in fresh):
                 state, reason = "exhausted", "spent_window"
             elif fresh and (stale or unknown):
                 state, reason = "partial", "unknown_or_stale_window"
             elif fresh:
-                state, reason = "measured", ""
+                evidence = {kind for _remaining, kind in fresh}
+                if evidence == {"inferred"}:
+                    state, reason = "inferred", "inferred_window"
+                elif "inferred" in evidence:
+                    state, reason = "partial", "mixed_measured_inferred"
+                else:
+                    state, reason = "measured", ""
             elif stale:
                 state, reason = "stale", "stale_reading"
             else:

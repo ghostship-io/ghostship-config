@@ -1,0 +1,92 @@
+{
+  "_comment": "Synthetic contract fixture only. Values are fabricated and contain no provider credentials, account identifiers, or live usage.",
+  "sources": [
+    {"id": "t3", "status": "ok", "reason": "ok", "age_seconds": 20},
+    {"id": "claude_usage", "status": "ok", "reason": "ok", "age_seconds": 15},
+    {"id": "grok", "status": "ok", "reason": "ok", "age_seconds": 30},
+    {"id": "antigravity", "status": "ok", "reason": "ok", "age_seconds": 25},
+    {"id": "opencode-go", "status": "ok", "reason": "ok", "age_seconds": 3600},
+    {"id": "openrouter", "status": "unsupported", "reason": "unsupported", "age_seconds": null},
+    {"id": "ollama", "status": "ok", "reason": "ok", "age_seconds": 10},
+    {"id": "opencode_events", "status": "ok", "reason": "ok", "age_seconds": 12},
+    {"id": "pool_events", "status": "unreadable", "reason": "ledger_missing", "age_seconds": null}
+  ],
+  "accounts": [
+    {
+      "provider": "codex",
+      "windows": [
+        {"source": "t3", "model": "*", "kind": "weekly", "quota_id": "weekly", "left_ratio": 0.75, "age_seconds": 20, "reset_in_seconds": 3600, "duration_seconds": 604800, "applies_to": [], "reset_source": "provider"},
+        {"source": "t3", "model": "*", "kind": "daily", "quota_id": "daily", "left_ratio": 0.9, "age_seconds": 80, "reset_in_seconds": 1800, "duration_seconds": 86400, "applies_to": [], "reset_source": "provider"}
+      ],
+      "state": "measured",
+      "reason": ""
+    },
+    {
+      "provider": "claude",
+      "windows": [
+        {"source": "claude_usage", "model": "claude-opus-example", "kind": "weekly", "quota_id": "weekly", "left_ratio": 0.6, "age_seconds": 15, "reset_in_seconds": 7200, "duration_seconds": 604800, "applies_to": ["claude"], "reset_source": "announced"}
+      ],
+      "state": "measured",
+      "reason": ""
+    },
+    {
+      "provider": "grok",
+      "windows": [
+        {"source": "grok", "model": "*", "kind": "monthly", "quota_id": "subscription", "left_ratio": 0.0, "age_seconds": 30, "reset_in_seconds": 86400, "duration_seconds": 2592000, "applies_to": [], "reset_source": "provider"}
+      ],
+      "state": "exhausted",
+      "reason": "spent_window"
+    },
+    {
+      "provider": "antigravity",
+      "windows": [
+        {"source": "antigravity", "model": "*", "kind": "weekly", "quota_id": "shared", "left_ratio": 0.5, "age_seconds": 25, "reset_in_seconds": 6000, "duration_seconds": 604800, "applies_to": ["claude", "gpt"], "reset_source": "provider"},
+        {"source": "antigravity", "model": "gemini-model-example", "kind": "quota", "quota_id": "gemini", "left_ratio": null, "age_seconds": 25, "reset_in_seconds": 6000, "duration_seconds": 3600, "applies_to": ["gemini"], "reset_source": "provider"}
+      ],
+      "state": "partial",
+      "reason": "unknown_or_stale_window"
+    },
+    {
+      "provider": "opencode-go",
+      "windows": [
+        {"source": "opencode-go", "model": "*", "kind": "monthly", "quota_id": "monthly", "left_ratio": 0.4, "age_seconds": 3600, "reset_in_seconds": 86400, "duration_seconds": 2592000, "applies_to": [], "reset_source": "provider"}
+      ],
+      "state": "stale",
+      "reason": "stale_reading"
+    },
+    {
+      "provider": "openrouter",
+      "windows": [],
+      "state": "unavailable",
+      "reason": "unsupported"
+    },
+    {
+      "provider": "ollama",
+      "windows": [
+        {"source": "ollama", "model": "*", "kind": "weekly", "quota_id": "weekly", "left_ratio": null, "age_seconds": 10, "reset_in_seconds": 7200, "duration_seconds": 604800, "applies_to": [], "reset_source": "provider"}
+      ],
+      "state": "unknown",
+      "reason": "unknown_window"
+    },
+    {
+      "provider": "opencode",
+      "windows": [],
+      "state": "partial",
+      "reason": "source_partial"
+    },
+    {
+      "provider": "cursor",
+      "windows": [],
+      "state": "unknown",
+      "reason": "no_quota_window"
+    },
+    {
+      "provider": "pi",
+      "windows": [
+        {"source": "pool_events", "model": "pi-model-example", "kind": "inferred", "quota_id": "inferred:5h", "left_ratio": 0.8, "age_seconds": 12, "reset_in_seconds": 18000, "duration_seconds": 18000, "applies_to": ["pi-model-example"], "reset_source": "inferred", "evidence": "inferred"}
+      ],
+      "state": "inferred",
+      "reason": "inferred_window"
+    }
+  ]
+}
