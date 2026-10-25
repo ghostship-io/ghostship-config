@@ -4398,6 +4398,114 @@ def provider_capacity_samples(
     return samples
 
 
+def provider_quota_evidence_samples(
+    snapshot: Mapping[str, Any],
+    coverage: Iterable[tuple[str, str]],
+    sources: Iterable[Mapping[str, Any]],
+    now: float,
+) -> list[tuple[str, dict[str, str], float]]:
+    """Report a bounded evidence state and age for every configured account."""
+    quota = snapshot.get("quota") or {}
+    accounts = quota.get("accounts") or {}
+    source_records = {
+        str(record.get("id") or ""): record
+        for record in sources
+        if isinstance(record, Mapping) and record.get("id")
+    }
+    aliases = {"t3_usage": ("opencode_events", "pool_events")}
+    samples: list[tuple[str, dict[str, str], float]] = []
+
+    def source_status(source: str) -> tuple[str, str, float | None]:
+        records = [
+            source_records[key]
+            for key in aliases.get(source, (source,))
+            if key in source_records
+        ]
+        if not records:
+            return "missing", "source_not_reported", None
+        observed = [
+            stamp for record in records
+            if (stamp := _epoch_seconds(record.get("observed_at_epoch"))) is not None
+        ]
+        age = max(0.0, float(now) - max(observed)) if observed else None
+        statuses = {str(record.get("status") or "unknown") for record in records}
+        if statuses == {"ok"}:
+            return "ok", "", age
+        if "ok" in statuses or "partial" in statuses:
+            return "partial", "source_partial", age
+        record = records[0]
+        status = str(record.get("status") or "unknown")
+        reason = str(record.get("reason") or "unknown")
+        if not re.fullmatch(r"[a-z0-9_]+", status):
+            status = "unknown"
+        if not re.fullmatch(r"[a-z0-9_]+", reason):
+            reason = "unknown"
+        return status, reason, age
+
+    for provider, configured_source in coverage:
+        windows = [
+            record for record in (accounts.get(provider) or ())
+            if isinstance(record, Mapping) and not record.get("not_used")
+        ]
+        fresh: list[float] = []
+        stale = 0
+        unknown = 0
+        source_ages: dict[str, float] = {}
+        for window in windows:
+            source = str(window.get("source") or configured_source)
+            observed = _epoch_seconds(window.get("check_at"))
+            remaining = _finite(window.get("remaining_ratio"))
+            if observed is not None:
+                age = max(0.0, now - observed)
+                source_ages[source] = min(
+                    source_ages.get(source, age), age
+                )
+            if observed is None:
+                unknown += 1
+            elif now - observed > quota_module.STALE_AFTER_SECONDS or observed > now + 60.0:
+                stale += 1
+            elif remaining is None:
+                unknown += 1
+            else:
+                fresh.append(remaining)
+        if windows:
+            if any(remaining <= 0.0 for remaining in fresh):
+                state, reason = "exhausted", "spent_window"
+            elif fresh and (stale or unknown):
+                state, reason = "partial", "unknown_or_stale_window"
+            elif fresh:
+                state, reason = "measured", ""
+            elif stale:
+                state, reason = "stale", "stale_reading"
+            else:
+                state, reason = "unknown", "unknown_window"
+            for source, age in sorted(source_ages.items()):
+                samples.append((
+                    "ghostship_ai_provider_quota_source_age_seconds",
+                    {"provider": str(provider), "source": source}, age,
+                ))
+        else:
+            status, source_reason, age = source_status(str(configured_source))
+            if age is not None:
+                samples.append((
+                    "ghostship_ai_provider_quota_source_age_seconds",
+                    {"provider": str(provider), "source": str(configured_source)}, age,
+                ))
+            if status not in ("ok", "partial"):
+                state, reason = "unavailable", source_reason or "source_unavailable"
+            elif status == "partial":
+                state, reason = "partial", "source_partial"
+            else:
+                state, reason = "unknown", "no_quota_window"
+        samples.append((
+            "ghostship_ai_provider_quota_evidence",
+            {"provider": str(provider), "source": str(configured_source),
+             "state": state, "reason": reason},
+            1.0,
+        ))
+    return samples
+
+
 # The place a window row takes in the card of its account. The session
 # window comes first, because it is the one that runs out first, and the
 # monthly window comes after the weekly one. An inferred window comes
