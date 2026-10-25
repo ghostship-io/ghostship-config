@@ -155,18 +155,18 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1792906756,
-        "narHash": "sha256-PFkdIQo48armsKHwoH6Zy9L+rTNkfW3D7vmPRaAdTi8=",
-        "owner": "ghostship-io",
-        "repo": "ghostship-agent",
-        "rev": "93650ea35075a9765519c1503aaab696d17f7749",
-        "type": "github"
+        "lastModified": 1792912765,
+        "narHash": "sha256-nsy05icV9xmI3IPDrTn25kxmQUNoIILW8NpIYu0csP4=",
+        "ref": "refs/heads/main",
+        "rev": "891be0c97ce78b3efa971adf8daf80d9cef2955f",
+        "revCount": 2017,
+        "type": "git",
+        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
       },
       "original": {
-        "owner": "ghostship-io",
-        "repo": "ghostship-agent",
-        "rev": "93650ea35075a9765519c1503aaab696d17f7749",
-        "type": "github"
+        "rev": "891be0c97ce78b3efa971adf8daf80d9cef2955f",
+        "type": "git",
+        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
       }
     },
     "home-manager": {
