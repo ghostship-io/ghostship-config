@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.341] - 2026-10-25
+
+Pin ghostship-agent main at v0.47.219, including the coordinator memory fix (#783), paged issue listing and claim backfill (#805), and coordinator message origin checks (#816).
+
+Refs #504, #594, #800.
+
+PR #574.
+
 ## [3.17.340] - 2026-10-25
 
 Fix the candidate service PATH so NixOS resolves `/run/wrappers/bin` as intended, and guard the effective generated PATH.
