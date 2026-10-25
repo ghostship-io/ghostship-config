@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.336] - 2026-10-25
+
+Document canonical account capacity fields, unknown/exhausted behavior, model and shared-account scope, reset provenance, evidence health, configured-reader gaps, metrics, and picker consumption.
+
+PR #569.
+
 ## [3.17.335] - 2026-10-25
 
 Add a synthetic provider quota contract fixture matrix and focused tests for configured readers, evidence states, scoped/shared windows, reset provenance, source freshness, and unsupported readers.
