@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.347] - 2026-10-25
+
+- Replace idle-gated T3 image deployment with immediate exact-image acceptance and activation, with one incident for a failed candidate.
+
+Release: patch
+
+PR #581.
+
 ## [3.17.346] - 2026-10-25
 
 - Require exact-image candidate acceptance before restarting T3 Code.
