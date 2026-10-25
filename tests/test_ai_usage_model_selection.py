@@ -47,6 +47,15 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(selected['available'])
         self.assertIsNone(selected['provider_quota']['exhausted'])
 
+    def test_model_scoped_capacity_stays_tighter_than_provider_capacity(self):
+        row = candidate('codex', 'reviewer', remaining=0.05)
+        value = self.build([row], {'codex': {
+            'left': 0.8, 'reset': '2026-10-26T12:00:00Z', 'exhausted': False,
+        }})
+        selected = value['worker'][0]
+        self.assertAlmostEqual(selected['remaining_ratio'], 0.05)
+        self.assertAlmostEqual(selected['provider_quota']['left'], 0.8)
+
     def test_orchestrator_is_also_worker_and_quality_picks_default(self):
         value = self.build([candidate('other', 'fast', 70), candidate('codex', 'reviewer', 90)])
         self.assertEqual(set(value['providers']['codex']), {'orchestrator', 'worker', 'selected', 'pools'})

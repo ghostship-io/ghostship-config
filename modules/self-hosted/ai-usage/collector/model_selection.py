@@ -522,7 +522,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         if provider_left is None:
             provider_left = number(provider_quota.get("remaining_ratio"))
         if provider_left is not None:
-            remaining = provider_left
+            remaining = min(remaining, provider_left) if remaining is not None else provider_left
         windows = applicable_windows(snapshot,source)
         reported = [value for window in windows if (value := number(window.get('remaining_ratio'))) is not None]
         if reported:
