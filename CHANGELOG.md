@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.338] - 2026-10-25
+
+Pin ghostship-agent to 0.47.212 after #783 merged. This revision descends from the current pin and includes #745, #746, #763 and #783. Refresh the private flake source narHash from that exact commit and keep the pinning guide current.
+
+PR #572.
+
 ## [3.17.337] - 2026-10-25
 
 - Pin the deployed agent source to current `main` at `5343c87eb882425b0a8c7c8805c0f694f46c1ed1`, including merged #713 and #720.
