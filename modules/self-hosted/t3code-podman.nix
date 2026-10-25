@@ -580,13 +580,13 @@ in
           description = "Isolated disposable T3 image candidate Podman manager";
           requires = [ "t3code-podman-network.service" ];
           after = [ "t3code-podman-network.service" ];
+          path = runtimePaths;
           environment = {
             HOME = "/var/lib/t3code-podman-candidate";
             XDG_RUNTIME_DIR = "/run/t3code-podman-candidate";
             CONTAINERS_CONF = candidateContainersConfig;
             CONTAINERS_STORAGE_CONF = candidateStorageConfig;
             CONTAINERS_REGISTRIES_CONF = registriesConfig;
-            PATH = lib.makeBinPath runtimePaths;
           };
           serviceConfig = {
             Type = "simple";
