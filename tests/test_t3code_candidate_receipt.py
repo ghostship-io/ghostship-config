@@ -65,9 +65,9 @@ class CandidateReceipt(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.verify()
 
-    def test_owner_force_cannot_bypass_a_missing_receipt(self):
+    def test_owner_force_names_the_exact_missing_candidate_receipt(self):
         with patch.object(deployer.subprocess, 'run') as run:
-            with self.assertRaises(FileNotFoundError):
+            with self.assertRaisesRegex(RuntimeError, str(self.path)):
                 deployer.force_restart('systemctl', 'podman', 'activate reviewed image',
                     self.root/'ledger', 'journal', None, self.root, self.archive)
         run.assert_not_called()
@@ -82,10 +82,10 @@ class CandidateReceipt(unittest.TestCase):
             self.assertEqual(deployer.main(), 0)
         self.assertEqual(json.loads((self.root/'ledger').read_text())['mode'], 'forced')
 
-    def test_idle_cannot_bypass_a_missing_receipt(self):
+    def test_idle_names_the_exact_missing_candidate_receipt(self):
         with patch.object(deployer.subprocess, 'run',
                 return_value=Mock(returncode=0, stdout='active')) as run:
-            with self.assertRaises(FileNotFoundError):
+            with self.assertRaisesRegex(RuntimeError, str(self.path)):
                 deployer.run_deployment(self.root, self.root, image_archive=self.archive,
                     idle_checker=lambda: True, sleep_fn=lambda _: None,
                     deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None)

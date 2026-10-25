@@ -35,7 +35,13 @@ def require_candidate(state_dir, image_archive, podman_bin):
         return
     state_dir = Path(state_dir)
     desired = (state_dir / "desired").read_text().strip()
-    receipt = json.loads((state_dir / "receipts" / f"{desired}.json").read_text())
+    receipt_path = state_dir / "receipts" / f"{desired}.json"
+    try:
+        receipt = json.loads(receipt_path.read_text())
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"candidate receipt missing for desired deployment {desired}: {receipt_path}"
+        ) from None
     checks = ("authenticated_app", "provider_turn", "agent_cli", "skills", "desktop_transport")
     if not (
         receipt.get("deployment_id") == desired
