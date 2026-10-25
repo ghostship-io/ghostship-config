@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.354] - 2026-10-25
+
+- Raise the P0 worker cap to 12
+
+PR #588.
+
 ## [3.17.353] - 2026-10-25
 
 - fix(t3code): stage provider context for candidate acceptance
