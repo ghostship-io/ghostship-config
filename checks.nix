@@ -131,6 +131,11 @@ in
     assert builtins.head (pkgs.lib.splitString ":" t3codeCandidatePodmanPath) == "/run/wrappers/bin";
     assert routePolicy.schema == "ghostship.route-policy/v1";
     assert
+      builtins.isInt routePolicy.worker_capacity.default && routePolicy.worker_capacity.default > 0;
+    assert
+      builtins.isInt routePolicy.worker_capacity.p0_override
+      && routePolicy.worker_capacity.p0_override > 0;
+    assert
       builtins.sort builtins.lessThan actualWorkerRoutes
       == builtins.sort builtins.lessThan expectedWorkerRoutes;
     assert
