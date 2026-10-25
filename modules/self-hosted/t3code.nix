@@ -15,6 +15,13 @@ let
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
+  t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
+    mkdir -p "$out"
+    cp ${../../packages/t3code/deploy-when-idle.py} "$out/deploy-when-idle.py"
+    cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
+    cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
+    cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
+  '';
   t3codeSecretsFile = "/run/secrets/t3code.env";
   # Private store-scoped retail settings (COSTCO_*, SAFEWAY_*, TARGET_*,
   # WALMART_*, HOMEDEPOT_*, BESTBUY_*). Root-owned and outside the repository;
@@ -139,7 +146,7 @@ let
   });
   t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
     set -eu
-    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/deploy-when-idle.py} \
+    exec ${pkgs.python3}/bin/python3 ${t3codeDeploymentScripts}/deploy-when-idle.py \
       --state-dir "${t3codeDeploymentState}" \
       --image-archive "${t3codeImage}" \
       --home-dir "${t3codeHome}" \
