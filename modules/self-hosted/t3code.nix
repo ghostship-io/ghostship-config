@@ -129,7 +129,7 @@ let
   );
   engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
-  imageTag = "t3code-runtime";
+  acceptedImageRef = "${imageName}:accepted";
   tooling = inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.t3code-tools;
   t3codeContainerHome = builtins.elemAt (lib.splitString "/.local/state/" managedBin) 0;
   t3codeToolMaintenance = tooling;
@@ -157,6 +157,12 @@ let
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
     text = builtins.readFile ../../packages/t3code/activate-deployment.sh;
+  };
+  t3codeReceiptSelfCheck = pkgs.writeShellApplication {
+    name = "t3code-receipt-self-check";
+    excludeShellChecks = [ "SC2016" ];
+    runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
+    text = builtins.readFile ../../packages/t3code/receipt-self-check.sh;
   };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
@@ -242,13 +248,12 @@ in
   };
 
   virtualisation.oci-containers.containers."t3code" = {
-    image = "${imageName}:${imageTag}";
-    imageFile = t3codeImage;
+    # This stable alias is moved only by the deployment script, after it has
+    # verified a PASS receipt for the exact image ID. In particular, systemd
+    # must not load the current Nix image archive during a plain restart.
+    image = acceptedImageRef;
     pull = "never";
-    labels = {
-      "io.containers.autoupdate" = "disabled";
-      "io.ghostship.t3code.deployment" = t3codeDeploymentId;
-    };
+    labels."io.containers.autoupdate" = "disabled";
     ports = [ ];
     extraOptions =
       (
@@ -358,6 +363,7 @@ in
       "mnt-share.mount"
     ];
     serviceConfig.TimeoutStopSec = lib.mkForce "210s";
+    serviceConfig.ExecStartPost = lib.getExe t3codeReceiptSelfCheck;
     preStart = lib.mkAfter ''
       set -eu
 
@@ -436,6 +442,7 @@ in
     after = [ "podman.service" ];
     environment = {
       STATE_DIR = t3codeDeploymentState;
+      ACCEPTED_IMAGE_REF = acceptedImageRef;
       IMAGE_ARCHIVE = toString t3codeImage;
       DEPLOYMENT_ID = t3codeDeploymentId;
       HOME_DIR = t3codeHome;

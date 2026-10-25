@@ -37,6 +37,8 @@ if [[ -n ${SUPERSEDE_TO:-} ]]; then
 fi
 config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
+if [[ ${RECEIPT_MISSING:-0} == 1 ]]; then exit 0; fi
+if [[ ${RECEIPT_IMAGE_MISMATCH:-0} == 1 ]]; then image=unreceipted-image; fi
 jq -cn \
   --arg deployment "$DEPLOYMENT_ID" --arg image "$image" --arg agent "$AGENT_REVISION" \
   --arg tooling "$TOOLING_PATH" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
@@ -52,9 +54,14 @@ set -euo pipefail
 if [[ $1 == inspect && $2 == t3code ]]; then
   case "$4" in
     '{{.State.Health.Status}}') printf 'healthy\n' ;;
-    '{{ index .Config.Labels "io.ghostship.t3code.deployment" }}') printf '%s\n' "$DEPLOYMENT_ID" ;;
-    *) printf 'container-id image-id started healthy %s\n' "$DEPLOYMENT_ID" ;;
+    *) printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" ;;
   esac
+elif [[ $1 == load ]]; then
+  printf '%s\n' image-load >> "$EVENTS"
+elif [[ $1 == tag ]]; then
+  printf '%s\n' image-tag >> "$EVENTS"
+elif [[ $1 == image && $2 == inspect ]]; then
+  printf 'sha256:%s\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
 elif [[ $1 == exec && $2 == t3code && $3 == readlink ]]; then
   printf '%s\n' "$TOOLING_PATH"
 elif [[ $1 == exec && $2 == t3code && $3 == stat ]]; then
@@ -82,7 +89,8 @@ chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/s
 
 export STATE_DIR="$tmp/state" IMAGE_ARCHIVE="$tmp/image.tar" DEPLOYMENT_ID=deployment-1
 export HOME_DIR="$tmp/home" CANDIDATE_ACCEPTANCE="$tmp/accept-candidate" PODMAN_BIN="$tmp/bin/podman"
-export SYSTEMCTL_BIN="$tmp/bin/systemctl" CANDIDATE_SOCKET="$tmp/candidate.sock" CANDIDATE_UID=62041
+export SYSTEMCTL_BIN="$tmp/bin/systemctl" ACCEPTED_IMAGE_REF=localhost/ghostship-t3code:accepted
+export CANDIDATE_SOCKET="$tmp/candidate.sock" CANDIDATE_UID=62041
 export CANDIDATE_RUNTIME_DIR="$tmp/runtime" CANDIDATE_HOME_TARGET=/candidate-home
 export PROVIDER_SECRETS_FILE="$tmp/provider.env" TOOLING_PATH="$tmp/tooling" AGENT_REVISION=agent-rev
 export PYTHON_BIN="$tmp/bin/python" JQ_BIN=jq RESTART_LEDGER="$tmp/ledger.jsonl"
@@ -92,7 +100,9 @@ bash "$root/packages/t3code/deploy-image.sh" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
 grep -q '^Restarting podman-t3code.service immediately after exact-image candidate acceptance$' "$tmp/success.log"
 [[ $(sed -n '1p' "$EVENTS") == candidate-accepted ]]
-[[ $(sed -n '2p' "$EVENTS") == restart ]]
+[[ $(sed -n '2p' "$EVENTS") == image-load ]]
+[[ $(sed -n '3p' "$EVENTS") == image-tag ]]
+[[ $(sed -n '4p' "$EVENTS") == restart ]]
 [[ $(cat "$tmp/state/applied") == "$DEPLOYMENT_ID" ]]
 [[ $(jq -r '.mode' "$tmp/ledger.jsonl") == candidate-accepted ]]
 
@@ -107,20 +117,45 @@ set -e
 [[ $first_status != 0 ]]
 grep -q 'Candidate acceptance FAILED' "$tmp/failure.log"
 [[ $(cat "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
-[[ $(wc -l < "$EVENTS") == 3 ]]
+[[ $(wc -l < "$EVENTS") == 5 ]]
 set +e
 bash "$root/packages/t3code/deploy-image.sh" > "$tmp/replay.log" 2>&1
 replay_status=$?
 set -e
 [[ $replay_status == 0 ]]
 grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
-[[ $(wc -l < "$EVENTS") == 3 ]]
+[[ $(wc -l < "$EVENTS") == 5 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
+
+# An absent receipt is rejected before the accepted alias can move. This is the
+# restart-path invariant: no receipt, no tag, no restart.
+export DEPLOYMENT_ID=deployment-absent CANDIDATE_FAIL=0 RECEIPT_MISSING=1 RECEIPT_IMAGE_MISMATCH=0
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/absent.log" 2>&1
+absent_status=$?
+set -e
+[[ $absent_status != 0 ]]
+grep -q 'receipt did not approve this exact image' "$tmp/absent.log"
+[[ $(wc -l < "$EVENTS") == 6 ]]
+
+# A mismatched receipt is also rejected before the accepted alias can move.
+export DEPLOYMENT_ID=deployment-mismatch RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=1
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/mismatch.log" 2>&1
+mismatch_status=$?
+set -e
+[[ $mismatch_status != 0 ]]
+grep -q 'receipt did not approve this exact image' "$tmp/mismatch.log"
+[[ $(wc -l < "$EVENTS") == 7 ]]
 
 # A target changed while acceptance ran must not be restarted with the old
 # image's receipt. Activation normally serializes this mutation on deploy.lock;
 # this guard also fails safely if an out-of-band writer changes desired.
-export DEPLOYMENT_ID=deployment-3 SUPERSEDE_TO=deployment-4 CANDIDATE_FAIL=0
+export DEPLOYMENT_ID=deployment-3 SUPERSEDE_TO=deployment-4 CANDIDATE_FAIL=0 RECEIPT_IMAGE_MISMATCH=0
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
 set +e
@@ -129,10 +164,11 @@ superseded_status=$?
 set -e
 [[ $superseded_status == 0 ]]
 grep -q 'superseded before restart; refusing stale image' "$tmp/superseded.log"
-[[ $(wc -l < "$EVENTS") == 4 ]]
+[[ $(wc -l < "$EVENTS") == 8 ]]
 [[ $(cat "$tmp/state/applied") == deployment-1 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
 
 echo 'V1 shell proof: candidate acceptance PASS precedes the immediate restart.'
+echo 'Receipt guard demonstration: absent and mismatched receipts refuse tag movement and restart.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'

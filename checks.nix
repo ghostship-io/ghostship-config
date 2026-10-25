@@ -35,6 +35,7 @@ let
   t3codeConfig = self.nixosConfigurations.chill-penguin.config;
   routePolicyPath = "/etc/ghostship/route-policy.json";
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
+  t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
@@ -108,6 +109,7 @@ in
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
         bash tests/test_t3code_activate_deployment.sh
+        bash tests/test_t3code_receipt_self_check.sh
         python -m unittest discover -s tests -v
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v1-sqlite.test.cjs
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v2-sqlite.test.cjs
@@ -116,6 +118,12 @@ in
       '';
   host-evaluation =
     assert failures == [ ];
+    # The unit always names the stable accepted alias, and never imports the
+    # current Nix image archive when systemd starts it. Only the receipt-checked
+    # deployer can move this alias.
+    assert t3codeContainer.image == "localhost/ghostship-t3code:accepted";
+    assert (t3codeContainer.imageFile or null) == null;
+    assert pkgs.lib.hasInfix "t3code-receipt-self-check" t3codeUnit.serviceConfig.ExecStartPost;
     assert builtins.all (
       unit:
       !unit.restartIfChanged

@@ -18,6 +18,7 @@ set -euo pipefail
 : "${JQ_BIN:?}"
 : "${RESTART_LEDGER:?}"
 : "${AUDIT_LOG:?}"
+: "${ACCEPTED_IMAGE_REF:?}"
 
 install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
@@ -108,15 +109,15 @@ fi
 
 container_identity() {
   local fields
-  fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}} {{ index .Config.Labels "io.ghostship.t3code.deployment" }}' 2>/dev/null || true)
+  fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}' 2>/dev/null || true)
   if [[ -z "$fields" ]]; then
     printf '{}\n'
     return
   fi
-  read -r container_id image started health deployment <<< "$fields"
+  read -r container_id image started health <<< "$fields"
   "$JQ_BIN" -cn --arg id "$container_id" --arg image "$image" --arg started_at "$started" \
-    --arg health "$health" --arg deployment "$deployment" \
-    '{id:$id,image:$image,started_at:$started_at,health:$health,deployment:$deployment}'
+    --arg health "$health" \
+    '{id:$id,image:$image,started_at:$started_at,health:$health}'
 }
 
 pre=$(container_identity)
@@ -128,6 +129,18 @@ if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_i
   echo "T3 deployment request was superseded before restart; refusing stale image" >&2
   exit 0
 fi
+
+# Only this receipt-checked path may move the unit's stable image alias. The
+# systemd unit has no imageFile, so an ordinary restart cannot import or retag
+# the current Nix image archive.
+"$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+"$PODMAN_BIN" tag "sha256:$image_id" "$ACCEPTED_IMAGE_REF"
+accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}')
+if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
+  echo "Accepted image alias does not resolve to the receipted image ID" >&2
+  exit 1
+fi
+echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
 
@@ -156,8 +169,9 @@ if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret_inode" != "$secret_inode
 fi
 
 post=$(container_identity)
-if [[ $(printf '%s' "$post" | "$JQ_BIN" -r '.deployment // empty') != "$DEPLOYMENT_ID" ]]; then
-  echo "T3 container did not start the accepted deployment $DEPLOYMENT_ID" >&2
+post_image=$(printf '%s' "$post" | "$JQ_BIN" -r '.image // empty')
+if [[ "${post_image#sha256:}" != "$image_id" ]]; then
+  echo "T3 container did not start the receipted image sha256:$image_id" >&2
   exit 1
 fi
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)

@@ -17,16 +17,19 @@ class ImageIdentity(unittest.TestCase):
         let
           flake = builtins.getFlake "path:__ROOT__";
           pkgs = flake.inputs.nixpkgs.legacyPackages.${builtins.currentSystem};
-          id = revision: ((import __ROOT__/modules/self-hosted/t3code.nix {
+          configFor = revision: (import __ROOT__/modules/self-hosted/t3code.nix {
             inputs.ghostship-private-agent.rev = revision;
             config = {};
             inherit pkgs; inherit (pkgs) lib;
-          }).virtualisation.oci-containers.containers.t3code.labels."io.ghostship.t3code.deployment");
+          });
           image = import __ROOT__/packages/t3code/image.nix { inherit pkgs; };
           changed = pkgs.dockerTools.buildLayeredImageWithNixDb (image.imageArgs // { tag = "changed-image-parameter"; });
         in {
-          baseline = id "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-          toolingChanged = id "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+          baseline = (configFor "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").systemd.services.ghostship-t3code-deploy.environment.DEPLOYMENT_ID;
+          toolingChanged = (configFor "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").systemd.services.ghostship-t3code-deploy.environment.DEPLOYMENT_ID;
+          baselineImageRef = (configFor "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").virtualisation.oci-containers.containers.t3code.image;
+          toolingChangedImageRef = (configFor "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").virtualisation.oci-containers.containers.t3code.image;
+          imageFile = (configFor "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").virtualisation.oci-containers.containers.t3code.imageFile or null;
           imageId = image.deploymentId;
           imageChanged = builtins.hashString "sha256" (toString changed);
         }
@@ -37,4 +40,7 @@ class ImageIdentity(unittest.TestCase):
         )
         values = json.loads(result.stdout)
         self.assertNotEqual(values["baseline"], values["toolingChanged"])
+        self.assertEqual(values["baselineImageRef"], "localhost/ghostship-t3code:accepted")
+        self.assertEqual(values["baselineImageRef"], values["toolingChangedImageRef"])
+        self.assertIsNone(values["imageFile"])
         self.assertNotEqual(values["imageId"], values["imageChanged"])
