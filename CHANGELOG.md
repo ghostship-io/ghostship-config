@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.340] - 2026-10-25
+
+Fix the candidate service PATH so NixOS resolves `/run/wrappers/bin` as intended, and guard the effective generated PATH.
+
+Refs #504, #594.
+
+PR #573.
+
 ## [3.17.339] - 2026-10-25
 
 Prepend NixOS's privileged uid/gid mapping helper directory to the isolated candidate Podman service PATH. The unit journal showed the plain store `newuidmap` failing to write `uid_map`, which prevented the candidate API manager from staying up and made `podman load` fail before a receipt could be written. Add a host-evaluation assertion for helper ordering.
