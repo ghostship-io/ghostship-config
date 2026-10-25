@@ -8,10 +8,13 @@ let
   hostHome = "/srv/apps/t3code/home";
   containerHome = "/home/t3code";
   state = ".local/state/ghostship-free-inference-bridge";
+  managedReleaseRecord = "${hostHome}/.local/state/t3code-shared-agents/release.json";
+  deployedReleaseRecord = "${hostHome}/.local/state/t3code-shared-agents/host-release.json";
   endpoint = pkgs.writeText "inference-server.json" (builtins.toJSON {
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
   hostRelease = pkgs.writeText "ghostship-managed-host-release.json" (builtins.toJSON {
+    version = lib.removeSuffix "\n" (builtins.readFile "${inputs.ghostship-private-agent}/VERSION");
     source = toString inputs.ghostship-private-agent;
     package = toString tools.default;
     revision = inputs.ghostship-private-agent.rev or null;
@@ -25,6 +28,39 @@ let
     exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
       --tools-package ${tools.default} --refresh --managed-only "$@"
+  '';
+  managedAgentReleasePublish = pkgs.writeShellScript "ghostship-managed-agent-release-publish" ''
+    set -eu
+    ${pkgs.nix}/bin/nix copy --no-check-sigs --to local?root=/srv/apps/t3code/nix-root \
+      ${tools.default} ${managedInstall} ${hostRelease}
+    gcroot_dir=/srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
+    install -d -m0755 "$gcroot_dir"
+    ln -sfn ${tools.default} "$gcroot_dir/managed-agent-tools"
+    install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
+    install -m0600 -o3000 -g3000 ${hostRelease} ${deployedReleaseRecord}.new
+    mv -fT ${deployedReleaseRecord}.new ${deployedReleaseRecord}
+    if [ ! -e ${hostHome}/.local/state/t3code-shared-agents/managed-installer ]; then
+      ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
+    fi
+  '';
+  managedAgentReleaseRefresh = pkgs.writeShellScript "ghostship-managed-agent-release-refresh" ''
+    set -eu
+    for _ in $(seq 600); do
+      if ${pkgs.podman}/bin/podman exec --user 0:0 t3code \
+          systemctl is-active --quiet t3code-container-setup.service; then
+        break
+      fi
+      sleep 2
+    done
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code \
+      systemctl is-active --quiet t3code-container-setup.service
+    exec ${pkgs.python3}/bin/python3 ${./managed-agent-release-refresh.py} \
+      --installed ${managedReleaseRecord} --deployed ${deployedReleaseRecord} \
+      --refresh-command ${lib.escapeShellArgs [
+        "${pkgs.podman}/bin/podman" "exec" "--user" "3000:3000"
+        "--env" "HOME=${containerHome}" "t3code" "${managedInstall}"
+        "--refresh" "--managed-only"
+      ]}
   '';
   sourceSync = import "${inputs.ghostship-private-agent}/packages/t3code/source-sync.nix" {
     inherit lib pkgs;
@@ -89,9 +125,9 @@ let
       systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${tools.default} ${scheduler} ${managedInstall} ${hostRelease} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
+      --to local?root=/srv/apps/t3code/nix-root ${scheduler} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
+    ${managedAgentReleasePublish}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
-    ln -sfn ${tools.default} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-agent-tools
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
     ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
@@ -101,13 +137,7 @@ let
     ln -sfn ${maintenance} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-maintenance
     ln -sfn ${toolUpdate} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update
     ln -sfn ${toolUpdateOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/tool-update-override
-    install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
-    install -m0600 -o3000 -g3000 ${hostRelease} ${hostHome}/.local/state/t3code-shared-agents/host-release.json.new
-    mv -fT ${hostHome}/.local/state/t3code-shared-agents/host-release.json.new ${hostHome}/.local/state/t3code-shared-agents/host-release.json
     # The monotonic agent resolver owns the live launcher; the host supplies a candidate.
-    if [ ! -e ${hostHome}/.local/state/t3code-shared-agents/managed-installer ]; then
-      ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
-    fi
     # Override only the old image's scheduled installer, preserving its timer and repo sync.
     ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
       -D -m0644 ${syncOverride} \
@@ -138,6 +168,20 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    systemd.services.ghostship-managed-agent-release-refresh = {
+      description = "Refresh managed shared agents when the deployed release changes";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "podman-t3code.service" ];
+      requires = [ "podman-t3code.service" ];
+      restartTriggers = [ inputs.ghostship-private-agent ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStartPre = managedAgentReleasePublish;
+        ExecStart = managedAgentReleaseRefresh;
+      };
+    };
+
     systemd.services.ghostship-inference-bridge = {
       description = "Authenticated free inference broker in the separate worker container";
       wantedBy = [ "multi-user.target" ];
