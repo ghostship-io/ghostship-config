@@ -33,8 +33,11 @@ let
   ) (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codePreStartSeedsTooling = pkgs.lib.hasInfix "ghostship-t3code-tools" t3codePreStart;
   t3codeConfig = self.nixosConfigurations.chill-penguin.config;
-  t3codeCandidatePodmanPath =
-    t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
+  routePolicyPath = "/etc/ghostship/route-policy.json";
+  t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
+  githubCoordinator =
+    t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
+  t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
   );
@@ -74,7 +77,8 @@ let
 in
 {
   antigravity-native-loader =
-    (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { }).tests.native-loader;
+    (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { })
+    .tests.native-loader;
   podman-ipam = import ./packages/podman-network/regression.nix { pkgs = securityPkgs; };
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
@@ -124,9 +128,13 @@ in
     assert !(self.nixosConfigurations.chill-penguin.config.systemd.timers ? ghostship-t3code-deploy);
     assert builtins.elem "ghostship-failure@%n.service"
       self.nixosConfigurations.chill-penguin.config.systemd.services.ghostship-t3code-deploy.onFailure;
-    assert builtins.head (pkgs.lib.splitString ":" t3codeCandidatePodmanPath)
-      == "/run/wrappers/bin";
+    assert builtins.head (pkgs.lib.splitString ":" t3codeCandidatePodmanPath) == "/run/wrappers/bin";
     assert routePolicy.schema == "ghostship.route-policy/v1";
+    assert
+      builtins.isInt routePolicy.worker_capacity.default && routePolicy.worker_capacity.default > 0;
+    assert
+      builtins.isInt routePolicy.worker_capacity.p0_override
+      && routePolicy.worker_capacity.p0_override > 0;
     assert
       builtins.sort builtins.lessThan actualWorkerRoutes
       == builtins.sort builtins.lessThan expectedWorkerRoutes;
@@ -135,11 +143,13 @@ in
       == builtins.sort builtins.lessThan expectedOrchestratorRoutes;
     assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
     assert routePolicy.authorizations == [ ];
-    assert
-      t3codeConfig.virtualisation.oci-containers.containers.t3code.environment.GHOSTSHIP_ROUTE_POLICY_PATH
-      == "/etc/ghostship/route-policy.json";
-    assert builtins.elem "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"
-      t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
+    # Fail host evaluation if either process cannot read the policy at the
+    # path its CLI uses. This checks evaluated container definitions, not
+    # source text, and keeps the environment and read-only mount in lockstep.
+    assert t3codeContainer.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
+    assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
+    assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
+    assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;
     assert builtins.elem
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
