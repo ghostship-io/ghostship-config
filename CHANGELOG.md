@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.308] - 2026-10-25
+
+Include owner memory in the pinned agent runtime source tree.
+
+PR #519.
+
 ## [3.17.307] - 2026-10-25
 
 Pin the deployed agent input to 0.47.134.
