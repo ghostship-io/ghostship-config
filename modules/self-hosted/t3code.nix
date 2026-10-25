@@ -148,6 +148,8 @@ let
   });
   t3codeImmediateDeploy = pkgs.writeShellApplication {
     name = "ghostship-t3code-deploy-image";
+    # The single-quoted jq programs intentionally avoid shell interpolation.
+    excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = builtins.readFile ../../packages/t3code/deploy-image.sh;
   };
