@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.323] - 2026-10-25
+
+- Enforce shared provider quota across picker model routes and report unmatched account keys.
+
+PR #550.
+
 ## [3.17.322] - 2026-10-25
 
 Package the T3 deployment and candidate acceptance scripts with their sibling inputs.
