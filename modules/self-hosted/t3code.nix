@@ -362,8 +362,13 @@ in
       "init-ghostship-net.service"
       "mnt-share.mount"
     ];
+    environment = {
+      STATE_DIR = t3codeDeploymentState;
+      PODMAN_BIN = "${pkgs.podman}/bin/podman";
+      JQ_BIN = "${pkgs.jq}/bin/jq";
+    };
     serviceConfig.TimeoutStopSec = lib.mkForce "210s";
-    serviceConfig.ExecStartPost = lib.getExe t3codeReceiptSelfCheck;
+    serviceConfig.ExecStartPost = "-${lib.getExe t3codeReceiptSelfCheck}";
     preStart = lib.mkAfter ''
       set -eu
 

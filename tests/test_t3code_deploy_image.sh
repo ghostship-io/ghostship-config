@@ -60,8 +60,13 @@ elif [[ $1 == load ]]; then
   printf '%s\n' image-load >> "$EVENTS"
 elif [[ $1 == tag ]]; then
   printf '%s\n' image-tag >> "$EVENTS"
+  printf '%s\n' "${2#sha256:}" > "$ACCEPTED_POINTER_FILE"
 elif [[ $1 == image && $2 == inspect ]]; then
-  printf 'sha256:%s\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
+  if [[ -r "$ACCEPTED_POINTER_FILE" ]]; then
+    printf 'sha256:%s\n' "$(cat "$ACCEPTED_POINTER_FILE")"
+  else
+    exit 1
+  fi
 elif [[ $1 == exec && $2 == t3code && $3 == readlink ]]; then
   printf '%s\n' "$TOOLING_PATH"
 elif [[ $1 == exec && $2 == t3code && $3 == stat ]]; then
@@ -88,6 +93,7 @@ SH
 chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/systemctl" "$tmp/bin/systemd-cat" "$tmp/bin/hostname"
 
 export STATE_DIR="$tmp/state" IMAGE_ARCHIVE="$tmp/image.tar" DEPLOYMENT_ID=deployment-1
+export ACCEPTED_POINTER_FILE="$tmp/state/accepted-image"
 export HOME_DIR="$tmp/home" CANDIDATE_ACCEPTANCE="$tmp/accept-candidate" PODMAN_BIN="$tmp/bin/podman"
 export SYSTEMCTL_BIN="$tmp/bin/systemctl" ACCEPTED_IMAGE_REF=localhost/ghostship-t3code:accepted
 export CANDIDATE_SOCKET="$tmp/candidate.sock" CANDIDATE_UID=62041
@@ -168,7 +174,34 @@ grep -q 'superseded before restart; refusing stale image' "$tmp/superseded.log"
 [[ $(cat "$tmp/state/applied") == deployment-1 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
 
+# A same-applied upgrade from the old unit may have a valid receipt but no new
+# accepted alias. Restore the alias from that receipt without rerunning checks
+# or restarting the existing service.
+export DEPLOYMENT_ID=deployment-repair
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+cp "$tmp/state/desired-inputs" "$tmp/state/applied-inputs"
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/applied"
+config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
+repair_image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
+jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
+  --arg agent "$AGENT_REVISION" --arg tooling "$TOOLING_PATH" \
+  --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
+  '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
+    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
+    live_before:{id:"production"},live_after:{id:"production"},
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+  > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
+rm -f "$ACCEPTED_POINTER_FILE"
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/repair.log"
+grep -q '^Initialized accepted image alias from the existing PASS receipt:' "$tmp/repair.log"
+[[ $(sed -n '9p' "$EVENTS") == image-load ]]
+[[ $(sed -n '10p' "$EVENTS") == image-tag ]]
+[[ $(wc -l < "$EVENTS") == 10 ]]
+[[ $(cat "$ACCEPTED_POINTER_FILE") == "$repair_image" ]]
+
 echo 'V1 shell proof: candidate acceptance PASS precedes the immediate restart.'
 echo 'Receipt guard demonstration: absent and mismatched receipts refuse tag movement and restart.'
+echo 'Upgrade proof: an existing matching PASS receipt initializes a missing accepted alias without rerunning checks or restarting.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'

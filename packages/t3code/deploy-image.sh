@@ -32,9 +32,52 @@ if [[ "$desired" != "$DEPLOYMENT_ID" ]]; then
   echo "T3 deployment request was superseded before it started" >&2
   exit 0
 fi
+image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
+image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
+secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
+receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+
+receipt_matches_image() {
+  "$JQ_BIN" -e \
+    --arg deployment "$DEPLOYMENT_ID" \
+    --arg image "$image_id" \
+    --arg agent "$AGENT_REVISION" \
+    --arg tooling "$TOOLING_PATH" \
+    --arg secret_inode "$secret_inode" \
+    '(.deployment_id == $deployment)
+     and (.image_id | sub("^sha256:"; "")) == $image
+     and (.candidate_name | startswith("t3code-candidate-"))
+     and (.live_before != null) and (.live_before == .live_after)
+     and (.agent_revision == $agent)
+     and (.agent_path == $tooling)
+     and (.provider_secret_inode == $secret_inode)
+     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
+           .checks.skills, .checks.desktop_transport] | all(. == true))' \
+    "$receipt" >/dev/null 2>&1
+}
+
+promote_accepted_alias() {
+  "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+  "$PODMAN_BIN" tag "sha256:$image_id" "$ACCEPTED_IMAGE_REF"
+  local accepted_id
+  accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
+  if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
+    echo "Accepted image alias does not resolve to the receipted image ID" >&2
+    return 1
+  fi
+}
+
 if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]]; then
-  echo "T3 image and runtime inputs are already applied: $DEPLOYMENT_ID"
-  exit 0
+  if receipt_matches_image; then
+    accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
+    if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
+      promote_accepted_alias
+      echo "Initialized accepted image alias from the existing PASS receipt: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
+    else
+      echo "T3 image, runtime inputs, and accepted image alias are already applied: $DEPLOYMENT_ID"
+    fi
+    exit 0
+  fi
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
@@ -43,7 +86,6 @@ if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$DEPLOYMENT_ID" ]]; then
   exit 0
 fi
 
-receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 mark_candidate_failed() {
   local temporary="$failed_file.tmp"
   printf '%s\n' "$DEPLOYMENT_ID" > "$temporary"
@@ -75,24 +117,7 @@ if ! "$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}"; then
   exit 1
 fi
 
-image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
-image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
-secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
-if ! "$JQ_BIN" -e \
-  --arg deployment "$DEPLOYMENT_ID" \
-  --arg image "$image_id" \
-  --arg agent "$AGENT_REVISION" \
-  --arg tooling "$TOOLING_PATH" \
-  --arg secret_inode "$secret_inode" \
-  '(.deployment_id == $deployment)
-   and (.image_id | sub("^sha256:"; "")) == $image
-   and (.candidate_name | startswith("t3code-candidate-"))
-   and (.live_before != null) and (.live_before == .live_after)
-   and (.agent_revision == $agent)
-   and (.agent_path == $tooling)
-   and (.provider_secret_inode == $secret_inode)
-   and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-         .checks.skills, .checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null; then
+if ! receipt_matches_image; then
   mark_candidate_failed
   echo "Candidate acceptance receipt did not approve this exact image: $DEPLOYMENT_ID" >&2
   exit 1
@@ -133,13 +158,7 @@ fi
 # Only this receipt-checked path may move the unit's stable image alias. The
 # systemd unit has no imageFile, so an ordinary restart cannot import or retag
 # the current Nix image archive.
-"$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
-"$PODMAN_BIN" tag "sha256:$image_id" "$ACCEPTED_IMAGE_REF"
-accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}')
-if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
-  echo "Accepted image alias does not resolve to the receipted image ID" >&2
-  exit 1
-fi
+promote_accepted_alias
 echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
