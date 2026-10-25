@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.305] - 2026-10-25
+
+- Paid models and Free models: the picker's own order, only the approved free workers listed, OpenCode Free routes under their provider, calibration and account-window state on free rows; names wrap and no panel scrolls.
+
+PR #478.
+
 ## [3.17.304] - 2026-10-25
 
 - Limit Tdarr to two CPU cores
