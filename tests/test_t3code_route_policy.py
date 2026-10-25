@@ -39,9 +39,15 @@ class T3RoutePolicyTests(unittest.TestCase):
         self.assertIn('rule = "owner-approved default paid worker route"', T3CODE)
         self.assertEqual(T3CODE.count('model = "claude-fable-5"'), 3)
         self.assertEqual(T3CODE.count('model = "claude-fable-5-1"'), 3)
-        self.assertEqual(T3CODE.count('provider = "claudeAgent"'), 7)
+        self.assertEqual(T3CODE.count('provider = "claudeAgent"'), 8)
         self.assertIn('authorizations = [ ];', T3CODE)
         self.assertNotIn('model = "gpt-6.1-sol"', T3CODE)
+
+    def test_orchestrator_route_is_owner_limited_to_claude_opus(self):
+        self.assertIn('model = "claude-opus-5-5"', T3CODE)
+        self.assertIn('rule = "owner: no Codex orchestrator handover trial"', T3CODE)
+        self.assertIn('expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" ]',
+                      (ROOT / "checks.nix").read_text())
 
 
 if __name__ == "__main__":
