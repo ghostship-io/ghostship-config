@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.352] - 2026-10-25
+
+- Pin T3 Code restarts to the last candidate-accepted image and promote a new image only after its exact-image PASS receipt.
+
+Release: patch
+
+PR #585.
+
 ## [3.17.351] - 2026-10-25
 
 The host evaluation verifies that the T3 agent container and Go coordinator receive the canonical route-policy path and mount that same file read-only. It also rejects missing or invalid worker capacity. Removing or mismatching either env declaration or mount fails host evaluation.
