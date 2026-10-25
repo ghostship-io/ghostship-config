@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.355] - 2026-10-25
+
+- Pin ghostship-agent main after #928
+
+PR #591.
+
 ## [3.17.354] - 2026-10-25
 
 - Raise the P0 worker cap to 12
