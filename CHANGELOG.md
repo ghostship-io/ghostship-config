@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.335] - 2026-10-25
+
+Add a synthetic provider quota contract fixture matrix and focused tests for configured readers, evidence states, scoped/shared windows, reset provenance, source freshness, and unsupported readers.
+
+PR #568.
+
 ## [3.17.334] - 2026-10-25
 
 Publish per-account quota evidence state, bounded failure reasons, and source age for configured providers. Missing quota windows and stale readings remain visible without implying capacity.
