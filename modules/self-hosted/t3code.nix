@@ -53,7 +53,6 @@ let
             {
               provider = "claudeAgent";
               model = "claude-sonnet-5-5";
-              kinds = [ "ui" ];
               rule = "owner: UI work only";
             }
             {

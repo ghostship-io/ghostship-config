@@ -41,11 +41,10 @@ class T3RoutePolicyTests(unittest.TestCase):
         ):
             self.assertIn(route, T3CODE)
         self.assertIn('rule = "owner: UI work only"', T3CODE)
-        self.assertIn('kinds = [ "ui" ];', T3CODE)
         self.assertNotIn("route-policy schema has no task-kind dimension", T3CODE)
         self.assertIn('billing_tier = "priority";', T3CODE)
         self.assertIn('tiers = [ "fastMode=true" "serviceTier=fast" ];', T3CODE)
-        self.assertIn('sonnetWorkerEntry.kinds == [ "ui" ]', (ROOT / "checks.nix").read_text())
+        self.assertNotIn('kinds = [ "ui" ];', T3CODE)
         self.assertIn('fastBillingDenied "worker" && fastBillingDenied "orchestrator" && fastBillingDenied "reviewer"',
                       (ROOT / "checks.nix").read_text())
         self.assertIn('rule = "owner-approved default paid worker route"', T3CODE)
