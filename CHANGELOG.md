@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.319] - 2026-10-25
+
+Fix candidate service unit PATH generation and update the agent pin to 0.47.176.
+
+PR #544.
+
 ## [3.17.318] - 2026-10-25
 
 - Pin agent 0.47.171 for the deployed batch.
