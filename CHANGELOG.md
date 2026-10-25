@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.303] - 2026-10-25
+
+- Providers: graphics-first top band; overspent and behind pace counted apart; free providers limited to the owner-approved list; OpenCode Free routes filed under their provider; names wrap and no panel scrolls.
+
+PR #476.
+
 ## [3.17.302] - 2026-10-25
 
 - Pin the agent revision that refreshes the launcher after the rewrite
