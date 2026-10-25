@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.334] - 2026-10-25
+
+Publish per-account quota evidence state, bounded failure reasons, and source age for configured providers. Missing quota windows and stale readings remain visible without implying capacity.
+
+PR #567.
+
 ## [3.17.333] - 2026-10-25
 
 Make the picker and published worker positions consume one shared ordering that preserves approved free-worker priority and capacity ranking.
