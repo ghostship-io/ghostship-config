@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.302] - 2026-10-25
+
+- Pin the agent revision that refreshes the launcher after the rewrite
+
+PR #501.
+
 ## [3.17.301] - 2026-10-25
 
 - Declare BW_ORGANIZATION_ID and BW_COLLECTION_ID as runtime Bitwarden config (for ghostship-agent#514)
