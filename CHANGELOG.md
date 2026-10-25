@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.324] - 2026-10-25
+
+- Fail closed on unverified Inception free entitlement and data-processing policy.
+
+PR #555.
+
 ## [3.17.323] - 2026-10-25
 
 - Enforce shared provider quota across picker model routes and report unmatched account keys.
