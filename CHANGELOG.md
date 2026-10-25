@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.326] - 2026-10-25
+
+Preserve provider-reported quota scope and treat malformed quota values as unknown in picker inputs.
+
+PR #558.
+
 ## [3.17.325] - 2026-10-25
 
 - Add worker capacity to owner route policy
