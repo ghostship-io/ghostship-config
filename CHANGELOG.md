@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.351] - 2026-10-25
+
+The host evaluation verifies that the T3 agent container and Go coordinator receive the canonical route-policy path and mount that same file read-only. It also rejects missing or invalid worker capacity. Removing or mismatching either env declaration or mount fails host evaluation.
+
+PR #584.
+
 ## [3.17.350] - 2026-10-25
 
 - Fix the T3 deployer shellcheck build gate so candidate image deployment can proceed.
