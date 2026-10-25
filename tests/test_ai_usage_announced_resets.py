@@ -1,638 +1,232 @@
-"""Announcement evidence must change effective reset and pace without inventing usage."""
-import sys
-import re
-import subprocess
-import unittest
-from unittest.mock import patch, AsyncMock
-from types import SimpleNamespace
-import asyncio
-import tempfile
+"""Free-model reset classification, durable pending state and capacity guards."""
 import json
-from datetime import datetime
+import sys
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage/collector"))
 import announced_resets as announcements
+import reset_events
 import main
-import model_selection
-import reset_overrides
-import snapshot
 from metrics import SourceResult
 
 URL = announcements.SOURCE + "/status/1234567890"
-TOPIC = "https://community.openai.com/t/reset-announcement/12345"
-NOW = datetime.fromisoformat("2030-07-01T12:00:00+00:00").timestamp()
+FOLLOWUP_URL = announcements.SOURCE + "/status/1234567891"
+NOW = __import__('datetime').datetime.fromisoformat("2030-07-01T12:00:00+00:00").timestamp()
 
 
-def post(text="All Codex limits reset tomorrow at 10am PT.", **kwargs):
-    return {"url": URL, "text": text, "published_at": "2030-06-30T20:00:00Z", **kwargs}
+def post(url=URL, text="A public synthetic post.", published_at="2030-07-01T11:30:00Z", author=None):
+    return {"url": url, "author": author or announcements.SOURCE.rstrip('/').rsplit('/', 1)[-1],
+            "text": text, "published_at": published_at}
+
+
+def judgment(item, *, reset=False, products=None, plans=None, windows=None, reset_at=None,
+             quote=None, confidence="low"):
+    return {"source_url": item["url"], "is_reset_announcement": reset,
+            "products": products or [], "plans": plans or [], "windows": windows or [],
+            "reset_at": reset_at, "evidence_quote": quote or "",
+            "confidence": confidence}
+
+
+def batch_value(posts, rows):
+    return {"is_reset_announcement": any(row["is_reset_announcement"] for row in rows),
+            "classifications": rows}
+
+
+def event(item, *, products=("codex",), plans=("all",), windows=("weekly",),
+          reset_at="2030-07-02T17:00:00Z", quote=None, confidence="high"):
+    row = judgment(item, reset=True, products=list(products), plans=list(plans), windows=list(windows),
+                   reset_at=reset_at, quote=quote or item["text"], confidence=confidence)
+    return reset_events.from_classification(item, row, NOW, row_author())
+
+
+def row_author():
+    return announcements.SOURCE.rstrip('/').rsplit('/', 1)[-1]
 
 
 class AnnouncedResetTests(unittest.TestCase):
-    def test_announcement_never_postpones_an_earlier_provider_reset(self):
-        results = [SourceResult("t3", "ok", windows=[
-            {"provider": "codex", "quotaId": "session", "resetEpoch": NOW + 100},
-            {"provider": "other", "quotaId": "weekly", "resetEpoch": NOW + 600000}])]
-        self.assertEqual(announcements.overrides(results, {"announcements": [announcements.parse(post())]}, NOW), [])
+    def test_recorded_day_17_18_20_followup_and_non_reset_fixtures(self):
+        fixtures = [
+            post(URL, "Day 17/ Bet you thought we forgot, but no, it's reset day today."),
+            post(URL + "2", "Day 18/ Decisions API is GA, but yes… that's a reset!"),
+            post(URL + "3", "Day 20/ Rest and reset."),
+            post(FOLLOWUP_URL, "Codex weekly limits reset at 17:00 UTC tomorrow."),
+            post(URL + "4", "The new editor is available today."),
+        ]
+        rows = [
+            judgment(fixtures[0], reset=True, products=["codex"], plans=["all"], windows=["unknown"],
+                     quote="it's reset day today", confidence="low"),
+            judgment(fixtures[1], reset=True, products=["codex"], plans=["all"], windows=["unknown"],
+                     quote="that's a reset!", confidence="low"),
+            judgment(fixtures[2], reset=False),
+            judgment(fixtures[3], reset=True, products=["codex"], plans=["all"], windows=["weekly"],
+                     reset_at="2030-07-02T17:00:00Z", quote="Codex weekly limits reset at 17:00 UTC tomorrow.",
+                     confidence="high"),
+            judgment(fixtures[4], reset=False),
+        ]
+        accepted = announcements.validate_classifications(fixtures, batch_value(fixtures, rows), NOW)
+        self.assertEqual([row["source_url"] for row in accepted], [URL, URL + "2", FOLLOWUP_URL])
+        self.assertEqual([row["confidence"] for row in accepted], ["low", "low", "high"])
+        self.assertEqual(accepted[2]["windows"], ["weekly"])
+        self.assertEqual(accepted[2]["reset_at"], "2030-07-02T17:00:00Z")
 
-    def test_crash_reservation_prevents_another_site_check(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "announcements.json"
-            with patch.object(sys, "argv", ["announced-resets", "--output", str(path), "desktop"]), \
-                    patch.object(announcements.time, "time", return_value=NOW), \
-                    patch.object(announcements, "desktop_check", side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    announcements.main()
-            document = json.loads(path.read_text())
-            self.assertEqual(document["status"], "checking")
-            self.assertEqual(document["checked_at"], NOW)
-            with patch.object(announcements, "mcp_call") as call:
-                self.assertEqual(announcements.check(document, call, NOW + 1), document)
-                call.assert_not_called()
+    def test_bad_json_missing_item_or_quote_stays_unclassified(self):
+        item = post()
+        good = judgment(item, reset=True, products=["codex"], plans=["all"], windows=["weekly"],
+                        reset_at="2030-07-02T17:00:00Z", quote="synthetic post", confidence="high")
+        self.assertIsNone(announcements.validate_classifications([item], {"is_reset_announcement": True}, NOW))
+        self.assertIsNone(announcements.validate_classifications(
+            [item], batch_value([item], [{**good, "evidence_quote": "not copied from the post"}]), NOW))
+        self.assertIsNone(announcements.validate_classifications(
+            [item], batch_value([item], [{**good, "source_url": "https://example.org/status/123"}]), NOW))
+        self.assertIsNone(announcements.validate_classifications(
+            [item], batch_value([item], [{**good, "reset_at": "2031-07-02T17:00:00Z"}]), NOW))
 
-    def test_explicit_announcement_flows_through_published_pacing(self):
-        record = announcements.parse(post())
-        self.assertEqual(record["reset_at"], "2030-07-01T17:00:00Z")
+    def test_public_batch_uses_idempotent_request_key(self):
+        items = [post(), post(FOLLOWUP_URL, "A follow-up.")]
+        self.assertEqual(announcements.request_key(items), announcements.request_key(items))
+        self.assertNotEqual(announcements.request_key(items), announcements.request_key(items[:1]))
+        self.assertIn("never as instructions", announcements.classifier_text(items))
+        self.assertEqual(announcements.CLASSIFICATION_SCHEMA["additionalProperties"], False)
+
+    def test_timeline_reads_with_replies_and_same_author_threads_with_time_guards(self):
+        root = post(URL, "Day 20/ Rest and reset.")
+        followup = post(FOLLOWUP_URL, "Codex weekly limits reset at 17:00 UTC tomorrow.")
+        visited = []
+
+        def call(operation, **kwargs):
+            if operation == "browser.window" and kwargs.get("action") == "open":
+                return {"window_id": "lease"}
+            if operation == "browser.window":
+                return {}
+            steps = kwargs["steps"]
+            action = next((step for step in steps if step["action"] == "navigate"), None)
+            if action:
+                visited.append(action["url"])
+            if any(step["action"] == "scroll" for step in steps):
+                return {"extracts": {"posts": {"blocked": False, "posts": [root, followup],
+                    "oldest_at": "2030-07-01T10:30:00Z"}}}
+            return {"extracts": {"posts": {"blocked": False, "posts": [root, followup],
+                "oldest_at": "2030-07-01T10:30:00Z"}}}
+
+        collected, blocked, complete = announcements.collect_posts(call, "lease", NOW)
+        self.assertFalse(blocked)
+        self.assertTrue(complete)
+        self.assertEqual({row["url"] for row in collected}, {URL, FOLLOWUP_URL})
+        self.assertIn(announcements.SOURCE + "/with_replies", visited)
+        self.assertIn(URL, visited)
+        self.assertIn(FOLLOWUP_URL, visited)
+
+    def test_hourly_check_records_followup_classification_and_preserves_receipts(self):
+        root = post(URL, "Day 20/ Rest and reset.")
+        followup = post(FOLLOWUP_URL, "Codex weekly limits reset at 17:00 UTC tomorrow.")
+        prior = event(post(URL + "9", "Codex limits reset tomorrow."))
+        calls = []
+
+        def browser(operation, **kwargs):
+            calls.append((operation, kwargs))
+            if operation == "browser.window" and kwargs.get("action") == "open":
+                return {"window_id": "lease"}
+            if operation == "browser.window":
+                return {}
+            return {"extracts": {"posts": {"blocked": False, "posts": [root, followup],
+                "oldest_at": "2030-07-01T10:30:00Z"}}}
+
+        def classify(posts, key):
+            self.assertEqual({row["url"] for row in posts}, {URL, FOLLOWUP_URL})
+            return {"pending": False, "entries": [event(followup, quote="Codex weekly limits reset at 17:00 UTC tomorrow.")]}
+
+        old_notice = {**prior, "notice_sent_at": NOW - 100}
+        result = announcements.check({"schema": 1, "announcements": [old_notice]}, browser, NOW, classify)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["classification_pending"], [])
+        self.assertIn(old_notice, result["announcements"])
+        saved = next(row for row in result["announcements"] if row["source_url"] == FOLLOWUP_URL)
+        self.assertEqual(saved["windows"], ["weekly"])
+        self.assertEqual(saved["confidence"], "high")
+        self.assertEqual(announcements.health(result, NOW)["classification_pending"], 0)
+
+    def test_unanswered_or_malformed_batch_remains_pending_and_visible(self):
+        item = post()
+
+        def browser(operation, **kwargs):
+            if operation == "browser.window" and kwargs.get("action") == "open":
+                return {"window_id": "lease"}
+            if operation == "browser.window":
+                return {}
+            return {"extracts": {"posts": {"blocked": False, "posts": [item],
+                "oldest_at": "2030-07-01T10:30:00Z"}}}
+
+        def classify(posts, key):
+            self.assertIsNone(announcements.validate_classifications(posts, {"malformed": True}, NOW))
+            return {"pending": True, "retry": True, "request_key": key, "job_id": "durable-job"}
+
+        result = announcements.check({"schema": 1, "announcements": []}, browser, NOW, classify)
+        self.assertEqual(result["announcements"], [])
+        self.assertEqual(len(result["classification_pending"]), 1)
+        self.assertEqual(result["classification_pending"][0]["job_id"], "durable-job")
+        self.assertTrue(result["classification_pending"][0]["request_key"].endswith("-retry-1"))
+        health = announcements.health(result, NOW)
+        self.assertEqual(health["classification_pending"], 1)
+        metric = {name: value for name, _, value in announcements.health_samples(result, NOW)}
+        self.assertEqual(metric["ghostship_ai_announcements_classification_pending"], 1.0)
+
+    def test_sign_in_wall_is_blocked_without_classifying_and_backs_off(self):
+        calls = []
+        def browser(operation, **kwargs):
+            calls.append((operation, kwargs))
+            if operation == "browser.window" and kwargs.get("action") == "open":
+                return {"window_id": "lease"}
+            if operation == "browser.window":
+                return {}
+            return {"extracts": {"posts": {"blocked": True, "posts": [], "oldest_at": None}}}
+        result = announcements.check({"schema": 1, "announcements": []}, browser, NOW,
+                                    lambda *_: self.fail("blocked pages must not reach inference"))
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["next_check_at"], NOW + announcements.BACKOFF)
+        self.assertEqual(announcements.health(result, NOW)["state"], "blocked")
+        self.assertEqual(calls[-1], ("browser.window", {"action": "close", "window_id": "lease"}))
+
+    def test_explicit_reset_affects_only_matching_window_and_confirmation_is_bounded(self):
+        record = event(post(), quote="A public synthetic post.")
         measured = {"provider": "codex", "quotaId": "weekly", "kind": "weekly",
                     "usedRatio": .5, "resetEpoch": NOW + 600000,
                     "durationSeconds": 604800, "observedAtEpoch": NOW}
         results = [SourceResult("t3", "ok", windows=[measured.copy()])]
-        before = model_selection.limiting_window([snapshot._window_record(measured, NOW)], "2030-07-01T12:00:00Z")
-        reset_overrides.apply(results, announcements.overrides(results, {"announcements": [record]}, NOW), NOW)
-        inputs = main.ranking_inputs(results, main.catalog_module.Catalog({}), {}, results[0].windows, now=NOW)
-        window = snapshot._window_record(inputs["windows"]["codex"][0], NOW)
-        limit = model_selection.limiting_window([window], "2030-07-01T12:00:00Z")
-        self.assertEqual(limit["reset_label"], "announced reset")
-        self.assertEqual(limit["reset_source"], "announced")
-        self.assertEqual(limit["reset_at"], record["reset_at"])
-        self.assertEqual(limit["provider_reset_at"], snapshot._iso(measured["resetEpoch"]))
-        self.assertNotEqual(limit["pace_state"], before["pace_state"])
-        self.assertEqual(limit["pace_state"], "ahead")
-        self.assertEqual(results[0].windows[0]["usedRatio"], .5)
-        self.assertEqual(results[0].windows[0]["observedAtEpoch"], NOW)
-        gauges = snapshot.account_window_samples({"quota": {"accounts": {"codex": [window]}}})
-        self.assertTrue(all("announced reset" in labels["label"] for _, labels, _ in gauges))
-        published = main.build_snapshot(results, [], {"announced_resets": {"schema": 1,
-            "status": "ok", "announcements": [record]}}, NOW, measured_windows=results[0].windows,
-            catalog=main.catalog_module.Catalog({}))
-        self.assertEqual(published["announced_resets"]["announcements"][0]["source_url"], URL)
-        account_window = published["quota"]["accounts"]["codex"][0]
-        self.assertEqual(account_window["reset_label"], "announced reset")
-        self.assertEqual(account_window["reset_at"], record["reset_at"])
-        self.assertEqual(announcements.overrides(results, {"announcements": [record]}, NOW + 18001), [])
-        reset_overrides.apply(results, [{"provider": "codex", "quota_id": "weekly",
-                                        "reset_at": "2030-07-01T18:00:00Z"}], NOW)
-        self.assertEqual(results[0].windows[0]["resetSource"], "custom")
-        self.assertEqual(results[0].windows[0]["providerResetEpoch"], measured["resetEpoch"])
+        self.assertEqual(announcements.overrides(results, {"announcements": [record]}, NOW)[0]["reset_at"], record["reset_at"])
+        other = {"provider": "codex", "quotaId": "session", "kind": "session", "durationSeconds": 18000}
+        self.assertFalse(reset_events.matches(record, other))
+        ambiguous = event(post(URL + "2", "An ambiguous reset."), windows=("weekly",), reset_at=None,
+                          confidence="low", quote="An ambiguous reset.")
+        document = {"announcements": [ambiguous]}
+        announcements.confirm(document, ambiguous["source_url"], "2030-07-02T17:00:00Z", NOW)
+        self.assertEqual(document["announcements"][0]["confidence"], "confirmed")
+        with self.assertRaisesRegex(ValueError, "future"):
+            announcements.confirm(document, ambiguous["source_url"], "2031-07-02T17:00:00Z", NOW)
 
-    def test_unrelated_features_and_other_authors_are_ignored(self):
-        for text in ("Reset day today!", "I reset my computer today.",
-                     "All Codex users get a banked reset tomorrow at 10am PT.",
-                     "Codex usage limits reset weekly.", "Did Codex weekly limits reset today?",
-                     "We are not resetting Codex usage limits today."):
-            with self.subTest(text=text):
-                self.assertIsNone(announcements.parse(post(text)))
-        self.assertIsNone(announcements.parse(post(url="https://example.org/status/123")))
-        for text in ("All Codex limits reset tomorrow before 10am PT.",
-                     "All Codex limits reset tomorrow at 10am PST.",
-                     "We are resetting Codex weekly usage limits later today."):
-            with self.subTest(text=text):
-                record = announcements.parse(post(text))
-                self.assertIsNone(record["reset_at"])
-                self.assertEqual(record["confidence"], "low")
-
-    def test_blocked_check_stops_closes_and_retains_history(self):
-        calls = []
-        def call(op, **kw):
-            calls.append((op, kw))
-            if kw.get("action") == "open":
-                return {"window_id": "lease"}
-            if op == "browser.op":
-                return {"extracts": {"announcements": {"blocked": True, "posts": [post()]}}}
-            return {}
-        document = {"schema": 1, "announcements": [announcements.parse(post())]}
-        result = announcements.check(document, call, NOW)
-        self.assertEqual(result["status"], "blocked")
-        self.assertEqual(result["announcements"], document["announcements"])
-        self.assertEqual(calls[-1], ("browser.window", {"action": "close", "window_id": "lease"}))
-        self.assertEqual(announcements.check(result, call, NOW + 100), result)
-        self.assertEqual(len(calls), 3)
-        self.assertEqual(result["sources"], [{"source_url": announcements.SOURCE, "status": "blocked"}])
-
-    def test_personal_profile_is_explicit_in_desktop_calls(self):
-        session = SimpleNamespace(call_tool=AsyncMock(return_value=SimpleNamespace(
-            structuredContent={"outcome": "success", "data": {"window_id": "lease"}})))
-        value = asyncio.run(announcements.mcp_call(session, "browser.window", {"action": "open"}))
-        self.assertEqual(value, {"window_id": "lease"})
-        self.assertEqual(session.call_tool.call_args.args[0], "browser_window")
-        self.assertEqual(session.call_tool.call_args.args[1]["identity"], "personal")
-
-    def test_outer_runtime_success_does_not_hide_unavailable_desktop(self):
-        session = SimpleNamespace(call_tool=AsyncMock(return_value=SimpleNamespace(
-            structuredContent={"outcome": "success", "data": {"outcome": "unavailable", "data": {}}})))
-        with self.assertRaises(ValueError):
-            asyncio.run(announcements.mcp_call(session, "browser.window", {"action": "open"}))
-
-    def test_unavailable_desktop_records_fixed_status(self):
-        def call(*args, **kwargs):
-            raise OSError("private transport failure")
-        value = announcements.check({"schema": 1, "announcements": []}, call, NOW)
-        self.assertEqual(value["status"], "unavailable")
-        self.assertNotIn("private", str(value))
-
-    def test_repeat_discovery_deduplicates_source(self):
-        def call(op, **kw):
-            if kw.get("action") == "open":
-                return {"window_id": "lease"}
-            if op == "browser.op":
-                return {"extracts": {"announcements": {"blocked": False, "posts": [post(), post()]}}}
-            return {}
-        first = announcements.check({"schema": 1, "announcements": []}, call, NOW)
-        second = announcements.check(first, call, NOW + announcements.INTERVAL)
-        self.assertEqual(len(second["announcements"]), 1)
-        self.assertEqual(second["status"], "ok")
-
-
-class EventConfirmationTests(unittest.TestCase):
-    def document(self):
-        entry = announcements.parse(post())
-        entry.update(relay_source_url=TOPIC,
-                     confidence='low', reason='community_relay', observed_at=NOW)
-        return {'schema': 1, 'status': 'partial', 'checked_at': NOW, 'announcements': [entry]}
-
-    def test_unverified_relay_is_published_with_link_before_confirmation_changes_pace(self):
-        document = self.document()
-        measured = {'provider': 'codex', 'quotaId': 'weekly', 'kind': 'weekly',
-                    'usedRatio': .5, 'resetEpoch': NOW + 600000,
-                    'durationSeconds': 604800, 'observedAtEpoch': NOW}
-        results = [SourceResult('t3', 'ok', windows=[measured.copy()])]
-        self.assertEqual(announcements.overrides(results, document, NOW), [])
-        text = main.render([], [], NOW, 0, {'announced_resets': document})
-        self.assertIn('label="announced (unverified)"', text)
-        self.assertIn(document['announcements'][0]['source_url'], text)
-        self.assertIn('ghostship_ai_announced_reset_info', text)
-        dashboard = json.loads((Path(__file__).resolve().parents[1] /
-            'modules/self-hosted/siem/dashboards/ai-usage.json').read_text())
-        rows = [item for item in dashboard['panels'] if item['type'] == 'row']
-        panel = next(item for row in rows for item in row['panels'] if item['id'] == 202)
-        self.assertIn('ghostship_ai_announced_reset_info', panel['targets'][0]['expr'])
-        self.assertTrue(panel['options']['enablePagination'])
-        link = panel['fieldConfig']['overrides'][0]['properties'][0]['value'][0]
-        self.assertEqual(link['url'], '${__value.raw}')
-        before = model_selection.limiting_window([snapshot._window_record(measured, NOW)], '2030-07-01T12:00:00Z')
-        announcements.confirm(document, document['announcements'][0]['source_url'], '2030-07-01T17:00:00Z', NOW)
-        reset_overrides.apply(results, announcements.overrides(results, document, NOW), NOW)
-        published = main.build_snapshot(results, [], {'announced_resets': document}, NOW,
-            measured_windows=results[0].windows, catalog=main.catalog_module.Catalog({}))
-        window = published['quota']['accounts']['codex'][0]
-        self.assertEqual(window['reset_at'], '2030-07-01T17:00:00Z')
-        self.assertEqual(window['reset_label'], 'announced reset')
-        after = model_selection.limiting_window([window], '2030-07-01T12:00:00Z')
-        self.assertNotEqual(after['pace_state'], before['pace_state'])
-        self.assertEqual(after['pace_state'], 'ahead')
-        self.assertEqual(results[0].windows[0]['usedRatio'], .5)
-        self.assertEqual(announcements.overrides(results, document, NOW + 18001), [])
-
-    def test_confirmation_is_explicit_bounded_and_requires_a_recorded_source(self):
-        for reset in ('2030-07-01T17:00:00', '2030-06-30T17:00:00Z', '2030-08-01T17:00:00Z', 'unknown'):
-            with self.subTest(reset=reset), self.assertRaises(ValueError):
-                announcements.confirm(self.document(), URL, reset, NOW)
-        with self.assertRaises(ValueError):
-            announcements.confirm(self.document(), TOPIC + '#announcement-999', '2030-07-01T17:00:00Z', NOW)
-
-    def test_confirmation_cli_writes_the_shared_cache_without_browsing(self):
+    def test_notice_receipts_survive_cache_load_and_deduplicate(self):
+        item = post()
+        record = event(item)
+        document = {"schema": 1, "status": "ok", "announcements": [record],
+                    "notice_receipts": {URL: NOW}}
+        import tempfile
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'announcements.json'
-            document = self.document()
+            path = Path(directory) / "announcements.json"
             path.write_text(json.dumps(document))
-            argv = ['announced-resets', '--output', str(path), '--confirm',
-                    document['announcements'][0]['source_url'], '--reset-at', '2030-07-01T17:00:00Z']
-            with patch.object(sys, 'argv', argv), patch.object(announcements.os, 'geteuid', return_value=0), \
-                 patch.object(announcements.time, 'time', return_value=NOW), \
-                 patch.object(announcements, 'desktop_check') as desktop:
-                announcements.main()
-                desktop.assert_not_called()
-            self.assertEqual(json.loads(path.read_text())['announcements'][0]['confidence'], 'confirmed')
-            with patch.object(sys, 'argv', argv), patch.object(announcements.os, 'geteuid', return_value=1000), \
-                 self.assertRaises(SystemExit):
-                announcements.main()
+            self.assertEqual(announcements.load(path)["notice_receipts"][URL], NOW)
 
-    def test_notice_retries_failure_and_is_not_repeated_after_success(self):
-        document = self.document()
-        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=1)) as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW)
-            self.assertNotIn('notice_sent_at', document['announcements'][0])
-            self.assertIn(document['announcements'][0]['source_url'], publish.call_args.args[0][-1])
-        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
-            announcements.notify_pending(document, 'fixture-notify', NOW + 2)
-            self.assertEqual(publish.call_count, 1)
-        self.assertEqual(announcements.overrides([], document, NOW), [])
+    def test_agent_cli_is_wired_into_hourly_service_without_deploying(self):
+        source = (Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage/announced-resets.nix").read_text()
+        self.assertIn("--agent ${tools.agent}/bin/agent", source)
+        self.assertIn("GHOSTSHIP_INFERENCE_BRIDGE_REQUIRED=1", source)
 
-    def test_rediscovery_preserves_confirmation_and_successful_notice(self):
-        document = self.document()
-        url = document['announcements'][0]['source_url']
-        announcements.confirm(document, url, '2030-07-01T18:00:00Z', NOW)
-        document['announcements'][0]['notice_sent_at'] = NOW
-        def call(op, **kwargs):
-            if kwargs.get('action') == 'open':
-                return {'window_id': 'lease'}
-            if op == 'browser.op':
-                current = kwargs['steps'][0]['url']
-                return {'extracts': {'announcements': {'blocked': False,
-                    'posts': [post()]}}}
-            return {}
-        result = announcements.check(document, call, NOW + announcements.INTERVAL)
-        self.assertEqual(result['announcements'][0]['confidence'], 'confirmed')
-        self.assertEqual(result['announcements'][0]['notice_sent_at'], NOW)
-
-        self.assertEqual(result['announcements'][0]['reset_at'], '2030-07-01T18:00:00Z')
-        self.assertEqual(result['announcements'][0]['reason'], 'operator_confirmed')
-
-
-class HourlyPrimaryTests(unittest.TestCase):
-    def browser(self, visited, blocked=False):
-        def call(op, **kwargs):
-            if kwargs.get('action') == 'open':
-                return {'window_id': 'lease'}
-            if op == 'browser.op':
-                url = kwargs['steps'][0]['url']
-                visited.append(url)
-                return {'extracts': {'announcements': {
-                    'blocked': blocked, 'posts': [post()], 'topics': []}}}
-            return {}
-        return call
-
-    def test_hourly_primary_and_eight_hour_wall_backoff(self):
-        visited = []
-        initial = {'schema': 1, 'announcements': []}
-        first = announcements.check(initial, self.browser(visited), NOW)
-        self.assertEqual(first['next_check_at'], NOW + 3600)
-        announcements.check(first, self.browser(visited), NOW + 3599)
-        self.assertEqual(visited, [announcements.SOURCE])
-        blocked = announcements.check(first, self.browser(visited, True), NOW + 3600)
-        self.assertEqual(blocked['next_check_at'], NOW + 9 * 3600)
-        count = len(visited)
-        announcements.check(blocked, self.browser(visited), NOW + 8 * 3600)
-        self.assertEqual(len(visited), count)
-        recovered = announcements.check(blocked, self.browser(visited), NOW + 9 * 3600)
-        self.assertEqual(recovered['next_check_at'], NOW + 10 * 3600)
-        self.assertEqual(recovered['sources'][0]['status'], 'ok')
-        self.assertNotIn('blocked_since', recovered)
-
-    def test_blocked_notice_once_per_episode_with_failed_publication_retry(self):
-        document = announcements.check({'schema': 1, 'announcements': []}, self.browser([], True), NOW)
-        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
-            announcements.notify_pending(document, 'fixture-notify', NOW)
-        self.assertNotIn('blocked_notice_sent_at', document)
-        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
-            announcements.notify_pending(document, 'fixture-notify', NOW + 2)
-            still_blocked = announcements.check(document, self.browser([], True), NOW + 8 * 3600)
-            announcements.notify_pending(still_blocked, 'fixture-notify', NOW + 8 * 3600)
-            self.assertEqual(publish.call_count, 1)
-            first_key = publish.call_args.args[0]
-            recovered = announcements.check(still_blocked, self.browser([]), NOW + 16 * 3600)
-            # Ignore the reset post: this test concerns wall notices only.
-            recovered['announcements'] = []
-            blocked_again = announcements.check(recovered, self.browser([], True), NOW + 17 * 3600)
-            announcements.notify_pending(blocked_again, 'fixture-notify', NOW + 17 * 3600)
-            self.assertEqual(publish.call_count, 2)
-            self.assertNotEqual(first_key[first_key.index('--dedupe') + 1],
-                                publish.call_args.args[0][first_key.index('--dedupe') + 1])
-
-    def test_existing_relay_receipt_suppresses_primary_post_notice_in_either_order(self):
-        for reverse in (False, True):
-            relay = EventConfirmationTests().document()['announcements'][0]
-            relay.update(source_url=TOPIC + '#announcement-1234567890', primary_source_url=URL, notice_sent_at=NOW)
-            primary = announcements.parse(post())
-            records = [relay, primary]
-            if reverse:
-                records.reverse()
-            with patch.object(announcements.subprocess, 'run') as publish:
-                announcements.notify_pending({'announcements': records}, 'fixture-notify', NOW + 1)
-                publish.assert_not_called()
-            self.assertEqual(primary['notice_sent_at'], NOW)
-
-    def test_new_posts_share_canonical_notice_key_and_all_confidences_notify(self):
-        relay = EventConfirmationTests().document()['announcements'][0]
-        primary = announcements.parse(post())
-        low = announcements.parse(post('We are resetting Codex weekly usage limits later today.', url=URL + '1'))
-        document = {'announcements': [relay, primary, low]}
-        with patch.object(announcements.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW)
-            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
-            self.assertEqual(publish.call_count, 2)
-            self.assertTrue(any('Codex reset announced' in call.args[0] for call in publish.call_args_list))
-            self.assertTrue(any('Codex reset announcement needs confirmation' in call.args[0]
-                                for call in publish.call_args_list))
-        self.assertTrue(all(row['notice_sent_at'] == NOW for row in document['announcements']))
-
-    def test_crash_reservation_backs_off_for_eight_hours(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'announcements.json'
-            with patch.object(sys, 'argv', ['checker', '--output', str(path), 'desktop']), \
-                 patch.object(announcements.time, 'time', return_value=NOW), \
-                 patch.object(announcements, 'desktop_check', side_effect=KeyboardInterrupt):
-                with self.assertRaises(KeyboardInterrupt):
-                    announcements.main()
-            document = json.loads(path.read_text())
-            self.assertFalse(announcements.due(document, NOW + 7 * 3600))
-            self.assertTrue(announcements.due(document, NOW + 8 * 3600))
-
-    def test_timer_invokes_hourly_but_cache_owns_wall_backoff(self):
-        source = (Path(__file__).resolve().parents[1] /
-                  'modules/self-hosted/ai-usage/announced-resets.nix').read_text()
-        self.assertIn('OnUnitActiveSec = "1h";', source)
-
-
-class UsageLimitEventTests(unittest.TestCase):
-    def weekly(self, **kwargs):
-        return {'provider': 'codex', 'quotaId': 'weekly', 'kind': 'weekly', 'usedRatio': 1.0,
-                'durationSeconds': 604800, 'resetEpoch': NOW + 500000,
-                'observedAtEpoch': NOW - 100, **kwargs}
-
-    def test_explicit_weekly_reset_has_quote_post_time_scope_and_confirmation(self):
-        record = announcements.parse(post('We are resetting all Codex weekly usage limits tomorrow at 10am PT.'))
-        self.assertEqual(record['confidence'], 'confirmed')
-        self.assertEqual(record['published_at'], '2030-06-30T20:00:00Z')
-        self.assertIn('resetting all Codex weekly', record['quote'])
-        self.assertEqual(record['products'], ['codex'])
-        self.assertEqual(record['plans'], ['all'])
-        self.assertEqual(record['windows'], ['weekly'])
-        self.assertEqual(record['reset_at'], '2030-07-01T17:00:00Z')
-
-    def test_explicit_iso_and_24_hour_reset_clocks_are_confirmed(self):
-        for text in ('All Codex weekly usage limits reset at 2030-07-01T17:00:00Z.',
-                     'All Codex weekly usage limits reset tomorrow at 10:00 PT.'):
-            with self.subTest(text=text):
-                record = announcements.parse(post(text))
-                self.assertEqual(record['confidence'], 'confirmed')
-                self.assertEqual(record['reset_at'], '2030-07-01T17:00:00Z')
-
-    def test_unrelated_mentions_are_not_events_but_ambiguous_announcements_are(self):
-        for text in ('I reset my laptop today.', 'Codex reset day!',
-                     'The Codex usage limits reset weekly.',
-                     'Here is how to reset the Codex usage display today.',
-                     'We reset the Codex usage dashboard today.'):
-            self.assertIsNone(announcements.parse(post(text)), text)
-        record = announcements.parse(post('We are resetting Codex weekly usage limits later today.'))
-        self.assertEqual(record['confidence'], 'low')
-        self.assertEqual(record['windows'], ['weekly'])
-        self.assertIsNone(record['reset_at'])
-        self.assertEqual(announcements.overrides([SourceResult('fixture', 'ok', windows=[self.weekly()])],
-                                               {'announcements': [record]}, NOW), [])
-
-    def test_known_time_with_unspecified_window_stays_unverified(self):
-        record = announcements.parse(post('We are resetting Codex usage limits now.'))
-        self.assertEqual(record['windows'], ['unknown'])
-        self.assertEqual(record['reset_at'], record['published_at'])
-        self.assertEqual(record['confidence'], 'low')
-        with self.assertRaises(ValueError):
-            announcements.confirm({'announcements': [record]}, URL, '2030-07-01T17:00:00Z', NOW)
-
-    def test_weekly_event_does_not_override_session_chatgpt_or_unknown_plan(self):
-        record = announcements.parse(post('We are resetting Codex Pro weekly usage limits tomorrow at 10am PT.'))
-        windows = [self.weekly(plan='pro'), self.weekly(quotaId='session', kind='session', plan='pro'),
-                   self.weekly(provider='chatgpt', plan='pro'), self.weekly()]
-        overrides = announcements.overrides([SourceResult('fixture', 'ok', windows=windows)],
-                                            {'announcements': [record]}, NOW)
-        self.assertEqual(len(overrides), 1)
-        self.assertEqual(overrides[0]['quota_id'], 'weekly')
-        self.assertEqual(overrides[0]['provider'], 'codex')
-
-    def test_scope_ignores_other_launch_prose_and_plus_as_a_conjunction(self):
-        record = announcements.parse(post('ChatGPT Plus is getting a feature. '
-            'Plus, we are resetting all Codex weekly usage limits now.'))
-        self.assertEqual(record['products'], ['codex'])
-        self.assertEqual(record['plans'], ['all'])
-        self.assertEqual(record['windows'], ['weekly'])
-        self.assertEqual(record['confidence'], 'confirmed')
-        self.assertNotIn('getting a feature', record['quote'])
-
-    def test_explicit_five_hour_and_chatgpt_scope_are_separate(self):
-        record = announcements.parse(post('All ChatGPT Plus 5h usage limits reset tomorrow at 10am PT.'))
-        self.assertEqual(record['confidence'], 'confirmed')
-        self.assertEqual(record['products'], ['chatgpt'])
-        self.assertEqual(record['windows'], ['session'])
-        self.assertEqual(record['plans'], ['plus'])
-        self.assertFalse(announcements.reset_events.matches(record, self.weekly(plan='plus')))
-
-    def test_completed_weekly_reset_changes_published_pace_and_picker_headroom(self):
-        published_at = '2030-07-01T11:59:40Z'
-        record = announcements.parse(post('We just reset all Codex weekly usage limits now.', published_at=published_at))
-        weekly = self.weekly()
-        session = self.weekly(quotaId='session', kind='session', usedRatio=.2, observedAtEpoch=NOW)
-        results = [SourceResult('fixture', 'ok', windows=[weekly, session])]
-        before = snapshot._window_record(weekly.copy(), NOW)
-        announcements.reset_events.apply_completed(results, {'announcements': [record]}, NOW)
-        self.assertEqual(weekly['usedRatio'], 0)
-        self.assertEqual(weekly['providerUsedRatio'], 1)
-        self.assertEqual(session['usedRatio'], .2)
-        self.assertEqual(weekly['resetEpoch'], NOW - 20 + 604800)
-        self.assertEqual(weekly['observedAtEpoch'], NOW - 20)
-        inputs = main.ranking_inputs(results, main.catalog_module.Catalog({}), {}, results[0].windows, now=NOW)
-        window = inputs['windows']['codex'][0]
-        self.assertEqual(main.ranking_module._window_state(window, NOW), ('known', 1.0))
-        failure = {'scope': 'account', 'reason': 'account_usage_limit', 'observed_at': NOW - 50}
-        self.assertTrue(main.ranking_module._quota_recovered(failure, inputs['windows']['codex'], NOW))
-        published = main.build_snapshot(results, [], {'announced_resets': {'announcements': [record]}}, NOW,
-                                       measured_windows=results[0].windows, catalog=main.catalog_module.Catalog({}))
-        actual = published['quota']['accounts']['codex'][0]
-        self.assertEqual(published['quota']['provider_capacity']['codex']['remaining_ratio'], .8)
-        self.assertEqual(published['quota']['provider_capacity']['codex']['unknown_windows'], 0)
-        self.assertEqual(actual['remaining_ratio'], 1)
-        self.assertEqual(actual['evidence'], 'announced_reset')
-        self.assertEqual(actual['provider_used_ratio'], 1)
-        self.assertEqual(actual['announcement_url'], URL)
-        self.assertEqual(actual['reset_source'], 'announced')
-        gauges = snapshot.account_window_samples(published)
-        self.assertTrue(any(name == 'ghostship_ai_account_window_remaining_ratio' and value == 1
-                            and labels['evidence'] == 'announced_reset' for name, labels, value in gauges))
-        self.assertNotEqual(model_selection.limiting_window([actual], '2030-07-01T12:00:00Z')['pace_state'],
-                            model_selection.limiting_window([before], '2030-07-01T12:00:00Z')['pace_state'])
-        # Reapplication is idempotent and does not erase provider provenance.
-        announcements.reset_events.apply_completed(results, {'announcements': [record]}, NOW + 1)
-        self.assertEqual(weekly['providerUsedRatio'], 1)
-
-    def test_newer_provider_truth_custom_override_and_expired_event_win(self):
-        record = announcements.parse(post('We just reset all Codex weekly usage limits now.',
-                                          published_at='2030-07-01T11:59:40Z'))
-        for window, now in ((self.weekly(observedAtEpoch=NOW, usedRatio=.3), NOW),
-                            (self.weekly(resetSource='custom'), NOW),
-                            (self.weekly(), NOW + 604800)):
-            original = dict(window)
-            announcements.reset_events.apply_completed([SourceResult('fixture', 'ok', windows=[window])],
-                                                      {'announcements': [record]}, now)
-            self.assertEqual(window, original)
-        weekly = self.weekly()
-        announcements.reset_events.apply_completed([SourceResult('fixture', 'ok', windows=[weekly])],
-                                                  {'announcements': [record]}, NOW + 1801)
-        inputs = main.ranking_inputs([], main.catalog_module.Catalog({}), {}, [weekly], now=NOW + 1801)
-        self.assertEqual(main.ranking_module._window_state(inputs['windows']['codex'][0], NOW + 1801),
-                         ('unknown', None))
-
-    def test_migration_drops_keyword_records_but_preserves_receipts_and_recheck_urls(self):
-        legacy = {'source_url': TOPIC + '#announcement-1234567890', 'primary_source_url': URL,
-                  'confidence': 'low', 'scope': 'unknown', 'notice_sent_at': NOW}
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'events.json'
-            path.write_text(json.dumps({'schema': 1, 'announcements': [legacy, {'source_url': URL}]}))
-            document = announcements.load(path)
-        self.assertEqual(document['announcements'], [])
-        self.assertEqual(document['recheck_urls'], [URL])
-        self.assertEqual(document['notice_receipts'], {URL: NOW})
-        self.assertEqual(list(announcements.samples(document)), [])
-        document['announcements'] = [announcements.parse(post())]
-        with patch.object(announcements.subprocess, 'run') as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
-            publish.assert_not_called()
-
-    def test_notice_receipts_outlive_the_event_history_bound(self):
-        receipts = {URL + str(i): NOW for i in range(250)}
-        receipts[URL] = NOW
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'events.json'
-            path.write_text(json.dumps({'schema': 1, 'announcements': [], 'notice_receipts': receipts}))
-            document = announcements.load(path)
-        document['announcements'] = [announcements.parse(post())]
-        with patch.object(announcements.subprocess, 'run') as publish:
-            announcements.notify_pending(document, 'fixture-notify', NOW + 1)
-            publish.assert_not_called()
-        self.assertEqual(len(document['notice_receipts']), 251)
-
-    def test_migration_rechecks_primary_posts_and_ignores_non_announcements(self):
-        visited = []
-        def call(op, **kwargs):
-            if kwargs.get('action') == 'open':
-                return {'window_id': 'lease'}
-            if op == 'browser.op':
-                url = kwargs['steps'][0]['url']; visited.append(url)
-                posts = [post('I reset my laptop today.')] if url == URL else [post()]
-                return {'extracts': {'announcements': {'blocked': False, 'posts': posts}}}
-            return {}
-        document = announcements.check({'schema': 1, 'announcements': [], 'recheck_urls': [URL]}, call, NOW)
-        self.assertEqual(visited, [announcements.SOURCE, URL])
-        self.assertEqual(document['recheck_urls'], [])
-        # Timeline evidence remains valid, but the permalink correction removes it.
-        self.assertEqual(document['announcements'], [])
-
-    def test_provider_series_contains_bounded_quote_scope_time_and_primary_link(self):
-        record = announcements.parse(post())
-        rows = list(announcements.samples({'announcements': [record]}))
-        self.assertEqual(len(rows), 1)
-        name, labels, value = rows[0]
-        self.assertEqual(name, 'ghostship_ai_announced_reset_info')
-        self.assertEqual(labels['provider'], 'codex')
-        self.assertEqual(labels['source_url'], URL)
-        self.assertEqual(labels['published_at'], record['published_at'])
-        self.assertEqual(labels['quote'], record['quote'])
-        self.assertEqual(labels['windows'], 'all')
-        self.assertEqual(labels['reset_at'], record['reset_at'])
-        self.assertEqual(labels['confidence'], 'confirmed')
-        self.assertEqual(value, 1)
-
-    def test_deployed_checker_keeps_its_parser_module_on_python_import_path(self):
-        source = (Path(__file__).resolve().parents[1] /
-                  'modules/self-hosted/ai-usage/announced-resets.nix').read_text()
-        self.assertEqual(source.count('${./collector}/announced_resets.py'), 2)
-
-
-class SandboxedDesktopTransportTests(unittest.TestCase):
-    def test_deployed_wrapper_uses_the_remote_api_instead_of_local_storage(self):
-        source = (Path(__file__).resolve().parents[1] /
-                  'modules/self-hosted/ai-usage/announced-resets.nix').read_text()
-        script = re.search(r'desktop = pkgs.writeShellScript "[^"]+" \'\'(.*?)\'\';', source, re.S)[1]
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'bin').mkdir()
-            podman = root / 'bin/podman'
-            podman.write_text('#!/bin/sh\n[ "$1" = "--remote" ] || exit 42\n[ "$2" = "exec" ] || exit 43\ncat\n')
-            podman.chmod(0o700)
-            result = subprocess.run(['bash', '-c', script.replace('${pkgs.podman}', str(root))],
-                                    input='MCP probe\n', text=True, capture_output=True, timeout=5)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, 'MCP probe\n')
-
-
-class MonitorHealthTests(unittest.TestCase):
-    def test_live_reset_day_phrasings_record_unverified_events(self):
-        for text in (
-                "Day 17/ Bet you thought we forgot, but no, it's reset day today.",
-                "Day 18/ Decisions API is GA, but yes\u2026 that's a reset!"):
-            record = announcements.parse({"url": URL, "text": text,
-                                          "published_at": "2026-10-22T05:00:00Z"})
-            self.assertIsNotNone(record, text)
-            self.assertEqual(record["confidence"], "low")
-            self.assertEqual(record["products"], ["codex"])
-            self.assertEqual(record["windows"], ["unknown"])
-            self.assertIsNone(record["reset_at"])
-            self.assertEqual(record["reason"], "ambiguous_reset_scope")
-            measured = {"provider": "codex", "quotaId": "weekly", "kind": "weekly",
-                        "usedRatio": .5, "resetEpoch": NOW + 600000,
-                        "durationSeconds": 604800, "observedAtEpoch": NOW}
-            results = [SourceResult("t3", "ok", windows=[measured.copy()])]
-            # An unverified event is visible but never changes capacity.
-            self.assertEqual(announcements.overrides(
-                results, {"announcements": [record]}, NOW), [])
-
-    def test_a_generic_reset_mention_without_the_primary_phrasing_is_ignored(self):
-        for text in ("Reset day today!", "I reset my computer today."):
-            self.assertIsNone(announcements.parse(
-                {"url": URL, "text": text, "published_at": "2026-10-22T05:00:00Z"}))
-
-    def test_health_reports_ok_stale_blocked_and_unknown(self):
-        now = NOW
-        ok = announcements.health(
-            {"status": "ok", "checked_at": now, "last_success_at": now}, now)
-        self.assertEqual((ok["state"], ok["reason"]), ("ok", ""))
-        self.assertAlmostEqual(ok["last_success_age_seconds"], 0)
-
-        stale = announcements.health(
-            {"status": "ok", "last_success_at": now - 4 * 3600}, now)
-        self.assertEqual(stale["state"], "stale")
-        self.assertIn("last successful read", stale["reason"])
-
-        failed = announcements.health(
-            {"status": "unavailable", "last_success_at": now - 60}, now)
-        self.assertEqual(failed["state"], "stale")
-        self.assertEqual(failed["reason"], "the last read did not succeed")
-
-        blocked = announcements.health(
-            {"status": "blocked", "last_success_at": now - 60,
-             "sources": [{"source_url": announcements.SOURCE, "status": "blocked"}]}, now)
+    def test_blocked_health_and_pending_health_are_separate(self):
+        blocked = announcements.health({"status": "blocked", "sources": [
+            {"source_url": announcements.SOURCE, "status": "blocked"}],
+            "classification_pending": [{}]}, NOW)
         self.assertEqual(blocked["state"], "blocked")
-        self.assertTrue(blocked["blocked"])
-
-        unknown = announcements.health({}, now)
-        self.assertEqual(unknown["state"], "unknown")
-
-    def test_health_samples_expose_last_success_and_event_count(self):
-        rows = list(announcements.health_samples(
-            {"status": "ok", "last_success_at": NOW, "announcements": [{}, {}]}, NOW))
-        names = {name: (labels, value) for name, labels, value in rows}
-        self.assertEqual(names["ghostship_ai_announcements_health"][0]["state"], "ok")
-        self.assertEqual(names["ghostship_ai_announcements_last_success_timestamp_seconds"][1], NOW)
-        self.assertEqual(names["ghostship_ai_announcements_events"][1], 2)
-
-    def test_a_successful_read_records_last_success_and_a_failure_preserves_it(self):
-        def call(operation, **kwargs):
-            if operation == "browser.window":
-                return {"window_id": "w"}
-            return {"extracts": {"announcements": {"blocked": False, "posts": []}}}
-
-        document = {"schema": 1, "announcements": [], "checked_at": 0, "next_check_at": 0}
-        updated = announcements.check(document, call, NOW)
-        self.assertEqual(updated["status"], "ok")
-        self.assertEqual(updated["last_success_at"], NOW)
-
-        def fail(operation, **kwargs):
-            raise OSError("desktop unavailable")
-
-        failed = announcements.check(updated, fail, NOW + 3600)
-        self.assertEqual(failed["status"], "unavailable")
-        self.assertEqual(failed["last_success_at"], NOW)
-        self.assertEqual(failed["last_error"], "unavailable")
+        self.assertEqual(blocked["classification_pending"], 1)
 
 
 if __name__ == "__main__":
