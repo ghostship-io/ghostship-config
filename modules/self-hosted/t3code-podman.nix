@@ -600,6 +600,10 @@ in
             RuntimeDirectoryMode = "0700";
             NetworkNamespacePath = "/run/netns/t3code-podman";
             ExecStart = "${pkgs.podman}/bin/podman system service --time=0 unix:///run/t3code-podman-candidate/podman.sock";
+            # The candidate container runs systemd as PID 1. Delegate its
+            # cgroup subtree just like the production Podman manager so its
+            # init can create the service cgroups it needs.
+            Delegate = true;
             Restart = "on-failure";
             RestartSec = 2;
             KillMode = "mixed";

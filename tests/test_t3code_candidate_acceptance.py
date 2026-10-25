@@ -142,6 +142,18 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "systemd entrypoint"):
             acceptance.image_details(archive_path)
 
+    def test_early_candidate_exit_reports_its_exit_code(self):
+        def command(engine, *args, **kwargs):
+            if args[:1] == ("exec",):
+                return Mock(returncode=1, stdout="")
+            if args[:1] == ("inspect",):
+                return Mock(returncode=0, stdout='{"Running":false,"ExitCode":255}')
+            return Mock(returncode=1, stdout="")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, r"exited before app readiness \(exit code 255\)"):
+                acceptance.check_candidate(["podman"], "candidate", "provider.env")
+
     def test_staging_never_copies_oauth_credentials_and_keeps_only_agent_skills(self):
         oauth_paths = (
             ".codex/auth.json", ".claude/.credentials.json",
