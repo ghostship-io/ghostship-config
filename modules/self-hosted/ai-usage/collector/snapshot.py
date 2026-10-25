@@ -3923,6 +3923,12 @@ def build_snapshot(
             binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
             remaining = float(binding["remaining_ratio"])
         provider_capacity[account] = {
+            # This is the one provider-level quota record consumed by the
+            # picker. Keep the older names below as compatibility aliases;
+            # unknown capacity is represented by None, never by zero or 100%.
+            "left": None if remaining is None else round(remaining, 4),
+            "reset": binding.get("reset_at") if binding is not None else None,
+            "exhausted": None if remaining is None else remaining <= 0.0,
             "remaining_ratio": None if remaining is None else round(remaining, 4),
             "binding": None
             if binding is None

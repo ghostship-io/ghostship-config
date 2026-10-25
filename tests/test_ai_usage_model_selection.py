@@ -20,9 +20,32 @@ def candidate(provider, model, quality=80, remaining=1, trust='trusted'):
 
 
 class SelectionTests(unittest.TestCase):
-    def build(self, rows):
-        return selection.build({'generated_at': '2026-10-23T12:00:00Z', 'candidates': rows},
+    def build(self, rows, provider_capacity=None):
+        return selection.build({'generated_at': '2026-10-23T12:00:00Z', 'candidates': rows,
+                                'quota': {'provider_capacity': provider_capacity or {}}},
                                [{'instance_id': 'codex', 'model': 'reviewer'}])
+
+    def test_picker_reads_canonical_provider_exhaustion_and_reset(self):
+        row = candidate('codex', 'reviewer', remaining=0.8)
+        value = self.build([row], {'codex': {
+            'left': 0.0, 'reset': '2026-10-26T12:00:00Z', 'exhausted': True,
+        }})
+        selected = value['worker'][0]
+        self.assertFalse(selected['available'])
+        self.assertEqual(selected['state'], 'exhausted')
+        self.assertEqual(selected['remaining_ratio'], 0.0)
+        self.assertEqual(selected['provider_quota'], {
+            'left': 0.0, 'reset': '2026-10-26T12:00:00Z', 'exhausted': True,
+        })
+
+    def test_unknown_provider_capacity_is_not_exhaustion(self):
+        row = candidate('codex', 'reviewer', remaining=0.8)
+        value = self.build([row], {'codex': {
+            'left': None, 'reset': None, 'exhausted': None,
+        }})
+        selected = value['worker'][0]
+        self.assertTrue(selected['available'])
+        self.assertIsNone(selected['provider_quota']['exhausted'])
 
     def test_orchestrator_is_also_worker_and_quality_picks_default(self):
         value = self.build([candidate('other', 'fast', 70), candidate('codex', 'reviewer', 90)])
