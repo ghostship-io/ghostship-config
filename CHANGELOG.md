@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.17.318] - 2026-10-25
+
+- Pin agent 0.47.171 for the deployed batch.
+
+Refs ghostship-io/ghostship-agent#647, #641, #498, #607, #664, #662, #531, #504
+
+Agent #651 is still open. This branch will be updated to include it before exact-head review and deployment if it lands.
+
+PR #534.
+
 ## [3.17.317] - 2026-10-25
 
 - Run isolated T3 candidate acceptance before container pickup
