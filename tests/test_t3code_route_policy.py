@@ -27,14 +27,19 @@ class T3RoutePolicyTests(unittest.TestCase):
     def test_worker_routes_and_all_role_fable_denials_are_explicit(self):
         for route in (
             'model = "gpt-6-luna"',
+            'model = "claude-sonnet-5-5"',
+            'model = "command-code/deepseek/deepseek-v4.1-flash"',
             'model = "gemini-3.8-flash"',
             'model = "gemini-3.8-flash-high"',
             'model = "gemini-4-argon"',
         ):
             self.assertIn(route, T3CODE)
+        self.assertIn('rule = "owner: UI work only"', T3CODE)
+        self.assertIn("picker continues to enforce that this route is for UI work only", T3CODE)
+        self.assertIn('rule = "owner-approved default paid worker route"', T3CODE)
         self.assertEqual(T3CODE.count('model = "claude-fable-5"'), 3)
         self.assertEqual(T3CODE.count('model = "claude-fable-5-1"'), 3)
-        self.assertEqual(T3CODE.count('provider = "claudeAgent"'), 6)
+        self.assertEqual(T3CODE.count('provider = "claudeAgent"'), 7)
         self.assertIn('authorizations = [ ];', T3CODE)
         self.assertNotIn('model = "gpt-6.1-sol"', T3CODE)
 

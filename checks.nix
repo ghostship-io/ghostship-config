@@ -43,6 +43,8 @@ let
       .entries;
   expectedWorkerRoutes = [
     "codex/gpt-6-luna"
+    "claudeAgent/claude-sonnet-5-5"
+    "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "antigravity/gemini-3.8-flash"
     "antigravity/gemini-3.8-flash-high"
     "antigravity/gemini-4-argon"

@@ -34,6 +34,18 @@ let
               rule = "owner-approved Codex worker route";
             }
             {
+              provider = "claudeAgent";
+              model = "claude-sonnet-5-5";
+              # The route-policy schema has no task-kind dimension. The model
+              # picker continues to enforce that this route is for UI work only.
+              rule = "owner: UI work only";
+            }
+            {
+              provider = "opencode";
+              model = "command-code/deepseek/deepseek-v4.1-flash";
+              rule = "owner-approved default paid worker route";
+            }
+            {
               provider = "antigravity";
               model = "gemini-3.8-flash";
               rule = "owner-approved Antigravity worker route";
