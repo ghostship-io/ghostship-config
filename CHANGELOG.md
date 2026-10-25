@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.331] - 2026-10-25
+
+Publish native T3 provider catalog records with provenance for the Go coordinator.
+
+PR #564.
+
 ## [3.17.330] - 2026-10-25
 
 Recognize structured OpenCode allowance errors returned inside HTTP 200 application envelopes while leaving unrecognized failures as non-quota errors.
