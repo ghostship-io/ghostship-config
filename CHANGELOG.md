@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.349] - 2026-10-25
+
+- Flake: pin ghostship-private-agent to b836f2ef; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #582.
+
 ## [3.17.348] - 2026-10-25
 
 Delegate the isolated candidate Podman service's cgroup subtree so systemd in candidate containers can create its service cgroups. Report the container exit code when candidate startup ends before app readiness.
