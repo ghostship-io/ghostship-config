@@ -95,9 +95,19 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn("--unit=t3code-server.service", run)
         self.assertNotIn("--unit=multi-user.target", run)
 
-    def test_staging_copies_only_the_allowlisted_provider_and_agent_inputs(self):
-        (self.home / ".codex").mkdir()
-        (self.home / ".codex/auth.json").write_text("provider credential")
+    def test_staging_never_copies_oauth_credentials_and_keeps_only_agent_skills(self):
+        oauth_paths = (
+            ".codex/auth.json", ".claude/.credentials.json",
+            ".gemini/oauth_creds.json", ".gemini/antigravity-cli/oauth_creds.json",
+            ".config/opencode/auth.json", ".local/share/opencode/auth.json",
+        )
+        for relative in oauth_paths:
+            source = self.home / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("refresh token fixture")
+        skill = self.home / ".agents/skills/candidate-check/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("skill fixture")
         (self.home / ".t3/userdata").mkdir(parents=True)
         (self.home / ".t3/userdata/state.sqlite").write_text("live threads")
         (self.home / ".t3/worktrees/project").mkdir(parents=True)
@@ -105,17 +115,78 @@ class CandidateAcceptanceTest(unittest.TestCase):
         candidate_home = self.root / "candidate-home"
         candidate_inputs = self.root / "candidate-inputs"
         acceptance.stage_candidate_inputs(self.home, candidate_home, candidate_inputs, os.getuid())
-        self.assertTrue((candidate_home / ".codex/auth.json").is_symlink())
-        self.assertEqual((candidate_inputs / ".codex/auth.json").read_text(), "provider credential")
-        self.assertEqual((candidate_inputs / ".codex/auth.json").stat().st_mode & 0o777, 0o400)
+        for relative in oauth_paths:
+            with self.subTest(path=relative):
+                self.assertFalse((candidate_inputs / relative).exists())
+                self.assertFalse((candidate_home / relative).is_symlink())
+        self.assertEqual((candidate_inputs / ".agents/skills/candidate-check/SKILL.md").read_text(),
+                         "skill fixture")
         self.assertFalse((candidate_inputs / ".t3").exists())
         self.assertFalse((candidate_home / ".t3").exists())
+
+    def test_provider_turn_uses_only_picker_approved_free_api_key_routes(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("OPENROUTER_API_KEY=static-key-fixture\n")
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": {
+                    "provider": "openrouter", "model": "cohere/north-mini-code:free",
+                    "billing": "free", "approved_free": True, "execution": "t3",
+                    "available": True,
+                }}}))
+            return Mock(returncode=0, stdout="passed")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            self.assertTrue(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env
+            ))
+        self.assertTrue(any("--provider" in call and "openrouter" in call for call in calls))
+        self.assertTrue(any("prove" in call and "openrouter/cohere/north-mini-code:free" in call
+                            for call in calls))
+
+    def test_provider_turn_fails_closed_when_no_static_api_key_is_projected(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        with patch.object(acceptance, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "no static API key"):
+                acceptance.check_provider_turn(["podman"], "candidate", provider_env)
+        command.assert_not_called()
+
+    def test_missing_static_api_key_leaves_no_accepting_receipt_and_tears_down(self):
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "no static API key"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                )
+        self.assertFalse((self.state / "receipts/generation-502.json").exists())
+        self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
+                      self.commands)
+
+    def test_provider_turn_refuses_paid_or_unapproved_picker_results(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("NVIDIA_API_KEY=static-key-fixture\n")
+        pick = {"data": {"pick": {
+            "provider": "nvidia", "model": "model", "billing": "subscription",
+            "approved_free": False, "execution": "t3", "available": True,
+        }}}
+        with patch.object(acceptance, "command", return_value=Mock(
+                returncode=0, stdout=json.dumps(pick))) as command:
+            with self.assertRaisesRegex(RuntimeError, "no available trusted free T3 route"):
+                acceptance.check_provider_turn(["podman"], "candidate", provider_env)
+        self.assertFalse(any("prove" in str(call.args) for call in command.call_args_list))
 
     def test_provider_projection_excludes_github_and_bitwarden_secrets(self):
         projection = self.root / "provider.env"
         projection.write_text(
             "OPENROUTER_API_KEY='provider-only'\n"
             "AGENT_DESKTOP_API_TOKEN=desktop-only\n"
+            "GOOGLE_GENERATIVE_AI_API_KEY=''\n"
             "GITHUB_TOKEN=must-not-copy\n"
             "BW_CLIENTSECRET=must-not-copy\n"
         )

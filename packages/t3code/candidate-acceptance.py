@@ -20,11 +20,6 @@ _probe = importlib.util.module_from_spec(_probe_spec)
 _probe_spec.loader.exec_module(_probe)
 
 CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")
-HOME_FILES = (
-    ".codex/auth.json", ".codex/config.toml", ".claude/.credentials.json",
-    ".gemini/oauth_creds.json", ".gemini/antigravity-cli/oauth_creds.json",
-    ".config/opencode/auth.json", ".local/share/opencode/auth.json",
-)
 HOME_DIRS = (".agents/skills",)
 PROVIDER_ENV = (
     "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN", "COHERE_API_KEY",
@@ -33,6 +28,11 @@ PROVIDER_ENV = (
     "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY", "POOLSIDE_API_KEY",
     "AGENT_DESKTOP_API_TOKEN",
 )
+API_KEY_ROUTE_ENV = {
+    "google": "GOOGLE_GENERATIVE_AI_API_KEY",
+    "nvidia": "NVIDIA_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
 ALLOWED_CANDIDATE_MOUNTS = {
     "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
     "/etc/ghostship/approved-free-workers.json": "/etc/ghostship/approved-free-workers.json",
@@ -48,14 +48,6 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
     candidate_inputs = Path(candidate_inputs)
     candidate_home.mkdir(mode=0o700)
     candidate_inputs.mkdir(mode=0o700)
-    for relative in HOME_FILES:
-        source = source_home / relative
-        if not source.is_file() or source.is_symlink():
-            continue
-        target = candidate_inputs / relative
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-        target.chmod(0o400)
     for relative in HOME_DIRS:
         source = source_home / relative
         if not source.is_dir() or source.is_symlink():
@@ -74,7 +66,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
                 copied = target_dir / name
                 shutil.copyfile(item, copied)
                 copied.chmod(0o444)
-    for relative in HOME_FILES + HOME_DIRS:
+    for relative in HOME_DIRS:
         if (candidate_inputs / relative).exists():
             link = candidate_home / relative
             link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -110,6 +102,8 @@ def write_provider_env(source_file, target_file):
                 if len(parsed) != 1:
                     raise ValueError(f"invalid quoting in candidate provider value {key}")
                 raw = parsed[0]
+            if not raw:
+                continue
             if any(char in raw for char in ("\n", "\r", "\x00")):
                 raise ValueError(f"unsupported multiline candidate provider value {key}")
             values[key] = raw
@@ -194,7 +188,7 @@ def assert_ok(engine, *args, timeout=180):
     return result.stdout.strip()
 
 
-def check_candidate(engine, name, timeout_s=300):
+def check_candidate(engine, name, provider_env_file, timeout_s=300):
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if command(engine, "exec", name, "curl", "-fsS", "--max-time", "5",
@@ -213,25 +207,65 @@ def check_candidate(engine, name, timeout_s=300):
         "http://127.0.0.1:3773/"
     ).returncode == 0
 
-    pick = command(engine, "exec", name, "agent", "models", "pick", "--role", "worker", "--json")
-    route = ""
-    if pick.returncode == 0:
-        try:
-            payload = json.loads(pick.stdout)
-            selection = payload.get("data", {}).get("pick") or {}
-            route = "/".join((selection.get("provider", ""), selection.get("model", "")))
-        except (ValueError, AttributeError):
-            route = ""
-    checks["provider_turn"] = bool(route) and command(
-        engine, "exec", name, "agent", "models", "prove", route, "--wait", "240", "--json",
-        timeout=270
-    ).returncode == 0
+    checks["provider_turn"] = check_provider_turn(
+        engine, name, provider_env_file, timeout_s=timeout_s
+    )
     checks["agent_cli"] = command(engine, "exec", name, "agent", "--help").returncode == 0
     checks["skills"] = command(engine, "exec", name, "agent", "skills", "doctor", "--json").returncode == 0
     checks["desktop_transport"] = command(
         engine, "exec", name, "agent", "tools", "doctor", "--json", "--only", "ghostship-bladebro"
     ).returncode == 0
     return checks
+
+
+def check_provider_turn(engine, name, provider_env_file, timeout_s=300):
+    """Prove a trusted free T3 route only when its static API key is projected."""
+    try:
+        env_names = {
+            line.split("=", 1)[0]
+            for line in Path(provider_env_file).read_text().splitlines()
+            if "=" in line and line.split("=", 1)[1]
+        }
+    except OSError:
+        env_names = set()
+    providers = [provider for provider, env_name in API_KEY_ROUTE_ENV.items()
+                 if env_name in env_names]
+    if not providers:
+        raise RuntimeError(
+            "provider_turn refused: filtered projection has no static API key for an approved free route"
+        )
+    for provider in providers:
+        pick = command(engine, "exec", name, "agent", "models", "pick",
+                       "--role", "worker", "--provider", provider, "--json")
+        if pick.returncode:
+            continue
+        try:
+            payload = json.loads(pick.stdout)
+            selection = payload.get("data", {}).get("pick") or {}
+        except (ValueError, AttributeError):
+            continue
+        if (not isinstance(selection, dict)
+                or not isinstance(selection.get("model"), str)
+                or not selection.get("model")
+                or selection.get("provider") != provider
+                or selection.get("billing") not in ("free", "promotion")
+                or selection.get("approved_free") is not True
+                or selection.get("execution") != "t3"
+                or selection.get("available") is not True):
+            continue
+        route = f"{provider}/{selection.get('model') or ''}"
+        if route.endswith("/"):
+            continue
+        proof = command(
+            engine, "exec", name, "agent", "models", "prove", route,
+            "--wait", str(min(max(timeout_s - 30, 1), 240)), "--json",
+            timeout=min(timeout_s, 270),
+        )
+        if proof.returncode == 0:
+            return True
+    raise RuntimeError(
+        "provider_turn failed: picker found no available trusted free T3 route backed by a filtered static API key"
+    )
 
 
 def candidate_agent_path(engine, name, candidate_home_target):
@@ -301,7 +335,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         # This leaf unit does not pull in multi-user.target's timers and automations.
         args.extend((image_tag, "--unit=t3code-server.service"))
         assert_ok(engine, *args, timeout=300)
-        checks = check_candidate(engine, name)
+        checks = check_candidate(engine, name, provider_env)
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
