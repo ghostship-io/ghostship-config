@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.345] - 2026-10-25
+
+- Raise the GitHub coordinator container memory limit to 1 GiB.
+
+PR #579.
+
 ## [3.17.344] - 2026-10-25
 
 Pin ghostship-agent main at v0.47.222, including the coordinator work-operation transport fix from #824, and update the pinning guide.
