@@ -318,6 +318,34 @@ def error_message(error: Mapping[str, Any]) -> str:
     return message
 
 
+_APPLICATION_BUDGET_ERROR_TYPES = frozenset({"freeusagelimiterror", "gousagelimiterror"})
+
+
+def _application_budget_message(error: Mapping[str, Any]) -> str:
+    """Read a known quota error from a structured application response.
+
+    Some gateways return an error envelope in an HTTP 200 response. Only
+    recognized allowance error types are evidence; arbitrary nested text is
+    not promoted into a quota refusal. The text is read in memory and dropped.
+    """
+    response = error.get("response") if isinstance(error, Mapping) else None
+    body = response.get("body") if isinstance(response, Mapping) else None
+    if not isinstance(body, str) or len(body) > 65536:
+        return ""
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return ""
+    nested = payload.get("error") if isinstance(payload, Mapping) else None
+    if not isinstance(nested, Mapping):
+        return ""
+    error_type = _normalise(str(nested.get("type") or "")).replace(" ", "")
+    message = nested.get("message")
+    if error_type not in _APPLICATION_BUDGET_ERROR_TYPES or not isinstance(message, str):
+        return ""
+    return message
+
+
 def _budget_window(message: str) -> tuple[bool, str | None]:
     """The window a message names, if it names a budget at all.
 
@@ -377,6 +405,11 @@ def classify_error(error: Mapping[str, Any]) -> tuple[str, str | None]:
     message = error_message(error)
     if _never_limit(message, kind):
         return (OUTCOME_OTHER, None)
+    application_message = _application_budget_message(error)
+    if application_message:
+        matched, window = _budget_window(application_message)
+        if matched:
+            return (OUTCOME_LIMIT, window)
     matched, window = _budget_window(message)
     if matched:
         return (OUTCOME_LIMIT, window)
