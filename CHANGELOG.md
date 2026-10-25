@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.307] - 2026-10-25
+
+Pin the deployed agent input to 0.47.134.
+
+PR #518.
+
 ## [3.17.306] - 2026-10-25
 
 - Pin the agent revision with the token-history doctor and message guard
