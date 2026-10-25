@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.312] - 2026-10-25
+
+- Record the Walmart coordinate settings in the retail inventory
+
+PR #487.
+
 ## [3.17.311] - 2026-10-25
 
 - Pin the managed agent to 0.47.146 for the exit-4 applied-with-warning deploy path.
