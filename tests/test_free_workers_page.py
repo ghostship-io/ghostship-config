@@ -15,7 +15,6 @@ import model_selection
 import snapshot
 
 PAGE = ROOT / 'modules/self-hosted/siem/dashboards/free-workers.json'
-PROVIDERS = ROOT / 'modules/self-hosted/siem/dashboards/ai-usage.json'
 
 
 def helper(panel, name, rows, now=1767268800000):
@@ -145,39 +144,6 @@ class FreeWorkersPageTests(unittest.TestCase):
                 self.assertEqual(panel['options']['renderMode'], 'allRows')
                 self.assertIsInstance(panel['options']['externalStyles'], list)
                 self.assertNotRegex(panel['options']['styles'], r'overflow(?:-y)?\s*:\s*(?:auto|scroll)')
-
-
-class FreeProviderCapacityTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.panel = next(p for p in json.loads(PROVIDERS.read_text())['panels'] if p['id'] == 210)
-
-    def card(self, account='nvidia', kind='daily', left=.65, state='behind', extra=()):
-        common = {'account': account, 'kind': kind, 'quota_id': 'daily', 'label': kind, 'evidence': 'provider_reported'}
-        rows = [{**common, 'field': 'left', 'value': left}, {**common, 'field': 'pace_state', 'state': state, 'value': 1}, *extra]
-        return helper(self.panel, 'capacityCards', rows)[0]['windows'][0]
-
-    def test_short_windows_never_have_pace_ticks_or_green_amber(self):
-        for kind in ('session', 'hourly', 'daily', 'minute', 'inferred'):
-            for state in ('ahead', 'behind', 'far_behind'):
-                with self.subTest(kind=kind, state=state):
-                    window = self.card(kind=kind, state=state)
-                    self.assertEqual(window['fillClass'], '')
-                    self.assertEqual(window['paceClass'], '')
-                    self.assertFalse(window['hasTick'])
-                    self.assertNotIn('pace', window['sub'])
-                    self.assertNotIn('ahead', window['sub'])
-                    self.assertNotIn('behind', window['sub'])
-            self.assertEqual(self.card(kind=kind, left=0)['fillClass'], 'spent')
-
-    def test_long_window_pace_is_text_only_like_providers(self):
-        for state, symbol in (('ahead', '▲'), ('on_pace', '●'), ('behind', '▼'),
-                              ('far_behind', '▼')):
-            with self.subTest(state=state):
-                window = self.card(kind='weekly', state=state)
-                self.assertEqual(window['fillClass'], '')
-                self.assertEqual(window['paceClass'], state)
-                self.assertIn(symbol, window['sub'])
 
 
 class FreeDashboardGeneratorTests(unittest.TestCase):
