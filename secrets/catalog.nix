@@ -66,6 +66,8 @@ in
         "BW_CLIENTID"
         "BW_CLIENTSECRET"
         "BW_PASSWORD"
+        "BW_ORGANIZATION_ID"
+        "BW_COLLECTION_ID"
       ];
     };
 
@@ -841,6 +843,14 @@ in
         BW_PASSWORD = {
           unit = "bitwarden";
           key = "BW_PASSWORD";
+        };
+        BW_ORGANIZATION_ID = {
+          unit = "bitwarden";
+          key = "BW_ORGANIZATION_ID";
+        };
+        BW_COLLECTION_ID = {
+          unit = "bitwarden";
+          key = "BW_COLLECTION_ID";
         };
         AGENT_DESKTOP_API_TOKEN = {
           unit = "agent-desktop";
