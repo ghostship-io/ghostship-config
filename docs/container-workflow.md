@@ -162,12 +162,11 @@ Host configuration changes and image updates decouple deployment from container
 interruption. `podman-t3code.service` does not restart on configuration switch.
 Only changes to `packages/t3code/image.nix` or its base dependencies queue an
 image replacement. T3 app and provider updates happen in the persistent home;
-only an app release queues an idle app restart. Image updates are applied by
-`t3code-deploy-when-idle` only after confirming sustained idle across active turns
-and pending tasks. If a manual host restart is required, use `t3code-safe-restart`
-rather than restarting `podman-t3code.service` directly. A forced restart needs the
-owner's own deploy or activate instruction, recorded with
-`--owner-request "<short quote or reference>"`.
+only an app release queues an app restart. Image updates are applied by
+`t3code-deploy-when-idle` after the candidate passes acceptance for the exact
+image. If a manual host restart is required, use `t3code-safe-restart` rather
+than restarting `podman-t3code.service` directly; the helper requires the same
+passing candidate receipt.
 
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
@@ -178,10 +177,9 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
-The idle deployment helper protects active sessions itself: its probe reads T3
-Code 2's `statev2.sqlite` and defers while a run, subagent or thread launch is
-open, a user message is under 15 minutes old, or turn items changed in the last
-10 minutes. No session guard is needed before a full switch.
+Candidate acceptance runs against the target image in isolation and confirms
+that the live production identity remains unchanged. Once the exact-image
+receipt passes, the deployment may restart T3 Code immediately.
 
 For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
 read-only. A unit linked under `/run/systemd/system` also has lower precedence
@@ -250,9 +248,9 @@ until their native adapters are validated. Run the deployed boundary proof with
 Provider data-retention settings and their re-check are documented in
 [provider zero data retention](provider-zdr.md).
 
-Use `agent deploy run` for merged changes. It preserves busy T3 sessions and
-checks activation gates; a deployment that requires an unauthorized restart
-waits for idle. Record the owner's explicit request for any authorized exception.
+Use `agent deploy run` for merged changes. It builds the target configuration,
+accepts the exact T3 candidate image before activation, then restarts T3 as soon
+as the receipt passes.
 
 The container hostname identifies the coding environment. Always select the
 target explicitly instead of using `.#$(hostname)` here. Host configuration

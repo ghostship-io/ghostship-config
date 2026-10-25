@@ -459,7 +459,7 @@ let
       EOF
       cat > etc/systemd/system/t3code-tool-update-restart.service <<'EOF'
       [Unit]
-      Description=Restart T3 Code after queued maintenance becomes idle
+      Description=Restart T3 Code after candidate image acceptance
       DefaultDependencies=no
       After=t3code-bootstrap.service
       Requires=t3code-bootstrap.service

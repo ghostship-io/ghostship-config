@@ -507,23 +507,19 @@ than ten minutes reaches operations through `ghostship-notify` with the
 `boot-generation-drift` dedupe key, because a reboot would revert to the
 profile's generation.
 
-T3 Code is never restarted unless it is idle, except when the owner has asked
-for work to be activated or deployed; an owner instruction to deploy or
-activate approves the restart. `t3code-safe-restart` queues a restart, and
-`t3code-deploy-when-idle` performs it once the activity probe confirms idle; a
-busy T3 Code defers the restart to the next check. A forced restart bypasses
-the idle gate and interrupts the work in flight, so it needs the owner's own
-instruction:
+T3 Code may restart as soon as the candidate image passes acceptance for the
+exact deployment and image. Candidate acceptance runs in isolation and verifies
+the application, provider turn, CLI, skills, and desktop transport while
+confirming that the production container identity stayed unchanged. The
+deployer records that receipt before restarting:
 
 ```bash
-t3code-safe-restart --force --owner-request "owner: deploy the reviewed change"
+t3code-safe-restart --force
 ```
 
-Without `--owner-request` the tool refuses the forced restart and says so.
-Every forced restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl`
-with the time, the actor, the owner's reference, and the container identity
-before and after the restart, and in the journal under the `t3code-restart`
-tag. A NixOS switch never restarts the container: `podman-t3code` has
+Every candidate-accepted restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl`
+with the time, actor, and container identity before and after the restart, and
+in the journal under the `t3code-restart` tag. A NixOS switch never restarts the container: `podman-t3code` has
 `restartIfChanged = false`, and the evaluation check asserts that the switch
 has no unit to restart.
 

@@ -155,8 +155,8 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 - Deploy merged configuration with `agent deploy run`. Use `--agent-rev REV`
   to pin and deploy a changed agent revision. The command serializes switches,
   builds the committed revision, checks dry-activation, records the generation
-  and verifies live health. Fix a failed gate rather than bypassing it with a
-  direct switch. Preserve active T3 sessions; do not force a busy restart.
+  and verifies live health. It accepts the target T3 candidate image before the
+  switch; a passing exact-image receipt permits the immediate restart.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

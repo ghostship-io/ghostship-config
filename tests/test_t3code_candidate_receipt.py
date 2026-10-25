@@ -65,35 +65,57 @@ class CandidateReceipt(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.verify()
 
-    def test_owner_force_names_the_exact_missing_candidate_receipt(self):
+    def test_immediate_restart_names_the_exact_missing_candidate_receipt(self):
         with patch.object(deployer.subprocess, 'run') as run:
             with self.assertRaisesRegex(RuntimeError, str(self.path)):
-                deployer.force_restart('systemctl', 'podman', 'activate reviewed image',
+                deployer.force_restart('systemctl', 'podman',
                     self.root/'ledger', 'journal', None, self.root, self.archive,
                     candidate_acceptor=lambda *_: deployer.require_candidate(self.root, self.archive, 'podman'))
         run.assert_not_called()
 
-    def test_raw_force_is_effective_and_receipt_is_checked(self):
+    def test_immediate_restart_is_effective_and_receipt_is_checked(self):
         self.verify()
-        argv = ['deployer', '--force', '--owner-request', 'activate reviewed image',
+        argv = ['deployer', '--force',
             '--state-dir', str(self.root), '--image-archive', str(self.archive),
             '--restart-ledger', str(self.root/'ledger'), '--audit-log', str(self.root/'audit')]
         with patch.object(sys, 'argv', argv), patch.object(deployer, 'produce_candidate_receipt', return_value=None), patch.object(deployer.subprocess, 'run',
                 return_value=Mock(returncode=0)), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(deployer.main(), 0)
-        self.assertEqual(json.loads((self.root/'ledger').read_text())['mode'], 'forced')
+        self.assertEqual(json.loads((self.root/'ledger').read_text())['mode'], 'candidate-accepted')
 
-    def test_idle_names_the_exact_missing_candidate_receipt(self):
+    def test_missing_candidate_receipt_prevents_restart(self):
         with patch.object(deployer.subprocess, 'run',
                 return_value=Mock(returncode=0, stdout='active')) as run:
             with self.assertRaisesRegex(RuntimeError, str(self.path)):
                 deployer.run_deployment(self.root, self.root, image_archive=self.archive,
-                    idle_checker=lambda: True, sleep_fn=lambda _: None,
                     deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None,
                     candidate_acceptor=lambda *_: deployer.require_candidate(self.root, self.archive, 'podman'))
         run.assert_not_called()
 
-    def test_acceptance_receipt_allows_idle_pickup(self):
+    def test_candidate_acceptance_receipt_must_match_target_image_and_deployment(self):
+        self.path.write_text(json.dumps(self.receipt))
+        accepted = deployer.verify_candidate_receipt(self.root, self.archive,
+                                                       'candidate-definition')
+        self.assertTrue(accepted['verified'])
+        for field, wrong in (('deployment_id', 'other'), ('image_id', 'other')):
+            with self.subTest(field=field):
+                broken = dict(self.receipt, **{field: wrong})
+                self.path.write_text(json.dumps(broken))
+                with self.assertRaises(RuntimeError):
+                    deployer.verify_candidate_receipt(self.root, self.archive,
+                                                       'candidate-definition')
+
+    def test_candidate_acceptance_refuses_missing_or_failed_receipt(self):
+        with self.assertRaises(RuntimeError):
+            deployer.verify_candidate_receipt(self.root, self.archive,
+                                               'candidate-definition')
+        self.receipt['checks']['provider_turn'] = False
+        self.path.write_text(json.dumps(self.receipt))
+        with self.assertRaises(RuntimeError):
+            deployer.verify_candidate_receipt(self.root, self.archive,
+                                               'candidate-definition')
+
+    def test_acceptance_receipt_allows_immediate_pickup(self):
         (self.root / 'desired').write_text('candidate-definition')
         (self.root / 'applied').write_text('old-definition')
         def accept(*_args):
@@ -102,7 +124,6 @@ class CandidateReceipt(unittest.TestCase):
                 side_effect=[Mock(returncode=0, stdout='active'), Mock(returncode=0)]) as run:
             result = deployer.run_deployment(
                 self.root, self.root, image_archive=self.archive,
-                idle_checker=lambda: True, sleep_fn=lambda _: None,
                 deployment_reader=lambda: 'old-definition', tool_lock_acquirer=lambda: None,
                 candidate_acceptor=accept, healthy_waiter=lambda: True,
             )
@@ -115,7 +136,7 @@ class CandidateReceipt(unittest.TestCase):
                 'image': 'sha256:'+self.image, 'deployment': 'candidate-definition'}):
             deployer.require_candidate(self.root, self.archive, 'podman')
 
-    def test_secret_inode_change_wakes_idle_pickup_even_with_same_image_and_id(self):
+    def test_secret_inode_change_restarts_after_candidate_acceptance(self):
         (self.root / 'desired').write_text('candidate-definition')
         (self.root / 'applied').write_text('candidate-definition')
         (self.root / 'desired-inputs').write_text('agent=pin secret_inode=changed\n')
@@ -125,7 +146,6 @@ class CandidateReceipt(unittest.TestCase):
                 side_effect=[Mock(returncode=0, stdout='active'), Mock(returncode=0)]) as run:
             result = deployer.run_deployment(
                 self.root, self.root, image_archive=self.archive,
-                idle_checker=lambda: True, sleep_fn=lambda _: None,
                 deployment_reader=lambda: 'candidate-definition', tool_lock_acquirer=lambda: None,
                 candidate_acceptor=accept, healthy_waiter=lambda: True,
             )

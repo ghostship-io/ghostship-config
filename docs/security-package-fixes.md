@@ -456,9 +456,9 @@ rebuilt as part of the image and is not part of the host unit set.
   `stopIfChanged = true`; its timer keeps `restartIfChanged = false`. It is
   therefore not restarted on a switch, and it keeps firing.
 
-**The flags do not prevent a replacement.** The pin changes
-`t3codeDeploymentId` (`hashString "sha256" (toString t3codeImage)`), and the
-existing idle-deploy controller reacts to exactly that:
+**The flags do not prevent a replacement.** The deployment identity changes
+with the candidate image or agent pin, and the candidate controller reacts to
+that target only after a passing exact-image acceptance receipt:
 
 The source comparison confirms that the image deployment identifier changes.
 Its literal values belong in protected activation evidence, rather than the
@@ -471,19 +471,20 @@ change:
    `t3codeDeploymentId` into `/var/lib/ghostship/t3code-deployment/desired`
    and runs `systemctl start --no-block t3code-deploy-when-idle.service`.
    `supportsDryActivation = false`, so it runs on every switch.
-2. `t3code-deploy-when-idle.service` sees `desired != applied` and calls
-   `is_live_idle`: the tool-update lock must be free, the activity probe must
-   confirm idle, and the container's web endpoint must answer. It then waits
-   `confirm_idle_seconds` (30 s) and re-checks.
-3. On a sustained idle window it runs
+2. Before activation, `agent deploy run` runs the target toplevel's candidate
+   acceptance against its embedded image archive and deployment identity. The
+   isolated candidate must pass app, provider-turn, CLI, skills and desktop
+   transport checks without changing production identity.
+3. After activation, `t3code-deploy-when-idle.service` verifies the receipt for
+   that exact image and deployment ID, then runs
    `systemctl restart podman-t3code.service`, which re-runs the unit and
    `podman run --replace` creates the container from the new image.
-4. `t3code-deploy-when-idle.timer` repeats this every minute
+4. `t3code-deploy-when-idle.timer` retries failed deployments every minute
    (`OnBootSec = 2m`, `OnUnitActiveSec = 1m`, `Persistent = true`), so the
    queue survives reboots and retries.
 
-Consequence: **activating this change recreates the T3 Code container at the
-first sustained idle window**, even though neither unit restarts on switch.
+Consequence: **activation recreates the T3 Code container as soon as candidate
+acceptance passes**, even though neither unit restarts on switch.
 "Idle" here means the activity probe reports no work; it is a normal working
 state, not a maintenance window, and an active session does not by itself
 prevent the replacement once the probe reports idle between turns.

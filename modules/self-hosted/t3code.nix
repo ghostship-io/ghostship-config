@@ -7,7 +7,6 @@
 }:
 
 let
-  t3codeActivityProbe = pkgs.callPackage "${inputs.ghostship-private-agent}/packages/t3code/activity-probe/default.nix" {};
   t3codeHome = "/srv/apps/t3code/home";
   hardened = config.ghostship.t3code.hardening.enable;
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
@@ -154,7 +153,6 @@ let
       --state-dir "${t3codeDeploymentState}" \
       --image-archive "${t3codeImage}" \
       --home-dir "${t3codeHome}" \
-      --probe-bin "${t3codeActivityProbe}/bin/t3code-activity-probe" \
       --podman-bin "${pkgs.podman}/bin/podman" \
       --candidate-socket "/run/t3code-podman-candidate/podman.sock" \
       --candidate-uid "${toString (config.ghostship.t3codePodman.uid + 1)}" \
@@ -163,6 +161,7 @@ let
       --provider-secrets-file "${t3codeSecrets}" \
       --tooling-path "${tooling}" \
       --agent-revision "${t3codeAgentRevision}" \
+      --expected-deployment-id "${t3codeDeploymentId}" \
       --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
       --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
       --restart-ledger "/var/lib/t3code-restarts/ledger.jsonl" \

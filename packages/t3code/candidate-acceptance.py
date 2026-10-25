@@ -280,12 +280,13 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
            volumes=(), systemctl_bin="systemctl",
            command_fn=command, identity_fn=None, candidate_uid=None,
            candidate_runtime_dir=None, provider_secrets_file=None, tooling_path=None,
-           expected_agent_revision=None, candidate_home_target="/candidate-home"):
+           expected_agent_revision=None, candidate_home_target="/candidate-home",
+           deployment_id=None):
     """Boot, check, record and remove one candidate without changing production."""
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
     state_dir = Path(state_dir)
-    desired = (state_dir / "desired").read_text().strip()
+    desired = deployment_id or (state_dir / "desired").read_text().strip()
     image_id, image_tag = image_details(image_archive)
     name = candidate_name(desired)
     receipts = state_dir / "receipts"
