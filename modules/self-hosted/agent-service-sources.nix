@@ -15,7 +15,8 @@ let
 in
 {
   coordinator = source ([ "lib/github-integration.nix" "lib/coordinator-python-packages.nix"
-    "config/agents/runtime-policy.json" "config/agents/model-identities.json" ]
+    "config/agents/runtime-policy.json" "config/agents/model-identities.json"
+    "config/agents/coordinator-jobs.json" ]
     ++ map (name: "tools/python/${name}")
       (lib.filter (name: name != "ghostship_github")
         (import (agent.outPath + "/lib/coordinator-python-packages.nix")))
@@ -30,7 +31,7 @@ in
     # Must cover every package the pinned agent's lib/private-integrations.nix
     # lists in runtimePackages, or that file's assert stops host evaluation.
     ++ map (name: "tools/python/ghostship_${name}") [
-      "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep"
+      "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep" "acceptance"
       "hostops" "ownermemory" "services" "health" "t3"
       "sessions" "delegation" "deploy" "github" "worker" "workflows" "policy"
       "apps"

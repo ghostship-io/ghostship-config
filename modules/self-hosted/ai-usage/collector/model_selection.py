@@ -513,11 +513,28 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             level = trust_cache[identity]['level']
         capacity = source.get("capacity") or {}
         remaining = number(capacity.get("remaining_ratio"))
+        provider = str(source.get("provider") or "")
+        account = str(source.get("account") or source.get("quota_account") or provider)
+        provider_quota = ((snapshot.get("quota") or {}).get("provider_capacity") or {}).get(account)
+        if not isinstance(provider_quota, Mapping):
+            provider_quota = {}
+        provider_left = number(provider_quota.get("left"))
+        if provider_left is None:
+            provider_left = number(provider_quota.get("remaining_ratio"))
+        if provider_left is not None:
+            remaining = min(remaining, provider_left) if remaining is not None else provider_left
         windows = applicable_windows(snapshot,source)
         reported = [value for window in windows if (value := number(window.get('remaining_ratio'))) is not None]
         if reported:
             remaining = min(reported + ([remaining] if remaining is not None else []))
-        exhausted = source.get("quota_state") == "exhausted" or remaining == 0
+        canonical_exhausted = provider_quota.get("exhausted")
+        if canonical_exhausted is None and "exhausted" not in provider_quota:
+            canonical_exhausted = provider_left == 0 if provider_left is not None else None
+        provider_reset = provider_quota.get("reset")
+        if provider_reset is None and isinstance(provider_quota.get("binding"), Mapping):
+            provider_reset = provider_quota["binding"].get("reset_at")
+        exhausted = (source.get("quota_state") == "exhausted" or remaining == 0
+                     or canonical_exhausted is True)
         available = (bool(source.get("available")) and not exhausted and level != "excluded"
                      and (not mapped or native.get("available") is not False))
         reason = "quota_exhausted" if exhausted else str(
@@ -584,6 +601,11 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "reason": "model_excluded" if level == "excluded" else reason, "trust_level": level, "quality_score": quality,
             "quality_p": posterior,
             "remaining_ratio": remaining, "limiting_window": limit,
+            "provider_quota": {
+                "left": provider_left,
+                "reset": provider_reset,
+                "exhausted": canonical_exhausted,
+            },
             "pace_delta": limit.get("pace_delta") if limit else None,
             "pace_state": limit.get("pace_state") if limit else "unknown",
             "ranking_pace_state": capacity.get('pace_state') or (limit.get('pace_state') if limit else 'unknown'),

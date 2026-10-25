@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.17.322] - 2026-10-25
+
+Package the T3 deployment and candidate acceptance scripts with their sibling inputs.
+
+PR #549.
+
+## [3.17.321] - 2026-10-25
+
+- Publish and consume canonical per-provider quota headroom, reset, and exhaustion.
+
+PR #543.
+
+## [3.17.320] - 2026-10-25
+
+- Flake: pin ghostship-private-agent to d3117442; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #547.
+
+## [3.17.319] - 2026-10-25
+
+Fix candidate service unit PATH generation and update the agent pin to 0.47.176.
+
+PR #544.
+
 ## [3.17.318] - 2026-10-25
 
 - Pin agent 0.47.171 for the deployed batch.

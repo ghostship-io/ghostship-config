@@ -211,6 +211,9 @@ class ProviderCapacityTests(unittest.TestCase):
         )
         capacity = data["quota"]["provider_capacity"]["claude"]
         self.assertEqual(capacity["remaining_ratio"], 0.0)
+        self.assertEqual(capacity["left"], 0.0)
+        self.assertTrue(capacity["exhausted"])
+        self.assertEqual(capacity["reset"], data["quota"]["accounts"]["claude"][0]["reset_at"])
         self.assertEqual(capacity["binding"]["kind"], "weekly")
         row = data["candidates"][0]
         self.assertEqual(row["capacity"]["remaining_ratio"], 0.0)
@@ -230,6 +233,9 @@ class ProviderCapacityTests(unittest.TestCase):
         )
         capacity = data["quota"]["provider_capacity"]["claude"]
         self.assertAlmostEqual(capacity["remaining_ratio"], 0.1, places=4)
+        self.assertAlmostEqual(capacity["left"], 0.1, places=4)
+        self.assertFalse(capacity["exhausted"])
+        self.assertEqual(capacity["reset"], capacity["binding"]["reset_at"])
         self.assertEqual(capacity["binding"]["kind"], "weekly")
 
     def test_the_binding_record_names_both_windows_when_they_differ(self):
@@ -774,6 +780,9 @@ class ProviderCapacityUnknownTests(unittest.TestCase):
         # The known window has room, but the account also has an unknown one:
         # no positive capacity is published.
         self.assertIsNone(capacity["remaining_ratio"])
+        self.assertIsNone(capacity["left"])
+        self.assertIsNone(capacity["reset"])
+        self.assertIsNone(capacity["exhausted"])
         self.assertGreaterEqual(capacity["unknown_windows"], 1)
 
     def test_a_model_scoped_window_does_not_constrain_the_provider(self):
