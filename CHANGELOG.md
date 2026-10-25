@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.333] - 2026-10-25
+
+Make the picker and published worker positions consume one shared ordering that preserves approved free-worker priority and capacity ranking.
+
+PR #563.
+
 ## [3.17.332] - 2026-10-25
 
 Keep verified quota resets from restoring capacity before their effective time, preserve provider reading provenance, and bound reset evidence by freshness.
