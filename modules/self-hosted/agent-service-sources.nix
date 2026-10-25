@@ -31,7 +31,7 @@ in
     # lists in runtimePackages, or that file's assert stops host evaluation.
     ++ map (name: "tools/python/ghostship_${name}") [
       "mcp" "registry" "inference" "runtime" "browser" "desktop" "keep"
-      "hostops" "services" "health" "t3"
+      "hostops" "ownermemory" "services" "health" "t3"
       "sessions" "delegation" "deploy" "github" "worker" "workflows" "policy"
       "apps"
     ]);
