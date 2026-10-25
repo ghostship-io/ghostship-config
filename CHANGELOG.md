@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.342] - 2026-10-25
+
+Set systemd as the candidate image's OCI Entrypoint so the post-image `--unit=t3code-server.service` argument reaches systemd and candidate acceptance can complete and write its receipt. Validate the image Entrypoint while inspecting candidate archives.
+
+Refs #504, #594.
+
+PR #576.
+
 ## [3.17.341] - 2026-10-25
 
 Pin ghostship-agent main at v0.47.219, including the coordinator memory fix (#783), paged issue listing and claim backfill (#805), and coordinator message origin checks (#816).
