@@ -813,6 +813,8 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
         for row in selection.get(category) or []:
             pool = row.get('pool') or {}
             limit = row.get('limiting_window') or {}
+            provider_quota = row.get('provider_quota') or {}
+            account_exhausted = provider_quota.get('exhausted') is True
             effort = row.get('effort') or {}
             pick = row.get('pick_score') or {}
             policy = row.get('data_policy') or {}
@@ -825,8 +827,10 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                       'reason': ExactLabel(str(row.get('reason') or '')),
                       'window': str(limit.get('kind') or ''),
                       'quota_id': str(limit.get('quota_id') or ''),
-                      'pace_state': str(limit.get('pace_state') or 'unknown'),
-                      'reset_source': str(limit.get('reset_source') or 'provider'),
+                      'pace_state': ('spent' if account_exhausted else
+                                     str(limit.get('pace_state') or 'unknown')),
+                      'reset_source': ('account_window' if account_exhausted else
+                                       str(limit.get('reset_source') or 'provider')),
                       'effort': str(effort.get('value') or ''),
                       'quality_basis': ExactLabel(str(row.get('quality_basis') or 'unknown')),
                       'quality_binding_basis': ExactLabel(str(row.get('quality_binding_basis') or '')),
@@ -859,7 +863,7 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
                                         and row.get('native') == selection.get('default_worker')),
                        'quality_rounds': row.get('quality_n'),
                        'quality_accepted': row.get('quality_s'),
-                       'remaining_ratio': limit.get('remaining_ratio'),
+                       'remaining_ratio': row.get('remaining_ratio'),
                        'pace_delta': limit.get('pace_delta'),
                        'pick_score': pick.get('score'),
                        'approved_free': 1.0 if row.get('approved_free') else 0.0,
@@ -872,10 +876,11 @@ def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], flo
             guard = row.get('worker_pool_guard') or {}
             numbers['guard_remaining_ratio'] = guard.get('remaining_ratio')
             numbers['guard_expected_remaining_ratio'] = guard.get('expected_remaining_ratio')
-            if limit.get('reset_at'):
+            reset_at = (provider_quota.get('reset') if account_exhausted else None) or limit.get('reset_at')
+            if reset_at:
                 try:
                     numbers['reset_timestamp_seconds'] = datetime.fromisoformat(
-                        str(limit['reset_at']).replace('Z', '+00:00')).timestamp()
+                        str(reset_at).replace('Z', '+00:00')).timestamp()
                 except (ValueError, OverflowError):
                     pass
             for field, value in numbers.items():

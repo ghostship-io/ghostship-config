@@ -577,9 +577,9 @@ for field, description in {
     'quality': 'Integer Quality score; ordering uses the unrounded posterior.',
     'quality_rounds': 'Observed model rounds used by Quality.',
     'quality_accepted': 'Accepted model rounds used by Quality.',
-    'remaining_ratio': 'Remaining share of the displayed long or quota limiting window.',
+    'remaining_ratio': 'Effective remaining share of the route after account and model limits.',
     'pace_delta': 'Weekly or monthly limiting window pace in percentage points.',
-    'reset_timestamp_seconds': 'Effective limiting-window reset; reset_source identifies custom resets.',
+    'reset_timestamp_seconds': 'Effective quota reset; reset_source identifies the quota owner.',
     'guard_remaining_ratio': 'Shared weekly remaining share read by the worker pool guard.',
     'guard_expected_remaining_ratio': 'Share the shared weekly window should have left at this point of its period.',
 }.items():
