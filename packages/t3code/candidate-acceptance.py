@@ -163,11 +163,18 @@ def candidate_name(deployment_id):
 def image_details(image_archive):
     with tarfile_open(image_archive) as archive:
         manifest = json.load(archive.extractfile("manifest.json"))[0]
-        config = archive.extractfile(manifest["Config"]).read()
+        config_bytes = archive.extractfile(manifest["Config"]).read()
+        config = json.loads(config_bytes)
         tags = manifest.get("RepoTags") or []
     if not tags:
         raise RuntimeError("candidate image archive has no repository tag")
-    return hashlib.sha256(config).hexdigest(), tags[0]
+    container_config = config.get("config") or {}
+    entrypoint = container_config.get("Entrypoint")
+    if (not isinstance(entrypoint, list) or not entrypoint
+            or not isinstance(entrypoint[0], str)
+            or Path(entrypoint[0]).name != "systemd"):
+        raise RuntimeError("candidate image archive requires a systemd entrypoint")
+    return hashlib.sha256(config_bytes).hexdigest(), tags[0]
 
 
 def tarfile_open(path):
