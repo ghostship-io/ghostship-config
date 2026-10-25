@@ -33,7 +33,7 @@ let
       schema = "ghostship.route-policy/v1";
       worker_capacity = {
         default = 8;
-        p0_override = 10;
+        p0_override = 12;
       };
       roles = {
         worker = {
