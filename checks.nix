@@ -42,6 +42,10 @@ let
   goCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-go-coordinator;
   goCoordinatorUnit = t3codeConfig.systemd.services.podman-ghostship-go-coordinator;
+  t3codeServiceToken =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.fields.GHOSTSHIP_COORDINATOR_TOKEN;
+  goCoordinatorServiceToken =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields.GHOSTSHIP_COORDINATOR_TOKEN;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
@@ -184,6 +188,8 @@ in
         goCoordinator.volumes);
     assert builtins.elem "/run/ghostship-secrets/ghostship-github/go-coordinator.env"
       goCoordinator.environmentFiles;
+    assert t3codeServiceToken.unit == "go-coordinator-auth";
+    assert goCoordinatorServiceToken.unit == "go-coordinator-auth";
     assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
     assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES
       == "ghostship-io/ghostship-agent";

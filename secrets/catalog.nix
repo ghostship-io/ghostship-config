@@ -103,6 +103,11 @@ in
       exports = [ ];
     };
 
+    go-coordinator-auth = mkUnit {
+      relativeFile = "secrets/files/sources/services/go-coordinator-auth.env.age";
+      exports = [ "TOKEN" ];
+    };
+
     discord = mkUnit {
       relativeFile = "secrets/files/sources/providers/discord.env.age";
       exports = [
@@ -830,6 +835,10 @@ in
         };
         GITHUB_TOKEN = {
           unit = "github";
+          key = "TOKEN";
+        };
+        GHOSTSHIP_COORDINATOR_TOKEN = {
+          unit = "go-coordinator-auth";
           key = "TOKEN";
         };
         BW_CLIENTID = {

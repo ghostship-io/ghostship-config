@@ -180,6 +180,7 @@ in
       mode = "0400";
       raw = true;
       fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
+      fields.GHOSTSHIP_COORDINATOR_TOKEN = { unit = "go-coordinator-auth"; key = "TOKEN"; };
     };
     ghostship.secretProjections.ghostship-hooks = {
       fileName = "ghostship-github/hooks.env";
