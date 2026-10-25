@@ -174,18 +174,13 @@
     },
     "inception": {
       "enabled": true,
-      "data_policy_approved": true,
+      "data_policy_approved": false,
       "allowed_workloads": [
         "development",
         "evaluation",
         "research"
       ],
-      "free_only": true,
-      "billing_verified": {
-        "basis": "Inception Free plan (100M tokens once), no card (coordinator check 2026-10-18)",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00"
-      }
+      "free_only": true
     },
     "poolside": {
       "enabled": true,
