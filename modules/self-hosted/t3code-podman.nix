@@ -89,16 +89,6 @@ let
     StandardError=inherit
     ExecStart=${pkgs.dbus}/bin/dbus-daemon --nofork --nopidfile --systemd-activation --address=systemd: --config-file=${busConfig}
     EOF
-    # This isolated service manager has no host user activation hooks. NixOS
-    # nevertheless explicitly restarts this unit during every switch.
-    cat > $out/nixos-activation.service <<'EOF'
-    [Unit]
-    Description=Isolated Podman manager activation (no host user hooks)
-    [Service]
-    Type=oneshot
-    RemainAfterExit=yes
-    ExecStart=${pkgs.coreutils}/bin/true
-    EOF
     cat > $out/podman.service <<'EOF'
     [Unit]
     Requires=dbus.socket

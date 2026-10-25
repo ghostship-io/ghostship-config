@@ -75,18 +75,16 @@ assert builtins.elem "t3code-podman-identity"
   cfg.system.activationScripts.t3code-podman-reexec-alias.deps;
 assert lib.hasInfix "rootfs.py reconcile /run/t3code-podman-rootfs "
   cfg.system.activationScripts.t3code-podman-reexec-alias.text;
-# The rendered manager must select the dedicated directory that declares the
-# mandatory activation unit; testing a mock manager cannot prove this contract.
+# The dedicated unit directory must not advertise NixOS user activation when
+# this isolated manager has no corresponding host activation service. The
+# switch tool uses this file's presence to decide whether to restart it.
 assert
   let
     unitPath = cfg.systemd.services."user@62040".environment.SYSTEMD_UNIT_PATH;
     manager = cfg.systemd.units."user@62040.service".text;
-    activation = builtins.readFile "${unitPath}/nixos-activation.service";
   in
   lib.hasInfix (builtins.unsafeDiscardStringContext "SYSTEMD_UNIT_PATH=${unitPath}") manager
-  && lib.hasInfix "Type=oneshot" activation
-  && lib.hasInfix "RemainAfterExit=yes" activation
-  && lib.hasInfix (builtins.unsafeDiscardStringContext "ExecStart=${base.pkgs.coreutils}/bin/true") activation;
+  && !(builtins.pathExists "${unitPath}/nixos-activation.service");
 assert !(cfg.system.activationScripts ? t3code-podman-user-activation);
 # Force generation of actual system unit text, including the template drop-in.
 {
