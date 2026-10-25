@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.304] - 2026-10-25
+
+- Limit Tdarr to two CPU cores
+
+PR #511.
+
 ## [3.17.303] - 2026-10-25
 
 - Providers: graphics-first top band; overspent and behind pace counted apart; free providers limited to the owner-approved list; OpenCode Free routes filed under their provider; names wrap and no panel scrolls.
