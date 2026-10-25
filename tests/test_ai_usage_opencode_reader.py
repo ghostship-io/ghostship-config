@@ -236,6 +236,40 @@ class ClassificationTests(unittest.TestCase):
         error = failure("provider.quota", "AI Gateway requires a valid credit card on file")
         self.assertEqual(self.classify(request(error=error)), ("limit", None))
 
+    def test_a_structured_http_200_go_budget_error_is_a_limit(self):
+        error = {
+            "type": "provider.error",
+            "message": "Provider returned an application error",
+            "status": 200,
+            "response": {
+                "body": json.dumps({
+                    "type": "error",
+                    "error": {
+                        "type": "GoUsageLimitError",
+                        "message": "Go usage limit exceeded",
+                    },
+                })
+            },
+        }
+        self.assertEqual(self.classify(request(error=error)), ("limit", None))
+
+    def test_an_unrecognized_http_200_error_body_is_not_a_quota_limit(self):
+        error = {
+            "type": "provider.error",
+            "message": "Provider returned an application error",
+            "status": 200,
+            "response": {
+                "body": json.dumps({
+                    "type": "error",
+                    "error": {
+                        "type": "ValidationError",
+                        "message": "usage limit reached",
+                    },
+                })
+            },
+        }
+        self.assertEqual(self.classify(request(error=error)), ("other", None))
+
     def test_too_many_concurrent_requests_is_not_a_limit(self):
         error = failure("provider.rate-limit", "Too Many Requests: too many concurrent requests")
         self.assertEqual(self.classify(request(error=error)), ("other", None))
