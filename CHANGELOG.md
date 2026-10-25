@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.309] - 2026-10-25
+
+- Keep the host-published managed agent package available through Nix garbage collection.
+- Run a persistent oneshot after T3 is ready, comparing installed and deployed versions before invoking the managed installer. Missing or older installed versions refresh; equal or newer installed versions log success and do not refresh.
+
+Refs ghostship-io/ghostship-agent#549
+
+PR #516.
+
 ## [3.17.308] - 2026-10-25
 
 Include owner memory in the pinned agent runtime source tree.
