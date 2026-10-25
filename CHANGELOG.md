@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.321] - 2026-10-25
+
+- Publish and consume canonical per-provider quota headroom, reset, and exhaustion.
+
+PR #543.
+
 ## [3.17.320] - 2026-10-25
 
 - Flake: pin ghostship-private-agent to d3117442; the lock's narHash is the `nix flake prefetch` hash of that revision.
