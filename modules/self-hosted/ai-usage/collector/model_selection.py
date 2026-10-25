@@ -374,7 +374,10 @@ def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # A free route the owner did not approve never takes a paid route's
         # place for internal work, whatever its score.
         unapproved_free = row['billing'] in ('free', 'promotion') and not row.get('approved_free')
-        return (not row.get('selection_eligible', True), not row['available'], TRUST.get(row['trust_level'], 3),
+        # Keep the complete published series in the same order as the picker:
+        # non-native routes can be displayed, but cannot be a picker choice.
+        return (not row.get('picker_eligible', False), not row.get('selection_eligible', True),
+                not row['available'], TRUST.get(row['trust_level'], 3),
                 not approved_active, unapproved_free,
                 row.get('ranking_pace_state', row['pace_state']) == 'far_behind', not free,
                 -(combined if combined is not None else -1),
@@ -744,24 +747,9 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                     # allowance and binding window are already published as
                     # their own fields; this carries them to the CLI too.
                     row["reason"] = "pick: " + str(row["pick_reason"])
-    # Quality chooses the provider's model. Capacity orders those provider
-    # choices across the lane; no provider name has a fixed position.
+    # ``ordered`` is the one authoritative order for picker choices and the
+    # published positions. Do not rank a second time for the dashboard.
     for category, rows in categories.items():
-        displayed_choices = {provider: group['selected'][category] or next(
-            (item['native'] for item in rows if item['provider'] == provider
-             and item['picker_eligible'] and item['selection_eligible']), None)
-            for provider, group in providers.items()}
-        def lane_key(row):
-            displayed = displayed_choices[row['provider']]
-            free_pick = (category != 'worker' or bool(row.get('approved_free')))
-            picked = ((row['native'] is not None and row['native'] == displayed)
-                      or (category == 'worker' and free_pick
-                          and row['key'] == free_selected.get(row['provider'])))
-            capacity = row['remaining_ratio']
-            return (not picked, not row['available'], TRUST.get(row['trust_level'],3),
-                    row.get('ranking_pace_state', row['pace_state']) == 'far_behind', -(capacity if capacity is not None else -1),
-                    row['position'])
-        rows.sort(key=lane_key)
         for index, row in enumerate(rows,1):
             row['position'] = index
     obsolete = []

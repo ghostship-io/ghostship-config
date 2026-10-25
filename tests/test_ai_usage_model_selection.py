@@ -277,8 +277,8 @@ class SelectionTests(unittest.TestCase):
             evidence={'policy': {'model_selection': {'approved_free_workers': [
                 {'provider': 'free-provider', 'model': 'free', 'allow_training': True,
                  'sensitivity': ['public', 'internal']}]}}})
-        self.assertEqual(value['worker'][0]['model'], 'free')
-        self.assertTrue(value['worker'][0]['approved_free'])
+        self.assertEqual(value['worker'][0]['model'], 'reviewer')
+        self.assertTrue(next(row for row in value['worker'] if row['model'] == 'free')['approved_free'])
         self.assertEqual(value['default_worker']['model'], 'reviewer')
         self.assertIsNone(next(r for r in value['worker'] if r['model'] == 'free')['native'])
 
@@ -300,19 +300,71 @@ class SelectionTests(unittest.TestCase):
         rows[0]['available'] = False
         self.assertEqual(self.build(rows)['free_selected']['opencode'], 'opencode:alternate')
 
-    def test_lane_order_and_default_follow_live_capacity_without_fixed_provider_order(self):
+    def test_published_order_and_default_follow_picker_quality_order(self):
         one=candidate('one','strong',99,remaining=.2)
         two=candidate('two','other',70,remaining=.8)
         two['windows']=[{'kind':'session','duration_seconds':18000,'remaining_ratio':.8}]
         value=self.build([one,two])
-        self.assertEqual(value['default_worker']['model'],'other')
-        self.assertEqual(value['worker'][0]['limiting_window']['kind'],'session')
+        self.assertEqual(value['default_worker']['model'],'strong')
+        self.assertEqual(value['worker'][0]['model'],'strong')
         two['capacity']['remaining_ratio']=0
         two['windows'][0]['remaining_ratio']=0
         self.assertEqual(self.build([one,two])['default_worker']['model'],'strong')
         two['capacity']['remaining_ratio']=1
         two['windows'][0]['remaining_ratio']=1
-        self.assertEqual(self.build([one,two])['default_worker']['model'],'other')
+        self.assertEqual(self.build([one,two])['default_worker']['model'],'strong')
+
+    def test_published_worker_order_matches_picker_after_free_route_gates(self):
+        from types import SimpleNamespace
+        import main
+
+        approvals = [
+            {'provider': 'nvidia', 'model': 'glm-flash', 'allow_training': False,
+             'sensitivity': ['public', 'internal']},
+            {'provider': 'nvidia', 'model': 'other', 'allow_training': False,
+             'sensitivity': ['public', 'internal']},
+        ]
+        proven_routes = main.best_free_t3_models(
+            [SimpleNamespace(provider='nvidia', model='glm-flash', rank=1, quality=70),
+             SimpleNamespace(provider='nvidia', model='other', rank=2, quality=99)],
+            {'policy': {'model_selection': {'approved_free_workers': approvals}}},
+            [{'source': 'probe', 'provider': 'opencode-free', 'model': 'nvidia/glm-flash',
+              'passed': True}],
+        )
+        paid = candidate('codex', 'reviewer', quality=90)
+        approved = candidate('opencode-free', 'nvidia/glm-flash', quality=70)
+        approved['native'] = ({
+            'mapped': True, 'provider_instance_id': 'opencode-free',
+            'model_id': 'nvidia/glm-flash',
+        } if 'nvidia/glm-flash' in proven_routes else {})
+        approved['access'] = {'billing': 'free'}
+        unproven = candidate('opencode-free', 'nvidia/other', quality=99)
+        unproven['native'] = ({
+            'mapped': True, 'provider_instance_id': 'opencode-free',
+            'model_id': 'nvidia/other',
+        } if 'nvidia/other' in proven_routes else {})
+        unproven['access'] = {'billing': 'free'}
+        snapshot = {
+            'generated_at': '2026-10-23T12:00:00Z',
+            'candidates': [paid, unproven, approved],
+            'quota': {'provider_capacity': {}},
+        }
+        value = selection.build(snapshot, [], evidence={
+            'policy': {'model_selection': {'approved_free_workers': approvals}},
+        })
+
+        published = [(labels['provider'], labels['model'])
+                     for name, labels, number in selection.samples(value)
+                     if name == 'ghostship_ai_picker_model_position']
+        first_available = next(
+            (row for row in value['worker']
+             if row['available'] and row['picker_eligible'] and row['selection_eligible']),
+            None,
+        )
+        self.assertTrue(next(row for row in value['worker'] if row['model'] == 'nvidia/glm-flash')['approved_free'])
+        self.assertFalse(next(row for row in value['worker'] if row['model'] == 'nvidia/other')['picker_eligible'])
+        self.assertEqual(value['default_worker'], first_available['native'])
+        self.assertEqual(published[0], (first_available['provider'], first_available['model']))
 
     def test_untiered_gemini_inherits_its_live_family_limit_and_stays_listed_at_zero(self):
         row=candidate('antigravity','gemini-example',remaining=None)
@@ -495,7 +547,7 @@ class SelectionTests(unittest.TestCase):
         result = self.build([external, native])
         self.assertEqual(result['default_worker']['model'], 'native')
         row = next(row for row in result['worker'] if row['model'] == 'native')
-        self.assertEqual(row['provider_position'], 2)
+        self.assertEqual(row['provider_position'], 1)
         self.assertEqual((row['picker_provider_position'], row['picker_pool_position']), (1, 1))
         published = {name: number for name, labels, number in selection.samples(result)
                      if labels['model'] == 'native'}
