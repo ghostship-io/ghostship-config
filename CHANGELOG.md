@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.325] - 2026-10-25
+
+- Add worker capacity to owner route policy
+
+PR #545.
+
 ## [3.17.324] - 2026-10-25
 
 - Fail closed on unverified Inception free entitlement and data-processing policy.
