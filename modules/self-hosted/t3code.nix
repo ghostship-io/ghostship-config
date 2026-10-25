@@ -448,6 +448,7 @@ in
     environment = {
       STATE_DIR = t3codeDeploymentState;
       ACCEPTED_IMAGE_REF = acceptedImageRef;
+      RECEIPT_SELF_CHECK = lib.getExe t3codeReceiptSelfCheck;
       IMAGE_ARCHIVE = toString t3codeImage;
       DEPLOYMENT_ID = t3codeDeploymentId;
       HOME_DIR = t3codeHome;

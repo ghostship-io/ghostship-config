@@ -54,6 +54,11 @@ set -euo pipefail
 if [[ $1 == inspect && $2 == t3code ]]; then
   case "$4" in
     '{{.State.Health.Status}}') printf 'healthy\n' ;;
+    '{{.Image}}') printf '%s\n' "$RUNNING_IMAGE_ID" ;;
+    '{{.State.Running}} {{.Image}}')
+      [[ ${RUNNING_CONTAINER:-1} == 1 ]] || exit 1
+      printf 'true %s\n' "$RUNNING_IMAGE_ID"
+      ;;
     *) printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" ;;
   esac
 elif [[ $1 == load ]]; then
@@ -84,16 +89,22 @@ fi
 SH
 cat > "$tmp/bin/systemd-cat" <<'SH'
 #!/usr/bin/env bash
-cat >/dev/null
+cat >> "$ALARM_LOG"
+SH
+cat > "$tmp/bin/receipt-self-check" <<SH
+#!/usr/bin/env bash
+exec bash "$root/packages/t3code/receipt-self-check.sh"
 SH
 cat > "$tmp/bin/hostname" <<'SH'
 #!/usr/bin/env bash
 printf 'test-host\n'
 SH
-chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/systemctl" "$tmp/bin/systemd-cat" "$tmp/bin/hostname"
+chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/systemctl" "$tmp/bin/systemd-cat" "$tmp/bin/receipt-self-check" "$tmp/bin/hostname"
 
 export STATE_DIR="$tmp/state" IMAGE_ARCHIVE="$tmp/image.tar" DEPLOYMENT_ID=deployment-1
 export ACCEPTED_POINTER_FILE="$tmp/state/accepted-image"
+export RUNNING_IMAGE_ID="sha256:$(printf 'legacy-running-image' | sha256sum | cut -d ' ' -f 1)"
+export RECEIPT_SELF_CHECK="$tmp/bin/receipt-self-check" ALARM_LOG="$tmp/alarms.log"
 export HOME_DIR="$tmp/home" CANDIDATE_ACCEPTANCE="$tmp/accept-candidate" PODMAN_BIN="$tmp/bin/podman"
 export SYSTEMCTL_BIN="$tmp/bin/systemctl" ACCEPTED_IMAGE_REF=localhost/ghostship-t3code:accepted
 export CANDIDATE_SOCKET="$tmp/candidate.sock" CANDIDATE_UID=62041
@@ -101,6 +112,16 @@ export CANDIDATE_RUNTIME_DIR="$tmp/runtime" CANDIDATE_HOME_TARGET=/candidate-hom
 export PROVIDER_SECRETS_FILE="$tmp/provider.env" TOOLING_PATH="$tmp/tooling" AGENT_REVISION=agent-rev
 export PYTHON_BIN="$tmp/bin/python" JQ_BIN=jq RESTART_LEDGER="$tmp/ledger.jsonl"
 export AUDIT_LOG="$tmp/home/restart-audit.log" EVENTS="$tmp/events"
+
+# Model the currently running image from the host before this guard existed.
+# This keeps the regular candidate-flow proof separate from the no-receipt
+# bootstrap proof below.
+printf '%s\n' "${RUNNING_IMAGE_ID#sha256:}" > "$ACCEPTED_POINTER_FILE"
+jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
+  '{deployment_id:"legacy",image_id:$image,candidate_name:"t3code-candidate-legacy",
+    live_before:{id:"production"},live_after:{id:"production"},
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+  > "$STATE_DIR/receipts/legacy.json"
 
 bash "$root/packages/t3code/deploy-image.sh" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
@@ -200,8 +221,51 @@ grep -q '^Initialized accepted image alias from the existing PASS receipt:' "$tm
 [[ $(wc -l < "$EVENTS") == 10 ]]
 [[ $(cat "$ACCEPTED_POINTER_FILE") == "$repair_image" ]]
 
+# With no receipt for the currently running image and no accepted alias, the
+# bootstrap tags only that live image, records the alarm, and does not load a
+# candidate image or restart T3.
+bootstrap_state="$tmp/bootstrap-state"
+mkdir -p "$bootstrap_state/receipts"
+export STATE_DIR="$bootstrap_state" DEPLOYMENT_ID=deployment-bootstrap
+export ACCEPTED_POINTER_FILE="$bootstrap_state/accepted-image"
+export RUNNING_IMAGE_ID="sha256:$(printf 'unreceipted-running-image' | sha256sum | cut -d ' ' -f 1)"
+export RUNNING_CONTAINER=1 ALARM_LOG="$tmp/bootstrap-alarms.log" EVENTS="$tmp/bootstrap-events"
+: > "$EVENTS"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/bootstrap.log" 2>&1
+bootstrap_status=$?
+set -e
+[[ $bootstrap_status == 0 ]]
+grep -q '^BOOTSTRAP: no PASS receipt matches running image ' "$tmp/bootstrap.log"
+grep -q 'without a matching PASS candidate-acceptance receipt' "$ALARM_LOG"
+[[ $(cat "$ACCEPTED_POINTER_FILE") == "${RUNNING_IMAGE_ID#sha256:}" ]]
+[[ $(cat "$EVENTS") == image-tag ]]
+[[ ! -e "$STATE_DIR/applied" ]]
+
+# With no live container, bootstrap fails clearly and leaves the alias absent.
+empty_state="$tmp/empty-state"
+mkdir -p "$empty_state/receipts"
+export STATE_DIR="$empty_state" DEPLOYMENT_ID=deployment-no-running
+export ACCEPTED_POINTER_FILE="$empty_state/accepted-image" RUNNING_CONTAINER=0
+export ALARM_LOG="$tmp/empty-alarms.log" EVENTS="$tmp/empty-events"
+: > "$EVENTS"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/no-running.log" 2>&1
+no_running_status=$?
+set -e
+[[ $no_running_status != 0 ]]
+grep -q 'no T3 container is running and no accepted alias exists' "$tmp/no-running.log"
+[[ ! -e "$ACCEPTED_POINTER_FILE" ]]
+[[ ! -s "$EVENTS" ]]
+
 echo 'V1 shell proof: candidate acceptance PASS precedes the immediate restart.'
 echo 'Receipt guard demonstration: absent and mismatched receipts refuse tag movement and restart.'
 echo 'Upgrade proof: an existing matching PASS receipt initializes a missing accepted alias without rerunning checks or restarting.'
+echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, and skipped candidate load/restart.'
+echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'

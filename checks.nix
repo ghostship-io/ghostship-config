@@ -36,6 +36,7 @@ let
   routePolicyPath = "/etc/ghostship/route-policy.json";
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
+  t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
@@ -127,6 +128,7 @@ in
     assert t3codeUnit.environment.STATE_DIR == "/var/lib/ghostship/t3code-deployment";
     assert pkgs.lib.hasSuffix "/bin/podman" t3codeUnit.environment.PODMAN_BIN;
     assert pkgs.lib.hasSuffix "/bin/jq" t3codeUnit.environment.JQ_BIN;
+    assert pkgs.lib.hasSuffix "/bin/t3code-receipt-self-check" t3codeDeploy.environment.RECEIPT_SELF_CHECK;
     assert builtins.all (
       unit:
       !unit.restartIfChanged
