@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.329] - 2026-10-25
+
+Picker route remaining gauges now use the effective route quota after shared account limits. Exhausted shared accounts publish zero with the account reset and spent state, even when the local route window still has headroom.
+
+PR #562.
+
 ## [3.17.328] - 2026-10-25
 
 Pin the Ghostship agent to current main with claim handover support.
