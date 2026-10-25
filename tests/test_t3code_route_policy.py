@@ -16,6 +16,12 @@ class T3RoutePolicyTests(unittest.TestCase):
         self.assertIn('"/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"', T3CODE)
         self.assertIn('environment.etc."ghostship/route-policy.json".source = ownerRoutePolicy', T3CODE)
 
+    def test_worker_capacity_is_in_the_live_policy_and_mounted_into_the_coordinator(self):
+        self.assertIn('worker_capacity = {\n        default = 8;\n        p0_override = 10;\n      };', T3CODE)
+        coordinator = (ROOT / "modules/self-hosted/github-engineering.nix").read_text()
+        self.assertIn('GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";', coordinator)
+        self.assertIn('"/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"', coordinator)
+
     def test_the_free_allow_list_is_derived_from_the_installed_approved_source(self):
         self.assertIn('approvedFreeWorkers = ./ai-usage/approved-free-workers.json', T3CODE)
         self.assertIn('environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers', T3CODE)
