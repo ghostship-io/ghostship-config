@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.348] - 2026-10-25
+
+Delegate the isolated candidate Podman service's cgroup subtree so systemd in candidate containers can create its service cgroups. Report the container exit code when candidate startup ends before app readiness.
+
+Refs: ghostship-io/ghostship-agent#504, ghostship-io/ghostship-agent#814
+
+PR #580.
+
 ## [3.17.347] - 2026-10-25
 
 - Replace idle-gated T3 image deployment with immediate exact-image acceptance and activation, with one incident for a failed candidate.
