@@ -449,6 +449,9 @@ METRIC_HELP = {
     "ghostship_ai_provider_capacity_windows": (
         "The account windows of a provider, split into known and unknown."
     ),
+    "ghostship_ai_picker_quota_capacity_missing": (
+        "A live picker candidate whose account key has no provider capacity record."
+    ),
     "ghostship_ai_account_window_remaining_ratio": (
         "The share of an account window that is left. One series per window "
         "of an account, and the label says which window it is."

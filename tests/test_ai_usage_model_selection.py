@@ -56,6 +56,47 @@ class SelectionTests(unittest.TestCase):
         self.assertAlmostEqual(selected['remaining_ratio'], 0.05)
         self.assertAlmostEqual(selected['provider_quota']['left'], 0.8)
 
+    def test_missing_account_capacity_key_is_a_visible_finding(self):
+        row = candidate('claude', 'claude-opus-5-5', remaining=0.5)
+        row['account'] = 'claudeAgent'
+        value = self.build([row], {'claude': {
+            'left': 0.8, 'reset': '2026-10-26T12:00:00Z', 'exhausted': False,
+        }})
+        self.assertEqual(value['quota_findings'], [{
+            'code': 'provider_capacity_key_missing',
+            'provider': 'claude', 'account': 'claudeAgent', 'model': 'claude-opus-5-5',
+        }])
+        self.assertEqual(value['worker'][0]['quota_finding'], value['quota_findings'][0])
+        self.assertTrue(any(name == 'ghostship_ai_picker_quota_capacity_missing'
+                            for name, _labels, _number in selection.samples(value)))
+
+    def test_spent_shared_account_blocks_models_with_local_headroom(self):
+        rows = [candidate('claude', model, remaining=0.8)
+                for model in ('claude-opus-5-5', 'claude-sonnet-5-5')]
+        for row in rows:
+            row['account'] = 'claude'
+            row['quota_state'] = 'available'
+        value = self.build(rows, {'claude': {
+            'left': 0.0, 'reset': '2026-10-26T12:00:00Z', 'exhausted': True,
+        }})
+        self.assertTrue(all(not row['available'] for row in value['worker']))
+        self.assertTrue(all(row['state'] == 'exhausted' for row in value['worker']))
+        self.assertTrue(all(row['remaining_ratio'] == 0.0 for row in value['worker']))
+
+    def test_model_scoped_exhaustion_does_not_block_sibling(self):
+        opus = candidate('example', 'opus-route', remaining=0.8)
+        fable = candidate('example', 'fable-route', remaining=0.0)
+        for row in (opus, fable):
+            row['account'] = 'example'
+        fable['available'] = False
+        fable['quota_state'] = 'exhausted'
+        value = self.build([opus, fable], {'example': {
+            'left': 0.8, 'reset': '2026-10-26T12:00:00Z', 'exhausted': False,
+        }})
+        by_model = {row['model']: row for row in value['worker']}
+        self.assertTrue(by_model['opus-route']['available'])
+        self.assertFalse(by_model['fable-route']['available'])
+
     def test_orchestrator_is_also_worker_and_quality_picks_default(self):
         value = self.build([candidate('other', 'fast', 70), candidate('codex', 'reviewer', 90)])
         self.assertEqual(set(value['providers']['codex']), {'orchestrator', 'worker', 'selected', 'pools'})

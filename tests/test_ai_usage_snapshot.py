@@ -150,17 +150,22 @@ class SnapshotContractTests(unittest.TestCase):
                      'resetEpoch':NOW+HOUR,'durationSeconds':7*86400,'observedAtEpoch':NOW,'appliesTo':scope}
                     for quota,used,scope in (('seven_day',.1,[]),('seven_day_fable',1,['fable']))]
         result = snapshot.build_snapshot(now=NOW, sources=[], ranked=rows,
-            native_models={('claude','claude-fable-5'):{'providerInstance':'claudeAgent','modelId':'claude-fable-5'}},
+            native_models={
+                ('claude','claude-opus-5-5'):{'providerInstance':'claudeAgent','modelId':'claude-opus-5-5'},
+                ('claude','claude-fable-5'):{'providerInstance':'claudeAgent','modelId':'claude-fable-5'},
+            },
             measured_windows=windows,
             outcomes={'policy':{'model_selection':{'excluded_pools':['antigravity:3p','claude:fable']}}})
         self.assertEqual({row['model'] for row in result['candidates']}, {'gemini-4-argon','claude-opus-5-5'})
         import model_selection
         canonical=model_selection.build(result,[],evidence={'policy':{'model_selection':{'excluded_pools':['antigravity:3p','claude:fable']}}})
+        self.assertEqual(canonical['quota_findings'], [])
         self.assertIn({'instanceId':'claudeAgent','model':'claude-fable-5'},
                       [row['native'] for row in canonical['role_exclusions']])
         claude_route=next(row for row in result['candidates']
                           if row['provider']=='claude' and row['model']=='claude-opus-5-5')
         self.assertEqual(claude_route['account'], 'claude')
+        self.assertEqual(claude_route['native']['provider_instance_id'], 'claudeAgent')
         claude_picker=next(row for row in canonical['worker']
                            if row['provider']=='claude' and row['model']=='claude-opus-5-5')
         self.assertEqual(claude_picker['provider_quota']['left'],

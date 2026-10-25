@@ -480,6 +480,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
     categories: dict[str, list[dict[str, Any]]] = {name: [] for name in CATEGORIES}
     providers: dict[str, dict[str, Any]] = {}
     free_selected: dict[str, str] = {}
+    quota_findings: list[dict[str, str]] = []
     trust_cache = {}
     role_exclusions = list(snapshot.get("selection_exclusions") or [])
     excluded_pools = set((((evidence or {}).get("policy") or {}).get("model_selection") or {}).get("excluded_pools") or [])
@@ -515,8 +516,17 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
         remaining = number(capacity.get("remaining_ratio"))
         provider = str(source.get("provider") or "")
         account = str(source.get("account") or source.get("quota_account") or provider)
-        provider_quota = ((snapshot.get("quota") or {}).get("provider_capacity") or {}).get(account)
+        capacity_records = ((snapshot.get("quota") or {}).get("provider_capacity") or {})
+        provider_quota = capacity_records.get(account) if isinstance(capacity_records, Mapping) else None
+        quota_finding = None
         if not isinstance(provider_quota, Mapping):
+            quota_finding = {
+                "code": "provider_capacity_key_missing",
+                "provider": provider,
+                "account": account,
+                "model": str(source.get("model") or ""),
+            }
+            quota_findings.append(quota_finding)
             provider_quota = {}
         provider_left = number(provider_quota.get("left"))
         if provider_left is None:
@@ -606,6 +616,7 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
                 "reset": provider_reset,
                 "exhausted": canonical_exhausted,
             },
+            "quota_finding": quota_finding,
             "pace_delta": limit.get("pace_delta") if limit else None,
             "pace_state": limit.get("pace_state") if limit else "unknown",
             "ranking_pace_state": capacity.get('pace_state') or (limit.get('pace_state') if limit else 'unknown'),
@@ -776,7 +787,8 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
             "max_age_seconds": snapshot.get("max_age_seconds", 900),
             "providers": providers, "worker_builds": dict(worker_builds),
             "free_selected": free_selected,
-            "role_exclusions": role_exclusions, "obsolete": obsolete, **categories,
+            "role_exclusions": role_exclusions, "obsolete": obsolete,
+            "quota_findings": quota_findings, **categories,
             "default_worker": next((row["native"] for row in categories["worker"]
                                     if row["available"] and row["picker_eligible"] and row["selection_eligible"]), None)}
 
@@ -784,6 +796,19 @@ def build(snapshot: Mapping[str, Any], orchestrator: list[Mapping[str, Any]],
 def samples(selection: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:
     """Project canonical choices without re-ranking or inventing readings."""
     values = []
+    for finding in selection.get("quota_findings") or []:
+        if not isinstance(finding, Mapping):
+            continue
+        values.append((
+            "ghostship_ai_picker_quota_capacity_missing",
+            {
+                "provider": str(finding.get("provider") or ""),
+                "account": ExactLabel(str(finding.get("account") or "")),
+                "model": ExactLabel(str(finding.get("model") or "")),
+                "code": str(finding.get("code") or "provider_capacity_key_missing"),
+            },
+            1.0,
+        ))
     for category in CATEGORIES:
         for row in selection.get(category) or []:
             pool = row.get('pool') or {}
