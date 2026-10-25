@@ -33,6 +33,8 @@ let
   ) (builtins.attrNames self.nixosConfigurations.chill-penguin.config.systemd.services);
   t3codePreStartSeedsTooling = pkgs.lib.hasInfix "ghostship-t3code-tools" t3codePreStart;
   t3codeConfig = self.nixosConfigurations.chill-penguin.config;
+  t3codeCandidatePodmanPath =
+    t3codeConfig.systemd.services.t3code-podman-candidate.path;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
   );
@@ -112,6 +114,7 @@ in
     ) agentUnits;
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
+    assert builtins.head t3codeCandidatePodmanPath == "/run/wrappers/bin";
     assert routePolicy.schema == "ghostship.route-policy/v1";
     assert
       builtins.sort builtins.lessThan actualWorkerRoutes
