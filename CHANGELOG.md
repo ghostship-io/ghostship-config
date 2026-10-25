@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.350] - 2026-10-25
+
+- Fix the T3 deployer shellcheck build gate so candidate image deployment can proceed.
+
+Release: patch
+
+PR #583.
+
 ## [3.17.349] - 2026-10-25
 
 - Flake: pin ghostship-private-agent to b836f2ef; the lock's narHash is the `nix flake prefetch` hash of that revision.
