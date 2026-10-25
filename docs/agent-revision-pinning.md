@@ -34,31 +34,19 @@ evaluate it with a GitHub credential — a bare public tarball fetch returns
 If a future bump is not primed, the host's upgrade fails with the
 `404` archive error described above and the running generation is unaffected.
 
-## The organisation namespace
+## Current source line
 
-The private agent source now lives in the `ghostship-io` organisation. The
-`ghostship-private-agent` input URL and both lock owners name that
-organisation. The pinned revision is `f6a415dd` (free-pool grant removal and
-conservative unknown limits), which descends from the previous pin
-`cb003746`, so nothing on the pinned line is dropped. The repositories were
-renamed at the same time — `nixos-config` became `ghostship-config` and
-`orca-advanced-calibration` became `ghostship-orca` — while local checkout
-paths and T3 project identifiers stayed the same.
-The pinned revision is now `af089700` (agent 0.43.1 restores the MCP server's agent browser; GitHub review capabilities are CLI-only), descending from `f6a415dd`. The next pin, `2318134e` (0.43.2), makes handler imports lazy, which is what actually restores the MCP browser.
+The private source is `ghostship-io/ghostship-agent`; the flake URL and both
+lock owners use that canonical namespace. The current pin is
+`97923468aa18458e3552f9b122b3619b359c8fe4` (0.47.212). It descends from the
+previous pin and includes #745, #746, #763 and #783: native prerequisite
+reconciliation for `Work.split`, revision-keyed scope wake deduplication,
+the work-start override schema fix, and bounded coordinator memory.
 
-The coordinator's repository map, its incident repository and the webhook
-receiver's allowlist now name the canonical repositories. The receiver also
-serves the seven previous names, and the coordinator configuration carries a
-`repository_aliases` map from each previous name to its canonical one, so that
-existing issue owners, queued deliveries, CI issue mappings and pull request
-links survive the transfer.
-
-Those aliases take effect only in an agent revision that implements them. A
-pin bump that adds them must descend from the pinned revision, as
-[the pin guard](#the-pin-must-not-move-backwards) requires; a revision from
-another line would drop the coordinator behaviour that is already deployed.
-The pinned revision `f6a415dd` carries that implementation, so the alias map
-is live.
+The repository moved from `nixos-config` to `ghostship-config`, and the former
+`orca-advanced-calibration` repository became `ghostship-orca`. Existing issue
+owners, queued deliveries, CI mappings and pull request links rely on the
+repository alias map in the agent source; pin updates must stay on that line.
 
 ## The pin must not move backwards
 
