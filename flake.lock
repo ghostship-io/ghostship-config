@@ -157,16 +157,16 @@
       "locked": {
         "lastModified": 1792912765,
         "narHash": "sha256-nsy05icV9xmI3IPDrTn25kxmQUNoIILW8NpIYu0csP4=",
-        "ref": "refs/heads/main",
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
         "rev": "891be0c97ce78b3efa971adf8daf80d9cef2955f",
-        "revCount": 2017,
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
+        "type": "github"
       },
       "original": {
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
         "rev": "891be0c97ce78b3efa971adf8daf80d9cef2955f",
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
+        "type": "github"
       }
     },
     "home-manager": {
