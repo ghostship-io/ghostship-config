@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.337] - 2026-10-25
+
+- Pin the deployed agent source to current `main` at `5343c87eb882425b0a8c7c8805c0f694f46c1ed1`, including merged #713 and #720.
+- Keep the GitHub flake source form so the repository's private-source CI gate can import and verify the exact pinned revision.
+
+PR #570.
+
 ## [3.17.336] - 2026-10-25
 
 Document canonical account capacity fields, unknown/exhausted behavior, model and shared-account scope, reset provenance, evidence health, configured-reader gaps, metrics, and picker consumption.
