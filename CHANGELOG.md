@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.317] - 2026-10-25
+
+- Run isolated T3 candidate acceptance before container pickup
+
+PR #531.
+
 ## [3.17.316] - 2026-10-25
 
 Pin Ghostship Agent runtime to 0.47.165.
