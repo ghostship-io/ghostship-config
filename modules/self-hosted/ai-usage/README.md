@@ -941,13 +941,14 @@ provider-reported dollar charge.
   was withheld and it worked.
 * `ghostship_ai_free_route_calibration_state{provider,model,state}` - 1 for
   the state of a route's calibration: `ok`, `warn` (a wrong reading on a day),
-  `fail` (falsely available two days running) or `unmeasured` (no evidence).
+  `fail` (falsely available on the latest complete day) or `unmeasured`
+  (no evidence).
 * `ghostship_ai_free_route_false_available_streak_days{provider,model}` - the
   consecutive complete days a route refused while it read available, ending at
   the last complete day.
 * `ghostship_ai_free_route_calibration_acceptance{state}` - 1 for the owner's
-  acceptance: `ok` when no free route refused while it read available on two
-  consecutive days, `fail` otherwise.
+  daily acceptance: `ok` when no free route refused while it read available on
+  the latest complete day, `fail` otherwise.
 
 The calibration replays the same request record the inference reads: just
 before every refusal and every run of successes it asks what the reading said,

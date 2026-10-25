@@ -16,9 +16,9 @@ record up to the observed request, so a change to the reading changes the
 calibration with it. The counts are bucketed per day in the collector's own
 zone, and the window is bounded: the trust view is the last two weeks.
 
-The acceptance rule is the owner's: a route fails when its false-available
-count is non-zero on two consecutive complete days. A day with no refusal is
-never a failing day.
+The acceptance rule is checked daily: a route fails when its false-available
+count is non-zero on the latest complete day. Earlier days remain in the
+published history, but do not keep a route failing after a clean day.
 
 This module reads no file and no network. It returns plain data.
 """
@@ -287,7 +287,8 @@ def build(
         by_provider.setdefault(provider, {}).setdefault((provider, model), []).append(event)
 
     complete = _complete_days(moment, zone, window_days)
-    last_two = complete[-2:]
+    checked_days = complete[-1:]
+    checked_day = checked_days[0] if checked_days else None
     published: dict[str, Any] = {}
     failed: list[str] = []
     routes_by_provider: dict[str, set[str]] = {}
@@ -312,7 +313,7 @@ def build(
             totals = counted["totals"]
             streak = _streak(complete, day_rows)
             observed = totals["refusals"] + totals["successes"]
-            if streak >= 2:
+            if checked_day and (day_rows.get(checked_day) or {}).get("false_available", 0) > 0:
                 state = STATE_FAIL
                 failed.append(_route_key(provider, model))
             elif totals["false_available"] or totals["false_exhausted"]:
@@ -334,16 +335,16 @@ def build(
     if failed:
         acceptance = {
             "state": "fail",
-            "reason": "a free route refused while it read available on two consecutive days",
+            "reason": "a free route refused while it read available on the latest complete day",
             "failed_routes": sorted(failed),
-            "checked_days": last_two,
+            "checked_days": checked_days,
         }
     else:
         acceptance = {
             "state": "ok",
             "reason": "",
             "failed_routes": [],
-            "checked_days": last_two,
+            "checked_days": checked_days,
         }
     return {
         "schema": ACCEPTANCE_SCHEMA,

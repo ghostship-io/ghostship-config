@@ -4293,7 +4293,7 @@ def build_snapshot(
         },
         "pending": pending,
         # How well each free route's reading predicted its refusals, per day,
-        # with the owner's two-consecutive-day acceptance rule.
+        # with the owner's daily false-availability acceptance rule.
         "free_calibration": dict(free_calibration or {}),
         "value_policy": {
             **VALUE_POLICY,

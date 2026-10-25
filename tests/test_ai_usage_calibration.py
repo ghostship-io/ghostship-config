@@ -2,8 +2,8 @@
 
 The owner's bar (ghostship-agent #462) is that a limit reading is only
 trustworthy when it predicted the refusals that happened. These tests pin the
-two ways it can be wrong, the daily buckets, the two-consecutive-day
-acceptance rule, the published data and the probe that fails on it.
+two ways it can be wrong, the daily buckets, daily acceptance, the published
+data and the probe that fails on it.
 """
 import importlib.util
 import json
@@ -63,7 +63,7 @@ class FalseAvailableTests(unittest.TestCase):
         self.assertEqual(day["refusals"], 1)
         self.assertEqual(day["false_available"], 1)
         self.assertEqual(day["false_exhausted"], 0)
-        self.assertEqual(row["state"], "warn")
+        self.assertEqual(row["state"], "fail")
 
     def test_a_refusal_that_meets_a_spent_reading_is_not_counted(self):
         document = build([
@@ -90,7 +90,6 @@ class FalseExhaustedTests(unittest.TestCase):
         row = document["routes"]["openrouter/example-free"]
         self.assertEqual(row["window"]["false_exhausted"], 1)
         self.assertEqual(row["window"]["successes"], 3)
-        self.assertEqual(row["state"], "warn")
 
 
 class DailyBucketsTests(unittest.TestCase):
@@ -110,7 +109,7 @@ class DailyBucketsTests(unittest.TestCase):
 
 
 class AcceptanceTests(unittest.TestCase):
-    """A route fails when it was falsely available two days running."""
+    """A route fails when it was falsely available on the latest full day."""
 
     def false_available_days(self):
         return [
@@ -120,39 +119,38 @@ class AcceptanceTests(unittest.TestCase):
             event("example-free", at(1, 2), outcome="limit"),
         ]
 
-    def test_two_consecutive_days_fail_the_acceptance(self):
+    def test_false_available_on_latest_complete_day_fails_acceptance(self):
         document = build(self.false_available_days())
         row = document["routes"]["openrouter/example-free"]
         self.assertEqual(row["false_available_streak_days"], 2)
         self.assertEqual(row["state"], "fail")
         self.assertEqual(document["acceptance"]["state"], "fail")
         self.assertEqual(document["acceptance"]["failed_routes"], ["openrouter/example-free"])
-        self.assertEqual(document["acceptance"]["checked_days"], ["2026-10-22", "2026-10-23"])
+        self.assertEqual(document["acceptance"]["checked_days"], ["2026-10-23"])
         ok, reason = calibration.probe({"free_calibration": document})
         self.assertFalse(ok)
         self.assertIn("openrouter/example-free", reason)
 
-    def test_one_false_day_is_a_warning_not_a_failure(self):
+    def test_one_false_day_fails_the_daily_acceptance(self):
         document = build([
             event("example-free", at(1, 0)),
             event("example-free", at(1, 2), outcome="limit"),
         ])
         row = document["routes"]["openrouter/example-free"]
         self.assertEqual(row["false_available_streak_days"], 1)
-        self.assertEqual(row["state"], "warn")
-        self.assertEqual(document["acceptance"]["state"], "ok")
+        self.assertEqual(row["state"], "fail")
+        self.assertEqual(document["acceptance"]["state"], "fail")
         ok, _reason = calibration.probe({"free_calibration": document})
-        self.assertTrue(ok)
+        self.assertFalse(ok)
 
-    def test_a_clean_day_breaks_the_streak(self):
+    def test_an_earlier_false_day_does_not_fail_a_clean_latest_day(self):
         document = build([
-            # A clean day, then a refusal on the next one: the streak is one.
             event("example-free", at(2, 0)),
+            event("example-free", at(2, 2), outcome="limit"),
             event("example-free", at(1, 0)),
-            event("example-free", at(1, 2), outcome="limit"),
         ])
         row = document["routes"]["openrouter/example-free"]
-        self.assertEqual(row["false_available_streak_days"], 1)
+        self.assertEqual(row["false_available_streak_days"], 0)
         self.assertEqual(document["acceptance"]["state"], "ok")
 
     def test_a_route_with_no_evidence_is_unmeasured_not_clean(self):

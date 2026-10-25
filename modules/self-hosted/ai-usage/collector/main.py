@@ -223,7 +223,7 @@ METRIC_HELP = {
     ),
     "ghostship_ai_free_route_calibration_acceptance": (
         "Whether the owner's acceptance rule holds: no free route refused "
-        "while it read available on two consecutive days."
+        "while it read available on the latest complete day."
     ),
     "ghostship_ai_pool_model_info": "One for a model the free pool may use.",
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
