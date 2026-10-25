@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage/collector"))
 import announced_resets as announcements
+import quota
 import reset_events
 import main
 from metrics import SourceResult
@@ -227,6 +228,82 @@ class AnnouncedResetTests(unittest.TestCase):
             "classification_pending": [{}]}, NOW)
         self.assertEqual(blocked["state"], "blocked")
         self.assertEqual(blocked["classification_pending"], 1)
+
+
+class CompletedResetTests(unittest.TestCase):
+    def setUp(self):
+        self.reset_at = "2030-07-02T17:00:00Z"
+        self.reset_epoch = reset_events.timestamp(self.reset_at).timestamp()
+        self.duration = 7 * 86400
+        self.announcement = event(post(), reset_at=self.reset_at)
+
+    def window(self, **overrides):
+        return {
+            "provider": "codex",
+            "model": "*",
+            "kind": "weekly",
+            "quotaId": "weekly",
+            "usedRatio": 0.75,
+            "resetEpoch": NOW + self.duration,
+            "durationSeconds": self.duration,
+            "observedAtEpoch": NOW,
+            "source": "t3",
+            **overrides,
+        }
+
+    def test_a_verified_reset_does_not_restore_quota_before_its_effective_time(self):
+        window = self.window()
+        before = dict(window)
+        reset_events.apply_completed(
+            [SourceResult("t3", "ok", windows=[window])],
+            {"announcements": [self.announcement]},
+            self.reset_epoch - 1,
+        )
+        self.assertEqual(window, before)
+
+    def test_a_verified_reset_restores_only_after_the_reset_and_keeps_provenance(self):
+        window = self.window()
+        reset_events.apply_completed(
+            [SourceResult("t3", "ok", windows=[window])],
+            {"announcements": [self.announcement]},
+            self.reset_epoch + 1,
+        )
+        self.assertEqual(window["usedRatio"], 0.0)
+        self.assertEqual(window["observedAtEpoch"], self.reset_epoch)
+        self.assertEqual(window["resetEpoch"], self.reset_epoch + self.duration)
+        self.assertEqual(window["resetSource"], "announced")
+        self.assertEqual(window["providerUsedRatio"], 0.75)
+        self.assertEqual(window["providerObservedAtEpoch"], NOW)
+
+    def test_a_newer_provider_reading_wins_and_reset_evidence_ages_out(self):
+        fresh_at = self.reset_epoch + 1
+        newer = self.window(usedRatio=0.2, observedAtEpoch=fresh_at)
+        reset_events.apply_completed(
+            [SourceResult("t3", "ok", windows=[newer])],
+            {"announcements": [self.announcement]},
+            fresh_at + 1,
+        )
+        self.assertEqual(newer["usedRatio"], 0.2)
+        self.assertNotIn("resetSource", newer)
+
+        announced = self.window()
+        now = self.reset_epoch + quota.STALE_AFTER_SECONDS + 1
+        reset_events.apply_completed(
+            [SourceResult("t3", "ok", windows=[announced])],
+            {"announcements": [self.announcement]},
+            now,
+        )
+        self.assertFalse(quota.current_reading(announced, now))
+
+    def test_malformed_duration_cannot_be_used_to_restore_quota(self):
+        window = self.window(durationSeconds=True)
+        before = dict(window)
+        reset_events.apply_completed(
+            [SourceResult("t3", "ok", windows=[window])],
+            {"announcements": [self.announcement]},
+            self.reset_epoch + 1,
+        )
+        self.assertEqual(window, before)
 
 
 if __name__ == "__main__":

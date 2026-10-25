@@ -1,6 +1,7 @@
 """Bounded evidence for usage-limit resets announced by the primary author."""
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 
@@ -104,7 +105,14 @@ def apply_completed(results, document, now):
                 continue
             duration = window.get('durationSeconds')
             observed = window.get('observedAtEpoch')
-            if not isinstance(duration, (int, float)) or duration <= 0 or not isinstance(observed, (int, float)):
+            if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                    or isinstance(observed, bool) or not isinstance(observed, (int, float))):
+                continue
+            try:
+                duration, observed = float(duration), float(observed)
+            except (OverflowError, ValueError):
+                continue
+            if not math.isfinite(duration) or duration <= 0 or not math.isfinite(observed):
                 continue
             candidates = []
             for event in document.get('announcements', []):
