@@ -19,8 +19,7 @@ set -euo pipefail
 : "${RESTART_LEDGER:?}"
 : "${AUDIT_LOG:?}"
 
-mkdir -p -m 0700 "$STATE_DIR/receipts"
-chmod 0700 "$STATE_DIR"
+install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
 flock -x 9
 
