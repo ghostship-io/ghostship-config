@@ -53,6 +53,13 @@ CATALOG = catalog.Catalog(
                     "modalities": {"input": ["text"]},
                     "cost": {"input": 4.0, "output": 20.0},
                 },
+                "claude-sonnet-5-5": {
+                    "name": "Claude Sonnet 5.5",
+                    "family": "claude-sonnet",
+                    "release_date": "2026-12-01",
+                    "modalities": {"input": ["text"]},
+                    "cost": {"input": 2.0, "output": 10.0},
+                },
                 "claude-fable-5-1": {
                     "name": "Claude Fable 5.1",
                     "family": "claude-fable",
@@ -276,7 +283,7 @@ class CandidateWindowTests(unittest.TestCase):
         ranked = ranking.rank_models(
             models=[
                 ranking.ModelRecord("claude", "claude-opus-5-5"),
-                ranking.ModelRecord("claude", "claude-fable-5-1"),
+                ranking.ModelRecord("claude", "claude-sonnet-5-5"),
             ],
             catalog=CATALOG,
             quota_windows={
@@ -295,8 +302,8 @@ class CandidateWindowTests(unittest.TestCase):
                         reset_epoch=NOW + 5 * DAY,
                         duration_seconds=WEEK,
                         observed_at=NOW,
-                        quota_id="seven_day_fable",
-                        applies_to=("fable",),
+                        quota_id="seven_day_sonnet",
+                        applies_to=("sonnet",),
                     ),
                 ]
             },
@@ -316,18 +323,19 @@ class CandidateWindowTests(unittest.TestCase):
             window["quota"]: window["scope"]
             for window in rows["claude-opus-5-5"]["quota_windows_applied"]
         }
-        # The week of the Fable models is not a window of the Opus route.
+        # The week of the Sonnet models is not a window of the Opus route.
         self.assertEqual(scopes, {"seven_day": "shared"})
-        # The spent week of the Fable models does not take the headroom of
+        # The spent week of the Sonnet models does not take the headroom of
         # the Opus route with it.
         self.assertEqual(rows["claude-opus-5-5"]["capacity"]["remaining_ratio"], 0.7)
+        self.assertTrue(rows["claude-opus-5-5"]["available"])
         scopes = {
             window["quota"]: window["scope"]
-            for window in rows["claude-fable-5-1"]["quota_windows_applied"]
+            for window in rows["claude-sonnet-5-5"]["quota_windows_applied"]
         }
-        self.assertEqual(scopes, {"seven_day": "shared", "seven_day_fable": "model"})
-        self.assertEqual(rows["claude-fable-5-1"]["capacity"]["remaining_ratio"], 0.0)
-
+        self.assertEqual(scopes, {"seven_day": "shared", "seven_day_sonnet": "model"})
+        self.assertEqual(rows["claude-sonnet-5-5"]["capacity"]["remaining_ratio"], 0.0)
+        self.assertFalse(rows["claude-sonnet-5-5"]["available"])
 
 if __name__ == "__main__":
     unittest.main()

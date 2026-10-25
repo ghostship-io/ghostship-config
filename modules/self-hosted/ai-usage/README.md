@@ -1571,6 +1571,14 @@ The first available native worker is the new-thread default. Evidence chooses
 a supported native effort, with the role default used while evidence ties;
 billing remains standard only.
 
+Each live candidate's account must resolve to a key in
+`quota.provider_capacity`. The picker applies that provider record alongside
+the candidate's own model windows, so a spent shared account window blocks
+every model while a spent model-scoped window blocks only its route. A missing
+account key is included in `model_selection.quota_findings` and published as
+`ghostship_ai_picker_quota_capacity_missing{provider,account,model,code}`;
+it is not silently treated as a successful quota lookup.
+
 The collector calls the policy input's authenticated picker reconciler on its
 normal cadence. Incremental settings patches preserve unrelated favorites and
 preferences. A durable ownership journal makes retries converge; partial
