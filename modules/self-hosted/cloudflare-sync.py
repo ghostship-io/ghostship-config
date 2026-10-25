@@ -5,6 +5,7 @@ import copy
 import datetime
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -236,19 +237,47 @@ def merge_ingress(current, routes, previous):
     ingress = current.get("ingress", [])
     if not ingress or "hostname" in ingress[-1] or "path" in ingress[-1]:
         raise ValueError("Expected terminal catch-all tunnel rule")
-    owned = set(routes) | set(previous)
+    if isinstance(previous, list):
+        previous = {"hosts": previous, "paths": []}
+    previous_hosts = set(previous.get("hosts", ()))
+    previous_paths = set(previous.get("paths", ()))
+    owned = set(routes) | previous_hosts
+    desired_paths = {
+        (hostname, "^" + re.escape(item["path"]) + "$"): item["origin"]
+        for hostname, route in routes.items()
+        for item in route.get("cloudflarePathRoutes", [])
+    }
     old = {}
+    old_paths = {}
     unrelated = []
     for rule in ingress[:-1]:
         hostname = rule.get("hostname")
         if hostname not in owned:
             unrelated.append(copy.deepcopy(rule))
             continue
-        if rule.get("path") or hostname in old:
+        path = rule.get("path")
+        if path:
+            key = (hostname, path)
+            if key not in desired_paths and f"{hostname}{path}" not in previous_paths:
+                raise ValueError(f"Ambiguous managed tunnel path rule for {hostname}{path}")
+            if key in old_paths:
+                raise ValueError(f"Ambiguous managed tunnel path rule for {hostname}{path}")
+            old_paths[key] = rule
+            continue
+        if hostname in old:
             raise ValueError(f"Ambiguous managed tunnel rules for {hostname}")
         old[hostname] = rule
     managed = []
     for hostname, route in sorted(routes.items()):
+        for item in route.get("cloudflarePathRoutes", []):
+            key = (hostname, "^" + re.escape(item["path"]) + "$")
+            rule = copy.deepcopy(old_paths.get(key, {}))
+            rule.update(
+                hostname=hostname,
+                path="^" + re.escape(item["path"]) + "$",
+                service=item["origin"],
+            )
+            managed.append(rule)
         rule = copy.deepcopy(old.get(hostname, {}))
         rule.update(hostname=hostname, service=route["origin"])
         managed.append(rule)
@@ -337,9 +366,8 @@ def main():
         )
     state_dir = Path(args.state_dir)
     state_file = state_dir / "managed.json"
-    previous = (
-        json.loads(state_file.read_text()) if state_file.exists() else []
-    )
+    stored = json.loads(state_file.read_text()) if state_file.exists() else []
+    previous = stored if isinstance(stored, dict) else {"hosts": stored, "paths": []}
     api = Cloudflare(os.environ["CLOUDFLARED_API_TOKEN"])
     prefix = "/accounts/" + os.environ["CLOUDFLARED_ACCOUNT_ID"]
     tunnel_id = os.environ["CLOUDFLARED_TUNNEL_ID"]
@@ -353,7 +381,7 @@ def main():
     desired = merge_ingress(current["config"], routes, previous)
     # Audit existing rules as well as the proposed configuration, including
     # unrelated legacy exact/wildcard hosts and all path-specific overrides.
-    hostnames = set(routes) | {
+    hostnames = set(routes) | set(previous["hosts"]) | {
         rule["hostname"]
         for config in (current["config"], desired)
         for rule in config.get("ingress", [])
@@ -381,7 +409,7 @@ def main():
         dns_operations(
             records,
             routes,
-            previous,
+            previous["hosts"],
             tunnel_id + ".cfargotunnel.com",
             zones[0]["id"],
         )
@@ -402,14 +430,23 @@ def main():
         )
     # Persist the ownership union before writes so partial runs/renames can be
     # retried or rolled back without losing track of newly-created records.
-    save_json(state_file, sorted(set(previous) | set(routes)))
+    desired_hosts = set(routes)
+    desired_paths = {
+        f"{hostname}^{re.escape(item['path'])}$"
+        for hostname, route in routes.items()
+        for item in route.get("cloudflarePathRoutes", [])
+    }
+    save_json(state_file, {
+        "hosts": sorted(set(previous["hosts"]) | desired_hosts),
+        "paths": sorted(set(previous["paths"]) | desired_paths),
+    })
     for method, path, data, _ in operations:
         if path == tunnel_path and api.get(tunnel_path) != current:
             raise RuntimeError(
                 "Tunnel changed during reconciliation; retry from fresh state"
             )
         api.request(method, path, data)
-    save_json(state_file, sorted(routes))
+    save_json(state_file, {"hosts": sorted(routes), "paths": sorted(desired_paths)})
     print(f"Cloudflare synchronized: {len(routes)} managed hostnames")
 
 

@@ -58,6 +58,16 @@ in
               type = types.nullOr types.str;
               default = null;
             };
+            cloudflarePathRoutes = mkOption {
+              default = [ ];
+              description = "Exact Cloudflare Tunnel paths routed to a separate origin on this hostname.";
+              type = types.listOf (types.submodule {
+                options = {
+                  path = mkOption { type = types.strMatching "/[a-z0-9-]+(/[a-z0-9-]+)*"; };
+                  origin = mkOption { type = types.str; };
+                };
+              });
+            };
             healthPath = mkOption {
               type = types.nullOr types.str;
               default = null;
@@ -69,7 +79,7 @@ in
               description = "Reference to explicit user approval for direct Internet access outside Cloudflare Access. Never inferred from app/client requirements.";
             };
             cloudflareBypassPaths = mkOption {
-              type = types.listOf (types.strMatching "/[a-z0-9-]+");
+              type = types.listOf (types.strMatching "/[a-z0-9-]+(/[a-z0-9-]+)*");
               default = [ ];
               description = "Exact request paths Cloudflare Access bypasses on this hostname; the origin must authenticate them itself. Requires cloudflareBypassApproval and an AppArmor profile.";
             };
@@ -180,6 +190,26 @@ in
           builtins.attrValues apps
         );
         message = "Ghostship apps need both hostname and origin, or neither.";
+      }
+      {
+        assertion = lib.all (app: app.cloudflarePathRoutes == [ ] || app.hostname != null) (
+          builtins.attrValues apps
+        );
+        message = "Cloudflare path routes require an app hostname.";
+      }
+      {
+        assertion = lib.all (
+          app: lib.all (route: builtins.elem route.path app.cloudflareBypassPaths) app.cloudflarePathRoutes
+        ) (builtins.attrValues apps);
+        message = "Cloudflare path routes require an approved exact-path Access bypass.";
+      }
+      {
+        assertion = lib.all (
+          app:
+          let paths = map (route: route.path) app.cloudflarePathRoutes;
+          in builtins.length paths == builtins.length (lib.unique paths)
+        ) (builtins.attrValues apps);
+        message = "Cloudflare Tunnel path routes must be unique per hostname.";
       }
       {
         assertion = lib.all (app: !app.public || app.cloudflareBypassApproval != null) (

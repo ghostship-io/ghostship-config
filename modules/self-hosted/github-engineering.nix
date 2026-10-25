@@ -126,8 +126,11 @@ in
         "ghostship-hooks//tools"
       ];
       apparmorRequiredProcessProfiles = [ "ghostship-hooks" ];
-      cloudflareBypassPaths = [ "/github" "/cloudflare" ];
-      cloudflareBypassApproval = "the owner 2026-10-19: approved Access bypass for exact POST paths /cloudflare and /github on hooks.ghostship.io only; GitHub HMAC and the Cloudflare webhook secret authenticate them";
+      cloudflareBypassPaths = [ "/github" "/cloudflare" "/shadow/github/webhook" ];
+      cloudflareBypassApproval = "the owner 2026-10-25: approved Access bypass for exact POST paths /cloudflare and /github and /shadow/github/webhook on hooks.ghostship.io; GitHub HMAC authenticates its signed Go coordinator ingress";
+      cloudflarePathRoutes = [
+        { path = "/shadow/github/webhook"; origin = "http://ghostship-go-coordinator:18765"; }
+      ];
       muximux.enable = false;
     };
     ghostship.apps.github-coordinator = {
@@ -181,6 +184,10 @@ in
       raw = true;
       fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
       fields.GHOSTSHIP_COORDINATOR_TOKEN = { unit = "go-coordinator-auth"; key = "TOKEN"; };
+      fields.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET = {
+        unit = "hooks";
+        key = "GITHUB_WEBHOOK_SECRET";
+      };
     };
     ghostship.secretProjections.ghostship-hooks = {
       fileName = "ghostship-github/hooks.env";
@@ -366,6 +373,7 @@ in
       environment = {
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
+        GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";
       };
       environmentFiles = [ config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path ];
       ports = [ "127.0.0.1:18765:18765" ];
@@ -378,9 +386,13 @@ in
     systemd.services.podman-ghostship-go-coordinator = {
       after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
       requires = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
+      serviceConfig.EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       preStart = ''
         set -eu
         umask 077
+        case "''${GHOSTSHIP_GITHUB_ACCOUNT:-}" in
+          (""|*[!A-Za-z0-9-]*) echo "invalid GHOSTSHIP_GITHUB_ACCOUNT in owner identity" >&2; exit 1 ;;
+        esac
         ${config.ghostship.selfHostedSecrets.renderFor "ghostship-go-coordinator"}/bin/ghostship-secret-project ghostship-go-coordinator
         token="$(${pkgs.coreutils}/bin/cat /run/ghostship-github/t3-token)"
         ${pkgs.coreutils}/bin/test -n "$token"
@@ -388,6 +400,7 @@ in
         tmp="$env_file.new"
         ${pkgs.coreutils}/bin/cat "$env_file" > "$tmp"
         printf 'T3_BRIDGE_TOKEN=%s\n' "$token" >> "$tmp"
+        printf 'GHOSTSHIP_COORDINATOR_GITHUB_OWNER_LOGIN=%s\n' "$GHOSTSHIP_GITHUB_ACCOUNT" >> "$tmp"
         ${pkgs.coreutils}/bin/chown 62033:62033 "$tmp"
         ${pkgs.coreutils}/bin/chmod 0400 "$tmp"
         ${pkgs.coreutils}/bin/mv -f "$tmp" "$env_file"
