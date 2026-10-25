@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.357] - 2026-10-25
+
+Pin the deployed agent flake input to agent main `ea113bbbde5713dce06c52d244e9dc6333febb9b`, including the work-ledger SQLITE_BUSY fix.
+
+Validated with `nix develop .#ci -c scripts/check`.
+
+PR #593.
+
 ## [3.17.356] - 2026-10-25
 
 - Route policy now expresses fast-tier denial as data for all roles.
