@@ -355,10 +355,10 @@ and after the change on the same nixpkgs input.
    the podman package. `podman-t3code` is the one exception. Two further
    services that reference the podman package but are not OCI containers
    (`podman-prune`, `ghostship-podman-snapshot`) are listed below.
-2. **The T3 Code container is recreated by the idle-deploy controller after
-   any activation**, not by the switch. `restartIfChanged = false` protects
-   the container during the switch only. See "T3 Code container and its
-   controllers" below.
+2. **The T3 Code container is recreated by the immediate deploy service after
+   an image or agent-pin change**, not by the switch. `restartIfChanged = false`
+   protects the container during the switch itself. See "T3 Code container and
+   its controllers" below.
 
 The switch implementation honours `X-RestartIfChanged=false` by skipping a
 modified service. For a service it will change, `X-StopIfChanged=false`
@@ -381,7 +381,7 @@ the pin, and the API is served by the pinned binary after the service restarts.
 | `nix-daemon.service` | Nix | true | false | restarted, socket stays up |
 | `nix-optimise.service` | Nix | false | true | skipped for a unit-content change; next independent start uses the new binary |
 | `nixos-upgrade.service` | Nix | false | true | skipped for a unit-content change; next independent start uses the new binary |
-| `t3code-deploy-when-idle.service` | — | false | true | not restarted; the timer keeps firing |
+| `ghostship-t3code-deploy.service` | — | false | true | started by activation after a deployment identity change |
 | `podman.service` (socket-activated) | Podman | true | true | restarts on the next socket activation |
 | `podman-t3code.service` | Podman | false | false | **not** restarted or stopped |
 | `podman-prune.service` | Podman | false | true | skipped for a unit-content change |
@@ -452,13 +452,13 @@ rebuilt as part of the image and is not part of the host unit set.
   `switch-to-configuration-ng` honours by skipping the unit, so the switch
   itself does not restart the running T3 Code container. It also keeps
   `stopIfChanged=false`. Neither flag blocks a separate controller command.
-- `t3code-deploy-when-idle.service` keeps `restartIfChanged = false` and
-  `stopIfChanged = true`; its timer keeps `restartIfChanged = false`. It is
-  therefore not restarted on a switch, and it keeps firing.
+- `ghostship-t3code-deploy.service` keeps `restartIfChanged = false` and
+  `stopIfChanged = true`. Activation starts it immediately when the image or
+  agent pin changes; there is no timer.
 
 **The flags do not prevent a replacement.** The deployment identity changes
-with the candidate image or agent pin, and the candidate controller reacts to
-that target only after a passing exact-image acceptance receipt:
+with the candidate image or agent pin, and the immediate deploy service tests
+that exact target before switching production:
 
 The source comparison confirms that the image deployment identifier changes.
 Its literal values belong in protected activation evidence, rather than the
@@ -468,31 +468,28 @@ Read from the source, the chain after any activation that includes this
 change:
 
 1. `system.activationScripts.t3code-deployment` writes the new
-   `t3codeDeploymentId` into `/var/lib/ghostship/t3code-deployment/desired`
-   and runs `systemctl start --no-block t3code-deploy-when-idle.service`.
-   `supportsDryActivation = false`, so it runs on every switch.
-2. Before activation, `agent deploy run` runs the target toplevel's candidate
-   acceptance against its embedded image archive and deployment identity. The
-   isolated candidate must pass app, provider-turn, CLI, skills and desktop
+   `t3codeDeploymentId` and runtime inputs, removes any leftover legacy
+   `restart.pending` marker, and starts `ghostship-t3code-deploy.service`.
+2. The service runs isolated candidate acceptance against the embedded image
+   archive. The candidate must pass app, provider-turn, CLI, skills and desktop
    transport checks without changing production identity.
-3. After activation, `t3code-deploy-when-idle.service` verifies the receipt for
-   that exact image and deployment ID, then runs
-   `systemctl restart podman-t3code.service`, which re-runs the unit and
-   `podman run --replace` creates the container from the new image.
-4. `t3code-deploy-when-idle.timer` retries failed deployments every minute
-   (`OnBootSec = 2m`, `OnUnitActiveSec = 1m`, `Persistent = true`), so the
-   queue survives reboots and retries.
+3. The shell deployer verifies that the receipt names the exact image,
+   deployment ID, agent revision and provider projection, then immediately
+   restarts `podman-t3code.service` and records the accepted restart.
+4. Failed acceptance marks the deployment ID as blocked and the service's
+   single failure path raises an incident. There is no timer or retry queue;
+   a newly detected image has a new deployment ID and runs its own acceptance.
 
 Consequence: **activation recreates the T3 Code container as soon as candidate
-acceptance passes**, even though neither unit restarts on switch.
-"Idle" here means the activity probe reports no work; it is a normal working
-state, not a maintenance window, and an active session does not by itself
-prevent the replacement once the probe reports idle between turns.
+acceptance passes**, even though `podman-t3code.service` itself does not restart
+as part of switch-to-configuration.
 
 ### Activation remains gated
 
 No activation procedure is approved here. A normal switch would restart 35
-other OCI containers and update the T3 image queue. Rebooting would interrupt
+other OCI containers and start exact-image candidate acceptance for T3. A
+passing receipt immediately activates and restarts that image; a failed
+acceptance blocks it and raises one incident. Rebooting would interrupt
 the active session; changing a boot default also changes profile/boot state.
 Neither is a permitted workaround under the current continuity constraints.
 Scoped activation is possible in principle, but requires its own exact
@@ -507,19 +504,13 @@ Before a package activation proposal can pass the shared coordinating gate:
 2. Identify each unit and executable that would change. Preserve the T3
    container identity, start time, host/inner PIDs, image and current-generation
    expectations explicitly; do not invent a global no-restart flag.
-3. Exclude an in-flight image replacement with the controller's existing
-   exclusive `deploy.lock` lease. Reading `applying` and then stopping the
-   controller races a new invocation; absence of that file is not proof that
-   stopping is safe. Do not stop an in-flight controller.
-4. Cover both the timer and the activation script's direct service start.
-   Any temporary inhibition needs exact prior-state capture, ownership,
-   failure behaviour and restoration instructions. No mask, timer change or
-   shared systemd reload is performed by this document.
-5. Preserve `desired`, `applied`, `applying`, `restart.pending` and `failures`,
-   including changes queued during maintenance. Never mark a new image
-   applied while the old one runs. Releasing an inhibition may allow a future
-   idle replacement; it does not guarantee exactly one replacement or make
-   that replacement safe for an active session.
+3. Exclude an in-flight image replacement with the deployer's exclusive
+   `deploy.lock` lease. Do not stop an in-flight deployment.
+4. The activation script starts one immediate deploy service. It has no timer
+   or idle check; its failure path records one incident.
+5. Preserve `desired`, `applied` and `applied-inputs`. A failed candidate
+   acceptance is marked against its deployment ID and is never retried or
+   queued. Never mark a new image applied while the old one runs.
 6. Provide rollback for the exact scoped changes without rebooting or
    restarting T3, and recheck runtime versions and session identity. A later
    shared activation requires a fresh comparison after other coordinated
@@ -629,9 +620,9 @@ work must use the coordinated window and the same bounded-build and
 - `podman-t3code.service` additionally requires
   `t3code-podman.socket`/`t3code-podman-ports.socket` when hardened, and keeps
   `restartIfChanged = false`, so the switch does not touch it.
-- `t3code-deploy-when-idle.service` orders after `podman.service`; the timer
-  is `Persistent = true`, so a missed run during the switch fires afterwards.
-  This is the unit that recreates the T3 Code container.
+- `ghostship-t3code-deploy.service` orders after `podman.service` and is started
+  by activation when the deployment identity changes. It tests and recreates
+  the T3 Code container immediately.
 - `t3code-nix-store-gc` orders after `podman-t3code.service` and never
   restarts the container.
 
@@ -826,24 +817,10 @@ Postchecks must compare the executable of the running main process with the
 fixed component and verify a fresh daemon-protocol connection, together with
 socket, T3 identity, deployment-state and kernel-containment guards.
 
-The latest read-only preflight found an existing pending image deployment.
-The controller's existing `deploy.lock` can exclude it during maintenance,
-but releasing that lease allows the pending replacement to resume. Queue
-writers are not all serialized by that lease: the activation script writes
-`desired` outside it, and `--safe-restart` writes `restart.pending` before
-taking it. Compare bytes and existence before and after each maintenance
-phase, abort on unexpected changes, and retain every newly arrived request.
-Never restore an older queue snapshot over it.
-
-Before releasing the lease, the reviewed plan must install and verify an
-owned runtime start condition on the deploy service, covering both timer
-and direct systemd starts. Preserve existing conditions and inhibitors. The
-new inhibition stays installed after daemon maintenance until a separately
-coordinated release reviews the pending destination and active sessions.
-The existing daily/continuation campaign must report that retained hold;
-no additional schedule is needed. Direct administrative `--force` execution
-bypasses this service guard and remains excluded from the window. No timer
-mask, queue edit or activation was performed.
+An in-flight T3 deployment holds `deploy.lock`. The activation writes the
+desired deployment identity and starts the immediate deploy service; it does
+not create a delayed restart request. Failed candidate acceptance records the
+blocked deployment ID and reports through the service's one failure path.
 
 A runtime override also needs the verified, explicitly owned GC root from
 the restoration step for its fixed store path.

@@ -158,15 +158,14 @@ container, and its inner application runtime running. Restarting any of them
 terminates the agent session. This restriction also covers Podman auto-update,
 dependency restarts, host reboot, and container bootstrap/activation helpers.
 
-Host configuration changes and image updates decouple deployment from container
-interruption. `podman-t3code.service` does not restart on configuration switch.
-Only changes to `packages/t3code/image.nix` or its base dependencies queue an
-image replacement. T3 app and provider updates happen in the persistent home;
-only an app release queues an app restart. Image updates are applied by
-`t3code-deploy-when-idle` after the candidate passes acceptance for the exact
-image. If a manual host restart is required, use `t3code-safe-restart` rather
-than restarting `podman-t3code.service` directly; the helper requires the same
-passing candidate receipt.
+Host configuration changes keep `podman-t3code.service` from restarting as
+part of the switch itself. When the deployment identity changes, the switch
+starts `ghostship-t3code-deploy.service` immediately. It accepts the exact
+image, verifies the receipt, and restarts `podman-t3code.service` in that same
+run. Failed acceptance marks that image blocked, raises the service failure
+incident once, and does not schedule a retry. T3 app and provider updates
+happen in the persistent home; image and agent pin changes use the same exact
+candidate acceptance path.
 
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
