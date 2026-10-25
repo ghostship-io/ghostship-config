@@ -89,8 +89,9 @@ let
       systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${scheduler} ${managedInstall} ${hostRelease} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
+      --to local?root=/srv/apps/t3code/nix-root ${tools.default} ${scheduler} ${managedInstall} ${hostRelease} ${sourceSync} ${syncOverride} ${writeClient} ${isolateT3Models} ${maintenance} ${toolUpdate} ${toolUpdateOverride}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
+    ln -sfn ${tools.default} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-agent-tools
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
     ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
