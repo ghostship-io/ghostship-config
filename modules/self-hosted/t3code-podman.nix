@@ -582,7 +582,7 @@ in
           after = [ "t3code-podman-network.service" ];
           # Rootless Podman must use NixOS's capability-bearing mapping
           # helpers before the plain shadow binaries in runtimePaths.
-          path = [ "/run/wrappers/bin" ] ++ runtimePaths;
+          path = [ "/run/wrappers" ] ++ runtimePaths;
           environment = {
             HOME = "/var/lib/t3code-podman-candidate";
             XDG_RUNTIME_DIR = "/run/t3code-podman-candidate";
