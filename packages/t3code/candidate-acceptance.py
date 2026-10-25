@@ -157,7 +157,11 @@ def validate_candidate_mounts(volumes):
 def candidate_name(deployment_id):
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", deployment_id):
         raise ValueError("invalid T3 candidate deployment identifier")
-    return f"t3code-candidate-{deployment_id}"
+    name = f"t3code-candidate-{deployment_id}"
+    if len(name.encode("ascii")) > 64:
+        suffix = hashlib.sha256(deployment_id.encode("ascii")).hexdigest()[:40]
+        name = f"t3code-candidate-{suffix}"
+    return name
 
 
 def image_details(image_archive):

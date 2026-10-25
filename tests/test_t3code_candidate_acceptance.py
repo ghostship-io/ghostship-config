@@ -76,6 +76,14 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.command = command
         self.identity = ["prod-id", "2026-10-25T00:00:00Z", 42, "13", "16"]
 
+    def test_candidate_hostname_fits_linux_limit_for_sha256_deployments(self):
+        first = acceptance.candidate_name("a" * 64)
+        second = acceptance.candidate_name("b" * 64)
+
+        self.assertLessEqual(len(first.encode()), 64)
+        self.assertEqual(first, acceptance.candidate_name("a" * 64))
+        self.assertNotEqual(first, second)
+
     def run_acceptance(self):
         with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
