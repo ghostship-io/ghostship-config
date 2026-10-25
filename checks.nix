@@ -51,6 +51,8 @@ let
   ]
   ++ expectedFreeRoutes;
   actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
+  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" ];
+  actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
   fableDenied =
     role:
     builtins.all
@@ -114,6 +116,9 @@ in
     assert
       builtins.sort builtins.lessThan actualWorkerRoutes
       == builtins.sort builtins.lessThan expectedWorkerRoutes;
+    assert
+      builtins.sort builtins.lessThan actualOrchestratorRoutes
+      == builtins.sort builtins.lessThan expectedOrchestratorRoutes;
     assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
     assert routePolicy.authorizations == [ ];
     assert

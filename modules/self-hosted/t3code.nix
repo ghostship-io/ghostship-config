@@ -80,18 +80,28 @@ let
           ];
           allow_rule = "not in the owner-approved worker routes";
         };
-        orchestrator.deny = [
-          {
-            provider = "claudeAgent";
-            model = "claude-fable-5";
-            rule = "Claude Fable denied by owner";
-          }
-          {
-            provider = "claudeAgent";
-            model = "claude-fable-5-1";
-            rule = "Claude Fable denied by owner";
-          }
-        ];
+        orchestrator = {
+          allow = [
+            {
+              provider = "claudeAgent";
+              model = "claude-opus-5-5";
+              rule = "owner: no Codex orchestrator handover trial";
+            }
+          ];
+          deny = [
+            {
+              provider = "claudeAgent";
+              model = "claude-fable-5";
+              rule = "Claude Fable denied by owner";
+            }
+            {
+              provider = "claudeAgent";
+              model = "claude-fable-5-1";
+              rule = "Claude Fable denied by owner";
+            }
+          ];
+          allow_rule = "not in the owner-approved orchestrator routes";
+        };
         reviewer.deny = [
           {
             provider = "claudeAgent";
