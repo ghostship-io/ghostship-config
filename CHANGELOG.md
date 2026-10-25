@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.328] - 2026-10-25
+
+Pin the Ghostship agent to current main with claim handover support.
+
+PR #561.
+
 ## [3.17.327] - 2026-10-25
 
 Provide host tools on PATH to the T3 candidate acceptance service.
