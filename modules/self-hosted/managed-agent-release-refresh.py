@@ -4,15 +4,22 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
-RELEASE_FIELDS = ("version", "source", "revision", "package")
+
+def release_version(record: dict) -> tuple[int, int, int]:
+    value = record.get("version")
+    if not isinstance(value, str) or not re.fullmatch(r"\d+\.\d+\.\d+", value):
+        raise ValueError("release record has an invalid version")
+    return tuple(int(part) for part in value.split("."))
 
 
 def release_differs(installed: dict, deployed: dict) -> bool:
-    """Whether the deployed generation names a different managed release."""
-    return any(installed.get(field) != deployed.get(field) for field in RELEASE_FIELDS)
+    """Whether the deployed pin is newer than the installed release."""
+    deployed_version = release_version(deployed)
+    return not installed or deployed_version > release_version(installed)
 
 
 def read_record(path: Path, *, missing_ok: bool = False) -> dict:
@@ -22,16 +29,17 @@ def read_record(path: Path, *, missing_ok: bool = False) -> dict:
         if missing_ok:
             return {}
         raise
-    if not isinstance(record, dict):
-        raise ValueError("release record must be a JSON object")
+    if not isinstance(record, dict) or not record:
+        raise ValueError("release record must be a nonempty JSON object")
     return record
 
 
 def refresh_if_needed(installed_path: Path, deployed_path: Path, command: list[str]) -> bool:
-    """Run the supplied refresh command once when installed and deployed differ."""
+    """Refresh only when the deployed pin is newer than the installed release."""
     installed = read_record(Path(installed_path), missing_ok=True)
     deployed = read_record(Path(deployed_path))
     if not release_differs(installed, deployed):
+        print("managed agent release is already current or newer")
         return False
     if not command:
         raise ValueError("refresh command is required when releases differ")

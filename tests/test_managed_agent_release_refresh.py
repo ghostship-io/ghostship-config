@@ -1,9 +1,11 @@
 """A changed host-pinned agent release refreshes without a bridge restart."""
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +18,7 @@ SPEC.loader.exec_module(refresh)
 
 
 class ManagedAgentReleaseRefreshTests(unittest.TestCase):
-    def test_generation_activation_refreshes_only_when_its_release_differs(self):
+    def test_older_installed_release_refreshes_to_newer_deployed_version(self):
         module = (ROOT / "modules/self-hosted/inference-bridge.nix").read_text()
         refresh_service = module.split(
             "systemd.services.ghostship-managed-agent-release-refresh = {", 1
@@ -34,25 +36,51 @@ class ManagedAgentReleaseRefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             installed_path = Path(temporary) / "release.json"
             deployed_path = Path(temporary) / "host-release.json"
-            installed = {
-                "version": "0.47.131", "source": "/fixture/old-source",
-                "revision": "a" * 40, "package": "/nix/store/old-agent",
-            }
-            deployed = {
-                "version": "0.47.131", "source": "/fixture/old-source",
-                "revision": "a" * 40, "package": "/nix/store/old-agent",
-            }
+            installed = {"version": "0.47.131"}
+            deployed = {"version": "0.47.132"}
             installed_path.write_text(json.dumps(installed))
             deployed_path.write_text(json.dumps(deployed))
             with patch.object(refresh.subprocess, "run") as run:
-                self.assertFalse(refresh.refresh_if_needed(installed_path, deployed_path, ["podman", "exec"]))
-                run.assert_not_called()
-
-                deployed["version"] = "0.47.132"
-                deployed["package"] = "/nix/store/new-agent"
-                deployed_path.write_text(json.dumps(deployed))
                 self.assertTrue(refresh.refresh_if_needed(installed_path, deployed_path, ["podman", "exec"]))
                 run.assert_called_once_with(["podman", "exec"], check=True)
+
+    def test_equal_installed_release_is_a_logged_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            installed_path = Path(temporary) / "release.json"
+            deployed_path = Path(temporary) / "host-release.json"
+            deployed_path.write_text(json.dumps({"version": "0.47.132"}))
+            with patch.object(refresh.subprocess, "run") as run:
+                installed_path.write_text(json.dumps({"version": "0.47.132"}))
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertFalse(
+                        refresh.refresh_if_needed(
+                            installed_path, deployed_path, ["podman", "exec"]
+                        )
+                    )
+                self.assertEqual(
+                    output.getvalue(), "managed agent release is already current or newer\n"
+                )
+                run.assert_not_called()
+
+    def test_newer_installed_release_is_a_logged_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            installed_path = Path(temporary) / "release.json"
+            deployed_path = Path(temporary) / "host-release.json"
+            installed_path.write_text(json.dumps({"version": "0.47.133"}))
+            deployed_path.write_text(json.dumps({"version": "0.47.132"}))
+            with patch.object(refresh.subprocess, "run") as run:
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertFalse(
+                        refresh.refresh_if_needed(
+                            installed_path, deployed_path, ["podman", "exec"]
+                        )
+                    )
+                self.assertEqual(
+                    output.getvalue(), "managed agent release is already current or newer\n"
+                )
+                run.assert_not_called()
 
     def test_missing_installed_record_requests_a_refresh(self):
         with tempfile.TemporaryDirectory() as temporary:
