@@ -358,6 +358,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     started = time.monotonic()
     providers: list[dict[str, Any]] = []
     status = "ok"
+    catalog_source = "t3.server.refreshProviders"
     try:
         refreshed = client.call("server.refreshProviders", {})
         providers = list((refreshed or {}).get("providers") or [])
@@ -367,6 +368,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
         try:
             config = client.call("server.getConfig", {}) or {}
             providers = list(config.get("providers") or [])
+            catalog_source = "t3.server.getConfig"
         except T3Error:
             return SourceResult(
                 source="t3",
@@ -386,6 +388,8 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     observed: float | None = None
     offered: list[tuple[str, str]] = []
     native: dict[tuple[str, str], dict[str, Any]] = {}
+    native_catalog: list[dict[str, Any]] = []
+    catalog_fetched_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     provider_states: dict[str, str] = {}
     for provider in providers:
         instance = str(provider.get("instanceId") or "")
@@ -401,6 +405,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             else:
                 pair = (name, slug)
             offered.append(pair)
+            options = _model_options(model)
             native[pair] = {
                 "providerInstance": instance,
                 "available": provider.get("enabled") is not False and provider.get("status") == "ready",
@@ -408,8 +413,37 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 # The label the instance gives the model, when it gives one.
                 # It is the name T3 Code's model catalog carries for it.
                 "name": _model_label(model),
-                "options": _model_options(model),
+                "options": options,
             }
+            effort_options = [
+                option for option in options
+                if any(token in str(option.get("id", "")).lower()
+                       for token in ("effort", "reasoning", "thinking"))
+            ]
+            if not effort_options:
+                effort_options = [{"id": None, "values": [None], "type": None}]
+            for effort_option in effort_options:
+                values = effort_option.get("values")
+                if not isinstance(values, list) or not values:
+                    values = [effort_option.get("currentValue")]
+                for effort_value in values:
+                    native_catalog.append({
+                        "provider_instance_id": instance,
+                        "provider": name,
+                        "model_id": slug,
+                        "display_name": _model_label(model) or None,
+                        "available": provider.get("enabled") is not False and provider.get("status") == "ready",
+                        "effort_option_id": effort_option.get("id"),
+                        "effort_value": effort_value,
+                        "effort_type": effort_option.get("type"),
+                        "native_options": options,
+                        "price": model.get("price"),
+                        "price_status": "known" if model.get("price") is not None else "unknown",
+                        "limit": model.get("limit"),
+                        "limit_status": "known" if model.get("limit") is not None else "unknown",
+                        "source": catalog_source,
+                        "fetched_at": catalog_fetched_at,
+                    })
             if instance == command_code.T3_INSTANCE and command_code.is_model(slug):
                 native[pair]['commandCodePolicyVerified'] = command_policy
                 native[pair]['available'] = native[pair]['available'] and command_policy
@@ -502,6 +536,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     if context is not None:
         context["offered_models"] = offered
         context["native_models"] = native
+        context["native_catalog"] = native_catalog
         context["instance_status"] = {
             str(provider.get("instanceId") or ""): str(provider.get("status") or "")
             for provider in providers
