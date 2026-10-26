@@ -298,10 +298,16 @@ in
     # does not survive. The path unit must re-apply it to the current file.
     assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.Unit
       == "ghostship-model-evidence-acl.service";
-    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.PathModified
-      == modelOutcomesHost;
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.PathChanged
+      == "${modelOutcomesHost}/model-evidence.jsonl";
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.PathExists
+      == "${modelOutcomesHost}/model-evidence.jsonl";
+    # The unit must not watch the directory: the service's own metadata change
+    # would retrigger it. A correct ACL is left untouched, so one rewrite causes
+    # exactly one run and a run cannot retrigger itself.
+    assert !(t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig ? PathModified);
     assert pkgs.lib.hasInfix " ${modelOutcomesHost}/model-evidence.jsonl " modelEvidenceAclExec;
-    assert pkgs.lib.hasSuffix "/bin/setfacl" modelEvidenceAclExec;
+    assert pkgs.lib.hasSuffix "${pkgs.acl}/bin/getfacl" modelEvidenceAclExec;
     assert t3codeConfig.ghostship.apps.hooks.cloudflareBypassPaths
       == [ "/github" "/cloudflare" "/shadow/github/webhook" ];
     assert t3codeConfig.ghostship.apps.hooks.cloudflarePathRoutes == [ {

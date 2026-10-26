@@ -57,9 +57,49 @@ class GoCoordinatorModelEvidenceTests(unittest.TestCase):
         self.assertIn("systemd.services.ghostship-model-evidence-acl", COORDINATOR)
         self.assertIn("systemd.paths.ghostship-model-evidence-acl", COORDINATOR)
         self.assertIn('Unit = "ghostship-model-evidence-acl.service";', COORDINATOR)
-        self.assertIn("PathModified = modelOutcomes.host;", COORDINATOR)
+        self.assertIn(
+            'PathChanged = "${modelOutcomes.host}/${modelOutcomes.file}";', COORDINATOR
+        )
+        self.assertNotIn("PathModified", COORDINATOR)
         self.assertIn("model-evidence-acl.sh", COORDINATOR)
         self.assertIn("u:62033:r,m::r", ACL_SCRIPT)
+
+    @unittest.skipUnless(
+        shutil.which("setfacl") and shutil.which("getfacl") and shutil.which("bash"),
+        "requires POSIX ACL tools",
+    )
+    def test_an_already_correct_acl_is_left_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory) / "model-evidence"
+            work.mkdir()
+            prepared = subprocess.run(
+                ["setfacl", "-m", "d:u:62033:rX,d:m::r", str(work)],
+                capture_output=True, text=True,
+            )
+            if prepared.returncode != 0:
+                self.skipTest("filesystem does not support POSIX ACLs")
+            ledger = work / "model-evidence.jsonl"
+            ledger.write_text('{"row":1}\n')
+            ledger.chmod(0o600)
+            log = work / "setfacl.log"
+            wrapper = work / "setfacl"
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                f'printf "%s\\n" "$*" >> {log}\n'
+                f'exec {shutil.which("setfacl")} "$@"\n'
+            )
+            wrapper.chmod(0o755)
+            command = [
+                "bash", str(ACL_SCRIPT_PATH), str(ledger),
+                str(wrapper), shutil.which("getfacl"),
+            ]
+            subprocess.run(command, check=True)
+            subprocess.run(command, check=True)
+            self.assertEqual(
+                log.read_text().splitlines(),
+                ["-m u:62033:r,m::r " + str(ledger)],
+                "a run that changes nothing must not call setfacl again",
+            )
 
     @unittest.skipUnless(
         shutil.which("setfacl") and shutil.which("getfacl") and shutil.which("bash"),
@@ -88,7 +128,10 @@ class GoCoordinatorModelEvidenceTests(unittest.TestCase):
             )
             self.assertIn("mask::---", before)
             subprocess.run(
-                ["bash", str(ACL_SCRIPT_PATH), str(ledger), shutil.which("setfacl")],
+                [
+                    "bash", str(ACL_SCRIPT_PATH), str(ledger),
+                    shutil.which("setfacl"), shutil.which("getfacl"),
+                ],
                 check=True,
             )
             after = subprocess.run(
