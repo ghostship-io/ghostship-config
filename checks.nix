@@ -69,6 +69,19 @@ let
     inferenceProxyUnit
     privateIntegrationsUnit
   ];
+  # Issue #639: a switch can restart an inference unit while the runtime
+  # publisher is still copying the new closure into the worker container (the
+  # exec exited 127 on the missing path), so ordering is not enough. Each start
+  # must gate on the exact executable.
+  startGatesOnContainerExecutable = executable: unit:
+    builtins.any
+      (command:
+        pkgs.lib.hasInfix "inference-container-wait.py" command
+        && pkgs.lib.hasInfix "ghostship-worker" command
+        && pkgs.lib.hasInfix executable command)
+      (if builtins.isList unit.serviceConfig.ExecStartPre
+      then unit.serviceConfig.ExecStartPre
+      else [ unit.serviceConfig.ExecStartPre ]);
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   goCoordinator =
@@ -421,6 +434,15 @@ in
     assert !(pkgs.lib.hasInfix " $MAINPID " inferenceSchedulerUnit.serviceConfig.ExecStop);
     assert !(inferenceBridgeUnit.serviceConfig ? SuccessExitStatus);
     assert !(inferenceSchedulerUnit.serviceConfig ? SuccessExitStatus);
+    # The start gate must name the exact binary and the worker container, so a
+    # switch restart waits for the published closure instead of executing a
+    # path the container does not have yet.
+    assert startGatesOnContainerExecutable "/bin/ghostship-free-inference-bridge" inferenceBridgeUnit;
+    assert startGatesOnContainerExecutable "/bin/agent" inferenceSchedulerUnit;
+    # The gate waits up to 1200 s. The systemd default would kill a slow but
+    # successful publication, so each start must outlast the gate.
+    assert inferenceBridgeUnit.serviceConfig.TimeoutStartSec == 1500;
+    assert inferenceSchedulerUnit.serviceConfig.TimeoutStartSec == 1500;
     assert builtins.all (
       unit:
       !(builtins.elem "ghostship-inference-bridge.service" unit.requires)

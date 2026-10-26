@@ -93,6 +93,26 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
         self.assertIn("ghostship_inference.cli serve", setting(scheduler, "ExecStop"))
         self.assertNotIn("SuccessExitStatus", BRIDGE_MODULE)
 
+    def test_each_start_waits_for_its_binary_in_the_worker_store(self):
+        # Issue #639: a switch restart can reach the worker container before the
+        # runtime publisher has copied the new closure, so `after=` is not
+        # enough. The start gates on the exact executable.
+        bridge = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-bridge =")
+        scheduler = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-scheduler =")
+        self.assertIn("inference-container-wait.py", BRIDGE_MODULE)
+        self.assertIn(
+            "${waitRuntime} ${broker}/bin/ghostship-free-inference-bridge", bridge
+        )
+        self.assertIn("${waitRuntime} ${scheduler}/bin/agent", scheduler)
+        # The gate may wait 1200 s, so the systemd default 90 s start timeout
+        # would kill a slow but successful publication.
+        self.assertEqual(setting(bridge, "TimeoutStartSec"), "1500")
+        self.assertEqual(setting(scheduler, "TimeoutStartSec"), "1500")
+        helper = re.search(r'waitRuntime = "([^"]*)";', BRIDGE_MODULE)
+        self.assertIsNotNone(helper)
+        self.assertIn("inference-container-wait.py", helper.group(1))
+        self.assertIn("ghostship-worker", helper.group(1))
+
 
 if __name__ == "__main__":
     unittest.main()
