@@ -821,9 +821,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
             selection = payload.get("data", {}).get("pick") or {}
         except (ValueError, AttributeError):
             selection = {}
-        if not valid_t3_free_route(selection):
+        if not valid_t3_acceptance_route(selection):
             raise RuntimeError(
-                "provider_turn failed: live picker returned no approved available free T3 route"
+                "provider_turn failed: live picker returned no approved available free or subscription T3 route"
             )
         initial_route = f"{selection['provider']}/{selection['model']}"
     routes = ([initial_route] if initial_route else []) + [
@@ -871,6 +871,32 @@ def valid_t3_free_route(selection):
     )
 
 
+# Protected premium allowances never pay for an image acceptance probe.
+PROTECTED_ACCEPTANCE_PROVIDERS = frozenset({"codex", "claude", "claudeAgent"})
+
+
+def valid_t3_acceptance_route(selection):
+    """An approved free T3 route, or else an admitted subscription T3 route.
+
+    The image gate must not depend on a free route happening to have quota
+    (config#616): one short probe turn on an admitted subscription route such as
+    DeepSeek Flash costs almost nothing. Codex and Claude stay excluded, and the
+    receipt records the route that proved the turn.
+    """
+    if valid_t3_free_route(selection):
+        return True
+    return (
+        isinstance(selection, dict)
+        and isinstance(selection.get("provider"), str)
+        and isinstance(selection.get("model"), str)
+        and bool(selection["model"])
+        and selection.get("billing") == "subscription"
+        and selection["provider"] not in PROTECTED_ACCEPTANCE_PROVIDERS
+        and selection.get("execution") == "t3"
+        and selection.get("available") is True
+    )
+
+
 def candidate_t3_routes(result):
     try:
         payload = json.loads(result.stdout)
@@ -879,7 +905,7 @@ def candidate_t3_routes(result):
         return []
     routes = []
     for row in rows:
-        if valid_t3_free_route(row):
+        if valid_t3_acceptance_route(row):
             route = f"{row['provider']}/{row['model']}"
             if route not in routes:
                 routes.append(route)
