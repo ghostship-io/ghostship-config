@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.361] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to 97c60ce0; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #598.
+
 ## [3.17.360] - 2026-10-26
 
 - Route the signed GitHub issue/comment webhook to the Go coordinator and provision its webhook secret and allowlisted repository/owner runtime settings.
