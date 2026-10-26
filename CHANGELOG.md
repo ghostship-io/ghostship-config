@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.374] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to d7f763e7; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #621.
+
 ## [3.17.373] - 2026-10-26
 
 - T3 acceptance: try up to three admitted routes before failing the image
