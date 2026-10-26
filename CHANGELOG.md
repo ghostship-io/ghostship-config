@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.358] - 2026-10-26
+
+- Add an isolated loopback Go coordinator container with persistent state, GitHub API credentials, a dedicated shared `GHOSTSHIP_COORDINATOR_TOKEN` for the CLI status client, and AppArmor confinement.
+
+PR #590.
+
 ## [3.17.357] - 2026-10-25
 
 Pin the deployed agent flake input to agent main `ea113bbbde5713dce06c52d244e9dc6333febb9b`, including the work-ledger SQLITE_BUSY fix.
