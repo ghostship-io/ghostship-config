@@ -37,10 +37,9 @@ permanent security thread. Keep private security evidence off free-tier workers.
    patch release or verified backport over a broad dependency upgrade. Prepare
    reproducible candidates and compare source/patch identity. Run fast unit
    regressions before merge; integration checks run in GitHub after merge.
-   Stage new Nix files before evaluation. Use the landing tool for release
-   metadata. Workers implement; the orchestrator reviews each diff. Record that
-   revision with `agent review approve`, then use `agent pr land`. Review affected consumers, privacy, test quality and
-   deployment impact. A patch-identity marker is not an executed vulnerability
+   Stage new Nix files before evaluation. Submit the PR for controller review;
+   the independent reviewer checks affected consumers, privacy, test quality and
+   deployment impact, and the controller lands the approved head. A patch-identity marker is not an executed vulnerability
    regression. Keep production exploit execution out of the procedure.
 4. Before application, inspect the complete activation/unit diff and existing
    maintenance locks. Read the pending deployment destination and any existing

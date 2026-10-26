@@ -122,8 +122,8 @@ host's full system derivation. Manual main CI also builds host-evaluation,
 config-tests and config-package, retaining full regression and host assertion
 coverage. Stage new Nix files before evaluation. Integration and browser jobs
 run manually on main; superseded PR runs are cancelled.
-The orchestrator reviews each diff and records approval; workers ship with
-`agent pr land` and deploy their own approved PRs.
+The controller's independent reviewer reviews each PR against its frozen
+issue and proof; the controller lands the approved exact head.
 
 ## Git access
 
@@ -139,10 +139,9 @@ git ls-remote origin HEAD
 ```
 
 Keep an existing SSH remote if its key is available. Use a named branch or
-worktree, verify and commit changes, push, and open a PR. Keep `VERSION` and
-`CHANGELOG.md` out of its diff: `agent pr land` publishes the release on main.
-Write release notes in the PR body under `## Changelog`; patch is the default,
-with `Release: minor` or `Release: major` selecting a larger bump.
+worktree, verify and commit changes, push, open a PR that names its frozen
+issue, and submit it for controller review. Keep `VERSION` and `CHANGELOG.md`
+out of its diff.
 
 ## Service container updates
 
