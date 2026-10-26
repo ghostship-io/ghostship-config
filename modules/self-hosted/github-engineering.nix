@@ -479,10 +479,13 @@ in
     };
     # A rewrite replaces the ledger with a new 0600 file whose mask cancels the
     # coordinator's inherited read entry. Re-apply it when the ledger file is
-    # created or replaced; the script leaves an already-correct ACL untouched,
-    # so its own run cannot retrigger the path unit.
+    # written or replaced, and once at activation; the script leaves an
+    # already-correct ACL untouched, so its own run cannot retrigger the path
+    # unit. The path unit must not use PathExists=: it re-fires every time the
+    # service goes inactive while the file exists, an endless loop.
     systemd.services.ghostship-model-evidence-acl = {
       description = "Keep the served selector's read access on the model evidence ledger";
+      wantedBy = [ "multi-user.target" ];
       # Legitimate ledger writes may trigger a burst of idempotent runs; the
       # units must not fail for doing their job. A runaway still stops at the
       # limit instead of spinning.
@@ -504,7 +507,6 @@ in
       description = "Watch the model evidence ledger for creation or replacement";
       wantedBy = [ "paths.target" ];
       pathConfig = {
-        PathExists = "${modelOutcomes.host}/${modelOutcomes.file}";
         PathChanged = "${modelOutcomes.host}/${modelOutcomes.file}";
         Unit = "ghostship-model-evidence-acl.service";
       };
