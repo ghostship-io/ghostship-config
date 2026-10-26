@@ -50,6 +50,14 @@ let
   '';
   pointerPython = pkgs.python3.withPackages (ps: [ ps.websockets ]);
   network = "ghostship_github_net";
+  # The coordinator refuses a launch once a repository has `max_active` live
+  # threads, defaulting to 3 when the entry omits it. The route policy's
+  # worker_capacity is the owner's only launch cap, so every repository's
+  # ceiling is read from that same generated policy instead of a second literal
+  # that can drift below it.
+  workerCapacity = (builtins.fromJSON (
+    builtins.readFile config.environment.etc."ghostship/route-policy.json".source
+  )).worker_capacity.default;
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
     "ghostship-io/ghostship-config" = {
@@ -63,6 +71,21 @@ let
     "ghostship-io/ghostship-newsletter".project_id = "@GHOSTSHIP_T3_PROJECT_NEWSLETTER@";
     "ghostship-io/ghostship-orca".project_id = "@GHOSTSHIP_T3_PROJECT_ORCA@";
   };
+  # The coordinator's effective entries. Each repository carries the route
+  # policy's worker_capacity as its `max_active`, so the global cap stays the
+  # only cap on launches; a repository entry may still raise it explicitly.
+  managedRepositories = lib.mapAttrs (_: r: {
+    base = "main";
+    max_active = workerCapacity;
+    # Off until the owner approves the ranking for routing: the review
+    # routes are frontier (Codex/Claude) and their quota is reserved.
+    automatic_review = {
+      enabled = false;
+      debounce_seconds = 30;
+      max_active = 1;
+      timeout_seconds = 1800;
+    };
+  } // r) repositories;
   # The previous owner and the two renamed repositories, so that existing
   # issue owners, queued deliveries, CI issue mappings and pull request links
   # survive the transfer. The alias targets are the canonical repositories
@@ -104,17 +127,7 @@ let
     ];
     review_max_active = 2;
     model_rankings_path = "/run/ghostship-integrations/model-routing.json";
-    repositories = lib.mapAttrs (_: r: r // {
-      base = "main";
-      # Off until the owner approves the ranking for routing: the review
-      # routes are frontier (Codex/Claude) and their quota is reserved.
-      automatic_review = {
-        enabled = false;
-        debounce_seconds = 30;
-        max_active = 1;
-        timeout_seconds = 1800;
-      };
-    }) repositories;
+    repositories = managedRepositories;
     # The coordinator resolves a legacy repository name to its canonical one
     # and keeps the pre-transfer identity for the commands it already sent.
     repository_aliases = repositoryAliases;
@@ -127,8 +140,18 @@ in
 {
   options.ghostship.githubEngineering.enable =
     lib.mkEnableOption "hooks.ghostship.io webhook receiver and T3 engineering coordinator";
+  options.ghostship.githubEngineering.repositories = lib.mkOption {
+    type = lib.types.attrsOf lib.types.anything;
+    readOnly = true;
+    description = ''
+      The coordinator's effective per-repository entries. Every managed
+      repository carries the route policy's worker_capacity as `max_active`, so
+      no hidden per-repository ceiling refuses a launch below the global cap.
+    '';
+  };
 
   config = lib.mkIf cfg.enable {
+    ghostship.githubEngineering.repositories = managedRepositories;
     ghostship.notify.incidentSpool = "${root}/incidents";
     ghostship.apps.hooks = {
       name = "Webhooks";

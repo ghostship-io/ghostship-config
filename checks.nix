@@ -82,6 +82,15 @@ let
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
   );
+  # The coordinator's per-repository ceiling must never undercut the route
+  # policy's global worker cap: a hidden default of 3 refused fast-lane
+  # launches while the policy still had room.
+  managedRepositories = t3codeConfig.ghostship.githubEngineering.repositories;
+  underCappedRepositories = builtins.filter
+    (name:
+      !(managedRepositories.${name} ? max_active)
+      || managedRepositories.${name}.max_active < routePolicy.worker_capacity.default)
+    (builtins.attrNames managedRepositories);
   routeKey = route: "${route.provider}/${route.model}";
   expectedFreeRoutes =
     map (entry: "opencode-free/${entry.provider}/${entry.model}")
@@ -210,6 +219,12 @@ in
     assert
       builtins.isInt routePolicy.worker_capacity.p0_override
       && routePolicy.worker_capacity.p0_override > 0;
+    # Every managed repository carries a max_active at least the route policy's
+    # worker_capacity default, so no hidden per-repository ceiling blocks a
+    # launch the global cap would allow.
+    assert managedRepositories != { };
+    assert pkgs.lib.assertMsg (underCappedRepositories == [ ])
+      "repository max_active is missing or below the route policy worker_capacity.default: ${builtins.concatStringsSep ", " underCappedRepositories}";
     assert
       builtins.sort builtins.lessThan actualWorkerRoutes
       == builtins.sort builtins.lessThan expectedWorkerRoutes;
