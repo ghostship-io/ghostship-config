@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.17.378] - 2026-10-26
+
+- Mount the canonical routing snapshot and the T3 model evidence into the Go coordinator so healthz reports current model evidence instead of unavailable sources.
+
+
+
+
+
+
+
+
+### Current review evidence at 0587fe665d9f8fd5f3a731cb4d4c1d54517baa58
+
+Review evidence at exact head 0587fe665d9f8fd5f3a731cb4d4c1d54517baa58: CLEAN (fingerprint a3fc0a8224dc20a428db269b372317d25fc62d04a380ff557b60690ff5ba716d). No open exact-head findings were returned.
+
+PR #606.
+
 ## [3.17.377] - 2026-10-26
 
 - secrets: rotate the Go coordinator service token
