@@ -26,6 +26,9 @@ class SourceClosureTests(unittest.TestCase):
             profiles.mkdir(parents=True)
             (profiles / 'research.json').write_text('{}')
             (root / 'unrelated.txt').write_text('excluded')
+            # lib/private-integrations.nix imports the relay module (agent f86623d3).
+            (root / 'lib').mkdir()
+            (root / 'lib/openai-relay.nix').write_text('{ pkgs }: { }')
             expression = r'''
               let
                 prefix = a: b: builtins.substring 0 (builtins.stringLength a) b == a;
@@ -39,6 +42,7 @@ class SourceClosureTests(unittest.TestCase):
               in { packages = builtins.attrNames (builtins.readDir
                      (result.integrations + "/tools/python"));
                    profiles = builtins.pathExists (result.integrations + "/config/sandbox-profiles/research.json");
+                   relay = builtins.pathExists (result.integrations + "/lib/openai-relay.nix");
                    unrelated = builtins.pathExists (result.integrations + "/unrelated.txt"); }
             '''.replace('__SOURCE__', str(ROOT / 'modules/self-hosted/agent-service-sources.nix')).replace('__ROOT__', str(root))
             result = subprocess.run(['nix', 'eval', '--impure', '--json', '--expr', expression],
@@ -46,6 +50,7 @@ class SourceClosureTests(unittest.TestCase):
             data = json.loads(result.stdout)
             self.assertEqual(set(data['packages']), {'ghostship_' + n for n in packages})
             self.assertTrue(data['profiles'])
+            self.assertTrue(data['relay'])
             self.assertFalse(data['unrelated'])
 
 
