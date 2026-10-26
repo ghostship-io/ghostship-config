@@ -104,6 +104,10 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
             "${waitRuntime} ${broker}/bin/ghostship-free-inference-bridge", bridge
         )
         self.assertIn("${waitRuntime} ${scheduler}/bin/agent", scheduler)
+        # The gate may wait 1200 s, so the systemd default 90 s start timeout
+        # would kill a slow but successful publication.
+        self.assertEqual(setting(bridge, "TimeoutStartSec"), "1500")
+        self.assertEqual(setting(scheduler, "TimeoutStartSec"), "1500")
         helper = re.search(r'waitRuntime = "([^"]*)";', BRIDGE_MODULE)
         self.assertIsNotNone(helper)
         self.assertIn("inference-container-wait.py", helper.group(1))

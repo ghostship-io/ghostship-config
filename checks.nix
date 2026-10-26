@@ -439,6 +439,10 @@ in
     # path the container does not have yet.
     assert startGatesOnContainerExecutable "/bin/ghostship-free-inference-bridge" inferenceBridgeUnit;
     assert startGatesOnContainerExecutable "/bin/agent" inferenceSchedulerUnit;
+    # The gate waits up to 1200 s. The systemd default would kill a slow but
+    # successful publication, so each start must outlast the gate.
+    assert inferenceBridgeUnit.serviceConfig.TimeoutStartSec == 1500;
+    assert inferenceSchedulerUnit.serviceConfig.TimeoutStartSec == 1500;
     assert builtins.all (
       unit:
       !(builtins.elem "ghostship-inference-bridge.service" unit.requires)

@@ -277,6 +277,9 @@ in
         ];
         Restart = "always";
         RestartSec = 10;
+        # The start gate waits up to 1200 s for the published closure, so the
+        # systemd default would kill a slow but successful publication.
+        TimeoutStartSec = 1500;
         TimeoutStopSec = schedulerStopTimeout + 10;
         # Killing the host Podman attachment reports exit 1 even for an orderly
         # stop. Signal the container scheduler and await both processes instead;
