@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.379] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to e7b0636d; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #625.
+
 ## [3.17.378] - 2026-10-26
 
 - Mount the canonical routing snapshot and the T3 model evidence into the Go coordinator so healthz reports current model evidence instead of unavailable sources.
