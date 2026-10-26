@@ -17,6 +17,8 @@ class RuntimeIdentity(unittest.TestCase):
             before = root / 'before'
             (before / 'lib').mkdir(parents=True)
             (before / 'lib/github-integration.nix').write_text('# builder fixture\n')
+            (before / 'lib/coordinator-python-packages.nix').write_text(
+                '[ "ghostship_github" "ghostship_t3" ]')
             code = before / 'tools/python/ghostship_github'
             code.mkdir(parents=True)
             (code / 'ingress.py').write_text('# ingress one\n')
@@ -31,9 +33,9 @@ class RuntimeIdentity(unittest.TestCase):
             (root / 'unrelated' / 'VERSION').write_text('new release\n')
             (root / 'unrelated' / 'README.md').write_text('unrelated docs\n')
             shutil.copytree(before, root / 'integrations')
-            mcp = root / 'integrations' / 'tools/python/ghostship_mcp'
-            mcp.mkdir()
-            (mcp / 'server.py').write_text('# private code change\n')
+            mcp = root / 'integrations' / 'connector/internal'
+            mcp.mkdir(parents=True)
+            (mcp / 'server.go').write_text('# private code change\n')
             expression = r'''
             let
               f = builtins.getFlake "path:__ROOT__";

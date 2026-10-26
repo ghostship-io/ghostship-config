@@ -6,6 +6,7 @@ let
   tools = agent.packages.${system};
   # The platform owns the runtime and generated service clients; the deployment supplies its icon.
   runtimes = import ./agent-service-runtimes.nix {
+    nativeAgent = inputs.ghostship-native-agent;
     inherit agent;
     inherit system;
     mcpIcon = ./private-integrations/ghostship.png;
@@ -253,6 +254,8 @@ in {
     };
     ghostship.secretProjections = serviceProjections;
     systemd.tmpfiles.rules = [
+      "d /srv/apps/ghostship-private-integrations/native-auth 0700 62020 62020 -"
+      "d /run/ghostship-native-mcp 0750 root ghostship-mcp -"
       # Podman refuses --env-file for a missing path. Create the private retail
       # settings file empty and root-owned; the deployer fills it in place and
       # tmpfiles never overwrites existing content.
@@ -345,14 +348,9 @@ in {
       requiredBy = [ "podman-ghostship-private-integrations.service" ];
       serviceConfig = { Type = "oneshot"; ExecStart = render; UMask = "0077"; };
     };
-    # T3 bridge: the isolated ChatGPT MCP reads /run/ghostship-integrations/
-    # {t3-server.json,t3-token} and can then call the t3_* capabilities. T3 Code
-    # runs inside the `t3code` container on ghostship_net, reachable by name
-    # through its access proxy at t3code:3773; this one unit publishes the URL
-    # and a scoped session token. Update = bump the agent flake pin only.
-    #
-    # Agent Desktop bridge: the same isolated MCP runs the parallel Bladebro
-    # worker transport, so it needs the desktop SSH contract. This unit
+    # Agent Desktop bridge remains available to the existing Keep broker and
+    # installed CLI tooling. Its credentials do not enter the native T3 MCP.
+    # This unit
     # publishes the t3code desktop key, its pinned host key, and the desktop
     # address into /run/ghostship-integrations; the MCP wrapper reads them by
     # file. The address is the agent_desktop_net IP because the desktop's
@@ -397,84 +395,65 @@ in {
         RandomizedDelaySec = 300;
       };
     };
+    # The existing owner-side bridge maintains native OAuth grants. The MCP
+    # receives only its private scoped projection, never local issuer access.
     systemd.services.ghostship-t3-bridge = {
-      description = "Publish the T3 bridge endpoint and session token for the ChatGPT MCP";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "podman-t3code.service" ];
+      description = "Maintain the shared native T3 MCP authorization";
+      after = [ "podman-t3code.service" "ghostship-private-relay-config.service" ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = pkgs.writeShellScript "ghostship-t3-bridge" ''
+        ExecStart = pkgs.writeShellScript "ghostship-native-t3-authorization" ''
           set -eu
           umask 077
-          printf 'http://t3code:3773' > /run/ghostship-integrations/t3-server.json.new
-          chmod 0444 /run/ghostship-integrations/t3-server.json.new
-          mv /run/ghostship-integrations/t3-server.json.new /run/ghostship-integrations/t3-server.json
-          for attempt in $(seq 1 30); do
-            if token=$(${pkgs.podman}/bin/podman exec t3code \
-                env HOME=/home/t3code T3CODE_HOME=/home/t3code/.t3 \
-                /home/t3code/.local/bin/t3 auth session issue \
-                --ttl 30d --label ghostship-chatgpt-mcp --token-only 2>/dev/null) \
-                && [ -n "$token" ]; then
-              printf '%s' "$token" > /run/ghostship-integrations/t3-token.new
-              chown 62020:62020 /run/ghostship-integrations/t3-token.new
-              chmod 0400 /run/ghostship-integrations/t3-token.new
-              mv /run/ghostship-integrations/t3-token.new /run/ghostship-integrations/t3-token
-              exit 0
-            fi
-            sleep 10
+          request=/srv/apps/ghostship-private-integrations/native-auth/request
+          trap 'rm -f "$request"' EXIT
+          ${pkgs.nix}/bin/nix copy --no-check-sigs \
+            --to local?root=/srv/apps/t3code/nix-root ${runtimes.private.runtime}
+          install -d -m 0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-native-mcp
+          ln -sfn ${runtimes.private.runtime} \
+            /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-native-mcp/runtime
+          ${pkgs.podman}/bin/podman exec --user 3000:3000 \
+            -e HOME=/home/t3code -e T3CODE_HOME=/home/t3code/.t3 t3code \
+            ${runtimes.private.runtime}/bin/ghostship-mcp --maintain-auth \
+            --native-t3 /home/t3code/.local/bin/t3 --native-home /home/t3code/.t3 \
+            --native-access full-access --upstream http://127.0.0.1:3774/mcp \
+            --oauth-issuer https://${config.ghostship.apps.t3code.hostname} \
+            --token-file /home/t3code/.local/state/ghostship-connector/t3-native-client.json
+          canonical=/srv/apps/t3code/home/.local/state/ghostship-connector/t3-native-client.json
+          target=/run/ghostship-native-mcp
+          install -d -m 0750 -o root -g ghostship-mcp "$target"
+          install -m 0400 -o 62020 -g 62020 "$canonical" "$target/t3-token.new"
+          mv "$target/t3-token.new" "$target/t3-token"
+          for name in ghostship.key ghostship.yaml; do
+            install -m 0400 -o 62020 -g 62020 \
+              "/run/ghostship-integrations/$name" "$target/$name.new"
+            mv "$target/$name.new" "$target/$name"
           done
-          echo "could not issue a T3 session token from the t3code container" >&2
-          exit 1
         '';
         UMask = "0077";
+        TimeoutStartSec = 150;
       };
     };
     systemd.timers.ghostship-t3-bridge = {
-      wantedBy = [ "timers.target" ];
+      wantedBy = [ "multi-user.target" ];
       timerConfig = {
-        OnBootSec = "10min";
-        OnCalendar = "daily";
+        OnBootSec = "2min";
+        OnCalendar = "hourly";
         Persistent = true;
-        RandomizedDelaySec = 600;
+        RandomizedDelaySec = 60;
+      };
+    };
+    systemd.paths.ghostship-t3-bridge = {
+      wantedBy = [ "multi-user.target" ];
+      pathConfig = {
+        PathExists = "/srv/apps/ghostship-private-integrations/native-auth/request";
+        Unit = "ghostship-t3-bridge.service";
       };
     };
     # Host CLI picker runs as root or a service account; the explicit path keeps
     # it on the T3 home store instead of guessing HOME (#403).
     environment.variables.GHOSTSHIP_MODEL_EVIDENCE_PATH =
       "/srv/apps/t3code/home/.local/state/ghostship/model-evidence/model-evidence.jsonl";
-    # The store lives in its own directory so the integrations container never
-    # sees the parent state tree. The recorder writes it 0600 for the T3 home
-    # owner; grant the integrations uid (62020) read on that directory and on
-    # future files via a default ACL, and an explicit mask on the file so the
-    # named entry survives a 0600 recreation.
-    systemd.services.podman-ghostship-private-integrations.preStart = lib.mkBefore ''
-      state=/srv/apps/t3code/home/.local/state/ghostship
-      evidence="$state/model-evidence"
-      legacy="$state/model-evidence.jsonl"
-      owner=$(${pkgs.coreutils}/bin/stat -c %u:%g "$state" 2>/dev/null || echo 3000:3000)
-      if [ -d "$state" ]; then
-        ${pkgs.coreutils}/bin/install -d -m 0750 -o "''${owner%:*}" -g "''${owner#*:}" "$evidence"
-        # One-time move of the pre-#403 store; the T3 recorder then appends here.
-        if [ -f "$legacy" ] && [ ! -e "$evidence/model-evidence.jsonl" ]; then
-          ${pkgs.coreutils}/bin/mv "$legacy" "$evidence/model-evidence.jsonl"
-          ${pkgs.coreutils}/bin/chown "''${owner%:*}:''${owner#*:}" "$evidence/model-evidence.jsonl"
-        elif [ -f "$legacy" ] && [ ! -L "$legacy" ]; then
-          echo "model evidence: legacy store and new store both exist; leaving both" >&2
-        fi
-        # The T3 unit keeps running until its next restart, so its recorder may
-        # still target the legacy path. Point that name at the one store instead
-        # of letting it recreate a second, invisible copy (#403).
-        if [ ! -e "$legacy" ] || [ -L "$legacy" ]; then
-          ${pkgs.coreutils}/bin/ln -sfn model-evidence/model-evidence.jsonl "$legacy"
-          ${pkgs.coreutils}/bin/chown -h "''${owner%:*}:''${owner#*:}" "$legacy"
-        fi
-        ${pkgs.acl}/bin/setfacl -m u:62020:rx "$evidence"
-        ${pkgs.acl}/bin/setfacl -m d:u:62020:rX "$evidence"
-        if [ -f "$evidence/model-evidence.jsonl" ]; then
-          ${pkgs.acl}/bin/setfacl -m u:62020:r,m::r "$evidence/model-evidence.jsonl"
-        fi
-      fi
-    '';
     ghostship.containerRuntimes.ghostship-private-integrations.runtime = runtimes.integrations;
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
       image = "ghostship-private-integrations:${baseImage.imageTag}";
@@ -483,42 +462,22 @@ in {
       user = "62020:62020";
       environment = {
         GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${baseImage.imageTag}";
-        # The MCP picker must read the same model-probe evidence the T3 home
-        # writes; HOME here is scrubbed, so name the store explicitly (#403).
-        GHOSTSHIP_MODEL_EVIDENCE_PATH = "/run/ghostship-model-evidence/model-evidence.jsonl";
+        GHOSTSHIP_MCP_SOCKET = runtimes.private.sharedSocket;
+        GHOSTSHIP_T3_MCP_ENDPOINT = "${config.ghostship.apps.t3code.origin}/mcp";
+        GHOSTSHIP_T3_MCP_ISSUER = "https://${config.ghostship.apps.t3code.hostname}";
+        GHOSTSHIP_T3_MCP_PRIVATE_HTTP = "1";
+        GHOSTSHIP_T3_MCP_TOKEN_FILE = "/run/ghostship-integrations/t3-token";
+        GHOSTSHIP_T3_MCP_AUTH_WAKE_FILE = "/state/native-auth/request";
       };
-      # The MCP runtime's account settings come from a root-owned file outside the
-      # repository: GHOSTSHIP_GOOGLE_OWNER_ACCOUNT, GHOSTSHIP_GOOGLE_AGENT_ACCOUNT
-      # and GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS (the only Drive folders, and their
-      # subfolders, the health op reads, so other people's records in a shared
-      # folder stay out). A missing setting fails closed in the tool that needs it.
-      # Store-scoped retail clients read their destination from the root-owned
-      # retail-store.env (COSTCO_*, SAFEWAY_*, TARGET_*, WALMART_*, HOMEDEPOT_*
-      # and BESTBUY_*); an unset setting fails with a usage error naming it.
-      environmentFiles = [
-        "/etc/ghostship/mcp-identity.env"
-        "/etc/ghostship/retail-store.env"
-      ];
       volumes = [
-        "/run/ghostship-integrations:/run/ghostship-integrations:ro"
-        # Read-only view of the dedicated model-evidence directory only; the
-        # pre-start grants this runtime's uid read through an ACL (#403). The
-        # parent state directory holds handoffs, sessions and reviews and stays
-        # out of this container entirely.
-        "/srv/apps/t3code/home/.local/state/ghostship/model-evidence:/run/ghostship-model-evidence:ro"
-        "/run/ghostship-keep:/run/ghostship-keep:ro"
-        "/run/ghostship-hostops:/run/ghostship-hostops:ro"
-        # Service executor credentials: the runtime's default directory.
-        "${serviceSecretsDir}:/run/ghostship-secrets:ro"
+        # Only native T3 and official relay credentials enter this first Go
+        # runtime. Other domain migrations grant their own bounded access.
+        "/run/ghostship-native-mcp:/run/ghostship-integrations:ro"
         "/srv/apps/ghostship-private-integrations:/state:rw,noexec,nosuid,nodev"
       ];
       extraOptions = [
         "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"
-        # Both networks are required: ghostship_net reaches T3 and
-        # agent_desktop_net reaches the Agent Desktop SSH endpoint, which
-        # starts on-demand Chrome with chrome-ensure.
         "--network=ghostship_net"
-        "--network=agent_desktop_net"
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777"
         # Each agent window drives parallel tabs through a pool of up to 8
         # Bladebro workers per identity (an SSH client plus reader threads
@@ -532,12 +491,9 @@ in {
       ];
     };
     systemd.services.podman-ghostship-private-integrations = {
-      after = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
-                "ghostship-hostops-broker.service"
-                "init-ghostship-net.service" "init-agent-desktop-net.service" ];
-      requires = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
-                   "init-ghostship-net.service" "init-agent-desktop-net.service" ];
-      wants = [ "ghostship-hostops-broker.service" ];
+      after = [ "ghostship-t3-bridge.service" "init-ghostship-net.service" ];
+      requires = [ "init-ghostship-net.service" ];
+      wants = [ "ghostship-t3-bridge.service" ];
       # One stdio relay per ID: systemd/Podman stop the old instance first.
       restartIfChanged = true;
       # Include Podman's drain window plus container cleanup overhead.

@@ -63,7 +63,6 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
         auth = block(FREE_WORKER_MODULE, "systemd.services.ghostship-free-worker-auth =")
         scheduler = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-scheduler =")
         proxy = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-proxy =")
-        mcp = block(BRIDGE_MODULE, "systemd.services.podman-ghostship-private-integrations =")
         self.assertIn('"ghostship-inference-bridge.service"', setting(auth, "wants"))
         self.assertNotIn('"ghostship-inference-bridge.service"', optional_setting(auth, "requires"))
         self.assertEqual(setting(scheduler, "Restart"), '"always"')
@@ -71,8 +70,7 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
         self.assertNotIn('"ghostship-free-worker-auth.service"', optional_setting(scheduler, "requires"))
         self.assertIn('"ghostship-inference-bridge.service"', setting(proxy, "wants"))
         self.assertNotIn('"ghostship-inference-bridge.service"', optional_setting(proxy, "requires"))
-        self.assertIn('"ghostship-free-worker-auth.service"', setting(mcp, "wants"))
-        self.assertNotIn('"ghostship-free-worker-auth.service"', optional_setting(mcp, "requires"))
+        self.assertNotIn('systemd.services.podman-ghostship-private-integrations', BRIDGE_MODULE)
 
     def test_socket_activation_never_reaches_a_permanent_trigger_limit(self):
         socket = block(BRIDGE_MODULE, "systemd.sockets.ghostship-inference-proxy =")

@@ -1,16 +1,19 @@
 # Content-scoped GhostShip code. No release version or whole-flake revision is
 # part of a service runtime; each service receives only its executable inputs.
-{ agent, system, mcpIcon ? null }:
+{ agent, system, mcpIcon ? null, nativeAgent ? agent }:
 let
   pkgs = import agent.inputs.nixpkgs { inherit system; };
   inherit (pkgs) lib;
   sources = import ./agent-service-sources.nix { inherit agent lib; };
   github = root: import (root + "/lib/github-integration.nix") { inherit pkgs; };
-  privateSource = sources.integrations;
-  tools = import (agent.outPath + "/lib/mkPackages.nix") { inherit pkgs; };
-  private = import (privateSource + "/lib/private-integrations.nix") {
-    inherit pkgs mcpIcon;
-    inherit (tools) serviceClients;
+  privateSource = (import ./agent-service-sources.nix { agent = nativeAgent; inherit lib; }).integrations;
+  private = {
+    runtime = import (privateSource + "/lib/native-mcp.nix") {
+      inherit pkgs;
+      sourceRevision = "source-" + builtins.hashString "sha256" (toString privateSource);
+    };
+    relay = import (privateSource + "/lib/openai-relay.nix") { inherit pkgs; };
+    sharedSocket = "/tmp/ghostship-mcp/ghostship.sock";
   };
   ingress = github sources.hooks;
   coordinator = github sources.coordinator;
@@ -52,9 +55,10 @@ in
       private.runtime
       (start "integrations" ''
         export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-        exec ${pkgs.python3.withPackages (ps: [ ps.mcp ps.jsonschema ps.pypdf ps.websockets ps.pillow (import (privateSource + "/lib/python-wyze.nix") ps) ])}/bin/python3 \
-          ${privateSource}/tools/python/ghostship_mcp/supervisor.py \
-          ${private.relay}/bin/tunnel-client ${private.runtime}/bin/ghostship-mcp ${private.sharedSocket} "$@"
+        exec ${private.runtime}/bin/ghostship-integration-supervisor \
+          --backend ${private.runtime}/bin/ghostship-mcp \
+          --relay ${private.relay}/bin/tunnel-client \
+          --socket ${private.sharedSocket} "$@"
       '')
     ];
   };

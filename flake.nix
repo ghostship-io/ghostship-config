@@ -6,6 +6,12 @@
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
     ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/f86623d34abde16f73c69814eeddd424f0fe7ce9";
+    # Independently reviewed native connector increment; unrelated service
+    # runtimes keep their existing release pin.
+    ghostship-native-agent = {
+      url = "github:ghostship-io/ghostship-agent/e6f0029cba29f09a69eeea7bc12f54af8ff7a906";
+      flake = false;
+    };
 
     # The owner's runtime policy, read by the AI usage collector for the
     # model-selection identities and trust evidence. It is a plain
