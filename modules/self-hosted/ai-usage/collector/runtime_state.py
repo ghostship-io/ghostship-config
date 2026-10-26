@@ -38,8 +38,11 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Iterable, Mapping
+
+import codes
 
 # The scopes a failure can have.
 SCOPE_ACCOUNT = "account"
@@ -145,6 +148,58 @@ MAX_ROWS = 2000
 # of them is slow to prepare and slow to run.
 MAX_BINDINGS = 200
 
+# A live WAL database is check-pointed and its shared memory is rebuilt while
+# the collector reads it. The read-only connection can then fail once with a
+# transient error, so it is attempted again before the source is reported as
+# unreadable.
+READ_ATTEMPTS = 3
+READ_RETRY_SLEEP_SECONDS = 0.2
+
+
+def _transient(error: Exception) -> bool:
+    """True for the errors a live WAL database produces while it changes."""
+    text = str(error).lower()
+    return (
+        "locked" in text
+        or "database is busy" in text
+        or "disk i/o error" in text
+    )
+
+
+def _read_reason(error: Exception) -> str:
+    """The fixed code of a failed read of the state."""
+    text = str(error).lower()
+    if "locked" in text or "database is busy" in text:
+        return "database_busy"
+    if "disk i/o error" in text:
+        return "database_io_error"
+    return "database_unreadable"
+
+
+def _with_retry(
+    path: str | Path, read: Callable[[sqlite3.Connection], Any]
+) -> Any:
+    """Run one state read, retrying only a transient WAL failure.
+
+    The connection and its setup PRAGMAs are part of the attempt: a lock at
+    open time is the same transient cause as a lock during the read. Every
+    attempt opens its own read-only connection, because a connection that saw
+    a disk I/O error is not trusted for the next one.
+    """
+    for attempt in range(READ_ATTEMPTS):
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = _connect(path)
+            return read(connection)
+        except sqlite3.Error as error:
+            if attempt + 1 >= READ_ATTEMPTS or not _transient(error):
+                raise
+        finally:
+            if connection is not None:
+                connection.close()
+        time.sleep(READ_RETRY_SLEEP_SECONDS)
+    raise RuntimeStateError("the T3 Code state could not be read")
+
 # The tables the reader uses. A state database without them is not a state
 # database, and the reader says so instead of guessing.
 ATTEMPTS_TABLE = "orchestration_v2_projection_run_attempts"
@@ -187,14 +242,14 @@ def read_limit_windows(path: str | Path, now: float) -> list[dict[str, Any]]:
     from datetime import datetime, timezone
 
     cutoff = datetime.fromtimestamp(now - LIMIT_MAX_SECONDS, timezone.utc).isoformat()
-    try:
-        connection = _connect(path)
-    except RuntimeStateError:
-        return []
-    try:
-        if not all(_has_table(connection, table) for table in (MESSAGES_TABLE, RUNS_TABLE)):
-            return []
-        rows = connection.execute(
+
+    def read(connection: sqlite3.Connection) -> list[Any] | None:
+        if not all(
+            _has_table(connection, table)
+            for table in (MESSAGES_TABLE, RUNS_TABLE)
+        ):
+            return None
+        return connection.execute(
             f"SELECT m.created_at, m.payload_json, r.payload_json FROM {MESSAGES_TABLE} m "
             f"JOIN {RUNS_TABLE} r ON m.run_id=r.run_id "
             "WHERE r.provider_instance_id='antigravity' AND m.role='assistant' "
@@ -202,10 +257,13 @@ def read_limit_windows(path: str | Path, now: float) -> list[dict[str, Any]]:
             "AND m.payload_json LIKE '%Usage Limit Reached%' "
             "ORDER BY datetime(m.created_at) DESC LIMIT ?", (cutoff, MAX_ROWS),
         ).fetchall()
-    except sqlite3.Error:
+
+    try:
+        rows = _with_retry(path, read)
+    except (RuntimeStateError, sqlite3.Error):
         return []
-    finally:
-        connection.close()
+    if rows is None:
+        return []
     windows: dict[str, dict[str, Any]] = {}
     units = {'day': 86400, 'hour': 3600, 'minute': 60, 'second': 1}
     for created, payload, run_payload in rows:
@@ -305,16 +363,28 @@ def _iso_epoch(value: Any) -> float | None:
 
 
 def _connect(path: str | Path) -> sqlite3.Connection:
-    """The state database, opened read only."""
+    """The state database, opened read only.
+
+    The temporary store is memory. A query over a window of runs sorts more
+    rows than fit in the page cache, and a temporary file would be written
+    under a service directory that is read only; SQLite reports that as a
+    disk I/O error. The window is small, so memory is the right place for it,
+    and the database itself is never written.
+    """
     target = Path(path)
     if not target.exists():
         raise RuntimeStateError("the T3 Code state database is not there")
+    # A connection failure is left as the SQLite error it is: a transient
+    # lock at open time is retried by the caller, and a persistent one keeps
+    # its own fixed reason. Only a missing database is a RuntimeStateError.
+    connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True, timeout=5)
     try:
-        return sqlite3.connect(f"file:{target}?mode=ro", uri=True, timeout=5)
-    except sqlite3.Error as error:
-        raise RuntimeStateError(
-            "the T3 Code state database could not be opened"
-        ) from error
+        connection.execute("PRAGMA query_only = 1")
+        connection.execute("PRAGMA temp_store = MEMORY")
+    except sqlite3.Error:
+        connection.close()
+        raise
+    return connection
 
 
 def _has_table(connection: sqlite3.Connection, table: str) -> bool:
@@ -399,21 +469,22 @@ def read_request_counts(
     """
     moment = float(now)
     cutoff = moment - float(age_seconds)
-    try:
-        connection = _connect(path)
-    except RuntimeStateError:
-        return {}
-    try:
+
+    def read(connection: sqlite3.Connection) -> Any:
         if not _has_table(connection, RUNS_TABLE):
-            return {}
+            return None
         runs = _recent_runs(connection, cutoff, moment)
         if not runs:
-            return {}
-        attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
-    except sqlite3.Error:
+            return ([], {})
+        return (runs, _attempts_of_runs(connection, [run["run_id"] for run in runs]))
+
+    try:
+        found = _with_retry(path, read)
+    except (RuntimeStateError, sqlite3.Error):
         return {}
-    finally:
-        connection.close()
+    if found is None:
+        return {}
+    runs, attempts = found
     counts: dict[str, int] = {}
     for run in runs:
         for attempt in attempts.get(run["run_id"]) or [run]:
@@ -628,39 +699,62 @@ def read_observations(
     )
     cutoff = moment - window
     success_cutoff = moment - success_window
-    empty: dict[str, Any] = {"failures": [], "successes": {}}
-    try:
-        connection = _connect(path)
-    except RuntimeStateError:
-        return empty
-    try:
+    def read(connection: sqlite3.Connection) -> Any:
         if not _has_table(connection, RUNS_TABLE):
-            return empty
-        runs = _recent_runs(connection, min(cutoff, success_cutoff), moment)
-        if not runs:
-            return empty
-        attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
-        thread_ids = {run["thread_id"] for run in runs if run["thread_id"]}
-        for entries in attempts.values():
+            return None
+        recent = _recent_runs(connection, min(cutoff, success_cutoff), moment)
+        if not recent:
+            return ([], {}, {}, {})
+        attempts_of_runs = _attempts_of_runs(
+            connection, [run["run_id"] for run in recent]
+        )
+        thread_ids = {run["thread_id"] for run in recent if run["thread_id"]}
+        for entries in attempts_of_runs.values():
             for attempt in entries:
                 if attempt["thread_id"]:
                     thread_ids.add(attempt["thread_id"])
-        errors = _errors(connection, thread_ids)
-        runtimes = _runtimes(connection, thread_ids)
-    except sqlite3.Error:
-        return empty
-    finally:
-        connection.close()
+        return (
+            recent,
+            attempts_of_runs,
+            _errors(connection, thread_ids),
+            _runtimes(connection, thread_ids),
+        )
+
+    try:
+        found = _with_retry(path, read)
+    except RuntimeStateError:
+        return _unreadable(path)
+    except sqlite3.Error as error:
+        return _unreadable(path, reason=_read_reason(error))
+    if found is None:
+        return _unreadable(path, schema=True)
+    runs, attempts, errors, runtimes = found
+    if not runs:
+        return _no_runtime_events()
 
     # The last failure and the last success of every target.
     failures: dict[tuple[str, str], dict[str, Any]] = {}
     successes: dict[tuple[str, str], float] = {}
+    # The newest instant the state itself reported. It is the source's data
+    # time, while a window the state carries keeps its own observation: a
+    # provider notice from yesterday is still the notice it was, and a run
+    # that just finished is current evidence that the state is being read.
+    observed_at: float | None = None
     for run in runs:
         entries = attempts.get(run["run_id"]) or []
         for attempt in entries or [run]:
             observed = attempt.get("observed_at") or run.get("observed_at")
             if observed is None:
                 continue
+            if float(observed) <= moment:
+                # A queued run can carry a start time a little ahead of the
+                # collection instant. It is not an observation yet, so the
+                # source stays dated by the newest run that has happened.
+                observed_at = (
+                    float(observed)
+                    if observed_at is None
+                    else max(observed_at, float(observed))
+                )
             instance = attempt.get("provider_instance_id") or run["provider_instance_id"]
             thread_id = attempt.get("thread_id") or run["thread_id"]
             model = attempt.get("model") or run.get("model") or ""
@@ -720,6 +814,47 @@ def read_observations(
             for (scope, target), observed in successes.items()
             if scope == SCOPE_MODEL
         },
+        # The newest runtime observation, and whether this read produced one.
+        # A state that was read but holds no recent run is a known empty
+        # reading with its own code, never a fresh source and never a
+        # database failure.
+        "observed_at": observed_at,
+        "status": "ok" if observed_at is not None else "error",
+        "reason": codes.OK if observed_at is not None else codes.NO_RUNTIME_EVENTS,
+    }
+
+
+def _no_runtime_events() -> dict[str, Any]:
+    return {
+        "failures": [],
+        "successes": {},
+        "observed_at": None,
+        "status": "error",
+        "reason": codes.NO_RUNTIME_EVENTS,
+    }
+
+
+def _unreadable(
+    path: str | Path, *, schema: bool = False, reason: str = ""
+) -> dict[str, Any]:
+    """A state read that failed, with the fixed code of its cause.
+
+    The path and the database's own message never leave this function.
+    """
+    if reason:
+        code = reason
+    elif schema:
+        code = "database_schema_missing"
+    elif not Path(path).exists():
+        code = "database_missing"
+    else:
+        code = "database_unreadable"
+    return {
+        "failures": [],
+        "successes": {},
+        "observed_at": None,
+        "status": "unreadable",
+        "reason": code,
     }
 
 

@@ -1587,15 +1587,39 @@ def ranking_samples(
     Returns the ranking metrics and the ranked models themselves, so the
     snapshot can be built from the same ranking.
     """
+    # The runtime source is the state read itself. Its data time is the newest
+    # observation the state reported, so a provider notice that is still in
+    # force does not make the source look stopped: the notice keeps its own
+    # observation on its window, and a run that just finished is current
+    # evidence that the state is being read. A state that cannot be read, or
+    # that holds no recent run, is published with its own fixed reason rather
+    # than disappearing from the coverage.
+    persisted = ranking_module.retired_from_state(
+        ranking_module.load_state(state_path)
+    )
+    observations = runtime_state_module.read_observations(
+        t3_state, now, success_age_seconds=_success_window(now, persisted)
+    )
     runtime_windows = runtime_state_module.read_limit_windows(t3_state, now)
-    if runtime_windows:
-        results.append(SourceResult(
-            source='t3_runtime', status='ok', reason=codes.OK,
-            observed_at=max(window['observedAtEpoch'] for window in runtime_windows),
-            windows=runtime_windows,
-            metrics=[sample for window in runtime_windows
-                     for sample in providers_module._window_samples(window)],
-        ))
+    runtime_status = str(observations.get('status') or 'ok')
+    runtime_reason = str(observations.get('reason') or codes.OK)
+    runtime_observed = observations.get('observed_at')
+    if runtime_observed is None and runtime_windows and runtime_status != 'unreadable':
+        # The read succeeded but found no recent run, while a provider notice
+        # was there. The notice's own observation is the reading, and it is
+        # never moved. A read that failed keeps its failure and publishes no
+        # observation at all.
+        runtime_observed = max(
+            float(window['observedAtEpoch']) for window in runtime_windows
+        )
+        runtime_status, runtime_reason = 'ok', codes.OK
+    results.append(SourceResult(
+        source='t3_runtime', status=runtime_status, reason=runtime_reason,
+        observed_at=runtime_observed,
+        windows=runtime_windows,
+        metrics=[sample for window in runtime_windows
+                 for sample in providers_module._window_samples(window)],
+    ))
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
@@ -1694,13 +1718,8 @@ def ranking_samples(
     #
     # The routes whose model a provider retired are kept in the collector's
     # own state file: the retirement outlives the window of the failure
-    # that reported it.
-    persisted = ranking_module.retired_from_state(
-        ranking_module.load_state(state_path)
-    )
-    observations = runtime_state_module.read_observations(
-        t3_state, now, success_age_seconds=_success_window(now, persisted)
-    )
+    # that reported it. The read itself happened above, before the source
+    # was published.
     observed_failures = observations["failures"]
     retired = retired_routes(persisted, observed_failures, observations["successes"])
     retired = merge_record_retirements(

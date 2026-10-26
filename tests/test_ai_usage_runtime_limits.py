@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] /
                        'modules/self-hosted/ai-usage/collector'))
@@ -144,6 +145,223 @@ class RuntimeLimitsTests(unittest.TestCase):
         self.assertEqual(snapshot['model_selection']['default_worker'],
                          {'instanceId': 'codex', 'model': 'gpt-6.1-sol'})
         self.assertIsNone(snapshot['model_selection']['providers']['antigravity']['selected']['worker'])
+
+
+class RuntimeSourceObservationTests(unittest.TestCase):
+    """The runtime source is dated by the state read, not by an old notice.
+
+    A provider notice stays in force for its whole window, but the state it
+    was read from keeps moving. The source's observation is the newest run
+    the read found, and every window keeps the notice's own observation.
+    """
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / 'state.sqlite'
+        with sqlite3.connect(self.path) as db:
+            db.execute('CREATE TABLE orchestration_v2_projection_runs '
+                       '(run_id TEXT, thread_id TEXT, provider TEXT, '
+                       'provider_instance_id TEXT, status TEXT, requested_at TEXT, '
+                       'completed_at TEXT, payload_json TEXT)')
+            db.execute('CREATE TABLE orchestration_v2_projection_messages '
+                       '(run_id TEXT, role TEXT, streaming INTEGER, created_at TEXT, payload_json TEXT)')
+            db.execute('CREATE TABLE orchestration_v2_projection_run_attempts '
+                       '(thread_id TEXT, run_id TEXT, provider TEXT, '
+                       'provider_instance_id TEXT, status TEXT, payload_json TEXT)')
+            db.execute('CREATE TABLE projection_thread_sessions '
+                       '(thread_id TEXT, last_error TEXT)')
+            db.execute('CREATE TABLE provider_session_runtime '
+                       '(thread_id TEXT, runtime_payload_json TEXT)')
+
+    def notice(self, at):
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                'INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?)',
+                ('run-notice', 'thread-notice', 'antigravity', 'antigravity',
+                 'completed', iso(at), iso(at),
+                 json.dumps({'modelSelection': {'instanceId': 'antigravity',
+                                                'model': 'gemini-4-argon'}})),
+            )
+            db.execute(
+                'INSERT INTO orchestration_v2_projection_messages VALUES (?,?,?,?,?)',
+                ('run-notice', 'assistant', 0, iso(at), json.dumps({'text': NOTICE})),
+            )
+
+    def recent_run(self, run_id, at, instance='codex', model='gpt-6.1-sol'):
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                'INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?)',
+                (run_id, 'thread-' + run_id, instance, instance, 'completed',
+                 iso(at), iso(at),
+                 json.dumps({'modelSelection': {'instanceId': instance, 'model': model}})),
+            )
+
+    def rank(self):
+        results = []
+        catalog_module = catalog.Catalog({})
+        context = {'offered_models': [('antigravity', 'gemini-4-argon')],
+                   'native_models': {}}
+        samples, ranked = main.ranking_samples(
+            results, catalog_module, context, NOW,
+            t3_home=self.folder.name, t3_state=str(self.path),
+            state_path=str(Path(self.folder.name) / 'ranking.json'),
+        )
+        runtime = next(result for result in results if result.source == 't3_runtime')
+        measured = [window for result in results for window in result.windows]
+        snapshot = main.build_snapshot(results, ranked, context, NOW,
+                                       measured_windows=measured,
+                                       catalog=catalog_module)
+        return runtime, snapshot
+
+    def test_the_state_connection_keeps_its_sort_in_memory(self):
+        connection = runtime_state._connect(self.path)
+        self.addCleanup(connection.close)
+        # A temporary file would land on the read-only service sandbox.
+        self.assertEqual(connection.execute("PRAGMA temp_store").fetchone()[0], 2)
+        self.assertEqual(connection.execute("PRAGMA query_only").fetchone()[0], 1)
+
+    def test_a_current_run_dates_the_source_while_the_notice_keeps_its_own_time(self):
+        notice_at = NOW - 200_000
+        run_at = NOW - 45
+        self.notice(notice_at)
+        self.recent_run('run-current', run_at)
+        runtime, snapshot = self.rank()
+        self.assertEqual(runtime.status, 'ok')
+        self.assertEqual(runtime.observed_at, run_at)
+        self.assertLessEqual(NOW - runtime.observed_at, 900)
+        # The window is still spent from the notice, and its time never moves.
+        self.assertEqual(runtime.windows[0]['observedAtEpoch'], notice_at)
+        coverage = next(source for source in snapshot['coverage']['sources']
+                        if source['id'] == 't3_runtime')
+        self.assertEqual(coverage['status'], 'ok')
+        self.assertLessEqual(coverage['age_seconds'], 900)
+
+    def test_without_a_current_run_the_source_keeps_the_notices_real_age(self):
+        notice_at = NOW - 200_000
+        self.notice(notice_at)
+        runtime, snapshot = self.rank()
+        self.assertEqual(runtime.status, 'ok')
+        # No clock is assigned to the old notice: its own time is the reading,
+        # and the age that follows is the real age.
+        self.assertEqual(runtime.observed_at, notice_at)
+        self.assertGreater(NOW - runtime.observed_at, 900)
+        coverage = next(source for source in snapshot['coverage']['sources']
+                        if source['id'] == 't3_runtime')
+        self.assertEqual(coverage['age_seconds'], NOW - notice_at)
+
+    def test_a_run_dated_ahead_of_the_collection_is_not_the_source_time(self):
+        self.recent_run('run-past', NOW - 120)
+        self.recent_run('run-future', NOW + 45)
+        observations = runtime_state.read_observations(self.path, NOW)
+        self.assertEqual(observations['status'], 'ok')
+        self.assertEqual(observations['observed_at'], NOW - 120)
+
+    def test_a_missing_state_is_reported_and_never_stamped_fresh(self):
+        absent = str(Path(self.folder.name) / 'absent.sqlite')
+        results = []
+        main.ranking_samples(results, catalog.Catalog({}), {}, NOW,
+                             t3_home=self.folder.name, t3_state=absent,
+                             state_path=str(Path(self.folder.name) / 'ranking.json'))
+        runtime = next(result for result in results if result.source == 't3_runtime')
+        self.assertEqual(runtime.status, 'unreadable')
+        self.assertEqual(runtime.reason, 'database_missing')
+    def test_a_transient_wal_io_error_is_retried_and_the_source_is_current(self):
+        notice_at = NOW - 200_000
+        run_at = NOW - 45
+        self.notice(notice_at)
+        self.recent_run('run-current', run_at)
+        real = runtime_state._connect
+        state = {'failed': False}
+
+        class Flaky:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, *args, **kwargs):
+                if not state['failed']:
+                    state['failed'] = True
+                    raise sqlite3.OperationalError('disk I/O error')
+                return self.connection.execute(*args, **kwargs)
+
+            def close(self):
+                self.connection.close()
+
+        calls = []
+
+        def connect(path):
+            calls.append(path)
+            return Flaky(real(path))
+
+        with patch.object(runtime_state, '_connect', side_effect=connect):
+            observations = runtime_state.read_observations(self.path, NOW)
+        self.assertTrue(state['failed'])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(observations['status'], 'ok')
+        self.assertEqual(observations['observed_at'], run_at)
+
+    def test_a_lock_at_open_is_retried(self):
+        run_at = NOW - 30
+        self.recent_run('run-current', run_at)
+        real = sqlite3.connect
+        calls = {'count': 0}
+
+        def flaky(*args, **kwargs):
+            calls['count'] += 1
+            if calls['count'] == 1:
+                raise sqlite3.OperationalError('database is locked')
+            return real(*args, **kwargs)
+
+        with patch.object(runtime_state.sqlite3, 'connect', side_effect=flaky):
+            observations = runtime_state.read_observations(self.path, NOW)
+        # The lock happened before the connection existed; it is the same
+        # transient cause as one during the read.
+        self.assertEqual(calls['count'], 2)
+        self.assertEqual(observations['status'], 'ok')
+        self.assertEqual(observations['observed_at'], run_at)
+
+    def test_a_lock_at_open_that_outlasts_the_retry_is_reported_as_busy(self):
+        with patch.object(
+            runtime_state.sqlite3,
+            'connect',
+            side_effect=sqlite3.OperationalError('database is locked'),
+        ):
+            observations = runtime_state.read_observations(self.path, NOW)
+        self.assertEqual(observations['status'], 'unreadable')
+        self.assertEqual(observations['reason'], 'database_busy')
+        self.assertIsNone(observations['observed_at'])
+
+    def test_a_persistent_wal_io_error_names_its_cause(self):
+        self.notice(NOW - 200_000)
+
+        class Broken:
+            def execute(self, *args, **kwargs):
+                raise sqlite3.OperationalError('disk I/O error')
+
+            def close(self):
+                pass
+
+        with patch.object(runtime_state, '_connect', return_value=Broken()):
+            observations = runtime_state.read_observations(self.path, NOW)
+        self.assertEqual(observations['status'], 'unreadable')
+        self.assertEqual(observations['reason'], 'database_io_error')
+        self.assertIsNone(observations['observed_at'])
+
+    def test_a_failed_state_read_is_not_masked_by_an_old_notice(self):
+        notice_at = NOW - 200_000
+        self.notice(notice_at)
+        unreadable = runtime_state._unreadable(
+            self.path, reason='database_io_error'
+        )
+        with patch.object(runtime_state, 'read_observations',
+                          return_value=unreadable):
+            runtime, _snapshot = self.rank()
+        # The window is still there, but it is not evidence that the state
+        # was read. No observation is invented from it.
+        self.assertEqual(runtime.status, 'unreadable')
+        self.assertEqual(runtime.reason, 'database_io_error')
+        self.assertIsNone(runtime.observed_at)
+        self.assertEqual(runtime.windows[0]['observedAtEpoch'], notice_at)
 
 
 class CapturedNoticeTests(unittest.TestCase):

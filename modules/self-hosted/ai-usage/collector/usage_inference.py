@@ -210,8 +210,12 @@ def read_records(
             reading = opencode_reader.collect_events(
                 path, cache, float(now), timeout_s=float(timeout_s)
             )
-        except Exception:  # pragma: no cover - the reader does not raise
-            return ({"status": "unreadable", "reason": opencode_reader.REASON_UNREADABLE}, time.monotonic() - began)
+        except Exception:
+            # The reader reports its own failures as readings. A failure that
+            # escapes it is not a database failure, and must not be published
+            # as one: the fixed code names the read, not a record it did not
+            # establish was unreadable.
+            return ({"status": "unreadable", "reason": codes.READER_ERROR}, time.monotonic() - began)
         return (reading, time.monotonic() - began)
 
     def read_pool() -> tuple[dict[str, Any], float]:
