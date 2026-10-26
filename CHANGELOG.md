@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.364] - 2026-10-26
+
+- Wait for T3 healthcheck start period after accepted restart
+
+PR #601.
+
 ## [3.17.363] - 2026-10-26
 
 - A T3 candidate acceptance failure blocks only the image and acceptance code that produced it. A fixed acceptance check re-runs acceptance for the same image.
