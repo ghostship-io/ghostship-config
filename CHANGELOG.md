@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.399] - 2026-10-26
+
+- Agent-bump switches no longer fail because the inference bridge loses the managed refresh lock, or because T3's clean stop for a new image is counted as a unit failure.
+
+PR #653.
+
 ## [3.17.398] - 2026-10-26
 
 deploy: keep the isolated T3 Podman manager's unit directory in its private
