@@ -18,6 +18,11 @@ let
   bridgeStopTimeout = 80;
   schedulerStopTimeout = 890;
   stopHelper = "${pkgs.python3}/bin/python ${./inference-container-stop.py} ${pkgs.podman}/bin/podman";
+  # A switch can restart an inference unit while the runtime publisher is still
+  # copying the new closure into the worker container (the bridge's exec
+  # exited 127 on the missing path), so `after=` alone does not protect the
+  # start. Gate each start on the exact executable it will run.
+  waitRuntime = "${pkgs.python3}/bin/python ${./inference-container-wait.py} ${pkgs.podman}/bin/podman ghostship-worker";
   hostRelease = pkgs.writeText "ghostship-managed-host-release.json" (builtins.toJSON {
     version = lib.removeSuffix "\n" (builtins.readFile "${inputs.ghostship-private-agent}/VERSION");
     source = toString inputs.ghostship-private-agent;
@@ -218,7 +223,10 @@ in
       };
       serviceConfig = {
         EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
-        ExecStartPre = publish;
+        ExecStartPre = [
+          "${waitRuntime} ${broker}/bin/ghostship-free-inference-bridge"
+          publish
+        ];
         ExecStart = lib.escapeShellArgs ([
           "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"
           "--env" "HOME=${workerHome}"
@@ -257,6 +265,7 @@ in
         StartLimitBurst = 0;
       };
       serviceConfig = {
+        ExecStartPre = "${waitRuntime} ${scheduler}/bin/agent";
         ExecStart = lib.escapeShellArgs [
           "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"
           "--env" "HOME=${workerHome}"

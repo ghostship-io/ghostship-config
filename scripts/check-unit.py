@@ -26,6 +26,7 @@ TESTS = (
     "test_model_evidence_path.py",
     "test_homepage_widgets_env.py",
     "test_inference_container_stop.py",
+    "test_inference_container_wait.py",
     "test_inference_mcp_socket.py",
     "test_inference_restart_recovery.py",
     "test_ssh_command_guard.py",
