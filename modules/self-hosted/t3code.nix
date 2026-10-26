@@ -435,8 +435,10 @@ in
     serviceConfig.TimeoutStopSec = lib.mkForce "210s";
     # A stop for a new image ends the attached `podman run` with 130 after
     # the container exits cleanly. Counting it as a failure fires OnFailure
-    # and fails the switch (#652); any other exit status still fails.
+    # and fails the switch (#652); any other exit status still fails. An
+    # unplanned 130 still restarts: systemd never restarts a stop it requested.
     serviceConfig.SuccessExitStatus = "130";
+    serviceConfig.RestartForceExitStatus = "130";
     serviceConfig.ExecStartPost = "-${lib.getExe t3codeReceiptSelfCheck}";
     preStart = lib.mkAfter ''
       set -eu

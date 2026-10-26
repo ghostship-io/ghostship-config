@@ -412,6 +412,9 @@ in
     # Issue #652: only the clean-stop status of the attached `podman run` is
     # accepted; a crash or a failed start still fails the unit.
     assert t3codeUnit.serviceConfig.SuccessExitStatus == "130";
+    # An unplanned 130 exit must still restart the container, not end quietly.
+    assert t3codeUnit.serviceConfig.Restart == "on-failure";
+    assert t3codeUnit.serviceConfig.RestartForceExitStatus == "130";
     # Issue #611: a switch restarting any inference unit must recover without
     # a manual reset. The bridge/scheduler retry forever, and no dependent
     # carries a Requires edge that would deactivate it with its dependency.
