@@ -300,6 +300,37 @@ class RuntimeSourceObservationTests(unittest.TestCase):
         self.assertEqual(observations['status'], 'ok')
         self.assertEqual(observations['observed_at'], run_at)
 
+    def test_a_lock_at_open_is_retried(self):
+        run_at = NOW - 30
+        self.recent_run('run-current', run_at)
+        real = sqlite3.connect
+        calls = {'count': 0}
+
+        def flaky(*args, **kwargs):
+            calls['count'] += 1
+            if calls['count'] == 1:
+                raise sqlite3.OperationalError('database is locked')
+            return real(*args, **kwargs)
+
+        with patch.object(runtime_state.sqlite3, 'connect', side_effect=flaky):
+            observations = runtime_state.read_observations(self.path, NOW)
+        # The lock happened before the connection existed; it is the same
+        # transient cause as one during the read.
+        self.assertEqual(calls['count'], 2)
+        self.assertEqual(observations['status'], 'ok')
+        self.assertEqual(observations['observed_at'], run_at)
+
+    def test_a_lock_at_open_that_outlasts_the_retry_is_reported_as_busy(self):
+        with patch.object(
+            runtime_state.sqlite3,
+            'connect',
+            side_effect=sqlite3.OperationalError('database is locked'),
+        ):
+            observations = runtime_state.read_observations(self.path, NOW)
+        self.assertEqual(observations['status'], 'unreadable')
+        self.assertEqual(observations['reason'], 'database_busy')
+        self.assertIsNone(observations['observed_at'])
+
     def test_a_persistent_wal_io_error_names_its_cause(self):
         self.notice(NOW - 200_000)
 

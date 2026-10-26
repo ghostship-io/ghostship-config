@@ -181,18 +181,22 @@ def _with_retry(
 ) -> Any:
     """Run one state read, retrying only a transient WAL failure.
 
-    Every attempt opens its own read-only connection: a connection that saw a
-    disk I/O error is not trusted for the next attempt.
+    The connection and its setup PRAGMAs are part of the attempt: a lock at
+    open time is the same transient cause as a lock during the read. Every
+    attempt opens its own read-only connection, because a connection that saw
+    a disk I/O error is not trusted for the next one.
     """
     for attempt in range(READ_ATTEMPTS):
-        connection = _connect(path)
+        connection: sqlite3.Connection | None = None
         try:
+            connection = _connect(path)
             return read(connection)
         except sqlite3.Error as error:
             if attempt + 1 >= READ_ATTEMPTS or not _transient(error):
                 raise
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
         time.sleep(READ_RETRY_SLEEP_SECONDS)
     raise RuntimeStateError("the T3 Code state could not be read")
 
@@ -370,12 +374,10 @@ def _connect(path: str | Path) -> sqlite3.Connection:
     target = Path(path)
     if not target.exists():
         raise RuntimeStateError("the T3 Code state database is not there")
-    try:
-        connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True, timeout=5)
-    except sqlite3.Error as error:
-        raise RuntimeStateError(
-            "the T3 Code state database could not be opened"
-        ) from error
+    # A connection failure is left as the SQLite error it is: a transient
+    # lock at open time is retried by the caller, and a persistent one keeps
+    # its own fixed reason. Only a missing database is a RuntimeStateError.
+    connection = sqlite3.connect(f"file:{target}?mode=ro", uri=True, timeout=5)
     try:
         connection.execute("PRAGMA query_only = 1")
         connection.execute("PRAGMA temp_store = MEMORY")
