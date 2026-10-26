@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.376] - 2026-10-26
+
+The AI-usage collector dates `t3_runtime` by the live state read and keeps a failed state or OpenCode read visible with its own fixed cause.
+
+PR #614.
+
 ## [3.17.375] - 2026-10-26
 
 - Point the T3 container's Go client at the live coordinator over the shared network and pass its bearer token through to provider sessions.
