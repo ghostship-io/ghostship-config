@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.377] - 2026-10-26
+
+- secrets: rotate the Go coordinator service token
+
+PR #622.
+
 ## [3.17.376] - 2026-10-26
 
 The AI-usage collector dates `t3_runtime` by the live state read and keeps a failed state or OpenCode read visible with its own fixed cause.
