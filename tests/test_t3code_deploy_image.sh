@@ -144,6 +144,8 @@ set -e
 [[ $first_status != 0 ]]
 grep -q 'Candidate acceptance FAILED' "$tmp/failure.log"
 [[ $(cat "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
+[[ $(jq -r '.deployment_id + ":" + (.exit_code | tostring)' "$tmp/state/attempts/$DEPLOYMENT_ID.json") == "$DEPLOYMENT_ID:1" ]]
+[[ $(jq -r '.started_at_ms | numbers' "$tmp/state/attempts/$DEPLOYMENT_ID.json") =~ ^[0-9]+$ ]]
 [[ $(wc -l < "$EVENTS") == 5 ]]
 set +e
 bash "$root/packages/t3code/deploy-image.sh" > "$tmp/replay.log" 2>&1
