@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.386] - 2026-10-26
+
+- coordinator: put the pinned Go coordinator on the container PATH for exec sessions
+
+PR #634.
+
 ## [3.17.385] - 2026-10-26
 
 - Stop the model-evidence ACL keeper from retriggering itself; it watches the ledger file and leaves an already-correct ACL untouched.
