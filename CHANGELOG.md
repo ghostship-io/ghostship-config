@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.387] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to f2be7a40; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #635.
+
 ## [3.17.386] - 2026-10-26
 
 - coordinator: put the pinned Go coordinator on the container PATH for exec sessions
