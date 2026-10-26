@@ -204,6 +204,10 @@ in
       # setgid: spooled files stay readable and removable by the coordinator.
       "d ${root}/spool 2770 root ghostship-github-spool -"
       "d ${root}/state 0700 ghostship-github ghostship-github -"
+      # The Python coordinator runs the pinned Go coordinator for review
+      # request and review record; those one-shot commands open their own
+      # SQLite store and cannot create its directory.
+      "d ${root}/state/ghostship-coordinator-shadow 0700 ghostship-github ghostship-github -"
       "d ${root}/go-state 0700 ghostship-coordinator ghostship-coordinator -"
       # Written by root's ghostship-notify only; the receiver cannot reach it.
       "d ${root}/incidents 2770 root ghostship-github -"

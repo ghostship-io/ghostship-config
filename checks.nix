@@ -49,6 +49,10 @@ let
   goCoordinatorServiceToken =
     t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields.GHOSTSHIP_COORDINATOR_TOKEN;
   goCoordinatorSecrets = t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields;
+  githubCoordinatorSecrets =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.fields;
+  githubCoordinatorRuntime =
+    t3codeConfig.ghostship.containerRuntimes.ghostship-github-coordinator.runtime;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
@@ -133,6 +137,19 @@ in
         python -m compileall -q modules/self-hosted/private-relay-render.py modules/self-hosted/secret-project.py modules/self-hosted/monitoring-provision.py modules/self-hosted/render-owner-config.py modules/self-hosted/monitoring-heartbeats.py modules/self-hosted/ghostship-notify.py modules/self-hosted/seerr-provision.py modules/self-hosted/dashboard-sync.py modules/self-hosted/cloudflare-sync.py containers/agent-desktop/root/opt/ghostship-agent-desktop/agent_desktop_api.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/cdp_client.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_cdp_matrix.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_retailer.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/check_cdp_regression.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_extension.py modules/self-hosted/agent-desktop-mcp.py
         touch "$out"
       '';
+  # The Python coordinator runs the pinned Go coordinator for review request
+  # and review record. Depend on the published runtime, not its source, so a
+  # missing binary, a dropped PATH export or a non-review build fails here.
+  go-coordinator-review-path =
+    pkgs.runCommand "ghostship-go-coordinator-review-path" { } ''
+      cli=${githubCoordinatorRuntime}/bin/ghostship-coordinator
+      test -x "$cli"
+      ${pkgs.gnugrep}/bin/grep -q 'export PATH=/run/ghostship-runtime/current/bin:' \
+        ${githubCoordinatorRuntime}/bin/start
+      "$cli" review > usage 2>&1 || true
+      ${pkgs.gnugrep}/bin/grep -q 'review request' usage
+      touch $out
+    '';
   host-evaluation =
     assert failures == [ ];
     # The unit always names the stable accepted alias, and never imports the
@@ -212,6 +229,22 @@ in
     assert pkgs.lib.hasInfix "T3_BRIDGE_TOKEN" goCoordinatorUnit.preStart;
     assert pkgs.lib.hasInfix "GHOSTSHIP_COORDINATOR_GITHUB_OWNER_LOGIN" goCoordinatorUnit.preStart;
     assert goCoordinatorUnit.serviceConfig.EnvironmentFile == [ "/etc/ghostship/owner-identity.env" ];
+    # The Python coordinator runs the pinned Go coordinator from its published
+    # runtime, with a review store directory that exists at boot. Its GitHub
+    # token stays in the projected environment file, never the container
+    # environment.
+    assert builtins.elem
+      "d /var/lib/ghostship-github/state/ghostship-coordinator-shadow 0700 ghostship-github ghostship-github -"
+      t3codeConfig.systemd.tmpfiles.rules;
+    assert builtins.elem
+      "${t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"
+      githubCoordinator.volumes;
+    assert builtins.elem "--secrets" githubCoordinator.cmd;
+    assert builtins.elem "/run/secrets/github.env" githubCoordinator.cmd;
+    assert githubCoordinatorSecrets.GITHUB_TOKEN.unit == "github";
+    assert githubCoordinatorSecrets.GITHUB_TOKEN.key == "TOKEN";
+    assert !(githubCoordinator.environment ? GH_TOKEN);
+    assert !(githubCoordinator.environment ? GITHUB_TOKEN);
     assert builtins.elem
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;

@@ -112,6 +112,7 @@ TESTS = (
     "test_ai_usage_not_offered_reason.py",
     "test_ai_usage_pool_unavailable_reason.py",
     "test_ai_usage_probe_field.py",
+    "test_coordinator_review_cli.py",
 )
 
 # Nix module evaluation and a real VictoriaMetrics fixture are integration
@@ -135,6 +136,7 @@ POST_MERGE_TESTS = {
     "test_secret_projection_identity.ProjectionIdentity.test_projection_renderer_depends_only_on_its_own_specification",
     "test_mcp_runtime_entrypoint.McpEntrypoint.test_deployed_base_exports_client_through_current_runtime",
     "test_mcp_runtime_entrypoint.McpEntrypoint.test_published_runtime_includes_the_client_and_server",
+    "test_coordinator_review_cli.CoordinatorReviewCliTests.test_published_runtime_carries_the_pinned_go_coordinator_on_path",
 }
 
 # Real Git command chains and socket/process lifecycles run in config-tests.
