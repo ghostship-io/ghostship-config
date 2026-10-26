@@ -143,7 +143,7 @@ first_status=$?
 set -e
 [[ $first_status != 0 ]]
 grep -q 'Candidate acceptance FAILED' "$tmp/failure.log"
-[[ $(cat "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
+[[ $(cut -d ' ' -f 1 "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
 [[ $(jq -r '.deployment_id + ":" + (.exit_code | tostring)' "$tmp/state/attempts/$DEPLOYMENT_ID.json") == "$DEPLOYMENT_ID:1" ]]
 [[ $(jq -r '.started_at_ms | numbers' "$tmp/state/attempts/$DEPLOYMENT_ID.json") =~ ^[0-9]+$ ]]
 [[ $(wc -l < "$EVENTS") == 5 ]]
@@ -155,6 +155,25 @@ set -e
 grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
 [[ $(wc -l < "$EVENTS") == 5 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
+
+# A changed acceptance check re-runs acceptance for the same image instead of
+# replaying the old failure; the new run still decides. Its events stay out of
+# the counts asserted below.
+saved_events=$EVENTS
+EVENTS="$tmp/rerun-events"
+cp "$CANDIDATE_ACCEPTANCE" "$tmp/accept-candidate.orig"
+printf '\n# acceptance fix\n' >> "$CANDIDATE_ACCEPTANCE"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/rerun.log" 2>&1
+rerun_status=$?
+set -e
+[[ $rerun_status != 0 ]]
+grep -q 'Candidate acceptance FAILED' "$tmp/rerun.log"
+! grep -q 'already failed' "$tmp/rerun.log"
+cp "$tmp/accept-candidate.orig" "$CANDIDATE_ACCEPTANCE"
+mark_failed_key="deployment-2 $(sha256sum "$CANDIDATE_ACCEPTANCE" | cut -d ' ' -f 1)"
+printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+EVENTS=$saved_events
 
 # An absent receipt is rejected before the accepted alias can move. This is the
 # restart-path invariant: no receipt, no tag, no restart.

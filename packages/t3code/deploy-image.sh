@@ -154,14 +154,18 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
-if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$DEPLOYMENT_ID" ]]; then
+# A failure blocks only the image and acceptance code that produced it. A fixed
+# acceptance check re-runs acceptance; it never skips it.
+acceptance_id=$(sha256sum "$CANDIDATE_ACCEPTANCE" | cut -d ' ' -f 1)
+failed_key="$DEPLOYMENT_ID $acceptance_id"
+if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$failed_key" ]]; then
   echo "Candidate acceptance already failed for $DEPLOYMENT_ID; image remains blocked" >&2
   exit 0
 fi
 
 mark_candidate_failed() {
   local temporary="$failed_file.tmp"
-  printf '%s\n' "$DEPLOYMENT_ID" > "$temporary"
+  printf '%s\n' "$failed_key" > "$temporary"
   chmod 0600 "$temporary"
   mv -f "$temporary" "$failed_file"
 }
