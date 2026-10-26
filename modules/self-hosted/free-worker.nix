@@ -227,7 +227,9 @@ in
       description = "Separate the Go and Zen Console OAuth roles";
       wantedBy = [ "multi-user.target" ];
       after = [ "ghostship-inference-bridge.service" ];
-      requires = [ "ghostship-inference-bridge.service" ];
+      # The auth cutover reads and writes the two containers itself; a bridge
+      # restart must not stop a completed cutover or cancel its start job.
+      wants = [ "ghostship-inference-bridge.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

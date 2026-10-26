@@ -27,6 +27,7 @@ TESTS = (
     "test_homepage_widgets_env.py",
     "test_inference_scheduler_stop.py",
     "test_inference_mcp_socket.py",
+    "test_inference_restart_recovery.py",
     "test_ssh_command_guard.py",
     "test_boot_generation_drift.py",
     "test_activate_host.py",

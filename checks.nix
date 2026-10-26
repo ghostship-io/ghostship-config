@@ -47,6 +47,23 @@ let
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
   t3codeDeployImageArchive = t3codeDeploy.environment.IMAGE_ARCHIVE;
+  # Issue #611: a switch that restarts the broker, worker or auth unit must
+  # never leave the free-inference chain failed or inactive until a manual
+  # reset. These are evaluated as data so a unit change that reintroduces the
+  # permanent stop fails host evaluation.
+  inferenceBridgeUnit = t3codeConfig.systemd.services.ghostship-inference-bridge;
+  inferenceSchedulerUnit = t3codeConfig.systemd.services.ghostship-inference-scheduler;
+  freeWorkerAuthUnit = t3codeConfig.systemd.services.ghostship-free-worker-auth;
+  inferenceProxyUnit = t3codeConfig.systemd.services.ghostship-inference-proxy;
+  inferenceProxySocket = t3codeConfig.systemd.sockets.ghostship-inference-proxy;
+  privateIntegrationsUnit =
+    t3codeConfig.systemd.services.podman-ghostship-private-integrations;
+  inferenceDependents = [
+    inferenceSchedulerUnit
+    freeWorkerAuthUnit
+    inferenceProxyUnit
+    privateIntegrationsUnit
+  ];
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   goCoordinator =
@@ -302,6 +319,25 @@ in
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
     assert t3codePreStartSeedsTooling;
     assert !(builtins.elem "podman-t3code" t3codeRestartedBySwitch);
+    # Issue #611: a switch restarting any inference unit must recover without
+    # a manual reset. The bridge/scheduler retry forever, and no dependent
+    # carries a Requires edge that would deactivate it with its dependency.
+    assert inferenceBridgeUnit.serviceConfig.Restart == "always";
+    assert inferenceSchedulerUnit.serviceConfig.Restart == "always";
+    assert inferenceBridgeUnit.unitConfig.StartLimitIntervalSec == 0;
+    assert inferenceBridgeUnit.unitConfig.StartLimitBurst == 0;
+    assert inferenceSchedulerUnit.unitConfig.StartLimitIntervalSec == 0;
+    assert inferenceSchedulerUnit.unitConfig.StartLimitBurst == 0;
+    assert builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.after;
+    assert builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.wants;
+    assert !(builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.requires);
+    assert builtins.all (
+      unit:
+      !(builtins.elem "ghostship-inference-bridge.service" unit.requires)
+      && !(builtins.elem "ghostship-free-worker-auth.service" unit.requires)
+    ) inferenceDependents;
+    assert inferenceProxySocket.socketConfig.TriggerLimitIntervalSec == 0;
+    assert inferenceProxySocket.socketConfig.TriggerLimitBurst == 0;
     # Temporary CAD checkouts once filled a 32 GiB tmpfs and stalled the
     # shared T3 cgroup. Check the evaluated mount and its writable sticky mode.
     assert builtins.elem "/srv/apps/t3code/tmp:/tmp:rw"

@@ -221,6 +221,16 @@ installer, disables the old local T3 pool, and removes Zen models from T3's
 OpenCode catalog. Verify authenticated requests through both client paths after
 activation and after a broker restart. Preserve the managed sync timer.
 
+A switch that restarts the worker container, T3, the broker or auth must not
+leave the chain down. The broker and scheduler retry after any exit with
+service start limiting disabled, and the broker waits for the worker container
+to accept an exec. Auth, the scheduler, the socket proxy and the MCP runtime use
+`Wants=`/`After=` on the broker rather than `Requires=`, and the proxy socket
+disables its trigger limit, so a restart propagates neither a permanent stop
+nor a permanent socket failure. After a switch, require the broker, scheduler,
+auth and MCP units to be active without a manual start; a `start-limit-hit`
+result means this contract regressed.
+
 `ghostship-free-worker-auth.service` separates the existing Console OAuth
 workspaces using native auth commands and secret-only stdin. It imports only
 Zen into the worker, proves a bounded public Zen task, then removes Zen from T3
