@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.389] - 2026-10-26
+
+- [P0] Model-evidence ACL keeper: drop PathExists so the switch stops failing
+
+PR #637.
+
 ## [3.17.388] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to a9499616; the lock's narHash is the `nix flake prefetch` hash of that revision.
