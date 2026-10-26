@@ -41,13 +41,17 @@ class ContainerStopTest(unittest.TestCase):
         inventory.assert_called_once_with(
             ['/podman', 'top', 'ghostship-worker', 'hpid'], text=True, timeout=10)
 
-    def test_already_exited_attachment_with_unset_mainpid_is_a_noop(self):
-        result = subprocess.run(
-            [sys.executable, str(source), "/unused/podman", "", "ghostship-worker",
-             "80", "ghostship_inference.server"],
-            capture_output=True, text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_missing_or_empty_mainpid_is_a_noop(self):
+        # systemd expands ${MAINPID} to nothing once the attachment is gone. The
+        # option may then be empty (inline, as in the unit) or absent entirely.
+        for pid in ([], ["--main-pid", ""], ["--main-pid="]):
+            with self.subTest(arguments=pid):
+                result = subprocess.run(
+                    [sys.executable, str(source), *pid, "/unused/podman",
+                     "ghostship-worker", "80", "ghostship_inference.server"],
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def run_shutdown(self, role, exit_status=0, *, ignore=False, process=None):
         expected_module, expected_arguments = ROLES[role]

@@ -86,9 +86,10 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
         bridge = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-bridge =")
         scheduler = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-scheduler =")
         self.assertIn("inference-container-stop.py", BRIDGE_MODULE)
-        self.assertIn("${stopHelper} $MAINPID", setting(bridge, "ExecStop"))
+        for unit in (bridge, scheduler):
+            self.assertIn(r"--main-pid=\${MAINPID}", setting(unit, "ExecStop"))
+            self.assertNotIn(" $MAINPID ", setting(unit, "ExecStop"))
         self.assertIn("ghostship_inference.server", setting(bridge, "ExecStop"))
-        self.assertIn("${stopHelper} $MAINPID", setting(scheduler, "ExecStop"))
         self.assertIn("ghostship_inference.cli serve", setting(scheduler, "ExecStop"))
         self.assertNotIn("SuccessExitStatus", BRIDGE_MODULE)
 

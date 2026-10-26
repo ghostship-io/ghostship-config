@@ -395,11 +395,16 @@ in
     assert builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.wants;
     assert !(builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.requires);
     # Issue #639: a switch stop must signal the container process and wait for
-    # it, never accept an arbitrary failure exit status from Podman.
+    # it, never accept an arbitrary failure exit status from Podman. The braced
+    # MAINPID keeps its (possibly empty) argument; the unbraced form is dropped.
     assert pkgs.lib.hasInfix "inference-container-stop.py" inferenceBridgeUnit.serviceConfig.ExecStop;
+    assert pkgs.lib.hasInfix "--main-pid=\${MAINPID}" inferenceBridgeUnit.serviceConfig.ExecStop;
     assert pkgs.lib.hasInfix "ghostship_inference.server" inferenceBridgeUnit.serviceConfig.ExecStop;
     assert pkgs.lib.hasInfix "inference-container-stop.py" inferenceSchedulerUnit.serviceConfig.ExecStop;
+    assert pkgs.lib.hasInfix "--main-pid=\${MAINPID}" inferenceSchedulerUnit.serviceConfig.ExecStop;
     assert pkgs.lib.hasInfix "ghostship_inference.cli serve" inferenceSchedulerUnit.serviceConfig.ExecStop;
+    assert !(pkgs.lib.hasInfix " $MAINPID " inferenceBridgeUnit.serviceConfig.ExecStop);
+    assert !(pkgs.lib.hasInfix " $MAINPID " inferenceSchedulerUnit.serviceConfig.ExecStop);
     assert !(inferenceBridgeUnit.serviceConfig ? SuccessExitStatus);
     assert !(inferenceSchedulerUnit.serviceConfig ? SuccessExitStatus);
     assert builtins.all (

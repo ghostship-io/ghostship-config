@@ -238,7 +238,7 @@ in
         # Killing the host Podman attachment reports exit 1 even for an orderly
         # stop and leaves conmon behind. Signal the container broker and await
         # both processes instead; a genuine broker crash still fails the unit.
-        ExecStop = "${stopHelper} $MAINPID ghostship-worker ${toString bridgeStopTimeout} ghostship_inference.server";
+        ExecStop = "${stopHelper} --main-pid=\${MAINPID} ghostship-worker ${toString bridgeStopTimeout} ghostship_inference.server";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";
@@ -272,7 +272,7 @@ in
         # Killing the host Podman attachment reports exit 1 even for an orderly
         # stop. Signal the container scheduler and await both processes instead;
         # genuine scheduler exit 1 must still fail and trigger monitoring.
-        ExecStop = "${stopHelper} $MAINPID ghostship-worker ${toString schedulerStopTimeout} ghostship_inference.cli serve";
+        ExecStop = "${stopHelper} --main-pid=\${MAINPID} ghostship-worker ${toString schedulerStopTimeout} ghostship_inference.cli serve";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";

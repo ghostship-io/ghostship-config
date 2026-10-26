@@ -77,15 +77,16 @@ def stop(podman, main_pid, timeout, *, container, module, arguments=()):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    # systemd unsets MAINPID once the attachment exits and expands the option to
+    # an empty value, so an absent or empty pid means there is nothing to stop.
+    parser.add_argument("--main-pid", default="")
     parser.add_argument("podman")
-    parser.add_argument("main_pid")
     parser.add_argument("container")
     parser.add_argument("timeout", type=float)
     parser.add_argument("module")
     parser.add_argument("arguments", nargs="*")
     args = parser.parse_args(argv)
-    # systemd unsets MAINPID if the attachment has already exited. Its recorded
-    # exit status still determines the unit result; there is nothing left to stop.
+    # Its recorded exit status still determines the unit result.
     if args.main_pid:
         stop(
             args.podman,
