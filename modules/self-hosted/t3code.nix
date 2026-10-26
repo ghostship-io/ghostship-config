@@ -137,6 +137,11 @@ let
   engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   acceptedImageRef = "${imageName}:accepted";
+  t3codeHealthStartPeriodSeconds = 5 * 60;
+  t3codeHealthIntervalSeconds = 30;
+  t3codeHealthWaitMarginSeconds = 60;
+  t3codeHealthWaitBudgetSeconds =
+    t3codeHealthStartPeriodSeconds + t3codeHealthIntervalSeconds + t3codeHealthWaitMarginSeconds;
   tooling = inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.t3code-tools;
   t3codeContainerHome = builtins.elemAt (lib.splitString "/.local/state/" managedBin) 0;
   t3codeToolMaintenance = tooling;
@@ -283,10 +288,10 @@ in
         "--network=ghostship_net"
         "--network=agent_desktop_net"
         "--health-cmd=${managedBin}/t3code-container-health"
-        "--health-interval=30s"
+        "--health-interval=${toString t3codeHealthIntervalSeconds}s"
         "--health-timeout=15s"
         "--health-retries=5"
-        "--health-start-period=5m"
+        "--health-start-period=${toString t3codeHealthStartPeriodSeconds}s"
       ]
       ++ (
         if hardened then
@@ -458,6 +463,7 @@ in
       RECEIPT_SELF_CHECK = lib.getExe t3codeReceiptSelfCheck;
       IMAGE_ARCHIVE = toString t3codeImage;
       DEPLOYMENT_ID = t3codeDeploymentId;
+      HEALTH_WAIT_BUDGET_SECONDS = toString t3codeHealthWaitBudgetSeconds;
       HOME_DIR = t3codeHome;
       CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py";
       PODMAN_BIN = "${pkgs.podman}/bin/podman";

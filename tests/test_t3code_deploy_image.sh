@@ -53,7 +53,10 @@ cat > "$tmp/bin/podman" <<'SH'
 set -euo pipefail
 if [[ $1 == inspect && $2 == t3code ]]; then
   case "$4" in
-    '{{.State.Health.Status}}') printf 'healthy\n' ;;
+    '{{.State.Health.Status}}')
+      now=$(cat "$HEALTH_CLOCK_FILE")
+      if (( now >= HEALTHY_AFTER_SECONDS )); then printf 'healthy\n'; else printf 'starting\n'; fi
+      ;;
     '{{.Image}}') printf '%s\n' "$RUNNING_IMAGE_ID" ;;
     '{{.State.Running}} {{.Image}}')
       [[ ${RUNNING_CONTAINER:-1} == 1 ]] || exit 1
@@ -99,7 +102,17 @@ cat > "$tmp/bin/hostname" <<'SH'
 #!/usr/bin/env bash
 printf 'test-host\n'
 SH
-chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/systemctl" "$tmp/bin/systemd-cat" "$tmp/bin/receipt-self-check" "$tmp/bin/hostname"
+cat > "$tmp/bin/health-clock" <<'SH'
+#!/usr/bin/env bash
+cat "$HEALTH_CLOCK_FILE"
+SH
+cat > "$tmp/bin/health-sleep" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+now=$(cat "$HEALTH_CLOCK_FILE")
+printf '%s\n' "$((now + $1))" > "$HEALTH_CLOCK_FILE"
+SH
+chmod +x "$tmp/bin/python" "$tmp/accept-candidate" "$tmp/bin/podman" "$tmp/bin/systemctl" "$tmp/bin/systemd-cat" "$tmp/bin/receipt-self-check" "$tmp/bin/hostname" "$tmp/bin/health-clock" "$tmp/bin/health-sleep"
 
 export STATE_DIR="$tmp/state" IMAGE_ARCHIVE="$tmp/image.tar" DEPLOYMENT_ID=deployment-1
 export ACCEPTED_POINTER_FILE="$tmp/state/accepted-image"
@@ -112,6 +125,10 @@ export CANDIDATE_RUNTIME_DIR="$tmp/runtime" CANDIDATE_HOME_TARGET=/candidate-hom
 export PROVIDER_SECRETS_FILE="$tmp/provider.env" TOOLING_PATH="$tmp/tooling" AGENT_REVISION=agent-rev
 export PYTHON_BIN="$tmp/bin/python" JQ_BIN=jq RESTART_LEDGER="$tmp/ledger.jsonl"
 export AUDIT_LOG="$tmp/home/restart-audit.log" EVENTS="$tmp/events"
+export HEALTH_WAIT_BUDGET_SECONDS=390 HEALTH_WAIT_CLOCK_BIN="$tmp/bin/health-clock"
+export HEALTH_WAIT_SLEEP_BIN="$tmp/bin/health-sleep" HEALTH_CLOCK_FILE="$tmp/health-clock"
+export HEALTHY_AFTER_SECONDS=0
+printf '0\n' > "$HEALTH_CLOCK_FILE"
 
 # Model the currently running image from the host before this guard existed.
 # This keeps the regular candidate-flow proof separate from the no-receipt
@@ -132,6 +149,38 @@ grep -q '^Restarting podman-t3code.service immediately after exact-image candida
 [[ $(sed -n '4p' "$EVENTS") == restart ]]
 [[ $(cat "$tmp/state/applied") == "$DEPLOYMENT_ID" ]]
 [[ $(jq -r '.mode' "$tmp/ledger.jsonl") == candidate-accepted ]]
+
+# A restart that remains starting for more than 120 simulated seconds must
+# still reach the existing post-restart checks and applied marker.
+saved_events=$EVENTS
+EVENTS="$tmp/health-events"
+: > "$EVENTS"
+export DEPLOYMENT_ID=deployment-slow-healthy HEALTHY_AFTER_SECONDS=130
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+printf '0\n' > "$HEALTH_CLOCK_FILE"
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/slow-healthy.log"
+[[ $(cat "$STATE_DIR/applied") == "$DEPLOYMENT_ID" ]]
+[[ $(cat "$HEALTH_CLOCK_FILE") -ge 130 ]]
+[[ $(wc -l < "$tmp/ledger.jsonl") == 2 ]]
+
+# A real timeout stays non-zero and cannot advance either applied marker.
+export DEPLOYMENT_ID=deployment-never-healthy HEALTHY_AFTER_SECONDS=999
+export HEALTH_WAIT_BUDGET_SECONDS=20
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+applied_before=$(cat "$STATE_DIR/applied")
+applied_inputs_before=$(cat "$STATE_DIR/applied-inputs")
+printf '0\n' > "$HEALTH_CLOCK_FILE"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/never-healthy.log" 2>&1
+never_healthy_status=$?
+set -e
+[[ $never_healthy_status != 0 ]]
+grep -q 'did not become healthy after the accepted image restart' "$tmp/never-healthy.log"
+[[ $(cat "$STATE_DIR/applied") == "$applied_before" ]]
+[[ $(cat "$STATE_DIR/applied-inputs") == "$applied_inputs_before" ]]
+EVENTS=$saved_events
 
 # A failed acceptance raises the systemd failure path once and is never queued
 # or retried by a later activation of the same image.
@@ -154,7 +203,7 @@ set -e
 [[ $replay_status == 0 ]]
 grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
 [[ $(wc -l < "$EVENTS") == 5 ]]
-[[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
+[[ $(wc -l < "$tmp/ledger.jsonl") == 2 ]]
 
 # A changed acceptance check re-runs acceptance for the same image instead of
 # replaying the old failure; the new run still decides. Its events stay out of
@@ -213,8 +262,8 @@ set -e
 [[ $superseded_status == 0 ]]
 grep -q 'superseded before restart; refusing stale image' "$tmp/superseded.log"
 [[ $(wc -l < "$EVENTS") == 8 ]]
-[[ $(cat "$tmp/state/applied") == deployment-1 ]]
-[[ $(wc -l < "$tmp/ledger.jsonl") == 1 ]]
+[[ $(cat "$tmp/state/applied") == deployment-slow-healthy ]]
+[[ $(wc -l < "$tmp/ledger.jsonl") == 2 ]]
 
 # A same-applied upgrade from the old unit may have a valid receipt but no new
 # accepted alias. Restore the alias from that receipt without rerunning checks

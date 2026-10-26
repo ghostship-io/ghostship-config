@@ -25,6 +25,23 @@ fi
 : "${AUDIT_LOG:?}"
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
+: "${HEALTH_WAIT_BUDGET_SECONDS:?}"
+
+health_wait_now() {
+  if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
+    "$HEALTH_WAIT_CLOCK_BIN"
+  else
+    printf '%s\n' "$SECONDS"
+  fi
+}
+
+health_wait_sleep() {
+  if [[ -n ${HEALTH_WAIT_SLEEP_BIN:-} ]]; then
+    "$HEALTH_WAIT_SLEEP_BIN" "$1"
+  else
+    sleep "$1"
+  fi
+}
 
 install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
@@ -240,9 +257,9 @@ echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCE
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
 
-deadline=$((SECONDS + 120))
+deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
 healthy=false
-while (( SECONDS < deadline )); do
+while (( $(health_wait_now) < deadline )); do
   status=$("$PODMAN_BIN" inspect t3code --format '{{.State.Health.Status}}' 2>/dev/null || true)
   if [[ "$status" == healthy ]] \
     && "$PODMAN_BIN" exec t3code systemctl is-active --quiet t3code-server.service \
@@ -250,7 +267,7 @@ while (( SECONDS < deadline )); do
     healthy=true
     break
   fi
-  sleep 5
+  health_wait_sleep 5
 done
 if [[ "$healthy" != true ]]; then
   echo "T3 Code did not become healthy after the accepted image restart" >&2
