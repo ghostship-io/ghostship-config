@@ -34,6 +34,7 @@ let
   t3codePreStartSeedsTooling = pkgs.lib.hasInfix "ghostship-t3code-tools" t3codePreStart;
   t3codeConfig = self.nixosConfigurations.chill-penguin.config;
   routePolicyPath = "/etc/ghostship/route-policy.json";
+  t3codeServerUnitSource = builtins.readFile ./packages/t3code/image.nix;
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
@@ -172,10 +173,11 @@ in
     assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
     assert fastBillingDenied "worker" && fastBillingDenied "orchestrator" && fastBillingDenied "reviewer";
     assert routePolicy.authorizations == [ ];
-    # Fail host evaluation if either process cannot read the policy at the
-    # path its CLI uses. This checks evaluated container definitions, not
-    # source text, and keeps the environment and read-only mount in lockstep.
+    # Fail host evaluation if the container loses its configured policy path,
+    # the server unit stops passing that environment into provider sessions,
+    # or the read-only policy mount drifts from the configured path.
     assert t3codeContainer.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
+    assert pkgs.lib.hasInfix "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH" t3codeServerUnitSource;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;

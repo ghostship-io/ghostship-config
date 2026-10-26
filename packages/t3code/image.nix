@@ -305,6 +305,7 @@ let
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
+      PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH
       ExecStartPre=${managedBin}/t3code-run-hooks before-t3code.d
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/configure.py
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-provider-privacy/setup.py
