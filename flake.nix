@@ -5,7 +5,7 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/1fc6fd04ce9b176112e2437fef6b04a1f6cc2bda";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/f51ac20548f974382abcec93f759a9f045303722";
 
     # The owner's runtime policy, read by the AI usage collector for the
     # model-selection identities and trust evidence. It is a plain
