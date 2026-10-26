@@ -141,6 +141,60 @@ class Seeding(unittest.TestCase):
             )
             self.assertEqual(len(calls), 2)
 
+    def test_only_the_live_roots_survive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            gcroot = Path(temporary) / "gcroots"
+            gcroot.mkdir()
+            for name in (
+                "t3code-podman-manager-units-live",
+                "t3code-podman-manager-units-current",
+                "t3code-podman-manager-units-retired",
+                # Another owner's root must never be touched.
+                "t3code-podman-runtime-production",
+            ):
+                (gcroot / name).symlink_to(f"/nix/store/{name}")
+            live = Path("/nix/store/live")
+            current = Path("/nix/store/current")
+            for directory in (live, current):
+                (root / directory.relative_to("/")).mkdir(parents=True)
+            manager_units.seed(
+                root,
+                [str(live), str(current)],
+                Path("/srv/private"),
+                gcroot,
+                "/bin/nix",
+                "/bin/nix-store",
+                run=lambda args, check=False: self.fail("present directories need no copy"),
+            )
+            self.assertEqual(
+                sorted(entry.name for entry in gcroot.iterdir()),
+                [
+                    "t3code-podman-manager-units-current",
+                    "t3code-podman-manager-units-live",
+                    "t3code-podman-runtime-production",
+                ],
+            )
+
+    def test_a_failed_seed_retires_nothing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            gcroot = Path(temporary) / "gcroots"
+            gcroot.mkdir()
+            stale = gcroot / "t3code-podman-manager-units-retired"
+            stale.symlink_to("/nix/store/retired")
+            with self.assertRaisesRegex(ValueError, "absent from the host store"):
+                manager_units.seed(
+                    root,
+                    ["/nix/store/podman-units-missing"],
+                    Path("/srv/private"),
+                    gcroot,
+                    "/bin/nix",
+                    "/bin/nix-store",
+                    run=lambda args, check=False: Completed(),
+                )
+            self.assertTrue(stale.is_symlink())
+
     def test_absent_host_directory_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "absent from the host store"):

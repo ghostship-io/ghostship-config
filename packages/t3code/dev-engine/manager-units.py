@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path("/run/t3code-podman-rootfs")
+GCROOT_PREFIX = "t3code-podman-manager-units-"
 
 
 def unit_dirs(service, systemctl, run=subprocess.run, read_bytes=Path.read_bytes):
@@ -54,10 +55,12 @@ def seed(root, directories, store_root, gcroot, nix, nix_store, run=subprocess.r
     root = Path(root)
     store_root = Path(store_root)
     gcroot = Path(gcroot)
+    keep = set()
     for directory in dict.fromkeys(directories):
         source = Path(directory)
         if not source.is_absolute() or ".." in source.parts:
             raise ValueError(f"unsafe unit directory: {directory}")
+        keep.add(f"{GCROOT_PREFIX}{source.name}")
         destination = root / source.relative_to("/")
         if destination.is_dir():
             continue
@@ -73,7 +76,7 @@ def seed(root, directories, store_root, gcroot, nix, nix_store, run=subprocess.r
                 "--store",
                 f"local?root={store_root}",
                 "--add-root",
-                str(gcroot / f"t3code-podman-manager-units-{source.name}"),
+                str(gcroot / f"{GCROOT_PREFIX}{source.name}"),
                 "--realise",
                 str(source),
             ],
@@ -83,6 +86,24 @@ def seed(root, directories, store_root, gcroot, nix, nix_store, run=subprocess.r
             raise ValueError(
                 f"unit directory is still absent from the private store: {directory}"
             )
+    # Only after the live set is pinned: retire this helper's roots for
+    # generations no running manager or current generation reads any more, so
+    # their runtime closures stop pinning the private store.
+    prune_roots(gcroot, keep)
+
+
+def prune_roots(gcroot, keep):
+    """Drop this helper's GC roots for unit directories outside the live set."""
+    try:
+        entries = list(Path(gcroot).iterdir())
+    except FileNotFoundError:
+        return
+    for entry in entries:
+        if entry.name.startswith(GCROOT_PREFIX) and entry.name not in keep:
+            # is_symlink() uses lstat(), so a root whose target is already
+            # gone is still retired.
+            if entry.is_symlink():
+                entry.unlink()
 
 
 def reconcile(root, service, current, store_root, gcroot, systemctl, nix, nix_store, run=subprocess.run):
