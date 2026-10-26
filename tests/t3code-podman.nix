@@ -95,6 +95,20 @@ assert
   && lib.hasInfix "Type=oneshot" activation
   && lib.hasInfix "RemainAfterExit=yes" activation
   && lib.hasInfix (builtins.unsafeDiscardStringContext "ExecStart=${base.pkgs.coreutils}/bin/true") activation;
+# A preserved manager reads the store directory it captured at start. The
+# switch must seed exactly that directory (and the current generation) into the
+# private store, or the mandatory per-user activation is not-found and the
+# switch exits 4.
+assert
+  let
+    unitPath = cfg.systemd.services."user@62040".environment.SYSTEMD_UNIT_PATH;
+    script = cfg.system.activationScripts.t3code-podman-manager-units;
+  in
+  builtins.elem "t3code-podman-reexec-alias" script.deps
+  && lib.hasInfix "manager-units.py" script.text
+  && lib.hasInfix "--manager user@62040.service" script.text
+  && lib.hasInfix (builtins.unsafeDiscardStringContext "--current ${unitPath}") script.text
+  && lib.hasInfix "--store-root /srv/apps/t3code/nix-root" script.text;
 assert !(cfg.system.activationScripts ? t3code-podman-user-activation);
 # Force generation of actual system unit text, including the template drop-in.
 {
