@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.368] - 2026-10-26
+
+- ci: raise fast check timeout for concurrent PR runs
+
+PR #605.
+
 ## [3.17.367] - 2026-10-26
 
 - Route policy: allow idle DeepSeek Flash, Grok and the Codex orchestrator successor
