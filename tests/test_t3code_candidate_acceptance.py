@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import sys
 from pathlib import Path
 import tarfile
 import tempfile
@@ -259,6 +260,32 @@ class CandidateAcceptanceTest(unittest.TestCase):
             }))
             with self.assertRaisesRegex(RuntimeError, "failed sources"):
                 acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+
+    def test_routing_snapshot_refusals_are_retryable_preconditions(self):
+        # The host's live snapshot is checked before the candidate runs, so its
+        # refusals leave the image retryable (exit 75), unlike candidate failures.
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        failed = {"schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+                  "coverage": {"sources_failed": 1}, "candidates": []}
+        for content in (None, "not json", json.dumps({"schema": "other"}), json.dumps(failed)):
+            source.unlink(missing_ok=True)
+            if content is not None:
+                source.write_text(content)
+            with self.assertRaises(acceptance.PreconditionError):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        argv = ["candidate-acceptance", "--state-dir", "s", "--image-archive", "i", "--home-dir", "h",
+                "--candidate-runtime-dir", "r", "--candidate-home-target", "/c", "--candidate-uid", "1"]
+        with patch.object(sys, "argv", argv), \
+                patch.object(acceptance, "accept", side_effect=acceptance.PreconditionError("live model routing snapshot has failed sources")), \
+                self.assertRaises(SystemExit) as exited:
+            acceptance.main()
+        self.assertEqual(exited.exception.code, acceptance.PRECONDITION_EXIT)
+        with patch.object(sys, "argv", argv), \
+                patch.object(acceptance, "accept", side_effect=RuntimeError("candidate acceptance failed")), \
+                self.assertRaisesRegex(RuntimeError, "candidate acceptance failed"):
+            acceptance.main()
 
     def test_candidate_stages_missing_shared_agent_store_paths_from_production(self):
         self.add_installed_toolchain()

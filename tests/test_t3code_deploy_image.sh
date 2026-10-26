@@ -26,6 +26,10 @@ SH
 cat > "$tmp/accept-candidate" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ ${CANDIDATE_PRECONDITION:-0} == 1 ]]; then
+  printf '%s\n' candidate-precondition >> "$EVENTS"
+  exit 75
+fi
 if [[ ${CANDIDATE_FAIL:-0} == 1 ]]; then
   printf '%s\n' candidate-failed >> "$EVENTS"
   exit 2
@@ -222,6 +226,28 @@ grep -q 'Candidate acceptance FAILED' "$tmp/rerun.log"
 cp "$tmp/accept-candidate.orig" "$CANDIDATE_ACCEPTANCE"
 mark_failed_key="deployment-2 $(sha256sum "$CANDIDATE_ACCEPTANCE" | cut -d ' ' -f 1)"
 printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+EVENTS=$saved_events
+
+# A host precondition that fails before the candidate runs (exit 75, e.g. a
+# routing snapshot with a failed source) fails the run but never blocks the
+# image: the next run re-runs full acceptance. Its events stay out of the
+# counts asserted below.
+saved_events=$EVENTS
+EVENTS="$tmp/precondition-events"
+export DEPLOYMENT_ID=deployment-precondition CANDIDATE_PRECONDITION=1 CANDIDATE_FAIL=0
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+for attempt in 1 2; do
+  set +e
+  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-$attempt.log" 2>&1
+  precondition_status=$?
+  set -e
+  [[ $precondition_status != 0 ]]
+  grep -q 'precondition not met for deployment-precondition; image stays retryable' "$tmp/precondition-$attempt.log"
+  ! grep -q 'already failed' "$tmp/precondition-$attempt.log"
+  [[ $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+done
+[[ $(grep -c candidate-precondition "$EVENTS") == 2 ]]
+export CANDIDATE_PRECONDITION=0
 EVENTS=$saved_events
 
 # An absent receipt is rejected before the accepted alias can move. This is the
