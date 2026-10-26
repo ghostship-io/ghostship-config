@@ -111,6 +111,17 @@ let
   publish = pkgs.writeShellScript "ghostship-inference-bridge-prepare" ''
     set -eu
     umask 077
+    # Ordering after the Podman unit only waits for the container to be
+    # created; the broker immediately execs into it. Wait until the worker
+    # accepts an exec so a switch that recreates the container cannot fail the
+    # bridge before it attaches.
+    for _ in $(seq 600); do
+      if ${pkgs.podman}/bin/podman exec --user 0:0 ghostship-worker /bin/true; then
+        break
+      fi
+      sleep 2
+    done
+    ${pkgs.podman}/bin/podman exec --user 0:0 ghostship-worker /bin/true
     # A replaced container runs t3code-container-setup at boot, whose `chown -R t3code:t3code
     # ~/.local` would reset the bridge socket and token to group t3code after this script
     # sets group 62020, locking the MCP container out (2026-10-17). Start only once it is done.
@@ -186,9 +197,20 @@ in
       description = "Authenticated free inference broker in the separate worker container";
       wantedBy = [ "multi-user.target" ];
       after = [ "podman-ghostship-worker.service" "podman-t3code.service" ];
-      requires = [ "podman-ghostship-worker.service" ];
+      # Wants+After keeps the start order without propagating a worker stop.
+      # With Requires, restarting the worker (or any unit the switch restarts)
+      # deactivates the bridge and cancels its automatic restart, leaving it
+      # inactive until someone starts it by hand.
+      wants = [ "podman-ghostship-worker.service" ];
       path = [ pkgs.coreutils ];
       restartTriggers = [ config.age.secrets.inference-bridge-token.file inputs.ghostship-private-agent ];
+      unitConfig = {
+        # A burst of container-attach failures during a T3 or worker restart
+        # must retry forever instead of becoming a permanent start-limit-hit.
+        # Repeated failures still reach operations through onFailure.
+        StartLimitIntervalSec = 0;
+        StartLimitBurst = 0;
+      };
       serviceConfig = {
         EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
         ExecStartPre = publish;
@@ -203,7 +225,7 @@ in
           "--socket" workerSocket
           "--socket-gid" "62020"
         ]);
-        Restart = "on-failure";
+        Restart = "always";
         RestartSec = 10;
         # container setup may take up to its own 20-minute start timeout
         TimeoutStartSec = 1500;
@@ -218,7 +240,13 @@ in
       description = "Durable free inference scheduler in the separate worker container";
       wantedBy = [ "multi-user.target" ];
       after = [ "podman-ghostship-worker.service" "ghostship-free-worker-auth.service" ];
-      requires = [ "podman-ghostship-worker.service" "ghostship-free-worker-auth.service" ];
+      # Ordering is required at boot; Requires would stop the scheduler and
+      # cancel its restart whenever auth or the worker is restarted.
+      wants = [ "podman-ghostship-worker.service" "ghostship-free-worker-auth.service" ];
+      unitConfig = {
+        StartLimitIntervalSec = 0;
+        StartLimitBurst = 0;
+      };
       serviceConfig = {
         ExecStart = lib.escapeShellArgs [
           "${pkgs.podman}/bin/podman" "exec" "--user" "63000:62020"
@@ -229,7 +257,7 @@ in
           "ghostship-worker" "${scheduler}/bin/agent" "free-inference" "serve"
           "--workers" "2" "--max-jobs" "4" "--poll-seconds" "30"
         ];
-        Restart = "on-failure";
+        Restart = "always";
         RestartSec = 10;
         TimeoutStopSec = 900;
         # Killing the host Podman attachment reports exit 1 even for an orderly
@@ -251,11 +279,16 @@ in
         SocketUser = "3000";
         SocketGroup = "62020";
         RemoveOnStop = true;
+        # A client burst while the broker restarts must not put the socket
+        # into a permanent trigger-limit failure.
+        TriggerLimitIntervalSec = 0;
+        TriggerLimitBurst = 0;
       };
     };
     systemd.services.ghostship-inference-proxy = {
       after = [ "ghostship-inference-bridge.service" ];
-      requires = [ "ghostship-inference-bridge.service" ];
+      # A broker restart must not stop the proxy; it reconnects per request.
+      wants = [ "ghostship-inference-bridge.service" ];
       serviceConfig = {
         ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd ${workerData}/socket/inference.sock";
         User = "62020";
@@ -274,7 +307,9 @@ in
     ];
     systemd.services.podman-ghostship-private-integrations = {
       after = [ "ghostship-inference-bridge.service" ];
-      requires = [ "ghostship-free-worker-auth.service" ];
+      # The MCP runtime only needs the worker socket mount, so an auth restart
+      # must not deactivate the container. Wants keeps the boot ordering.
+      wants = [ "ghostship-free-worker-auth.service" ];
     };
   };
 }
