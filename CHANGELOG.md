@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.369] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to 353c3be5; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #615.
+
 ## [3.17.368] - 2026-10-26
 
 - ci: raise fast check timeout for concurrent PR runs
