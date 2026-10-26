@@ -184,6 +184,10 @@ in
       raw = true;
       fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
       fields.GHOSTSHIP_COORDINATOR_TOKEN = { unit = "go-coordinator-auth"; key = "TOKEN"; };
+      fields.GHOSTSHIP_T3_PLAINTEXT_HOSTS = {
+        unit = "go-coordinator-plaintext-hosts";
+        key = "GHOSTSHIP_T3_PLAINTEXT_HOSTS";
+      };
       fields.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET = {
         unit = "hooks";
         key = "GITHUB_WEBHOOK_SECRET";

@@ -108,6 +108,11 @@ in
       exports = [ "TOKEN" ];
     };
 
+    go-coordinator-plaintext-hosts = mkUnit {
+      relativeFile = "secrets/files/sources/services/go-coordinator-plaintext-hosts.env.age";
+      exports = [ "GHOSTSHIP_T3_PLAINTEXT_HOSTS" ];
+    };
+
     discord = mkUnit {
       relativeFile = "secrets/files/sources/providers/discord.env.age";
       exports = [
