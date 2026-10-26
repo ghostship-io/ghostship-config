@@ -67,6 +67,11 @@ let
             }
             {
               provider = "opencode";
+              model = "ollama-cloud/deepseek-v4.1-flash";
+              rule = "owner-approved DeepSeek Flash subscription route";
+            }
+            {
+              provider = "opencode";
               model = "opencode-go/deepseek-v4.1-flash";
               rule = "owner-approved DeepSeek Flash subscription route";
             }

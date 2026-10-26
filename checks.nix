@@ -63,6 +63,7 @@ let
     "claudeAgent/claude-sonnet-5-5"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
+    "opencode/ollama-cloud/deepseek-v4.1-flash"
     "opencode/opencode-go/deepseek-v4.1-flash"
     "grok/grok-4.7"
     "antigravity/gemini-3.8-flash"

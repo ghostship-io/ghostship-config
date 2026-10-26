@@ -36,6 +36,7 @@ class T3RoutePolicyTests(unittest.TestCase):
             'model = "claude-sonnet-5-5"',
             'model = "command-code/deepseek/deepseek-v4.1-flash"',
             'model = "ollama-cloud/deepseek-v4.1-flash:1017"',
+            'model = "ollama-cloud/deepseek-v4.1-flash"',
             'model = "opencode-go/deepseek-v4.1-flash"',
             'model = "grok-4.7"',
             'model = "gemini-3.8-flash"',
