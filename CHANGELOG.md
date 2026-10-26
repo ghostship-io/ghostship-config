@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.17.393] - 2026-10-26
+
+Fix deploy switches failing with exit 4 when they stop or restart the free
+inference broker: stop now signals the container process and waits for it, so a
+clean stop exits 0 while a real crash still fails.
+
+Release: patch
+
+Refs #639
+
+PR #642.
+
 ## [3.17.392] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 868f979c; the lock's narHash is the `nix flake prefetch` hash of that revision.
