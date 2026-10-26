@@ -544,6 +544,12 @@ in
       Type = "oneshot";
       ExecStart = lib.getExe t3codeImmediateDeploy;
       TimeoutStartSec = "25m";
+      # deploy-image.sh exits 75 when a host precondition (the live routing
+      # snapshot) is unmet before the candidate runs; retry it, bounded by the
+      # script's attempt counter. Six attempts 2 minutes apart fit the deploy
+      # run's 25-minute receipt wait; a switch's start supersedes the wait.
+      RestartForceExitStatus = "75";
+      RestartSec = "120";
     };
   };
 

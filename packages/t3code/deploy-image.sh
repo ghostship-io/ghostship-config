@@ -180,6 +180,13 @@ if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$failed_key" ]]; then
   exit 0
 fi
 
+# A precondition miss (exit 75) is retried by systemd (RestartForceExitStatus=75)
+# after RestartSec; this counter bounds the retries for one image and acceptance
+# code. The last attempt exits 1, which stops the retries and leaves the image
+# retryable by a later run.
+precondition_file="$STATE_DIR/precondition-attempts"
+precondition_attempts=${PRECONDITION_ATTEMPTS:-6}
+
 mark_candidate_failed() {
   local temporary="$failed_file.tmp"
   printf '%s\n' "$failed_key" > "$temporary"
@@ -210,9 +217,25 @@ acceptance_status=0
 # 75: a host precondition failed before the candidate ran; the image is not at
 # fault and the next run re-runs full acceptance.
 if [[ $acceptance_status == 75 ]]; then
-  echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID; image stays retryable" >&2
-  exit 1
+  attempt=1
+  previous_deployment="" previous_acceptance="" previous_attempt=""
+  if [[ -r "$precondition_file" ]]; then
+    read -r previous_deployment previous_acceptance previous_attempt < "$precondition_file" || true
+  fi
+  if [[ "${previous_deployment:-} ${previous_acceptance:-}" == "$failed_key" && ${previous_attempt:-} =~ ^[0-9]+$ ]]; then
+    attempt=$((previous_attempt + 1))
+  fi
+  if (( attempt >= precondition_attempts )); then
+    rm -f "$precondition_file"
+    echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID after $attempt attempts; image stays retryable" >&2
+    exit 1
+  fi
+  printf '%s %s\n' "$failed_key" "$attempt" > "$precondition_file.tmp"
+  mv -f "$precondition_file.tmp" "$precondition_file"
+  echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID (attempt $attempt of $precondition_attempts); image stays retryable and is retried" >&2
+  exit 75
 fi
+rm -f "$precondition_file"
 if [[ $acceptance_status != 0 ]]; then
   mark_candidate_failed
   echo "Candidate acceptance FAILED for $DEPLOYMENT_ID; image will not be queued" >&2
