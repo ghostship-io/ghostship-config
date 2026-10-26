@@ -306,8 +306,9 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       # Provider sessions inherit the route policy and the live Go coordinator
-      # address and bearer token, both from the container environment.
-      PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN
+      # address, plus the path of the token file the Go CLI reads. No credential
+      # value is passed: every worker in this cgroup can read the environment.
+      PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN_FILE
       ExecStartPre=${managedBin}/t3code-run-hooks before-t3code.d
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/configure.py
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-provider-privacy/setup.py

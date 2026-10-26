@@ -15,9 +15,12 @@ let
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   # The live Go coordinator's healthz and work endpoints, reached over the
-  # shared ghostship_net by container name. The bearer token the service checks
-  # is GHOSTSHIP_COORDINATOR_TOKEN from the t3code secret projection.
+  # shared ghostship_net by container name. Its bearer token lives in its own
+  # projection file so it never enters the container environment: worker
+  # sessions inherit that environment, and a worker running `env` must not be
+  # able to read or print a credential. Sessions get only the file path.
   goCoordinatorUrl = "http://ghostship-go-coordinator:18765";
+  coordinatorTokenFile = "/run/secrets/coordinator-token.env";
   t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
     mkdir -p "$out"
     cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
@@ -341,6 +344,7 @@ in
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
+      "${config.ghostship.selfHostedSecrets.projections.t3code-coordinator-token.containerPath}:${coordinatorTokenFile}:ro"
       "/etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro"
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       "/run/t3code-podman/podman.sock:/var/run/podman/podman.sock:rw"
@@ -366,8 +370,26 @@ in
       GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
       # The Go CLI's --go operations and review records call the live service.
       GHOSTSHIP_COORDINATOR_URL = goCoordinatorUrl;
+      # The token itself stays in the mounted file; only this path is inherited.
+      GHOSTSHIP_COORDINATOR_TOKEN_FILE = coordinatorTokenFile;
     };
     environmentFiles = [ t3codeSecrets retailStoreEnv ];
+  };
+
+  # The coordinator bearer token the Go CLI reads: one field, in its own file,
+  # readable by the runtime user (uid 3000 inside the container) and nobody
+  # else. It is deliberately not a field of the t3code projection, whose
+  # variables become the container environment.
+  ghostship.secretProjections.t3code-coordinator-token = {
+    fileName = "t3code-coordinator/token.env";
+    owner = "apps";
+    group = "apps";
+    mode = "0400";
+    raw = true;
+    fields.GHOSTSHIP_COORDINATOR_TOKEN = {
+      unit = "go-coordinator-auth";
+      key = "TOKEN";
+    };
   };
 
   ghostship.t3codePodman.enable = true;
