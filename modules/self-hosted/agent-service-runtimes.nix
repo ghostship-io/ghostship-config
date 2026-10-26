@@ -14,6 +14,10 @@ let
   };
   ingress = github sources.hooks;
   coordinator = github sources.coordinator;
+  # The pinned Go coordinator the Python coordinator runs for review request
+  # and review record. It travels in the same runtime as the Python code that
+  # calls it, so the client and its callers are always one pinned revision.
+  coordinatorCli = agent.packages.${system}.coordinator;
   start = name: text: pkgs.writeTextFile {
     name = "ghostship-${name}-entrypoint";
     destination = "/bin/start";
@@ -27,12 +31,21 @@ in
   hooks = start "hooks" ''
     exec ${ingress.ingressPython}/bin/python3 -I -B ${ingress.ingressScript}/share/ghostship-github/ingress.py "$@"
   '';
-  coordinator = start "coordinator" ''
-    export PYTHONPATH=${coordinator.coordinatorRuntime}/share/ghostship-github/python
-    export GHOSTSHIP_REVIEW_GIT_BIN=${coordinator.coordinatorRuntime}/bin/git
-    export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    exec ${coordinator.coordinatorPython}/bin/python3 -B -m ghostship_github.coordinator "$@"
-  '';
+  coordinator = pkgs.symlinkJoin {
+    name = "ghostship-github-coordinator-runtime";
+    paths = [
+      coordinatorCli
+      (start "coordinator" ''
+        export PYTHONPATH=${coordinator.coordinatorRuntime}/share/ghostship-github/python
+        export GHOSTSHIP_REVIEW_GIT_BIN=${coordinator.coordinatorRuntime}/bin/git
+        export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+        # shutil.which("ghostship-coordinator") in ghostship_github.
+        # go_coordinator must resolve this pinned binary.
+        export PATH=/run/ghostship-runtime/current/bin:$PATH
+        exec ${coordinator.coordinatorPython}/bin/python3 -B -m ghostship_github.coordinator "$@"
+      '')
+    ];
+  };
   integrations = pkgs.symlinkJoin {
     name = "ghostship-integrations-entrypoint";
     paths = [
