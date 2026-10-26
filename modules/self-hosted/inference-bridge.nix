@@ -210,11 +210,7 @@ in
       # lock as the release refresh, which takes it without waiting. An agent
       # bump starts both in one switch; ordering after the refresh keeps the
       # bridge from losing that race and failing the switch (#651).
-      after = [
-        "podman-ghostship-worker.service"
-        "podman-t3code.service"
-        "ghostship-managed-agent-release-refresh.service"
-      ];
+      after = [ "podman-ghostship-worker.service" "podman-t3code.service" "ghostship-managed-agent-release-refresh.service" ];
       # Wants+After keeps the start order without propagating a worker stop.
       # With Requires, restarting the worker (or any unit the switch restarts)
       # deactivates the bridge and cancels its automatic restart, leaving it
