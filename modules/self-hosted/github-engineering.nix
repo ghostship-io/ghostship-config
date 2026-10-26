@@ -429,6 +429,9 @@ in
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";
+        # The service has no home directory; the current orchestrator comes
+        # from the projected canonical pointer directory.
+        GHOSTSHIP_ORCHESTRATOR_FILE = "/run/ghostship-orchestrator/pointer.env";
         GHOSTSHIP_MODEL_RANKINGS_PATH = "${modelRouting.mount}/${modelRouting.file}";
         GHOSTSHIP_MODEL_EVIDENCE_PATH = "${modelOutcomes.mount}/${modelOutcomes.file}";
       };
@@ -437,6 +440,9 @@ in
       volumes = [
         "${root}/go-state:/state:rw,noexec,nosuid,nodev"
         "${goCoordinatorHeartbeat}:/opt/ghostship-go-coordinator-heartbeat:ro"
+        # Directory binding follows the canonical writer’s atomic replacements,
+        # so a rotation is visible without a service restart.
+        "${orchestratorDirectory}:/run/ghostship-orchestrator:ro,noexec,nosuid,nodev"
         "${modelRouting.host}:${modelRouting.mount}:ro,noexec,nosuid,nodev"
         "${modelOutcomes.host}:${modelOutcomes.mount}:ro,noexec,nosuid,nodev"
       ];
