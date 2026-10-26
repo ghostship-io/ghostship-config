@@ -40,6 +40,11 @@ let
   modelRoutingMount = "/run/ghostship-model-routing";
   modelOutcomesHost = "/srv/apps/t3code/home/.local/state/ghostship/model-evidence";
   modelOutcomesMount = "/run/ghostship-model-evidence";
+  # The canonical orchestrator pointer the serving Go coordinator resolves the
+  # current role from. Its writer replaces the file atomically, so the service
+  # binds the directory and reads the named file inside it.
+  orchestratorHost = "/srv/apps/t3code/home/.local/state/ghostship/orchestrator";
+  orchestratorMount = "/run/ghostship-orchestrator";
   modelEvidenceAclExec =
     t3codeConfig.systemd.services.ghostship-model-evidence-acl.serviceConfig.ExecStart;
   t3codeServerUnitSource = builtins.readFile ./packages/t3code/image.nix;
@@ -329,6 +334,15 @@ in
       goCoordinator.volumes;
     assert builtins.elem "${modelOutcomesHost}:${modelOutcomesMount}:ro,noexec,nosuid,nodev"
       goCoordinator.volumes;
+    # The serving coordinator resolves the current orchestrator from the one
+    # canonical pointer directory, never from its own home, and both
+    # coordinators read the same projection so a rotation has one authority.
+    assert goCoordinator.environment.GHOSTSHIP_ORCHESTRATOR_FILE
+      == "${orchestratorMount}/pointer.env";
+    assert builtins.elem "${orchestratorHost}:${orchestratorMount}:ro,noexec,nosuid,nodev"
+      goCoordinator.volumes;
+    assert builtins.elem "${orchestratorHost}:${orchestratorMount}:ro,noexec,nosuid,nodev"
+      githubCoordinator.volumes;
     # The outcome ledger is written 0600 by the T3 recorder; the unit grants
     # this container's uid read through the directory ACL.
     assert pkgs.lib.hasInfix "u:62033:rx" goCoordinatorUnit.preStart;
