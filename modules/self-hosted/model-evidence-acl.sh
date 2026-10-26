@@ -6,14 +6,25 @@
 # mask to whichever file the ledger path currently names.
 # Re-applying an ACL that is already effective changes the file, which can look
 # like another trigger to the path unit, so a correct ledger is left untouched.
+# The check is shell-only: the service PATH has no external parser.
 set -eu
 evidence=${1:?model evidence ledger path is required}
 setfacl=${2:?setfacl path is required}
 getfacl=${3:?getfacl path is required}
+uid=${4:-62033}
 [ -f "$evidence" ] || exit 0
-if acl=$("$getfacl" -c --absolute-names "$evidence" 2>/dev/null); then
-  entry=$(printf '%s\n' "$acl" | awk -F: '$1 == "user" && $2 == "62033" { print $3; exit }')
-  mask=$(printf '%s\n' "$acl" | awk -F: '$1 == "mask" { print $3; exit }')
+# Numeric ids: the host resolves the coordinator uid to a user name otherwise.
+if acl=$("$getfacl" -c -n --absolute-names "$evidence" 2>/dev/null); then
+  entry=""
+  mask=""
+  while IFS=: read -r kind id perms; do
+    case "$kind" in
+      user) case "$id" in "$uid") entry=$perms ;; esac ;;
+      mask) mask=$perms ;;
+    esac
+  done <<EOF
+$acl
+EOF
   case "$entry" in
     *r*)
       case "$mask" in
@@ -22,4 +33,4 @@ if acl=$("$getfacl" -c --absolute-names "$evidence" 2>/dev/null); then
       ;;
   esac
 fi
-exec "$setfacl" -m u:62033:r,m::r "$evidence"
+exec "$setfacl" -m "u:${uid}:r,m::r" "$evidence"
