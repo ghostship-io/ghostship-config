@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.373] - 2026-10-26
+
+- T3 acceptance: try up to three admitted routes before failing the image
+
+PR #620.
+
 ## [3.17.372] - 2026-10-26
 
 Configure the Go coordinator's private runtime T3 plaintext host allowlist.
