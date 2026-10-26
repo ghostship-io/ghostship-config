@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.381] - 2026-10-26
+
+Every GitHub coordinator repository now carries `max_active` from the route
+policy's `worker_capacity.default`, so the route policy's global cap is the only
+cap on worker launches. `checks.nix` fails host evaluation when a repository is
+missing the key or below that default.
+
+PR #626.
+
 ## [3.17.380] - 2026-10-26
 
 The free-inference broker and scheduler now retry forever after a switch restart, wait for the worker container before attaching, and no longer propagate a broker/auth restart to auth, the scheduler, the proxy or the MCP runtime; the proxy socket cannot be permanently disabled by a client burst. Refs #611.
