@@ -34,6 +34,7 @@ class SourceClosureTests(unittest.TestCase):
                 result = import __SOURCE__ { inherit lib; agent.outPath = __ROOT__; };
               in { native = builtins.pathExists (result.integrations + "/connector/internal/auth.go");
                    builder = builtins.pathExists (result.integrations + "/lib/native-mcp.nix");
+                   relay = builtins.pathExists (result.integrations + "/lib/openai-relay.nix");
                    python = builtins.pathExists (result.integrations + "/tools/python");
                    profiles = builtins.pathExists (result.integrations + "/config/sandbox-profiles/research.json");
                    unrelated = builtins.pathExists (result.integrations + "/unrelated.txt"); }
@@ -43,6 +44,7 @@ class SourceClosureTests(unittest.TestCase):
             data = json.loads(result.stdout)
             self.assertTrue(data['native'])
             self.assertTrue(data['builder'])
+            self.assertTrue(data['relay'])
             self.assertFalse(data['python'])
             self.assertFalse(data['profiles'])
             self.assertFalse(data['unrelated'])
