@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.372] - 2026-10-26
+
+Configure the Go coordinator's private runtime T3 plaintext host allowlist.
+
+PR #617.
+
 ## [3.17.371] - 2026-10-26
 
 - T3 acceptance: prove the turn on an admitted subscription route when no free route is available
