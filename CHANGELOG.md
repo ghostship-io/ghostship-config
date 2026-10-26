@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.363] - 2026-10-26
+
+- A T3 candidate acceptance failure blocks only the image and acceptance code that produced it. A fixed acceptance check re-runs acceptance for the same image.
+
+PR #600.
+
 ## [3.17.362] - 2026-10-26
 
 - T3 candidate acceptance stages a partial live routing snapshot when no source has failed, so one unread quota source no longer blocks every T3 deploy.
