@@ -60,6 +60,7 @@ POLICY_SOURCES: dict[str, str] = {
     "ghostship-cloudflared": "modules/self-hosted/apparmor/cloudflared.profile",
     "ghostship-container-default": "modules/self-hosted/container-default-apparmor.profile",
     "ghostship-flaresolverr": "modules/self-hosted/apparmor/flaresolverr.profile",
+    "ghostship-free-worker": "modules/self-hosted/apparmor/free-worker.profile",
     "ghostship-github-coordinator": "modules/self-hosted/apparmor/ghostship-github-coordinator.profile",
     "ghostship-gluetun": "modules/self-hosted/apparmor/gluetun.profile",
     "ghostship-go-coordinator": "modules/self-hosted/apparmor/ghostship-go-coordinator.profile",
