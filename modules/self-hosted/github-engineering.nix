@@ -127,7 +127,7 @@ in
       ];
       apparmorRequiredProcessProfiles = [ "ghostship-hooks" ];
       cloudflareBypassPaths = [ "/github" "/cloudflare" "/shadow/github/webhook" ];
-      cloudflareBypassApproval = "the owner 2026-10-25: approved Access bypass for exact POST paths /cloudflare and /github and /shadow/github/webhook on hooks.ghostship.io; GitHub HMAC authenticates its signed Go coordinator ingress";
+      cloudflareBypassApproval = "the owner 2026-10-19: approved Access bypass for exact POST paths /cloudflare and /github on hooks.ghostship.io only; the owner 2026-10-26 (ghostship-agent#924 issuecomment-6405254835) approved exact POST /shadow/github/webhook; GitHub HMAC authenticates its signed Go coordinator ingress";
       cloudflarePathRoutes = [
         { path = "/shadow/github/webhook"; origin = "http://ghostship-go-coordinator:18765"; }
       ];
