@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.17.370] - 2026-10-26
+
+- Publish the pinned Go coordinator in the Python coordinator runtime and put it on the container `PATH`, so exact-head review requests and FIX verdicts record again.
+
+
+
+
+### Current review evidence at 401aa11446e8108f8d6e06e098462e26d5001f6d
+
+Review evidence at exact head 401aa11446e8108f8d6e06e098462e26d5001f6d: CLEAN (fingerprint 86882175a6eec78cbd33d6ad0360b9d396409ff5f4f96e879cbbaa1f7cf64ab5). No open exact-head findings were returned.
+
+PR #607.
+
 ## [3.17.369] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 353c3be5; the lock's narHash is the `nix flake prefetch` hash of that revision.
