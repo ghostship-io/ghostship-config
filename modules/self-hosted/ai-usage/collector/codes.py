@@ -30,6 +30,13 @@ RPC_FAILED = "rpc_failed"
 UNAVAILABLE = "unavailable"
 PROBE_FAILED = "probe_failed"
 STALE_READING = "stale_reading"
+# The T3 state was read but held no runtime observation in the window. It is
+# not a database failure: the record is readable and simply has no event yet.
+NO_RUNTIME_EVENTS = "no_runtime_events"
+# The reader of a request record raised something its own fixed codes do not
+# describe. It is never reported as an unreadable database, because the
+# database was not what failed.
+READER_ERROR = "reader_error"
 UNKNOWN = "unknown"
 
 # The reason codes of the two request readers. They are a closed set of
@@ -40,6 +47,14 @@ READ_CODES = frozenset(
     {
         "database_missing",
         "database_unreadable",
+        # The database is readable, but another process held its write lock
+        # for longer than the read could wait. It is a transient cause, not a
+        # corrupt or missing record.
+        "database_busy",
+        # A live WAL database reported a transient I/O error while it was
+        # being checkpointed. It is retried, and only a persistent one is
+        # reported.
+        "database_io_error",
         "database_corrupt",
         "database_schema_missing",
         "cache_unwritten",
@@ -68,6 +83,8 @@ CODES = frozenset(
         UNAVAILABLE,
         PROBE_FAILED,
         STALE_READING,
+        NO_RUNTIME_EVENTS,
+        READER_ERROR,
         UNKNOWN,
     }
 ) | READ_CODES

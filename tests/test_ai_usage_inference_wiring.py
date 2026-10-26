@@ -1021,5 +1021,28 @@ class FreeInstanceRecordTests(WiringTestCase):
         )
 
 
+class EscapingReaderFailureTests(WiringTestCase):
+    """A reader failure outside its own codes is never a database failure."""
+
+    def test_an_escaping_failure_is_reported_as_a_reader_error(self):
+        database = build_database(self.directory, [record(at(13, 0), usage=1000)])
+        with patch(
+            "opencode_reader.collect_events",
+            side_effect=MemoryError(),
+        ):
+            reading = usage().read_records(
+                NOW,
+                opencode_db=database,
+                events_cache=self.cache,
+                pool_ledger=None,
+            )
+        self.assertEqual(reading.results[0].source, "opencode_events")
+        self.assertEqual(reading.results[0].status, "unreadable")
+        # The database was never established as unreadable. Naming it so
+        # would hide the actual cause and send the reader after the wrong
+        # record.
+        self.assertEqual(reading.results[0].reason, "reader_error")
+
+
 if __name__ == "__main__":
     unittest.main()

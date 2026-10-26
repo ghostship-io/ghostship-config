@@ -88,6 +88,13 @@ READ_TIMEOUT_S = 20.0
 # longer than this is not waited for.
 BUSY_TIMEOUT_S = 2.0
 
+# A lock or a WAL I/O error that outlasts the connection's wait is usually a
+# checkpoint or a write that is about to finish. The read is attempted once
+# more after this short pause, inside the same wall clock budget, and only
+# then reported with its own code.
+TRANSIENT_RETRY_ATTEMPTS = 2
+TRANSIENT_RETRY_WAIT_S = 0.25
+
 # How often the progress handler looks at the clock. The handler runs every
 # so many instructions of the running query, so the limit is honoured well
 # inside the wall clock it names.
@@ -128,6 +135,14 @@ STATUS_UNREADABLE = "unreadable"
 REASON_OK = "ok"
 REASON_MISSING = "database_missing"
 REASON_UNREADABLE = "database_unreadable"
+# Another process held the database's write lock for longer than the read
+# could wait. The record is not missing, corrupt or unreadable: the cause is
+# transient, and the read is retried once before this is reported.
+REASON_BUSY = "database_busy"
+# A live WAL database reported a transient I/O error, usually while its log
+# was being checkpointed. It is retried like a lock and reported only when it
+# outlasts the retry.
+REASON_IO = "database_io_error"
 REASON_CORRUPT = "database_corrupt"
 REASON_SCHEMA = "database_schema_missing"
 REASON_TIMEOUT = "timeout"
@@ -138,12 +153,17 @@ REASONS = frozenset(
         REASON_OK,
         REASON_MISSING,
         REASON_UNREADABLE,
+        REASON_BUSY,
+        REASON_IO,
         REASON_CORRUPT,
         REASON_SCHEMA,
         REASON_TIMEOUT,
         REASON_CACHE,
     }
 )
+
+# The transient causes a read is attempted again for.
+RETRYABLE_REASONS = frozenset({REASON_BUSY, REASON_IO})
 
 # The three outcomes of a request.
 OUTCOME_SUCCESS = "success"
@@ -634,6 +654,18 @@ def _unreadable(reason: str) -> dict[str, Any]:
     }
 
 
+def _locked(error: Exception) -> bool:
+    """True when SQLite reported contention with another process."""
+    text = str(error).lower()
+    return "locked" in text or "database is busy" in text
+
+
+def _io_error(error: Exception) -> bool:
+    """True when SQLite reported a transient error on the live WAL."""
+    text = str(error).lower()
+    return "disk i/o error" in text or "input/output error" in text
+
+
 def _reason_for(error: Exception, path: str | os.PathLike[str]) -> str:
     """The fixed reason code of a failed open.
 
@@ -642,6 +674,10 @@ def _reason_for(error: Exception, path: str | os.PathLike[str]) -> str:
     """
     if not Path(path).exists():
         return REASON_MISSING
+    if _io_error(error):
+        return REASON_IO
+    if _locked(error):
+        return REASON_BUSY
     if isinstance(error, sqlite3.DatabaseError) and not isinstance(error, sqlite3.OperationalError):
         return REASON_CORRUPT
     return REASON_UNREADABLE
@@ -657,6 +693,10 @@ def _reason_for_read(error: Exception) -> str:
     text = str(error).lower()
     if "no such table" in text:
         return REASON_SCHEMA
+    if _io_error(error):
+        return REASON_IO
+    if _locked(error):
+        return REASON_BUSY
     if "interrupted" in text:
         # The query was aborted because the read ran out of time.
         return REASON_TIMEOUT
@@ -682,12 +722,41 @@ def read_events(
     `days` days, `since` and `until` bound it further in epoch seconds, and
     the whole read is given `timeout_s` seconds of wall clock. A read that
     runs out of time aborts its query and is reported as unreadable with the
-    reason `timeout`.
+    reason `timeout`. A transient write lock or WAL I/O error is retried once
+    inside that same budget, and only a cause that outlasts both attempts is
+    reported, with its own code (`database_busy` or `database_io_error`).
 
     The reading carries the cursor as well: the newest row time the read
     saw, in epoch milliseconds. That is where the next incremental read
     starts.
     """
+    deadline = time.monotonic() + float(timeout_s)
+    result: dict[str, Any] | None = None
+    for attempt in range(TRANSIENT_RETRY_ATTEMPTS):
+        result = _read_events_once(
+            path, now, since=since, until=until, days=days, deadline=deadline
+        )
+        if result["status"] != STATUS_UNREADABLE or result["reason"] not in RETRYABLE_REASONS:
+            break
+        if attempt + 1 >= TRANSIENT_RETRY_ATTEMPTS:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= TRANSIENT_RETRY_WAIT_S:
+            break
+        time.sleep(TRANSIENT_RETRY_WAIT_S)
+    return result
+
+
+def _read_events_once(
+    path: str | os.PathLike[str],
+    now: float,
+    *,
+    since: float | None,
+    until: float | None,
+    days: int,
+    deadline: float,
+) -> dict[str, Any]:
+    """One attempt at the read, inside a deadline shared by the retries."""
     try:
         connection = open_database(path)
     except sqlite3.Error as error:
@@ -714,7 +783,6 @@ def read_events(
             "counts": counts,
             "cursor": None,
         }
-    deadline = time.monotonic() + float(timeout_s)
     # The progress handler aborts the query when the read is out of time.
     connection.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_STEPS)
     cursor: int | None = None

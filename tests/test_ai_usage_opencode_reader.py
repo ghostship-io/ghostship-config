@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "modules" / "self-hosted" / "ai-usage" / "collector"
@@ -689,6 +690,64 @@ class UnreadableTests(unittest.TestCase):
         self.assertEqual(
             result["counts"], {"rows_read": 0, "rows_unmapped": 0, "outcomes": {"success": 0, "limit": 0, "other": 0}}
         )
+
+    def test_a_locked_database_is_retried_and_read(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            connection.close()
+            module = reader()
+            real = module.open_database
+            calls = []
+
+            def flaky(location):
+                calls.append(location)
+                if len(calls) == 1:
+                    raise sqlite3.OperationalError("database is locked")
+                return real(location)
+
+            with patch.object(module, "open_database", side_effect=flaky):
+                result = module.read_events(path, content["now_epoch_ms"] / 1000.0)
+        # The writer's lock was transient: the retry read the record, and the
+        # source is not reported as unreadable.
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["reason"], "ok")
+
+    def test_a_lock_that_outlasts_the_retry_is_reported_as_busy(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            connection.close()
+            module = reader()
+            with patch.object(
+                module,
+                "open_database",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ):
+                result = module.read_events(path, content["now_epoch_ms"] / 1000.0)
+        self.assertEqual(result["status"], "unreadable")
+        # The database is there and readable; another process held it. The
+        # cause is named instead of the catch-all unreadable.
+        self.assertEqual(result["reason"], "database_busy")
+        self.assertEqual(result["events"], [])
+
+    def test_a_wal_io_error_that_outlasts_the_retry_is_reported_as_io(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            connection.close()
+            module = reader()
+            with patch.object(
+                module,
+                "open_database",
+                side_effect=sqlite3.OperationalError("disk I/O error"),
+            ):
+                result = module.read_events(path, content["now_epoch_ms"] / 1000.0)
+        self.assertEqual(result["status"], "unreadable")
+        # A live WAL's transient error keeps its own code, so it is not
+        # confused with a missing or corrupt record.
+        self.assertEqual(result["reason"], "database_io_error")
 
 
 class PrivacyTests(unittest.TestCase):

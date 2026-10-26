@@ -35,6 +35,15 @@ text never become published quota evidence. These windows feed the same
 selection used by the dashboard, managed favorites/default, CLI picks and MCP
 picks.
 
+The `t3_runtime` source is the state read itself. Its observation time is the
+newest run the read found, so a notice that is still in force does not make the
+source look stopped while the state is live; each window keeps the provider
+notice's own observation and is never re-stamped. A state that cannot be read,
+or that holds no recent run, is published with its own fixed reason instead of
+disappearing from the coverage. A read of the live WAL keeps its temporary
+store in memory, so the read-only service sandbox cannot turn a sort spill into
+a disk I/O error, and a transient lock or I/O error is attempted again.
+
 * Unit: `ghostship-ai-usage.service` (`Type=oneshot`), timer
   `ghostship-ai-usage.timer` (`OnUnitActiveSec=5min`, `AccuracySec=1s`,
   `Persistent=false`).
@@ -898,9 +907,15 @@ basis. A paid provider has no row at all.
   `missing_credentials`, `unsupported`, `error`, and `unreadable` for the
   two request records, which cannot be read at all. The `reason` label
   carries the fixed code of the failure, and the two records have their own
-  codes: `database_missing`, `database_unreadable`, `database_corrupt`,
-  `database_schema_missing`, `cache_unwritten`, `ledger_missing`,
-  `ledger_unreadable`, `ledger_corrupt` and `ledger_schema_missing`.
+  codes: `database_missing`, `database_unreadable`, `database_busy`,
+  `database_io_error`, `database_corrupt`, `database_schema_missing`,
+  `cache_unwritten`, `ledger_missing`, `ledger_unreadable`, `ledger_corrupt`
+  and `ledger_schema_missing`. `database_busy` is another process's write
+  lock that outlasted the read and its one bounded retry;
+  `database_io_error` is a live WAL's transient I/O error that outlasted the
+  same retry; `reader_error` is a failure of the reader itself, never
+  reported as an unreadable database; `no_runtime_events` is a readable T3
+  state with no run in the window.
 * `ghostship_ai_source_last_success_timestamp_seconds{source,provider}` - when
   the source last produced a reading.
 * `ghostship_ai_source_observed_timestamp_seconds{source,provider}` - when the
