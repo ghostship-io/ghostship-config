@@ -49,11 +49,7 @@ jobs:
           body: |
             Refresh Nix inputs together. Host derivations and configuration tests passed in the update workflow.
 
-            ## Changelog
-
-            - Refresh coordinated Nix inputs; evaluate all hosts and run configuration checks.
-
-            Review compatibility before landing with `agent pr land`, which publishes the release. Native deployment remains staged; no host switches run in GitHub Actions.
+            Review compatibility, then land through controller review (`gsc review --repo ghostship-io/ghostship-config …`). Native deployment remains staged; no host switches run in GitHub Actions.
 
             <!-- ghostship-agent -->
           draft: true

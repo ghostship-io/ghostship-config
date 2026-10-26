@@ -3,12 +3,13 @@
 - Follow [shared preferences](home/config/AGENTS.md).
 - Run focused fast unit tests with `nix develop .#ci -c`; stage new Nix files first.
   Use `nix develop .#browser` when local Playwright browsers are required.
-- Work on a named branch in an isolated worktree. Workers implement and the
-  orchestrator reviews each diff. Once approved with `agent review approve`,
-  workers ship with `agent pr land` and deploy their own work.
-- Keep `VERSION` and `CHANGELOG.md` out of PRs. `agent pr land` publishes one
-  release commit on main; use a PR body `## Changelog` section for release
-  notes and `Release: minor` or `Release: major` for an explicit larger bump.
+- Work on a named branch in an isolated worktree, against a frozen issue the
+  PR names with `Refs #N`. Prove the exact head (`mvp check-proof` from a
+  ghostship-agent checkout for a change without Go source) and submit it with
+  `gsc review --repo ghostship-io/ghostship-config ISSUE PR HEAD PACKET SHA THREAD`.
+  The controller's independent reviewer approves it or returns a FIX to you,
+  and the controller lands the approved exact head.
+- Keep `VERSION` and `CHANGELOG.md` out of PRs.
 - Cloudflare Access bypasses, direct Internet listeners and public IPv6 rules
   require explicit user approval recorded in the service configuration. Every
   Internet-facing service requires an enabled, attached AppArmor profile; use

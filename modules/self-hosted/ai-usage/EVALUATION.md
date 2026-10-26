@@ -56,8 +56,8 @@ already keeps.
   upgrade of any kind.
 - A quality score is never invented. A model without a measurement keeps its
   lineage prior, and the prior stays labelled as a prior.
-- The orchestrator reviews each diff: worker implementations require
-  orchestrator review before merge.
+- Every change is independently reviewed before merge: the controller's
+  reviewer approves the exact head or returns a FIX.
 - The role cap is independent of the quality: a free route stays in the low
   complexity classes, whatever the measured quality says.
 - The collector keeps its own five minute reading of the quota and the

@@ -21,10 +21,9 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- Work on a named branch, run focused fast unit tests, then ship with
-  `agent pr land` and deploy your finished work after the orchestrator reviews
-  the diff. Follow the current agent engineering policy and report completion
-  or blockers to the orchestrator.
+- Work on a named branch, run focused fast unit tests, prove the exact head
+  and submit it for controller review; the controller lands the approved head.
+  Follow the current agent engineering policy.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
 - Develop hosts rely on the installed global `skills` CLI and linked local
