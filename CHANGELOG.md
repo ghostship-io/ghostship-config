@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.398] - 2026-10-26
+
+deploy: keep the isolated T3 Podman manager's unit directory in its private
+store so user activation and the switch exit 0.
+
+PR #647.
+
 ## [3.17.397] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 622ba68f; the lock's narHash is the `nix flake prefetch` hash of that revision.
