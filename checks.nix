@@ -37,6 +37,7 @@ let
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
+  t3codeDeployImageArchive = t3codeDeploy.environment.IMAGE_ARCHIVE;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   goCoordinator =
@@ -218,3 +219,12 @@ in
         printf '%s\n' "$evaluated" > "$out"
       '';
 }
+// pkgs.lib.optionalAttrs
+  (pkgs.stdenv.hostPlatform.system == t3codeConfig.nixpkgs.hostPlatform.system)
+  {
+    t3code-deployer-image-archive = pkgs.runCommand "t3code-deployer-image-archive" { } ''
+      ${t3codeDeploy.serviceConfig.ExecStart} --list-manifest ${t3codeDeployImageArchive} > manifest.json
+      ${pkgs.jq}/bin/jq -e '.[0].Config | strings | length > 0' manifest.json >/dev/null
+      touch "$out"
+    '';
+  }

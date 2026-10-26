@@ -1,5 +1,10 @@
 set -euo pipefail
 
+if [[ ${1:-} == --list-manifest ]]; then
+  : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
+  exec tar -xOf "$2" manifest.json
+fi
+
 : "${STATE_DIR:?}"
 : "${IMAGE_ARCHIVE:?}"
 : "${DEPLOYMENT_ID:?}"
@@ -33,6 +38,29 @@ if [[ "$desired" != "$DEPLOYMENT_ID" ]]; then
   echo "T3 deployment request was superseded before it started" >&2
   exit 0
 fi
+attempts_dir="$STATE_DIR/attempts"
+install -d -m 0700 "$attempts_dir"
+attempt_file="$attempts_dir/$DEPLOYMENT_ID.json"
+attempt_temporary="$attempt_file.tmp"
+attempt_started_at_ms=$(date +%s%3N)
+write_attempt_result() {
+  local exit_code=$?
+  trap - EXIT
+  if "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
+    --argjson started_at_ms "$attempt_started_at_ms" --argjson exit_code "$exit_code" \
+    '{deployment_id:$deployment,started_at_ms:$started_at_ms,exit_code:$exit_code}' \
+    > "$attempt_temporary"; then
+    chmod 0600 "$attempt_temporary"
+    mv -f "$attempt_temporary" "$attempt_file"
+  fi
+  return "$exit_code"
+}
+"$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
+  --argjson started_at_ms "$attempt_started_at_ms" \
+  '{deployment_id:$deployment,started_at_ms:$started_at_ms,status:"running"}' > "$attempt_temporary"
+chmod 0600 "$attempt_temporary"
+mv -f "$attempt_temporary" "$attempt_file"
+trap write_attempt_result EXIT
 image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
 image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
 secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
