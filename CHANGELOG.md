@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.401] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to f86623d3; the lock's narHash is the `nix flake prefetch` hash of that revision.
+- Agent service sources: carry `lib/openai-relay.nix` into the integrations source.
+
+PR #656.
+
 ## [3.17.400] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to c66435e8; the lock's narHash is the `nix flake prefetch` hash of that revision.
