@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.17.385] - 2026-10-26
+
+- Stop the model-evidence ACL keeper from retriggering itself; it watches the ledger file and leaves an already-correct ACL untouched.
+
+
+
+
+
+
+
+
+### Current review evidence at 3e6dd0ed846cf7be5739b801bb041a2f9b97b141
+
+Review evidence at exact head 3e6dd0ed846cf7be5739b801bb041a2f9b97b141: CLEAN (fingerprint 8ad88d6e94de134e4db5ee57ee0b526d68800fd1cc90759f5fad500e59509b5a). No open exact-head findings were returned.
+
+PR #629.
+
 ## [3.17.384] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to f51ac205; the lock's narHash is the `nix flake prefetch` hash of that revision.
