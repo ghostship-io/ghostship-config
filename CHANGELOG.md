@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.17.375] - 2026-10-26
+
+- Point the T3 container's Go client at the live coordinator over the shared network and pass its bearer token through to provider sessions.
+
+
+
+
+### Current review evidence at 15ee825a82f4da70220e6394220d7d6a29971cd8
+
+Review evidence at exact head 15ee825a82f4da70220e6394220d7d6a29971cd8: CLEAN (fingerprint f480de17a2227d5de7db48cd6888dd9252e6c7d536d139d8e4d938f0d6701802). No open exact-head findings were returned.
+
+PR #613.
+
 ## [3.17.374] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to d7f763e7; the lock's narHash is the `nix flake prefetch` hash of that revision.
