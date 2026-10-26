@@ -11,6 +11,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -208,26 +209,36 @@ def stage_candidate_provider_auth(source_home, candidate_home, approved_file):
     return True
 
 
+# Exit status for a host precondition that failed before the candidate ran.
+# deploy-image.sh leaves the image retryable for it; any other failure blocks
+# the image.
+PRECONDITION_EXIT = 75
+
+
+class PreconditionError(RuntimeError):
+    """A host condition checked before the candidate runs was not met."""
+
+
 def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
     """Snapshot the live routing catalog into private candidate scratch."""
     source = Path(source_file)
     if source.is_symlink() or not source.is_file() or source.stat().st_size > 16 * 1024 * 1024:
-        raise RuntimeError("live model routing snapshot is unavailable")
+        raise PreconditionError("live model routing snapshot is unavailable")
     try:
         document = json.loads(source.read_text())
     except (OSError, ValueError):
-        raise RuntimeError("live model routing snapshot is unreadable") from None
+        raise PreconditionError("live model routing snapshot is unreadable") from None
     if (not isinstance(document, dict)
             or document.get("schema") != "ghostship.ai-usage.routing"
             or document.get("schema_version") != 1
             or not isinstance(document.get("partial"), bool)):
-        raise RuntimeError("live model routing snapshot is invalid")
+        raise PreconditionError("live model routing snapshot is invalid")
     # A partial snapshot still carries the full catalog; one unread quota
     # source must not block every deploy. A failed source still does.
     coverage = document.get("coverage")
     failed = coverage.get("sources_failed") if isinstance(coverage, dict) else None
     if document["partial"] and (not isinstance(failed, int) or isinstance(failed, bool) or failed != 0):
-        raise RuntimeError("live model routing snapshot has failed sources")
+        raise PreconditionError("live model routing snapshot has failed sources")
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)
@@ -1151,15 +1162,19 @@ def main():
     parser.add_argument("--systemctl-bin", default="systemctl")
     parser.add_argument("--candidate-uid", type=int, required=True)
     args = parser.parse_args()
-    accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
-           args.home_dir, args.volume, args.systemctl_bin,
-           candidate_uid=args.candidate_uid,
-           candidate_runtime_dir=args.candidate_runtime_dir,
-           provider_secrets_file=args.provider_secrets_file,
-           tooling_path=args.tooling_path,
-           expected_agent_revision=args.agent_revision,
-           candidate_home_target=args.candidate_home_target,
-           model_routing_file=args.model_routing_file)
+    try:
+        accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
+               args.home_dir, args.volume, args.systemctl_bin,
+               candidate_uid=args.candidate_uid,
+               candidate_runtime_dir=args.candidate_runtime_dir,
+               provider_secrets_file=args.provider_secrets_file,
+               tooling_path=args.tooling_path,
+               expected_agent_revision=args.agent_revision,
+               candidate_home_target=args.candidate_home_target,
+               model_routing_file=args.model_routing_file)
+    except PreconditionError as error:
+        print(f"candidate acceptance precondition not met: {error}", file=sys.stderr)
+        sys.exit(PRECONDITION_EXIT)
 
 
 if __name__ == "__main__":

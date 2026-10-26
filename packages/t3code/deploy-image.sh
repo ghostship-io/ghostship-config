@@ -205,7 +205,15 @@ candidate_args+=(--volume /etc/ghostship/route-policy.json:/etc/ghostship/route-
 candidate_args+=(--volume /etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro)
 candidate_args+=(--volume /nix/store:/nix/store:O)
 
-if ! "$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}"; then
+acceptance_status=0
+"$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}" || acceptance_status=$?
+# 75: a host precondition failed before the candidate ran; the image is not at
+# fault and the next run re-runs full acceptance.
+if [[ $acceptance_status == 75 ]]; then
+  echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID; image stays retryable" >&2
+  exit 1
+fi
+if [[ $acceptance_status != 0 ]]; then
   mark_candidate_failed
   echo "Candidate acceptance FAILED for $DEPLOYMENT_ID; image will not be queued" >&2
   exit 1
