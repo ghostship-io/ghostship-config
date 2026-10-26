@@ -363,6 +363,10 @@ in
         GHOSTSHIP_REVIEW_STORE = "/reviews";
         GHOSTSHIP_ORCHESTRATOR_FILE = "/run/ghostship-orchestrator/pointer.env";
         GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
+        # `podman exec` sessions (work.remote operations) start from the image
+        # environment, not the entrypoint's exports, so the pinned Go
+        # coordinator must be on the container PATH itself.
+        PATH = "/run/ghostship-runtime/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
       };
       volumes = [
         "${reviewStore}:/reviews:ro,noexec,nosuid,nodev"

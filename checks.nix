@@ -268,6 +268,8 @@ in
     assert pkgs.lib.hasInfix "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH" t3codeServerUnitSource;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
+    # Exec sessions resolve the pinned Go coordinator from the container PATH.
+    assert pkgs.lib.hasPrefix "/run/ghostship-runtime/current/bin:" githubCoordinator.environment.PATH;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;
     # The Go CLI inside the T3 container calls the live coordinator over the
     # shared network, authenticated by the same secret the service reads. The
