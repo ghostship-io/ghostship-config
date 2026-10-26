@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.382] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to 1fc6fd04; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #628.
+
 ## [3.17.381] - 2026-10-26
 
 Every GitHub coordinator repository now carries `max_active` from the route
