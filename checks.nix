@@ -69,8 +69,35 @@ let
   goCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-go-coordinator;
   goCoordinatorUnit = t3codeConfig.systemd.services.podman-ghostship-go-coordinator;
-  t3codeServiceToken =
-    t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.fields.GHOSTSHIP_COORDINATOR_TOKEN;
+  t3codeTokenProjection =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.t3code-coordinator-token;
+  t3codeServiceToken = t3codeTokenProjection.fields.GHOSTSHIP_COORDINATOR_TOKEN;
+  # PassEnvironment is the only route a container variable takes into the T3
+  # server, whose cgroup includes every provider and its tools. A secret value
+  # there is readable by any worker running `env`, so only non-secret paths and
+  # URLs may cross. The names come from the secret catalog and the module
+  # projections, so a new credential cannot slip through as another field.
+  secretCatalog = import ./secrets/catalog.nix { recipients = import ./secrets/recipients.nix; };
+  projectedSecretNames = pkgs.lib.unique (
+    pkgs.lib.concatMap
+      (name: builtins.attrNames secretCatalog.projections.${name}.fields)
+      (builtins.attrNames secretCatalog.projections)
+    ++ pkgs.lib.concatMap
+      (name: builtins.attrNames t3codeConfig.ghostship.secretProjections.${name}.fields)
+      (builtins.attrNames t3codeConfig.ghostship.secretProjections)
+  );
+  t3codePassedEnvironment = pkgs.lib.splitString " " (
+    pkgs.lib.last (
+      pkgs.lib.splitString "PassEnvironment=" (
+        builtins.head (
+          pkgs.lib.filter (line: pkgs.lib.hasInfix "PassEnvironment=" line) (
+            pkgs.lib.splitString "\n" t3codeServerUnitSource
+          )
+        )
+      )
+    )
+  );
+  credentialsPassedToSessions = pkgs.lib.intersectLists t3codePassedEnvironment projectedSecretNames;
   goCoordinatorServiceToken =
     t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields.GHOSTSHIP_COORDINATOR_TOKEN;
   goCoordinatorSecrets = t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields;
@@ -247,10 +274,20 @@ in
     # token comes only from the projected environment file, never the repo.
     assert t3codeContainer.environment.GHOSTSHIP_COORDINATOR_URL
       == "http://ghostship-go-coordinator:18765";
+    assert credentialsPassedToSessions == [ ];
     assert pkgs.lib.hasInfix
-      "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN"
+      "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN_FILE"
       t3codeServerUnitSource;
     assert !(t3codeContainer.environment ? GHOSTSHIP_COORDINATOR_TOKEN);
+    assert t3codeContainer.environment.GHOSTSHIP_COORDINATOR_TOKEN_FILE
+      == "/run/secrets/coordinator-token.env";
+    assert !(
+      t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.fields
+      ? GHOSTSHIP_COORDINATOR_TOKEN
+    );
+    assert builtins.elem
+      "${t3codeTokenProjection.containerPath}:/run/secrets/coordinator-token.env:ro"
+      t3codeContainer.volumes;
     assert builtins.elem t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.path
       t3codeContainer.environmentFiles;
     assert t3codeServiceToken.unit == "go-coordinator-auth";

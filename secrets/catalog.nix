@@ -842,10 +842,6 @@ in
           unit = "github";
           key = "TOKEN";
         };
-        GHOSTSHIP_COORDINATOR_TOKEN = {
-          unit = "go-coordinator-auth";
-          key = "TOKEN";
-        };
         BW_CLIENTID = {
           unit = "bitwarden";
           key = "BW_CLIENTID";
