@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.402] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to f7d2d3dd; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #661.
+
 ## [3.17.401] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to f86623d3; the lock's narHash is the `nix flake prefetch` hash of that revision.
