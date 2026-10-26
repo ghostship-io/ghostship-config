@@ -57,8 +57,13 @@ let
             }
             {
               provider = "opencode";
+              model = "ollama-cloud/deepseek-v4.1-flash";
+              rule = "owner 2026-10-26 (#523 decision 5): default worker route, Ollama first";
+            }
+            {
+              provider = "opencode";
               model = "command-code/deepseek/deepseek-v4.1-flash";
-              rule = "owner-approved default paid worker route";
+              rule = "owner 2026-10-26 (#523 decision 5): default worker route after Ollama";
             }
             {
               provider = "antigravity";

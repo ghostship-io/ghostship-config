@@ -61,6 +61,7 @@ let
   expectedWorkerRoutes = [
     "codex/gpt-6-luna"
     "claudeAgent/claude-sonnet-5-5"
+    "opencode/ollama-cloud/deepseek-v4.1-flash"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "antigravity/gemini-3.8-flash"
     "antigravity/gemini-3.8-flash-high"
