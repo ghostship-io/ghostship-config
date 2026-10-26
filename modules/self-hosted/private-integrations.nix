@@ -424,9 +424,11 @@ in {
           install -d -m 0750 -o root -g ghostship-mcp "$target"
           install -m 0400 -o 62020 -g 62020 "$canonical" "$target/t3-token.new"
           mv "$target/t3-token.new" "$target/t3-token"
-          install -m 0400 -o 62020 -g 62020 \
-            /run/ghostship-integrations/ghostship.yaml "$target/ghostship.yaml.new"
-          mv "$target/ghostship.yaml.new" "$target/ghostship.yaml"
+          for name in ghostship.key ghostship.yaml; do
+            install -m 0400 -o 62020 -g 62020 \
+              "/run/ghostship-integrations/$name" "$target/$name.new"
+            mv "$target/$name.new" "$target/$name"
+          done
         '';
         UMask = "0077";
         TimeoutStartSec = 150;

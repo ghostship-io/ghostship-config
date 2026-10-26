@@ -28,7 +28,7 @@ profile ghostship-private-integrations flags=(complain,attach_disconnected,media
   /sys/kernel/mm/transparent_hugepage/hpage_pmd_size r,
   /sys/fs/cgroup/{,cpu.max,memory.max} r,
   /run/ghostship-integrations/ r,
-  /run/ghostship-integrations/{t3-token,ghostship.yaml} r,
+  /run/ghostship-integrations/{t3-token,ghostship.key,ghostship.yaml} r,
   /state/ r,
   owner /state/native-auth/ rw,
   owner /state/native-auth/request rw,

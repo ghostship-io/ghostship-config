@@ -62,3 +62,38 @@ class HomePostalTests(unittest.TestCase):
                     render.home_postal({})
                 with self.assertRaises(SystemExit):
                     render.home_postal({'HOME_POSTAL_CODE': 'not-a-code'})
+
+class NativeProjectionTests(unittest.TestCase):
+    def test_native_mount_contains_the_rendered_key_and_rotates_it(self):
+        """Regression: YAML alone left the official tunnel's file key absent."""
+        import os
+        import subprocess
+        module = (Path(__file__).resolve().parents[1] /
+                  'modules/self-hosted/private-integrations.nix').read_text()
+        projection = module.split('          target=/run/ghostship-native-mcp\n', 1)[1].split("        '';", 1)[0]
+        self.assertIn('-m 0400 -o 62020 -g 62020', projection)
+        # Exercise the deployed shell projection unprivileged; only ownership
+        # changes to this test account. Contents and restrictive modes are real.
+        projection = projection.replace('-o root -g ghostship-mcp', '')
+        projection = projection.replace('-o 62020 -g 62020', '')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, target = root / 'rendered', root / 'mounted'
+            source.mkdir()
+            canonical = root / 'native-grant'
+            canonical.write_text('{"synthetic":"native-grant"}')
+            (source / 'ghostship.yaml').write_text(json.dumps({
+                'control_plane': {'api_key': 'file:/run/ghostship-integrations/ghostship.key'}}))
+            projection = projection.replace('/run/ghostship-integrations/', str(source) + '/')
+            for value in ('synthetic-first', 'synthetic-rotated'):
+                (source / 'ghostship.key').write_text(value)
+                subprocess.run(['sh', '-eu', '-c', projection], check=True,
+                               env={**os.environ, 'target': str(target), 'canonical': str(canonical)},
+                               timeout=2)
+                config = json.loads((target / 'ghostship.yaml').read_text())
+                key = target / Path(config['control_plane']['api_key'].removeprefix('file:')).name
+                self.assertEqual(key.read_text(), value)
+                for name in ('ghostship.key', 'ghostship.yaml', 't3-token'):
+                    self.assertEqual((target / name).stat().st_mode & 0o777, 0o400)
+                self.assertEqual(list(target.glob('*.new')), [])
+                self.assertNotIn(value, (target / 'ghostship.yaml').read_text())
