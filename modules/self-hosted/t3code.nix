@@ -53,12 +53,27 @@ let
             {
               provider = "claudeAgent";
               model = "claude-sonnet-5-5";
-              rule = "owner: UI work only";
+              rule = "owner: any roadmap work while Claude stays above its weekly worker guard";
             }
             {
               provider = "opencode";
               model = "command-code/deepseek/deepseek-v4.1-flash";
               rule = "owner-approved default paid worker route";
+            }
+            {
+              provider = "opencode";
+              model = "ollama-cloud/deepseek-v4.1-flash:1017";
+              rule = "owner-approved DeepSeek Flash subscription route";
+            }
+            {
+              provider = "opencode";
+              model = "opencode-go/deepseek-v4.1-flash";
+              rule = "owner-approved DeepSeek Flash subscription route";
+            }
+            {
+              provider = "grok";
+              model = "grok-4.7";
+              rule = "owner: expiring subscription, use until exhausted";
             }
             {
               provider = "antigravity";
@@ -101,6 +116,11 @@ let
               provider = "claudeAgent";
               model = "claude-opus-5-5";
               rule = "owner: no Codex orchestrator handover trial";
+            }
+            {
+              provider = "codex";
+              model = "gpt-6.1-sol";
+              rule = "owner: Codex succeeds Claude when Claude inference runs out";
             }
           ];
           deny = [
