@@ -62,13 +62,17 @@ let
     "codex/gpt-6-luna"
     "claudeAgent/claude-sonnet-5-5"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
+    "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
+    "opencode/ollama-cloud/deepseek-v4.1-flash"
+    "opencode/opencode-go/deepseek-v4.1-flash"
+    "grok/grok-4.7"
     "antigravity/gemini-3.8-flash"
     "antigravity/gemini-3.8-flash-high"
     "antigravity/gemini-4-argon"
   ]
   ++ expectedFreeRoutes;
   actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
-  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" ];
+  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ];
   actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
   fastBillingDenied = role: builtins.any
     (entry: entry.provider == "*" && entry.model == "*"

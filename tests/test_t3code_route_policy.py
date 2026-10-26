@@ -35,12 +35,16 @@ class T3RoutePolicyTests(unittest.TestCase):
             'model = "gpt-6-luna"',
             'model = "claude-sonnet-5-5"',
             'model = "command-code/deepseek/deepseek-v4.1-flash"',
+            'model = "ollama-cloud/deepseek-v4.1-flash:1017"',
+            'model = "ollama-cloud/deepseek-v4.1-flash"',
+            'model = "opencode-go/deepseek-v4.1-flash"',
+            'model = "grok-4.7"',
             'model = "gemini-3.8-flash"',
             'model = "gemini-3.8-flash-high"',
             'model = "gemini-4-argon"',
         ):
             self.assertIn(route, T3CODE)
-        self.assertIn('rule = "owner: UI work only"', T3CODE)
+        self.assertIn('rule = "owner: any roadmap work while Claude stays above its weekly worker guard"', T3CODE)
         self.assertNotIn("route-policy schema has no task-kind dimension", T3CODE)
         self.assertIn('billing_tier = "priority";', T3CODE)
         self.assertIn('tiers = [ "fastMode=true" "serviceTier=fast" ];', T3CODE)
@@ -52,12 +56,15 @@ class T3RoutePolicyTests(unittest.TestCase):
         self.assertEqual(T3CODE.count('model = "claude-fable-5-1"'), 3)
         self.assertEqual(T3CODE.count('provider = "claudeAgent"'), 8)
         self.assertIn('authorizations = [ ];', T3CODE)
-        self.assertNotIn('model = "gpt-6.1-sol"', T3CODE)
+        worker_block = T3CODE.split("worker = {", 1)[1].split("orchestrator = {", 1)[0]
+        self.assertNotIn('model = "gpt-6.1-sol"', worker_block)
 
-    def test_orchestrator_route_is_owner_limited_to_claude_opus(self):
-        self.assertIn('model = "claude-opus-5-5"', T3CODE)
-        self.assertIn('rule = "owner: no Codex orchestrator handover trial"', T3CODE)
-        self.assertIn('expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" ]',
+    def test_orchestrator_routes_are_claude_opus_then_codex_successor(self):
+        orchestrator_block = T3CODE.split("orchestrator = {", 1)[1].split("reviewer.deny", 1)[0]
+        self.assertIn('model = "claude-opus-5-5"', orchestrator_block)
+        self.assertIn('model = "gpt-6.1-sol"', orchestrator_block)
+        self.assertIn('rule = "owner: Codex succeeds Claude when Claude inference runs out"', orchestrator_block)
+        self.assertIn('expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ]',
                       (ROOT / "checks.nix").read_text())
 
 
