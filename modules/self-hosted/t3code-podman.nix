@@ -11,6 +11,7 @@ let
   state = "/var/lib/t3code-podman";
   root = "/run/t3code-podman-rootfs";
   runtime = "/run/user/${uid}";
+  privateStore = "/srv/apps/t3code/nix-root";
   workspace = config.ghostship.agentHost.workspacePath;
   worktrees = "/srv/apps/t3code/home/.t3/worktrees";
   graphRoot = "${state}/${if cfg.candidate then "candidate" else "storage"}";
@@ -288,9 +289,9 @@ let
       ]
     }
     if [ "$1" = start ]; then
-      ${pkgs.nix}/bin/nix copy --no-check-sigs --to 'local?root=/srv/apps/t3code/nix-root' ${cfg.runtimePackage}
-      ${pkgs.nix}/bin/nix-store --store 'local?root=/srv/apps/t3code/nix-root' \
-        --add-root /srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-podman-runtime-${
+      ${pkgs.nix}/bin/nix copy --no-check-sigs --to 'local?root=${privateStore}' ${cfg.runtimePackage}
+      ${pkgs.nix}/bin/nix-store --store 'local?root=${privateStore}' \
+        --add-root ${privateStore}/nix/var/nix/gcroots/t3code-podman-runtime-${
           if cfg.candidate then "candidate" else "production"
         } \
         --realise ${cfg.runtimePackage} >/dev/null
@@ -541,6 +542,22 @@ in
           deps = [ "t3code-podman-identity" ];
           text = ''
             ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/rootfs.py} reconcile ${root} ${spec}
+          '';
+        };
+        # The manager loads units from the store directory it captured when it
+        # started, and the private store is seeded only when the rootfs unit
+        # starts. Seed the directories a preserved manager reads, otherwise its
+        # mandatory per-user nixos-activation.service is not-found and every
+        # switch exits 4 before the user-manager reexec.
+        system.activationScripts.t3code-podman-manager-units = {
+          deps = [ "t3code-podman-reexec-alias" ];
+          text = ''
+            ${pkgs.python3}/bin/python ${../../packages/t3code/dev-engine/manager-units.py} \
+              --root ${root} --manager user@${uid}.service --current ${units} \
+              --store-root ${privateStore} \
+              --gcroot ${privateStore}/nix/var/nix/gcroots \
+              --systemctl ${pkgs.systemd}/bin/systemctl \
+              --nix ${pkgs.nix}/bin/nix --nix-store ${pkgs.nix}/bin/nix-store
           '';
         };
         users.groups.${user}.gid = cfg.uid;
