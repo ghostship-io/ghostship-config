@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.359] - 2026-10-26
+
+- fix: provide gzip to immediate T3 deployer
+
+PR #596.
+
 ## [3.17.358] - 2026-10-26
 
 - Add an isolated loopback Go coordinator container with persistent state, GitHub API credentials, a dedicated shared `GHOSTSHIP_COORDINATOR_TOKEN` for the CLI status client, and AppArmor confinement.
