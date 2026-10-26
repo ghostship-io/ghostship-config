@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.362] - 2026-10-26
+
+- T3 candidate acceptance stages a partial live routing snapshot when no source has failed, so one unread quota source no longer blocks every T3 deploy.
+
+PR #599.
+
 ## [3.17.361] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 97c60ce0; the lock's narHash is the `nix flake prefetch` hash of that revision.
