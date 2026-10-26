@@ -31,7 +31,7 @@ class RetailStoreEnvTests(unittest.TestCase):
         integrations = (ROOT / "modules/self-hosted/private-integrations.nix").read_text()
         t3code = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn("/etc/ghostship/retail-store.env", integrations)
-        self.assertIn("environmentFiles", integrations)
+        self.assertNotIn("environmentFiles", integrations)
         self.assertIn(
             '"f /etc/ghostship/retail-store.env 0600 root root -"', integrations)
         self.assertIn("retailStoreEnv", t3code)

@@ -150,6 +150,23 @@
         "type": "github"
       }
     },
+    "ghostship-native-agent": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793039547,
+        "narHash": "sha256-/mkvD4fsu5JRFMTP4wJ6vtD2gR6qHi4U1H9bkfMeYro=",
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
+        "rev": "e6f0029cba29f09a69eeea7bc12f54af8ff7a906",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
+        "rev": "e6f0029cba29f09a69eeea7bc12f54af8ff7a906",
+        "type": "github"
+      }
+    },
     "ghostship-private-agent": {
       "inputs": {
         "nixpkgs": "nixpkgs"
@@ -335,6 +352,7 @@
       "inputs": {
         "apple-silicon": "apple-silicon",
         "ghostship-agent-policy": "ghostship-agent-policy",
+        "ghostship-native-agent": "ghostship-native-agent",
         "ghostship-private-agent": "ghostship-private-agent",
         "home-manager": "home-manager",
         "nix-index-database": "nix-index-database",

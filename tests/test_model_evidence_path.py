@@ -29,11 +29,11 @@ class EvidenceStoreTests(unittest.TestCase):
     def test_the_host_and_the_container_name_the_same_store(self):
         text = INTEGRATIONS.read_text()
         self.assertIn(HOST_STORE, text)
-        self.assertIn(MOUNTED_STORE, text)
+        self.assertNotIn(MOUNTED_STORE, text)
 
     def test_only_the_store_directory_is_mounted_into_the_container(self):
         text = INTEGRATIONS.read_text()
-        self.assertIn(MOUNT, text)
+        self.assertNotIn(MOUNT, text)
         self.assertNotIn(PARENT_MOUNT, text)
         # The pre-start names the dedicated directory, not the parent state tree.
         self.assertIn('evidence="$state/model-evidence"', text)

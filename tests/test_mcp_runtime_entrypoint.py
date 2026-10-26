@@ -41,12 +41,8 @@ class McpEntrypoint(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
             (fixture / "lib").mkdir()
-            (fixture / "lib/private-integrations.nix").write_text('''{...}: {
-              runtime = "/fixture-client";
-              relay = "/fixture-relay";
-              sharedSocket = "/fixture-socket";
-            }''')
-            (fixture / "lib/mkPackages.nix").write_text('{...}: {serviceClients = {};}')
+            (fixture / "lib/native-mcp.nix").write_text('{...}: "/fixture-client"')
+            (fixture / "lib/openai-relay.nix").write_text('{...}: "/fixture-relay"')
             (fixture / "nixpkgs.nix").write_text('''{...}: {
               lib = {
                 removePrefix = p: s: builtins.substring (builtins.stringLength p) (-1) s;

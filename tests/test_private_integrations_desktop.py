@@ -23,11 +23,11 @@ class DesktopWiringTest(unittest.TestCase):
         self.assertNotIn('managerAddress', source)
         self.assertNotIn('profile_id =', source)
 
-    def test_private_mcp_joins_both_required_networks(self):
+    def test_native_mcp_uses_only_t3_network(self):
         source = self.source
         self.assertIn('"--network=ghostship_net"', source)
-        self.assertIn('"--network=agent_desktop_net"', source)
-        self.assertIn('init-agent-desktop-net.service', source)
+        self.assertNotIn('"--network=agent_desktop_net"', source)
+        self.assertNotIn('init-agent-desktop-net.service', source)
 
     def test_both_identities_resolve_to_desktop_chrome(self):
         source = self.source
@@ -37,7 +37,8 @@ class DesktopWiringTest(unittest.TestCase):
 
     def test_service_credentials_are_scoped_and_read_only(self):
         source = self.source
-        self.assertIn('"${serviceSecretsDir}:/run/ghostship-secrets:ro"', source)
+        self.assertNotIn('"${serviceSecretsDir}:/run/ghostship-secrets:ro"', source)
+        self.assertIn('/run/ghostship-native-mcp:/run/ghostship-integrations:ro', source)
         self.assertIn('group = "ghostship-mcp";', source)
         projections = source.split("serviceCredentials = {", 1)[1].split("\n  };", 1)[0]
         self.assertNotIn("cloudflare", projections)

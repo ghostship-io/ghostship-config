@@ -325,16 +325,5 @@ in
         RestrictAddressFamilies = [ "AF_UNIX" ];
       };
     };
-    virtualisation.oci-containers.containers.ghostship-private-integrations.volumes = [
-      # T3 reconciles ownership recursively under its home. MCP must use the
-      # worker-owned socket so that reconciliation cannot remove its group access.
-      "${workerData}/socket:/run/ghostship-integrations/inference-socket:ro"
-    ];
-    systemd.services.podman-ghostship-private-integrations = {
-      after = [ "ghostship-inference-bridge.service" ];
-      # The MCP runtime only needs the worker socket mount, so an auth restart
-      # must not deactivate the container. Wants keeps the boot ordering.
-      wants = [ "ghostship-free-worker-auth.service" ];
-    };
   };
 }
