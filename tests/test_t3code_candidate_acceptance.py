@@ -540,6 +540,45 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
                       self.commands)
 
+    def test_provider_turn_uses_an_admitted_subscription_route_when_no_free_route_is_available(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": {
+                    "provider": "commandCode", "model": "deepseek/deepseek-v4.1-flash",
+                    "billing": "subscription", "execution": "t3", "available": True,
+                }}}))
+            return Mock(returncode=0, stdout="passed")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env,
+                tooling_path="/nix/store/test-agent",
+            ), "commandCode/deepseek/deepseek-v4.1-flash")
+        self.assertTrue(any(any(item.endswith("provider-turn-probe.py") for item in call) and
+                            "commandCode/deepseek/deepseek-v4.1-flash" in call for call in calls))
+
+    def test_provider_turn_never_spends_a_protected_premium_route(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        for provider, model in (("codex", "gpt-6.1-sol"), ("claude", "claude-opus-5-5"),
+                                ("claudeAgent", "claude-sonnet-5-5")):
+            with self.subTest(provider=provider):
+                pick = {"data": {"pick": {"provider": provider, "model": model,
+                                          "billing": "subscription", "execution": "t3",
+                                          "available": True}}}
+                with patch.object(acceptance, "command", return_value=Mock(
+                        returncode=0, stdout=json.dumps(pick))) as command:
+                    with self.assertRaisesRegex(RuntimeError, "no approved available free or subscription T3 route"):
+                        acceptance.check_provider_turn(["podman"], "candidate", provider_env,
+                                                       tooling_path="/nix/store/test-agent")
+                self.assertFalse(any(any(str(item).endswith("provider-turn-probe.py") for item in call.args)
+                                     for call in command.call_args_list))
+
     def test_provider_turn_refuses_free_pool_routes_for_t3_execution(self):
         provider_env = self.root / "provider.env"
         provider_env.write_text("")
@@ -549,7 +588,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }}}
         with patch.object(acceptance, "command", return_value=Mock(
                 returncode=0, stdout=json.dumps(pick))) as command:
-            with self.assertRaisesRegex(RuntimeError, "no approved available free T3 route"):
+            with self.assertRaisesRegex(RuntimeError, "no approved available free or subscription T3 route"):
                 acceptance.check_provider_turn(
                     ["podman"], "candidate", provider_env,
                     tooling_path="/nix/store/test-agent",
