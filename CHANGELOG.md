@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.360] - 2026-10-26
+
+- Route the signed GitHub issue/comment webhook to the Go coordinator and provision its webhook secret and allowlisted repository/owner runtime settings.
+
+PR #594.
+
 ## [3.17.359] - 2026-10-26
 
 - fix: provide gzip to immediate T3 deployer
