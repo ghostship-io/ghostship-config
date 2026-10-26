@@ -1,5 +1,10 @@
 set -euo pipefail
 
+if [[ ${1:-} == --list-manifest ]]; then
+  : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
+  exec tar -xOf "$2" manifest.json
+fi
+
 : "${STATE_DIR:?}"
 : "${IMAGE_ARCHIVE:?}"
 : "${DEPLOYMENT_ID:?}"

@@ -37,6 +37,7 @@ let
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
+  t3codeDeployImageArchive = t3codeDeploy.environment.IMAGE_ARCHIVE;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
@@ -123,6 +124,11 @@ in
         python -m compileall -q modules/self-hosted/private-relay-render.py modules/self-hosted/secret-project.py modules/self-hosted/monitoring-provision.py modules/self-hosted/render-owner-config.py modules/self-hosted/monitoring-heartbeats.py modules/self-hosted/ghostship-notify.py modules/self-hosted/seerr-provision.py modules/self-hosted/dashboard-sync.py modules/self-hosted/cloudflare-sync.py containers/agent-desktop/root/opt/ghostship-agent-desktop/agent_desktop_api.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/cdp_client.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_cdp_matrix.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_retailer.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/check_cdp_regression.py containers/agent-desktop/root/opt/ghostship-agent-desktop/tools/run_extension.py modules/self-hosted/agent-desktop-mcp.py
         touch "$out"
       '';
+  t3code-deployer-image-archive = pkgs.runCommand "t3code-deployer-image-archive" { } ''
+    ${t3codeDeploy.serviceConfig.ExecStart} --list-manifest ${t3codeDeployImageArchive} > manifest.json
+    ${pkgs.jq}/bin/jq -e '.[0].Config | strings | length > 0' manifest.json >/dev/null
+    touch "$out"
+  '';
   host-evaluation =
     assert failures == [ ];
     # The unit always names the stable accepted alias, and never imports the
