@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.365] - 2026-10-26
+
+- Pass route policy to T3 provider sessions
+
+PR #602.
+
 ## [3.17.364] - 2026-10-26
 
 - Wait for T3 healthcheck start period after accepted restart
