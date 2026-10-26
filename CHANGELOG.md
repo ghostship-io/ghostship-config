@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.397] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to 622ba68f; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #650.
+
 ## [3.17.396] - 2026-10-26
 
 Stopping or restarting the free-inference units during a deploy switch no
