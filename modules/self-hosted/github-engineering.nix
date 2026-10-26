@@ -42,6 +42,12 @@ let
     mount = "/run/ghostship-model-evidence";
     file = "model-evidence.jsonl";
   };
+  # Each new ledger is created 0600, and a 0600 create resets the inherited ACL
+  # mask to none, which cancels the named read entry. The script applies the
+  # entry and its mask to whichever file the ledger path currently names.
+  modelEvidenceAcl = pkgs.writeShellScript "ghostship-model-evidence-acl" ''
+    exec ${pkgs.bash}/bin/bash ${./model-evidence-acl.sh} "$@"
+  '';
   pointerPython = pkgs.python3.withPackages (ps: [ ps.websockets ]);
   network = "ghostship_github_net";
   # T3 projects per repository (ids from the T3 orchestration shell).
@@ -443,6 +449,32 @@ in
           ${pkgs.acl}/bin/setfacl -m u:62033:r,m::r "$evidence/${modelOutcomes.file}"
         fi
       '';
+    };
+    # A rewrite replaces the ledger with a new 0600 file whose mask cancels the
+    # coordinator's inherited read entry. Re-apply it whenever the directory
+    # changes, so read access does not depend on when the container last started.
+    systemd.services.ghostship-model-evidence-acl = {
+      description = "Keep the served selector's read access on the model evidence ledger";
+      serviceConfig = {
+        Type = "oneshot";
+        UMask = "0077";
+        ExecStart = "${modelEvidenceAcl} ${lib.escapeShellArg "${modelOutcomes.host}/${modelOutcomes.file}"} ${pkgs.acl}/bin/setfacl";
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ReadWritePaths = [ modelOutcomes.host ];
+        CapabilityBoundingSet = [ "CAP_DAC_READ_SEARCH" "CAP_FOWNER" ];
+        AmbientCapabilities = "";
+      };
+    };
+    systemd.paths.ghostship-model-evidence-acl = {
+      description = "Watch the model evidence ledger for a rewrite";
+      wantedBy = [ "paths.target" ];
+      pathConfig = {
+        PathExists = modelOutcomes.host;
+        PathModified = modelOutcomes.host;
+        Unit = "ghostship-model-evidence-acl.service";
+      };
     };
   };
 }

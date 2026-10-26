@@ -40,6 +40,8 @@ let
   modelRoutingMount = "/run/ghostship-model-routing";
   modelOutcomesHost = "/srv/apps/t3code/home/.local/state/ghostship/model-evidence";
   modelOutcomesMount = "/run/ghostship-model-evidence";
+  modelEvidenceAclExec =
+    t3codeConfig.systemd.services.ghostship-model-evidence-acl.serviceConfig.ExecStart;
   t3codeServerUnitSource = builtins.readFile ./packages/t3code/image.nix;
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
@@ -260,6 +262,14 @@ in
     # this container's uid read through the directory ACL.
     assert pkgs.lib.hasInfix "u:62033:rx" goCoordinatorUnit.preStart;
     assert pkgs.lib.hasInfix "d:u:62033:rX" goCoordinatorUnit.preStart;
+    # A rewrite replaces the ledger with a 0600 file, so the startup grant alone
+    # does not survive. The path unit must re-apply it to the current file.
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.Unit
+      == "ghostship-model-evidence-acl.service";
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.PathModified
+      == modelOutcomesHost;
+    assert pkgs.lib.hasInfix " ${modelOutcomesHost}/model-evidence.jsonl " modelEvidenceAclExec;
+    assert pkgs.lib.hasSuffix "/bin/setfacl" modelEvidenceAclExec;
     assert t3codeConfig.ghostship.apps.hooks.cloudflareBypassPaths
       == [ "/github" "/cloudflare" "/shadow/github/webhook" ];
     assert t3codeConfig.ghostship.apps.hooks.cloudflarePathRoutes == [ {
