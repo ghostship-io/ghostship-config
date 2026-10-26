@@ -229,25 +229,51 @@ printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
 EVENTS=$saved_events
 
 # A host precondition that fails before the candidate runs (exit 75, e.g. a
-# routing snapshot with a failed source) fails the run but never blocks the
-# image: the next run re-runs full acceptance. Its events stay out of the
+# routing snapshot with a failed source) never blocks the image. The deployer
+# exits 75 so systemd retries it (RestartForceExitStatus=75), a bounded number
+# of times; the last attempt exits 1, stops the retries and leaves the image
+# retryable, and a later run starts the count again. Its events stay out of the
 # counts asserted below.
 saved_events=$EVENTS
 EVENTS="$tmp/precondition-events"
-export DEPLOYMENT_ID=deployment-precondition CANDIDATE_PRECONDITION=1 CANDIDATE_FAIL=0
+export DEPLOYMENT_ID=deployment-precondition CANDIDATE_PRECONDITION=1 CANDIDATE_FAIL=0 PRECONDITION_ATTEMPTS=3
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-for attempt in 1 2; do
+precondition_run() {
   set +e
-  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-$attempt.log" 2>&1
+  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-$1.log" 2>&1
   precondition_status=$?
   set -e
-  [[ $precondition_status != 0 ]]
-  grep -q 'precondition not met for deployment-precondition; image stays retryable' "$tmp/precondition-$attempt.log"
-  ! grep -q 'already failed' "$tmp/precondition-$attempt.log"
+  ! grep -q 'already failed' "$tmp/precondition-$1.log"
   [[ $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+}
+for attempt in 1 2; do
+  precondition_run "$attempt"
+  [[ $precondition_status == 75 ]]
+  grep -q "precondition not met for deployment-precondition (attempt $attempt of 3); image stays retryable and is retried" "$tmp/precondition-$attempt.log"
+  [[ $(cut -d ' ' -f 3 "$tmp/state/precondition-attempts") == "$attempt" ]]
 done
-[[ $(grep -c candidate-precondition "$EVENTS") == 2 ]]
-export CANDIDATE_PRECONDITION=0
+precondition_run 3
+[[ $precondition_status == 1 ]]
+grep -q 'precondition not met for deployment-precondition after 3 attempts; image stays retryable' "$tmp/precondition-3.log"
+[[ ! -e "$tmp/state/precondition-attempts" ]]
+precondition_run 4
+[[ $precondition_status == 75 ]]
+grep -q '(attempt 1 of 3)' "$tmp/precondition-4.log"
+[[ $(grep -c candidate-precondition "$EVENTS") == 4 ]]
+# A candidate failure after a precondition miss is not retried: it blocks the
+# image and clears the count.
+export CANDIDATE_PRECONDITION=0 CANDIDATE_FAIL=1
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-then-fail.log" 2>&1
+precondition_status=$?
+set -e
+[[ $precondition_status == 1 ]]
+grep -q 'Candidate acceptance FAILED for deployment-precondition' "$tmp/precondition-then-fail.log"
+[[ ! -e "$tmp/state/precondition-attempts" ]]
+[[ $(cut -d ' ' -f 1 "$tmp/state/failed-candidate") == deployment-precondition ]]
+printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+export CANDIDATE_FAIL=0
+unset PRECONDITION_ATTEMPTS
 EVENTS=$saved_events
 
 # An absent receipt is rejected before the accepted alias can move. This is the

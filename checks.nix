@@ -245,6 +245,8 @@ in
     assert pkgs.lib.hasSuffix "/bin/podman" t3codeUnit.environment.PODMAN_BIN;
     assert pkgs.lib.hasSuffix "/bin/jq" t3codeUnit.environment.JQ_BIN;
     assert pkgs.lib.hasSuffix "/bin/t3code-receipt-self-check" t3codeDeploy.environment.RECEIPT_SELF_CHECK;
+    # A precondition miss (exit 75) is retried by systemd; deploy-image.sh bounds it.
+    assert t3codeDeploy.serviceConfig.RestartForceExitStatus == "75" && t3codeDeploy.serviceConfig.RestartSec == "120";
     assert builtins.all (
       unit:
       !unit.restartIfChanged
