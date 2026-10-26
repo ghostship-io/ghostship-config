@@ -474,14 +474,20 @@ in
       '';
     };
     # A rewrite replaces the ledger with a new 0600 file whose mask cancels the
-    # coordinator's inherited read entry. Re-apply it whenever the directory
-    # changes, so read access does not depend on when the container last started.
+    # coordinator's inherited read entry. Re-apply it when the ledger file is
+    # created or replaced; the script leaves an already-correct ACL untouched,
+    # so its own run cannot retrigger the path unit.
     systemd.services.ghostship-model-evidence-acl = {
       description = "Keep the served selector's read access on the model evidence ledger";
+      # Legitimate ledger writes may trigger a burst of idempotent runs; the
+      # units must not fail for doing their job. A runaway still stops at the
+      # limit instead of spinning.
+      startLimitIntervalSec = 60;
+      startLimitBurst = 120;
       serviceConfig = {
         Type = "oneshot";
         UMask = "0077";
-        ExecStart = "${modelEvidenceAcl} ${lib.escapeShellArg "${modelOutcomes.host}/${modelOutcomes.file}"} ${pkgs.acl}/bin/setfacl";
+        ExecStart = "${modelEvidenceAcl} ${lib.escapeShellArg "${modelOutcomes.host}/${modelOutcomes.file}"} ${pkgs.acl}/bin/setfacl ${pkgs.acl}/bin/getfacl";
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = true;
@@ -491,11 +497,11 @@ in
       };
     };
     systemd.paths.ghostship-model-evidence-acl = {
-      description = "Watch the model evidence ledger for a rewrite";
+      description = "Watch the model evidence ledger for creation or replacement";
       wantedBy = [ "paths.target" ];
       pathConfig = {
-        PathExists = modelOutcomes.host;
-        PathModified = modelOutcomes.host;
+        PathExists = "${modelOutcomes.host}/${modelOutcomes.file}";
+        PathChanged = "${modelOutcomes.host}/${modelOutcomes.file}";
         Unit = "ghostship-model-evidence-acl.service";
       };
     };
