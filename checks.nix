@@ -198,6 +198,8 @@ in
       goCoordinator.environmentFiles;
     assert t3codeServiceToken.unit == "go-coordinator-auth";
     assert goCoordinatorServiceToken.unit == "go-coordinator-auth";
+    assert goCoordinatorSecrets.GHOSTSHIP_T3_PLAINTEXT_HOSTS.unit == "go-coordinator-plaintext-hosts";
+    assert goCoordinatorSecrets.GHOSTSHIP_T3_PLAINTEXT_HOSTS.key == "GHOSTSHIP_T3_PLAINTEXT_HOSTS";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.unit == "hooks";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.key == "GITHUB_WEBHOOK_SECRET";
     assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
