@@ -110,6 +110,10 @@ let
       container = "ghostship-github-coordinator";
       heartbeat = [ "/bin/cat" "/proc/sys/kernel/random/boot_id" ];
     };
+    go-coordinator = {
+      container = "ghostship-go-coordinator";
+      heartbeat = [ "/opt/ghostship-go-coordinator-heartbeat/read-file" "/proc/sys/kernel/random/boot_id" ];
+    };
     ghostship.container = "ghostship-private-integrations";
     chaptarr = {
       children = [ "server" "healthcheck" ];
@@ -160,6 +164,8 @@ let
   enabled =
     name:
     if name == "github-coordinator" then
+      config.ghostship.githubEngineering.enable
+    else if name == "go-coordinator" then
       config.ghostship.githubEngineering.enable
     else if name == "ghostship" then
       config.ghostship.privateIntegrations.enable

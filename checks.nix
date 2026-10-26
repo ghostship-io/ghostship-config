@@ -39,6 +39,13 @@ let
   t3codeDeploy = t3codeConfig.systemd.services.ghostship-t3code-deploy;
   githubCoordinator =
     t3codeConfig.virtualisation.oci-containers.containers.ghostship-github-coordinator;
+  goCoordinator =
+    t3codeConfig.virtualisation.oci-containers.containers.ghostship-go-coordinator;
+  goCoordinatorUnit = t3codeConfig.systemd.services.podman-ghostship-go-coordinator;
+  t3codeServiceToken =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.fields.GHOSTSHIP_COORDINATOR_TOKEN;
+  goCoordinatorServiceToken =
+    t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields.GHOSTSHIP_COORDINATOR_TOKEN;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
@@ -170,6 +177,25 @@ in
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;
+    assert goCoordinator.imageFile != null;
+    assert builtins.elem "127.0.0.1:18765:18765" goCoordinator.ports;
+    assert builtins.elem "/var/lib/ghostship-github/go-state:/state:rw,noexec,nosuid,nodev"
+      goCoordinator.volumes;
+    assert t3codeConfig.ghostship.apps.go-coordinator.apparmorHeartbeat
+      == [ "/opt/ghostship-go-coordinator-heartbeat/read-file" "/proc/sys/kernel/random/boot_id" ];
+    assert builtins.any (volume: builtins.match ".*:ro" volume != null)
+      (builtins.filter (volume: builtins.match ".*ghostship-go-coordinator-heartbeat.*" volume != null)
+        goCoordinator.volumes);
+    assert builtins.elem "/run/ghostship-secrets/ghostship-github/go-coordinator.env"
+      goCoordinator.environmentFiles;
+    assert t3codeServiceToken.unit == "go-coordinator-auth";
+    assert goCoordinatorServiceToken.unit == "go-coordinator-auth";
+    assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
+    assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES
+      == "ghostship-io/ghostship-agent";
+    assert builtins.elem "ghostship-github-t3-token.service" goCoordinatorUnit.requires;
+    assert pkgs.lib.hasInfix "/run/ghostship-github/t3-token" goCoordinatorUnit.preStart;
+    assert pkgs.lib.hasInfix "T3_BRIDGE_TOKEN" goCoordinatorUnit.preStart;
     assert builtins.elem
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;

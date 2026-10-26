@@ -15,6 +15,11 @@ let
   base = name: uid: import ./service-base-image.nix { inherit pkgs name uid; gid = "62032"; };
   ingressImage = base "ghostship-github-ingress" "62030";
   coordinatorImage = base "ghostship-github-coordinator" "62031";
+  goCoordinatorImage = inputs.ghostship-private-agent.packages.${system}.github-go-coordinator-image;
+  goCoordinatorHeartbeat = pkgs.pkgsStatic.runCommandCC "ghostship-go-coordinator-heartbeat" { } ''
+    mkdir -p $out
+    $CC -O2 -static -o $out/read-file ${./siem/heartbeat.c}
+  '';
   # Under /var/lib: tmpfiles refuses root-owned children of the apps-owned /srv/apps.
   root = "/var/lib/ghostship-github";
   t3Home = lib.removeSuffix ":/home/t3code:rw" (lib.findFirst
@@ -133,6 +138,15 @@ in
       hostname = null;
       origin = null;
     };
+    ghostship.apps.go-coordinator = {
+      name = "Go coordinator";
+      container = "ghostship-go-coordinator";
+      group = "Infrastructure";
+      description = "Serves cached work status from the Go coordinator";
+      hostname = null;
+      origin = null;
+      apparmorProfile = "ghostship-go-coordinator";
+    };
 
     users.groups.ghostship-hooks.gid = 62030;
     users.users.ghostship-hooks = {
@@ -145,6 +159,10 @@ in
       isSystemUser = true; uid = 62031; group = "ghostship-github";
       extraGroups = [ "ghostship-github-spool" ];
     };
+    users.groups.ghostship-coordinator.gid = 62033;
+    users.users.ghostship-coordinator = {
+      isSystemUser = true; uid = 62033; group = "ghostship-coordinator";
+    };
 
     ghostship.secretProjections.ghostship-github-coordinator = {
       fileName = "ghostship-github/github.env";
@@ -154,6 +172,15 @@ in
       raw = true;
       fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
       fields.NTFY_PUBLISH_PASSWORD = { unit = "monitoring"; key = "NTFY_PUBLISH_PASSWORD"; };
+    };
+    ghostship.secretProjections.ghostship-go-coordinator = {
+      fileName = "ghostship-github/go-coordinator.env";
+      owner = "ghostship-coordinator";
+      group = "ghostship-coordinator";
+      mode = "0400";
+      raw = true;
+      fields.GITHUB_TOKEN = { unit = "github"; key = "TOKEN"; };
+      fields.GHOSTSHIP_COORDINATOR_TOKEN = { unit = "go-coordinator-auth"; key = "TOKEN"; };
     };
     ghostship.secretProjections.ghostship-hooks = {
       fileName = "ghostship-github/hooks.env";
@@ -170,6 +197,7 @@ in
       # setgid: spooled files stay readable and removable by the coordinator.
       "d ${root}/spool 2770 root ghostship-github-spool -"
       "d ${root}/state 0700 ghostship-github ghostship-github -"
+      "d ${root}/go-state 0700 ghostship-coordinator ghostship-coordinator -"
       # Written by root's ghostship-notify only; the receiver cannot reach it.
       "d ${root}/incidents 2770 root ghostship-github -"
       "d /run/ghostship-secrets/ghostship-github 0750 root ghostship-github -"
@@ -326,6 +354,43 @@ in
           ${pkgs.acl}/bin/setfacl -m d:u:62031:rX {} +
         ${config.ghostship.selfHostedSecrets.renderFor "ghostship-github-coordinator"}/bin/ghostship-secret-project ghostship-github-coordinator
         ${renderOwnerConfig}/bin/ghostship-render-owner-config ${coordinatorConfigTemplate} ${root}/config.json 644
+      '';
+    };
+
+    virtualisation.oci-containers.containers.ghostship-go-coordinator = {
+      image = "ghostship-go-coordinator:${goCoordinatorImage.imageTag}";
+      imageFile = goCoordinatorImage;
+      pull = "never";
+      user = "62033:62033";
+      cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
+      environment = {
+        T3_SERVER_URL = "http://t3code:3773";
+        GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
+      };
+      environmentFiles = [ config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path ];
+      ports = [ "127.0.0.1:18765:18765" ];
+      volumes = [
+        "${root}/go-state:/state:rw,noexec,nosuid,nodev"
+        "${goCoordinatorHeartbeat}:/opt/ghostship-go-coordinator-heartbeat:ro"
+      ];
+      extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=256m" "--cpus=0.5" ];
+    };
+    systemd.services.podman-ghostship-go-coordinator = {
+      after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
+      requires = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
+      preStart = ''
+        set -eu
+        umask 077
+        ${config.ghostship.selfHostedSecrets.renderFor "ghostship-go-coordinator"}/bin/ghostship-secret-project ghostship-go-coordinator
+        token="$(${pkgs.coreutils}/bin/cat /run/ghostship-github/t3-token)"
+        ${pkgs.coreutils}/bin/test -n "$token"
+        env_file=${lib.escapeShellArg config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path}
+        tmp="$env_file.new"
+        ${pkgs.coreutils}/bin/cat "$env_file" > "$tmp"
+        printf 'T3_BRIDGE_TOKEN=%s\n' "$token" >> "$tmp"
+        ${pkgs.coreutils}/bin/chown 62033:62033 "$tmp"
+        ${pkgs.coreutils}/bin/chmod 0400 "$tmp"
+        ${pkgs.coreutils}/bin/mv -f "$tmp" "$env_file"
       '';
     };
   };

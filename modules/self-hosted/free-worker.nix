@@ -185,39 +185,7 @@ in
     ];
     security.apparmor.policies.ghostship-free-worker = {
       state = "complain";
-      profile = ''
-        #include <tunables/global>
-        profile ghostship-free-worker flags=(attach_disconnected,mediate_deleted) {
-          #include <abstractions/base>
-          network inet stream,
-          network inet6 stream,
-          network inet dgram,
-          network inet6 dgram,
-          network unix,
-          userns,
-          capability sys_admin,
-          capability sys_chroot,
-          capability setuid,
-          capability setgid,
-          mount,
-          umount,
-          pivot_root,
-          signal (send,receive) peer=ghostship-free-worker,
-          /nix/store/** mr,
-          /nix/store/*/bin/* ixr,
-          /bin/* ixr,
-          /lib/** mr,
-          /lib64/** mr,
-          /etc/{passwd,group,nsswitch.conf,resolv.conf,hosts,localtime} r,
-          /etc/ssl/** r,
-          /home/worker/** rwk,
-          /home/worker/.local/share/t3code-tools/opencode/releases/2.1.2/** ixr,
-          /tmp/** rwkm,
-          /run/** rwk,
-          /proc/** r,
-          /dev/{null,zero,random,urandom} rw,
-        }
-      '';
+      profile = builtins.readFile ./apparmor/free-worker.profile;
     };
     virtualisation.oci-containers.containers.ghostship-worker = {
       image = "ghostship-worker:free-runtime";
