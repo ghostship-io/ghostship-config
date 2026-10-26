@@ -202,6 +202,21 @@ in
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" githubCoordinator.volumes;
+    # The Go CLI inside the T3 container calls the live coordinator over the
+    # shared network, authenticated by the same secret the service reads. The
+    # token comes only from the projected environment file, never the repo.
+    assert t3codeContainer.environment.GHOSTSHIP_COORDINATOR_URL
+      == "http://ghostship-go-coordinator:18765";
+    assert pkgs.lib.hasInfix
+      "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN"
+      t3codeServerUnitSource;
+    assert !(t3codeContainer.environment ? GHOSTSHIP_COORDINATOR_TOKEN);
+    assert builtins.elem t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.path
+      t3codeContainer.environmentFiles;
+    assert t3codeServiceToken.unit == "go-coordinator-auth";
+    assert t3codeServiceToken.key == "TOKEN";
+    assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_TOKEN.unit == t3codeServiceToken.unit;
+    assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_TOKEN.key == t3codeServiceToken.key;
     assert goCoordinator.imageFile != null;
     assert builtins.elem "127.0.0.1:18765:18765" goCoordinator.ports;
     assert builtins.elem "/var/lib/ghostship-github/go-state:/state:rw,noexec,nosuid,nodev"
@@ -213,7 +228,6 @@ in
         goCoordinator.volumes);
     assert builtins.elem "/run/ghostship-secrets/ghostship-github/go-coordinator.env"
       goCoordinator.environmentFiles;
-    assert t3codeServiceToken.unit == "go-coordinator-auth";
     assert goCoordinatorServiceToken.unit == "go-coordinator-auth";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.unit == "hooks";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.key == "GITHUB_WEBHOOK_SECRET";

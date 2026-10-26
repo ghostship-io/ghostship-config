@@ -14,6 +14,10 @@ let
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
+  # The live Go coordinator's healthz and work endpoints, reached over the
+  # shared ghostship_net by container name. The bearer token the service checks
+  # is GHOSTSHIP_COORDINATOR_TOKEN from the t3code secret projection.
+  goCoordinatorUrl = "http://ghostship-go-coordinator:18765";
   t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
     mkdir -p "$out"
     cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
@@ -360,6 +364,8 @@ in
       # model evidence, not a provider sandbox or another HOME (#403).
       GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence/model-evidence.jsonl";
       GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
+      # The Go CLI's --go operations and review records call the live service.
+      GHOSTSHIP_COORDINATOR_URL = goCoordinatorUrl;
     };
     environmentFiles = [ t3codeSecrets retailStoreEnv ];
   };
