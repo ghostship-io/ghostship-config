@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.384] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to f51ac205; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #631.
+
 ## [3.17.383] - 2026-10-26
 
 - Mount the coordinator token as a file for provider sessions
