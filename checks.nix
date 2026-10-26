@@ -34,6 +34,14 @@ let
   t3codePreStartSeedsTooling = pkgs.lib.hasInfix "ghostship-t3code-tools" t3codePreStart;
   t3codeConfig = self.nixosConfigurations.chill-penguin.config;
   routePolicyPath = "/etc/ghostship/route-policy.json";
+  # Canonical model evidence the served Go selector reads. Each producer
+  # replaces its file atomically, so the mounts are directories.
+  modelRoutingHost = "/var/lib/ghostship-ai-usage";
+  modelRoutingMount = "/run/ghostship-model-routing";
+  modelOutcomesHost = "/srv/apps/t3code/home/.local/state/ghostship/model-evidence";
+  modelOutcomesMount = "/run/ghostship-model-evidence";
+  modelEvidenceAclExec =
+    t3codeConfig.systemd.services.ghostship-model-evidence-acl.serviceConfig.ExecStart;
   t3codeServerUnitSource = builtins.readFile ./packages/t3code/image.nix;
   t3codeContainer = t3codeConfig.virtualisation.oci-containers.containers.t3code;
   t3codeUnit = t3codeConfig.systemd.services.podman-t3code;
@@ -238,6 +246,30 @@ in
       == "ghostship-io/ghostship-agent";
     assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY
       == "ghostship-io/ghostship-agent";
+    # The service must read current model evidence: the canonical routing
+    # snapshot and the T3 outcome ledger are mounted read-only, and the
+    # service is told the file path inside each mount. Without both, healthz
+    # reports every source as unavailable.
+    assert goCoordinator.environment.GHOSTSHIP_MODEL_RANKINGS_PATH
+      == "${modelRoutingMount}/routing.json";
+    assert goCoordinator.environment.GHOSTSHIP_MODEL_EVIDENCE_PATH
+      == "${modelOutcomesMount}/model-evidence.jsonl";
+    assert builtins.elem "${modelRoutingHost}:${modelRoutingMount}:ro,noexec,nosuid,nodev"
+      goCoordinator.volumes;
+    assert builtins.elem "${modelOutcomesHost}:${modelOutcomesMount}:ro,noexec,nosuid,nodev"
+      goCoordinator.volumes;
+    # The outcome ledger is written 0600 by the T3 recorder; the unit grants
+    # this container's uid read through the directory ACL.
+    assert pkgs.lib.hasInfix "u:62033:rx" goCoordinatorUnit.preStart;
+    assert pkgs.lib.hasInfix "d:u:62033:rX" goCoordinatorUnit.preStart;
+    # A rewrite replaces the ledger with a 0600 file, so the startup grant alone
+    # does not survive. The path unit must re-apply it to the current file.
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.Unit
+      == "ghostship-model-evidence-acl.service";
+    assert t3codeConfig.systemd.paths.ghostship-model-evidence-acl.pathConfig.PathModified
+      == modelOutcomesHost;
+    assert pkgs.lib.hasInfix " ${modelOutcomesHost}/model-evidence.jsonl " modelEvidenceAclExec;
+    assert pkgs.lib.hasSuffix "/bin/setfacl" modelEvidenceAclExec;
     assert t3codeConfig.ghostship.apps.hooks.cloudflareBypassPaths
       == [ "/github" "/cloudflare" "/shadow/github/webhook" ];
     assert t3codeConfig.ghostship.apps.hooks.cloudflarePathRoutes == [ {

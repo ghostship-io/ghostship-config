@@ -28,6 +28,26 @@ let
     config.virtualisation.oci-containers.containers.t3code.volumes);
   reviewStore = "${t3Home}/.local/state/ghostship/reviews";
   orchestratorDirectory = "${t3Home}/.local/state/ghostship/orchestrator";
+  # Canonical model evidence for the served Go selector. The AI usage collector
+  # owns the routing snapshot and the T3 home owns the outcome ledger. Each
+  # producer replaces its file atomically, so the service mounts the directory
+  # and reads the named file inside it.
+  modelRouting = {
+    host = "/var/lib/ghostship-ai-usage";
+    mount = "/run/ghostship-model-routing";
+    file = "routing.json";
+  };
+  modelOutcomes = {
+    host = "${t3Home}/.local/state/ghostship/model-evidence";
+    mount = "/run/ghostship-model-evidence";
+    file = "model-evidence.jsonl";
+  };
+  # Each new ledger is created 0600, and a 0600 create resets the inherited ACL
+  # mask to none, which cancels the named read entry. The script applies the
+  # entry and its mask to whichever file the ledger path currently names.
+  modelEvidenceAcl = pkgs.writeShellScript "ghostship-model-evidence-acl" ''
+    exec ${pkgs.bash}/bin/bash ${./model-evidence-acl.sh} "$@"
+  '';
   pointerPython = pkgs.python3.withPackages (ps: [ ps.websockets ]);
   network = "ghostship_github_net";
   # T3 projects per repository (ids from the T3 orchestration shell).
@@ -382,12 +402,16 @@ in
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";
+        GHOSTSHIP_MODEL_RANKINGS_PATH = "${modelRouting.mount}/${modelRouting.file}";
+        GHOSTSHIP_MODEL_EVIDENCE_PATH = "${modelOutcomes.mount}/${modelOutcomes.file}";
       };
       environmentFiles = [ config.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.path ];
       ports = [ "127.0.0.1:18765:18765" ];
       volumes = [
         "${root}/go-state:/state:rw,noexec,nosuid,nodev"
         "${goCoordinatorHeartbeat}:/opt/ghostship-go-coordinator-heartbeat:ro"
+        "${modelRouting.host}:${modelRouting.mount}:ro,noexec,nosuid,nodev"
+        "${modelOutcomes.host}:${modelOutcomes.mount}:ro,noexec,nosuid,nodev"
       ];
       extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=256m" "--cpus=0.5" ];
     };
@@ -412,7 +436,45 @@ in
         ${pkgs.coreutils}/bin/chown 62033:62033 "$tmp"
         ${pkgs.coreutils}/bin/chmod 0400 "$tmp"
         ${pkgs.coreutils}/bin/mv -f "$tmp" "$env_file"
+        # The outcome ledger belongs to the T3 home owner and the recorder
+        # writes it 0600. Create the directory as that owner and grant this
+        # uid read on the directory and on future files.
+        state=${lib.escapeShellArg "${t3Home}/.local/state/ghostship"}
+        evidence=${lib.escapeShellArg modelOutcomes.host}
+        owner=$(${pkgs.coreutils}/bin/stat -c %u:%g "$state" 2>/dev/null || echo 3000:3000)
+        ${pkgs.coreutils}/bin/install -d -m 0750 -o "''${owner%:*}" -g "''${owner#*:}" "$evidence"
+        ${pkgs.acl}/bin/setfacl -m u:62033:rx "$evidence"
+        ${pkgs.acl}/bin/setfacl -m d:u:62033:rX "$evidence"
+        if [ -f "$evidence/${modelOutcomes.file}" ]; then
+          ${pkgs.acl}/bin/setfacl -m u:62033:r,m::r "$evidence/${modelOutcomes.file}"
+        fi
       '';
+    };
+    # A rewrite replaces the ledger with a new 0600 file whose mask cancels the
+    # coordinator's inherited read entry. Re-apply it whenever the directory
+    # changes, so read access does not depend on when the container last started.
+    systemd.services.ghostship-model-evidence-acl = {
+      description = "Keep the served selector's read access on the model evidence ledger";
+      serviceConfig = {
+        Type = "oneshot";
+        UMask = "0077";
+        ExecStart = "${modelEvidenceAcl} ${lib.escapeShellArg "${modelOutcomes.host}/${modelOutcomes.file}"} ${pkgs.acl}/bin/setfacl";
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        ReadWritePaths = [ modelOutcomes.host ];
+        CapabilityBoundingSet = [ "CAP_DAC_READ_SEARCH" "CAP_FOWNER" ];
+        AmbientCapabilities = "";
+      };
+    };
+    systemd.paths.ghostship-model-evidence-acl = {
+      description = "Watch the model evidence ledger for a rewrite";
+      wantedBy = [ "paths.target" ];
+      pathConfig = {
+        PathExists = modelOutcomes.host;
+        PathModified = modelOutcomes.host;
+        Unit = "ghostship-model-evidence-acl.service";
+      };
     };
   };
 }

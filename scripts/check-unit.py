@@ -113,6 +113,7 @@ TESTS = (
     "test_ai_usage_pool_unavailable_reason.py",
     "test_ai_usage_probe_field.py",
     "test_coordinator_review_cli.py",
+    "test_go_coordinator_model_evidence.py",
     "test_t3code_coordinator_client.py",
 )
 

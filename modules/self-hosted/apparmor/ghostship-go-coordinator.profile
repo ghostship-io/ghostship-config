@@ -20,6 +20,11 @@ profile ghostship-go-coordinator flags=(complain,attach_disconnected,mediate_del
   audit /proc/sys/kernel/random/boot_id r,
   /state/ r,
   /state/** rwk,
+  # The routing snapshot and outcome ledger the served selector reads.
+  /run/ghostship-model-routing/ r,
+  /run/ghostship-model-routing/** r,
+  /run/ghostship-model-evidence/ r,
+  /run/ghostship-model-evidence/** r,
   /tmp/ r,
   owner /tmp/** rwk,
   /var/tmp/ r,
