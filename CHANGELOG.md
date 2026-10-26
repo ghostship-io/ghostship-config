@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.371] - 2026-10-26
+
+- T3 acceptance: prove the turn on an admitted subscription route when no free route is available
+
+PR #619.
+
 ## [3.17.370] - 2026-10-26
 
 - Publish the pinned Go coordinator in the Python coordinator runtime and put it on the container `PATH`, so exact-head review requests and FIX verdicts record again.
