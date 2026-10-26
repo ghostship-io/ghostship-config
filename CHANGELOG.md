@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.394] - 2026-10-26
+
+- [P0] Project the orchestrator pointer to the Go coordinator
+
+PR #644.
+
 ## [3.17.393] - 2026-10-26
 
 Fix deploy switches failing with exit 4 when they stop or restart the free
