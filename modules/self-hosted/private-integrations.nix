@@ -452,39 +452,6 @@ in {
     # it on the T3 home store instead of guessing HOME (#403).
     environment.variables.GHOSTSHIP_MODEL_EVIDENCE_PATH =
       "/srv/apps/t3code/home/.local/state/ghostship/model-evidence/model-evidence.jsonl";
-    # The store lives in its own directory so the integrations container never
-    # sees the parent state tree. The recorder writes it 0600 for the T3 home
-    # owner; grant the integrations uid (62020) read on that directory and on
-    # future files via a default ACL, and an explicit mask on the file so the
-    # named entry survives a 0600 recreation.
-    systemd.services.podman-ghostship-private-integrations.preStart = lib.mkBefore ''
-      state=/srv/apps/t3code/home/.local/state/ghostship
-      evidence="$state/model-evidence"
-      legacy="$state/model-evidence.jsonl"
-      owner=$(${pkgs.coreutils}/bin/stat -c %u:%g "$state" 2>/dev/null || echo 3000:3000)
-      if [ -d "$state" ]; then
-        ${pkgs.coreutils}/bin/install -d -m 0750 -o "''${owner%:*}" -g "''${owner#*:}" "$evidence"
-        # One-time move of the pre-#403 store; the T3 recorder then appends here.
-        if [ -f "$legacy" ] && [ ! -e "$evidence/model-evidence.jsonl" ]; then
-          ${pkgs.coreutils}/bin/mv "$legacy" "$evidence/model-evidence.jsonl"
-          ${pkgs.coreutils}/bin/chown "''${owner%:*}:''${owner#*:}" "$evidence/model-evidence.jsonl"
-        elif [ -f "$legacy" ] && [ ! -L "$legacy" ]; then
-          echo "model evidence: legacy store and new store both exist; leaving both" >&2
-        fi
-        # The T3 unit keeps running until its next restart, so its recorder may
-        # still target the legacy path. Point that name at the one store instead
-        # of letting it recreate a second, invisible copy (#403).
-        if [ ! -e "$legacy" ] || [ -L "$legacy" ]; then
-          ${pkgs.coreutils}/bin/ln -sfn model-evidence/model-evidence.jsonl "$legacy"
-          ${pkgs.coreutils}/bin/chown -h "''${owner%:*}:''${owner#*:}" "$legacy"
-        fi
-        ${pkgs.acl}/bin/setfacl -m u:62020:rx "$evidence"
-        ${pkgs.acl}/bin/setfacl -m d:u:62020:rX "$evidence"
-        if [ -f "$evidence/model-evidence.jsonl" ]; then
-          ${pkgs.acl}/bin/setfacl -m u:62020:r,m::r "$evidence/model-evidence.jsonl"
-        fi
-      fi
-    '';
     ghostship.containerRuntimes.ghostship-private-integrations.runtime = runtimes.integrations;
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
       image = "ghostship-private-integrations:${baseImage.imageTag}";
