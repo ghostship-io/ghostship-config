@@ -79,6 +79,19 @@ class InferenceRestartRecoveryTests(unittest.TestCase):
         self.assertEqual(setting(socket, "TriggerLimitIntervalSec"), "0")
         self.assertEqual(setting(socket, "TriggerLimitBurst"), "0")
 
+    def test_stopping_each_inference_unit_signals_only_its_container_process(self):
+        # Issue #639: signalling the host Podman attachment reports exit 1 for
+        # an orderly stop. The stop helper signals the container process and
+        # waits for both, so the real exit status (crash included) survives.
+        bridge = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-bridge =")
+        scheduler = block(BRIDGE_MODULE, "systemd.services.ghostship-inference-scheduler =")
+        self.assertIn("inference-container-stop.py", BRIDGE_MODULE)
+        self.assertIn("${stopHelper} $MAINPID", setting(bridge, "ExecStop"))
+        self.assertIn("ghostship_inference.server", setting(bridge, "ExecStop"))
+        self.assertIn("${stopHelper} $MAINPID", setting(scheduler, "ExecStop"))
+        self.assertIn("ghostship_inference.cli serve", setting(scheduler, "ExecStop"))
+        self.assertNotIn("SuccessExitStatus", BRIDGE_MODULE)
+
 
 if __name__ == "__main__":
     unittest.main()

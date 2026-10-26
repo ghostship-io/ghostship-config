@@ -1,5 +1,12 @@
-"""Stop only the container scheduler, then let its attached Podman client exit."""
+"""Stop one process inside the worker container, then let its Podman client exit.
 
+systemd stops a `podman exec` unit by signalling the Podman attachment, which
+reports exit 1 even for an orderly stop and leaves conmon behind. Signal the
+container process instead and wait for both identities to finish, so a clean
+stop keeps the main process's real exit status (0) and a crash still fails.
+"""
+
+import argparse
 import os
 from pathlib import Path
 import select
@@ -9,12 +16,15 @@ import sys
 import time
 
 
-def stop(podman, main_pid, timeout=890, *, container="t3code"):
+def stop(podman, main_pid, timeout, *, container, module, arguments=()):
     try:
         attachment = os.pidfd_open(main_pid)
     except ProcessLookupError:
         return
     descriptors = [attachment]
+    # The entrypoint execs the interpreter, so argv[0] is python and the
+    # module and its fixed arguments follow.
+    expected = [b"-m", module.encode(), *(argument.encode() for argument in arguments)]
     try:
         output = subprocess.check_output(
             [podman, "top", container, "hpid"], text=True, timeout=10
@@ -33,14 +43,14 @@ def stop(podman, main_pid, timeout=890, *, container="t3code"):
                     argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
                 except FileNotFoundError:
                     continue
-                if argv[1:4] == [b"-m", b"ghostship_inference.cli", b"serve"]:
+                if argv[1 : 1 + len(expected)] == expected:
                     targets.append(descriptor)
                     descriptors.append(descriptor)
             finally:
                 if descriptor not in targets:
                     os.close(descriptor)
         if len(targets) != 1:
-            raise RuntimeError(f"expected one container scheduler, found {len(targets)}")
+            raise RuntimeError(f"expected one {module} process, found {len(targets)}")
         # A pidfd pins process identity even if it exits during inspection.
         try:
             signal.pidfd_send_signal(targets[0], signal.SIGTERM)
@@ -54,7 +64,9 @@ def stop(podman, main_pid, timeout=890, *, container="t3code"):
         while pending:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError("scheduler or Podman attachment did not finish shutdown")
+                raise TimeoutError(
+                    f"{module} or its Podman attachment did not finish shutdown"
+                )
             for descriptor, _ in poller.poll(max(1, int(remaining * 1000))):
                 pending.remove(descriptor)
                 poller.unregister(descriptor)
@@ -63,8 +75,27 @@ def stop(podman, main_pid, timeout=890, *, container="t3code"):
             os.close(descriptor)
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("podman")
+    parser.add_argument("main_pid")
+    parser.add_argument("container")
+    parser.add_argument("timeout", type=float)
+    parser.add_argument("module")
+    parser.add_argument("arguments", nargs="*")
+    args = parser.parse_args(argv)
     # systemd unsets MAINPID if the attachment has already exited. Its recorded
     # exit status still determines the unit result; there is nothing left to stop.
-    if len(sys.argv) > 2 and sys.argv[2]:
-        stop(sys.argv[1], int(sys.argv[2]), container=sys.argv[3] if len(sys.argv) > 3 else "t3code")
+    if args.main_pid:
+        stop(
+            args.podman,
+            int(args.main_pid),
+            args.timeout,
+            container=args.container,
+            module=args.module,
+            arguments=args.arguments,
+        )
+
+
+if __name__ == "__main__":
+    main()

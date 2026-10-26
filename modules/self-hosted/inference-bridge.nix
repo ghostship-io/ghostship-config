@@ -13,6 +13,11 @@ let
   endpoint = pkgs.writeText "inference-server.json" (builtins.toJSON {
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
+  # A clean stop signals the process inside the container and waits for it and
+  # the Podman attachment, so systemd's own stop timeout must outlast that wait.
+  bridgeStopTimeout = 80;
+  schedulerStopTimeout = 890;
+  stopHelper = "${pkgs.python3}/bin/python ${./inference-container-stop.py} ${pkgs.podman}/bin/podman";
   hostRelease = pkgs.writeText "ghostship-managed-host-release.json" (builtins.toJSON {
     version = lib.removeSuffix "\n" (builtins.readFile "${inputs.ghostship-private-agent}/VERSION");
     source = toString inputs.ghostship-private-agent;
@@ -229,7 +234,11 @@ in
         RestartSec = 10;
         # container setup may take up to its own 20-minute start timeout
         TimeoutStartSec = 1500;
-        TimeoutStopSec = 90;
+        TimeoutStopSec = bridgeStopTimeout + 10;
+        # Killing the host Podman attachment reports exit 1 even for an orderly
+        # stop and leaves conmon behind. Signal the container broker and await
+        # both processes instead; a genuine broker crash still fails the unit.
+        ExecStop = "${stopHelper} $MAINPID ghostship-worker ${toString bridgeStopTimeout} ghostship_inference.server";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";
@@ -259,11 +268,11 @@ in
         ];
         Restart = "always";
         RestartSec = 10;
-        TimeoutStopSec = 900;
+        TimeoutStopSec = schedulerStopTimeout + 10;
         # Killing the host Podman attachment reports exit 1 even for an orderly
         # stop. Signal the container scheduler and await both processes instead;
         # genuine scheduler exit 1 must still fail and trigger monitoring.
-        ExecStop = "${pkgs.python3}/bin/python ${./inference-scheduler-stop.py} ${pkgs.podman}/bin/podman $MAINPID ghostship-worker";
+        ExecStop = "${stopHelper} $MAINPID ghostship-worker ${toString schedulerStopTimeout} ghostship_inference.cli serve";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";
