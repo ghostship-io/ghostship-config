@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.366] - 2026-10-26
+
+- Flake: pin ghostship-private-agent to 472311e7; the lock's narHash is the `nix flake prefetch` hash of that revision.
+
+PR #604.
+
 ## [3.17.365] - 2026-10-26
 
 - Pass route policy to T3 provider sessions
