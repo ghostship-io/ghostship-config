@@ -28,6 +28,8 @@ let
     config.virtualisation.oci-containers.containers.t3code.volumes);
   reviewStore = "${t3Home}/.local/state/ghostship/reviews";
   orchestratorDirectory = "${t3Home}/.local/state/ghostship/orchestrator";
+  # The Go coordinator serves this directory; its CLI commands must read it too.
+  goCoordinatorState = "/state";
   # Canonical model evidence for the served Go selector. The AI usage collector
   # owns the routing snapshot and the T3 home owns the outcome ledger. Each
   # producer replaces its file atomically, so the service mounts the directory
@@ -424,8 +426,11 @@ in
       imageFile = goCoordinatorImage;
       pull = "never";
       user = "62033:62033";
-      cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
+      cmd = [ "--state-dir" goCoordinatorState "--listen" "0.0.0.0:18765" ];
       environment = {
+        # CLI commands run in this container (`trace report`, `work status`)
+        # read the serving state, not the empty default shadow directory.
+        GHOSTSHIP_COORDINATOR_STATE = goCoordinatorState;
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";

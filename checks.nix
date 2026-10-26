@@ -352,6 +352,12 @@ in
     # coordinators read the same projection so a rotation has one authority.
     assert goCoordinator.environment.GHOSTSHIP_ORCHESTRATOR_FILE
       == "${orchestratorMount}/pointer.env";
+    # CLI commands in the container (trace report, work status) default to
+    # GHOSTSHIP_COORDINATOR_STATE; it must name the directory the service
+    # serves, or they read an empty shadow and report zero attempts.
+    assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_STATE
+      == builtins.elemAt goCoordinator.cmd
+        (pkgs.lib.lists.findFirstIndex (arg: arg == "--state-dir") null goCoordinator.cmd + 1);
     assert builtins.elem "${orchestratorHost}:${orchestratorMount}:ro,noexec,nosuid,nodev"
       goCoordinator.volumes;
     assert builtins.elem "${orchestratorHost}:${orchestratorMount}:ro,noexec,nosuid,nodev"
