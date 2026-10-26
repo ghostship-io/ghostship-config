@@ -433,6 +433,10 @@ in
       JQ_BIN = "${pkgs.jq}/bin/jq";
     };
     serviceConfig.TimeoutStopSec = lib.mkForce "210s";
+    # A stop for a new image ends the attached `podman run` with 130 after
+    # the container exits cleanly. Counting it as a failure fires OnFailure
+    # and fails the switch (#652); any other exit status still fails.
+    serviceConfig.SuccessExitStatus = "130";
     serviceConfig.ExecStartPost = "-${lib.getExe t3codeReceiptSelfCheck}";
     preStart = lib.mkAfter ''
       set -eu

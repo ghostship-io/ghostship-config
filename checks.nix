@@ -409,6 +409,9 @@ in
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;
     assert t3codePreStartSeedsTooling;
     assert !(builtins.elem "podman-t3code" t3codeRestartedBySwitch);
+    # Issue #652: only the clean-stop status of the attached `podman run` is
+    # accepted; a crash or a failed start still fails the unit.
+    assert t3codeUnit.serviceConfig.SuccessExitStatus == "130";
     # Issue #611: a switch restarting any inference unit must recover without
     # a manual reset. The bridge/scheduler retry forever, and no dependent
     # carries a Requires edge that would deactivate it with its dependency.
@@ -421,6 +424,9 @@ in
     assert builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.after;
     assert builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.wants;
     assert !(builtins.elem "podman-ghostship-worker.service" inferenceBridgeUnit.requires);
+    # Issue #651: the bridge publishes under the managed refresh lock, so an
+    # agent-bump switch must start it only after the release refresh.
+    assert builtins.elem "ghostship-managed-agent-release-refresh.service" inferenceBridgeUnit.after;
     # Issue #639: a switch stop must signal the container process and wait for
     # it, never accept an arbitrary failure exit status from Podman. The braced
     # MAINPID keeps its (possibly empty) argument; the unbraced form is dropped.
