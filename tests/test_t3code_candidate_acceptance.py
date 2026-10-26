@@ -635,6 +635,60 @@ class CandidateAcceptanceTest(unittest.TestCase):
                   if any(item.endswith("provider-turn-probe.py") for item in call)]
         self.assertEqual(proved, ["opencode-free/nvidia/first", "opencode-free/nvidia/fallback"])
 
+    def subscription_rows(self, *names):
+        return [{"provider": provider, "model": model, "billing": "subscription",
+                 "execution": "t3", "available": True}
+                for provider, model in (name.split("/", 1) for name in names)]
+
+    def probe_calls(self, calls):
+        return [call for call in calls if any(item.endswith("provider-turn-probe.py") for item in call)]
+
+    def test_provider_turn_tries_the_next_admitted_route_after_an_api_error(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        rows = self.subscription_rows("ollama/deepseek-v4.1-flash:1017", "commandCode/deepseek/deepseek-v4.1-flash")
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if any(item.endswith("provider-turn-probe.py") for item in args):
+                if "ollama/deepseek-v4.1-flash:1017" in args:
+                    return Mock(returncode=1, stderr="", stdout='{"status":"error","message":"provider api"}')
+                return Mock(returncode=0, stdout="passed")
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": rows[0]}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": rows}}))
+            return Mock(returncode=0, stdout="present")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env, tooling_path="/nix/store/test-agent",
+            ), "commandCode/deepseek/deepseek-v4.1-flash")
+        self.assertEqual(len(self.probe_calls(calls)), 2)
+
+    def test_provider_turn_probes_at_most_three_routes_then_fails(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        rows = self.subscription_rows("a/one", "b/two", "c/three", "d/four", "e/five")
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if any(item.endswith("provider-turn-probe.py") for item in args):
+                return Mock(returncode=1, stderr="", stdout='{"status":"error","message":"provider api"}')
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": rows[0]}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": rows}}))
+            return Mock(returncode=0, stdout="present")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, "no live picker route proved a turn"):
+                acceptance.check_provider_turn(["podman"], "candidate", provider_env,
+                                               tooling_path="/nix/store/test-agent")
+        self.assertEqual(len(self.probe_calls(calls)), acceptance.MAX_ACCEPTANCE_ROUTES)
+
     def test_provider_probe_carries_safe_model_unavailable_category(self):
         result = {"outcome": "execution", "detail": "model unavailable: private provider response"}
         self.assertEqual(provider_probe.safe_failure_code(result), "model-unavailable")
