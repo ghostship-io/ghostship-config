@@ -153,17 +153,17 @@
     "ghostship-native-agent": {
       "flake": false,
       "locked": {
-        "lastModified": 1793039547,
-        "narHash": "sha256-/mkvD4fsu5JRFMTP4wJ6vtD2gR6qHi4U1H9bkfMeYro=",
+        "lastModified": 1793043722,
+        "narHash": "sha256-GR5IrG4eXZmx7rk1pw7ajpi5/7J+Eaw+D3j7gjYQguM=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "e6f0029cba29f09a69eeea7bc12f54af8ff7a906",
+        "rev": "50353d957dd2a987201c4d338b10a2a6f301038b",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "e6f0029cba29f09a69eeea7bc12f54af8ff7a906",
+        "rev": "50353d957dd2a987201c4d338b10a2a6f301038b",
         "type": "github"
       }
     },
