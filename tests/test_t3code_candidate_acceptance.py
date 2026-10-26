@@ -241,6 +241,25 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o444)
         self.assertEqual(target.stat().st_uid, os.getuid())
 
+    def test_candidate_model_routing_accepts_partial_without_failed_sources(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        source.write_text(json.dumps({
+            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+            "coverage": {"sources_total": 13, "sources_ok": 12, "sources_partial": 1, "sources_failed": 0},
+            "candidates": [],
+        }))
+        target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        self.assertEqual(target.read_text(), source.read_text())
+        for coverage in ({"sources_failed": 1}, {}, None):
+            source.write_text(json.dumps({
+                "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+                "coverage": coverage, "candidates": [],
+            }))
+            with self.assertRaisesRegex(RuntimeError, "failed sources"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+
     def test_candidate_stages_missing_shared_agent_store_paths_from_production(self):
         self.add_installed_toolchain()
         agent_wrapper = self.home / ".local/state/t3code-shared-agents/bin/agent"
