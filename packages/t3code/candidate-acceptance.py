@@ -837,7 +837,10 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     if not tooling_path:
         raise RuntimeError("provider_turn failed: candidate agent tools path unavailable")
     failures = []
-    for route in routes:
+    # A route-level failure (provider API error, quota, unavailable model) says
+    # nothing about the image: try the next admitted route. An image defect fails
+    # every route. Bounded so a broken image still fails fast (config#616).
+    for route in routes[:MAX_ACCEPTANCE_ROUTES]:
         proof = candidate_agent_command(
             engine, name, "agent", "run", "--", "python3",
             "/run/t3code-candidate-inputs/provider-turn-probe.py",
@@ -849,8 +852,6 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         category = candidate_error_category(proof)
         summary = candidate_error_summary(proof)
         failures.append(f"{route}:{category}-{summary}")
-        if "model-unavailable" not in summary.lower():
-            break
     raise RuntimeError(
         "provider_turn failed: no live picker route proved a turn ("
         + ",".join(failures[:8])
@@ -870,6 +871,8 @@ def valid_t3_free_route(selection):
         and selection.get("available") is True
     )
 
+
+MAX_ACCEPTANCE_ROUTES = 3
 
 # Protected premium allowances never pay for an image acceptance probe.
 PROTECTED_ACCEPTANCE_PROVIDERS = frozenset({"codex", "claude", "claudeAgent"})
