@@ -36,4 +36,13 @@ assert fails "Cloudflare Access path bypasses require recorded explicit user app
 assert fails "Cloudflare Access path bypasses require recorded explicit user approval and an AppArmor profile." {
   ghostship.apps.hooks.apparmorProfile = lib.mkForce null;
 };
+assert fails "Cloudflare path routes require an approved exact-path Access bypass." {
+  ghostship.apps.hooks.cloudflareBypassPaths = lib.mkForce [ "/github" "/cloudflare" ];
+};
+assert fails "Cloudflare Tunnel path routes must be unique per hostname." {
+  ghostship.apps.hooks.cloudflarePathRoutes = lib.mkForce [
+    { path = "/shadow/github/webhook"; origin = "http://go-one:18765"; }
+    { path = "/shadow/github/webhook"; origin = "http://go-two:18765"; }
+  ];
+};
 true

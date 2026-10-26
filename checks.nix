@@ -47,6 +47,7 @@ let
     t3codeConfig.ghostship.selfHostedSecrets.projections.t3code.fields.GHOSTSHIP_COORDINATOR_TOKEN;
   goCoordinatorServiceToken =
     t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields.GHOSTSHIP_COORDINATOR_TOKEN;
+  goCoordinatorSecrets = t3codeConfig.ghostship.selfHostedSecrets.projections.ghostship-go-coordinator.fields;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
@@ -191,12 +192,24 @@ in
       goCoordinator.environmentFiles;
     assert t3codeServiceToken.unit == "go-coordinator-auth";
     assert goCoordinatorServiceToken.unit == "go-coordinator-auth";
+    assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.unit == "hooks";
+    assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.key == "GITHUB_WEBHOOK_SECRET";
     assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
     assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES
       == "ghostship-io/ghostship-agent";
+    assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY
+      == "ghostship-io/ghostship-agent";
+    assert t3codeConfig.ghostship.apps.hooks.cloudflareBypassPaths
+      == [ "/github" "/cloudflare" "/shadow/github/webhook" ];
+    assert t3codeConfig.ghostship.apps.hooks.cloudflarePathRoutes == [ {
+      path = "/shadow/github/webhook";
+      origin = "http://ghostship-go-coordinator:18765";
+    } ];
     assert builtins.elem "ghostship-github-t3-token.service" goCoordinatorUnit.requires;
     assert pkgs.lib.hasInfix "/run/ghostship-github/t3-token" goCoordinatorUnit.preStart;
     assert pkgs.lib.hasInfix "T3_BRIDGE_TOKEN" goCoordinatorUnit.preStart;
+    assert pkgs.lib.hasInfix "GHOSTSHIP_COORDINATOR_GITHUB_OWNER_LOGIN" goCoordinatorUnit.preStart;
+    assert goCoordinatorUnit.serviceConfig.EnvironmentFile == [ "/etc/ghostship/owner-identity.env" ];
     assert builtins.elem
       "/etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro"
       t3codeConfig.virtualisation.oci-containers.containers.t3code.volumes;

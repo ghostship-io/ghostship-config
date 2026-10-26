@@ -417,3 +417,51 @@ class AccessTests(unittest.TestCase):
             [identity_policy()],
         )
         api.request.assert_not_called()
+
+
+class TunnelPathRouteTests(unittest.TestCase):
+    def test_exact_path_routes_before_hostname_fallback_and_is_idempotent(self):
+        routes = {
+            "hooks.ghostship.io": {
+                "origin": "http://ghostship-hooks:8080",
+                "cloudflarePathRoutes": [{
+                    "path": "/shadow/github/webhook",
+                    "origin": "http://ghostship-go-coordinator:18765",
+                }],
+            }
+        }
+        ingress = [
+            {"hostname": "hooks.ghostship.io", "service": "http://ghostship-hooks:8080"},
+            {"service": "http_status:404"},
+        ]
+        result = cloudflare.merge_ingress({"ingress": ingress}, routes, [])
+        self.assertEqual(result["ingress"][0], {
+            "hostname": "hooks.ghostship.io",
+            "path": r"^/shadow/github/webhook$",
+            "service": "http://ghostship-go-coordinator:18765",
+        })
+        self.assertEqual(result["ingress"][1], ingress[0])
+        result["ingress"][0]["originRequest"] = {"connectTimeout": "30s"}
+        repeated = cloudflare.merge_ingress(result, routes, [])
+        self.assertEqual(repeated, result)
+
+    def test_only_previous_managed_path_rules_can_be_removed(self):
+        previous = {
+            "hosts": ["hooks.ghostship.io"],
+            "paths": [r"hooks.ghostship.io^/shadow/github/webhook$"],
+        }
+        old = {
+            "ingress": [
+                {"hostname": "hooks.ghostship.io", "path": r"^/shadow/github/webhook$",
+                 "service": "http://ghostship-go-coordinator:18765"},
+                {"hostname": "hooks.ghostship.io", "service": "http://ghostship-hooks:8080"},
+                {"service": "http_status:404"},
+            ]
+        }
+        routes = {"hooks.ghostship.io": {"origin": "http://ghostship-hooks:8080"}}
+        result = cloudflare.merge_ingress(old, routes, previous)
+        self.assertEqual(result["ingress"], [old["ingress"][1], old["ingress"][2]])
+
+        unowned = copy.deepcopy(old)
+        with self.assertRaisesRegex(ValueError, "Ambiguous managed tunnel path"):
+            cloudflare.merge_ingress(unowned, routes, {"hosts": ["hooks.ghostship.io"], "paths": []})
