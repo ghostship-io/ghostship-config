@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.367] - 2026-10-26
+
+- Route policy: allow idle DeepSeek Flash, Grok and the Codex orchestrator successor
+
+PR #609.
+
 ## [3.17.366] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 472311e7; the lock's narHash is the `nix flake prefetch` hash of that revision.
