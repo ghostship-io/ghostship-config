@@ -66,7 +66,13 @@ if [[ $1 == inspect && $2 == t3code ]]; then
       [[ ${RUNNING_CONTAINER:-1} == 1 ]] || exit 1
       printf 'true %s\n' "$RUNNING_IMAGE_ID"
       ;;
-    *) printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" ;;
+    *)
+      if [[ -r "$LIVE_IMAGE_FILE" ]]; then
+        printf 'container-id %s started healthy\n' "$(cat "$LIVE_IMAGE_FILE")"
+      else
+        printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
+      fi
+      ;;
   esac
 elif [[ $1 == load ]]; then
   printf '%s\n' image-load >> "$EVENTS"
@@ -83,6 +89,9 @@ elif [[ $1 == exec && $2 == t3code && $3 == readlink ]]; then
   printf '%s\n' "$TOOLING_PATH"
 elif [[ $1 == exec && $2 == t3code && $3 == stat ]]; then
   stat -Lc '%i' "$PROVIDER_SECRETS_FILE"
+elif [[ $1 == exec && $2 == t3code && $3 == sha256sum ]]; then
+  # The running container's provider secret: stale unless a case says otherwise.
+  sha256sum "$LIVE_SECRET_FILE"
 fi
 SH
 cat > "$tmp/bin/systemctl" <<'SH'
@@ -90,6 +99,7 @@ cat > "$tmp/bin/systemctl" <<'SH'
 set -euo pipefail
 if [[ $1 == restart && $2 == podman-t3code.service ]]; then
   printf '%s\n' restart >> "$EVENTS"
+  rm -f "$LIVE_IMAGE_FILE"
 elif [[ $1 == is-active ]]; then
   exit 0
 fi
@@ -133,6 +143,8 @@ export HEALTH_WAIT_BUDGET_SECONDS=390 HEALTH_WAIT_CLOCK_BIN="$tmp/bin/health-clo
 export HEALTH_WAIT_SLEEP_BIN="$tmp/bin/health-sleep" HEALTH_CLOCK_FILE="$tmp/health-clock"
 export HEALTHY_AFTER_SECONDS=0
 printf '0\n' > "$HEALTH_CLOCK_FILE"
+export LIVE_IMAGE_FILE="$tmp/live-image" LIVE_SECRET_FILE="$tmp/live-secret"
+printf 'provider=stale\n' > "$LIVE_SECRET_FILE"
 
 # Model the currently running image from the host before this guard existed.
 # This keeps the regular candidate-flow proof separate from the no-receipt
@@ -384,7 +396,44 @@ grep -q 'no T3 container is running and no accepted alias exists' "$tmp/no-runni
 [[ ! -e "$ACCEPTED_POINTER_FILE" ]]
 [[ ! -s "$EVENTS" ]]
 
+# A re-run of acceptance for the image T3 already runs, with the same agent
+# and provider secret content (only the secret's inode is new after a switch),
+# records the PASS and does not restart T3. A changed image, or changed secret
+# content, still restarts once after PASS (#667).
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/unchanged-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+unset SUPERSEDE_TO
+rm -f "$tmp/state/failed-candidate"
+ledger_before=$(wc -l < "$tmp/ledger.jsonl")
+unchanged_run() {
+  : > "$EVENTS"
+  export DEPLOYMENT_ID=$1
+  printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+  printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+  printf '0\n' > "$HEALTH_CLOCK_FILE"
+  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/$1.log" 2>&1
+  [[ $(cat "$STATE_DIR/applied") == "$1" ]]
+  grep -q candidate-accepted "$EVENTS"
+}
+cp "$PROVIDER_SECRETS_FILE" "$LIVE_SECRET_FILE"
+unchanged_run deployment-unchanged
+grep -q 'PASS recorded, no restart' "$tmp/deployment-unchanged.log"
+! grep -q restart "$EVENTS"
+[[ $(wc -l < "$tmp/ledger.jsonl") == "$ledger_before" ]]
+[[ $(jq -r .deployment_id "$STATE_DIR/deployed-inputs.json") == deployment-unchanged ]]
+printf 'sha256:%s\n' "$(printf 'older-image' | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
+unchanged_run deployment-new-image
+[[ $(grep -c '^restart$' "$EVENTS") == 1 ]]
+! grep -q 'no restart' "$tmp/deployment-new-image.log"
+[[ $(wc -l < "$tmp/ledger.jsonl") == $((ledger_before + 1)) ]]
+printf 'provider=rotated\n' > "$LIVE_SECRET_FILE"
+unchanged_run deployment-new-secret
+[[ $(grep -c '^restart$' "$EVENTS") == 1 ]]
+[[ $(wc -l < "$tmp/ledger.jsonl") == $((ledger_before + 2)) ]]
+
 echo 'V1 shell proof: candidate acceptance PASS precedes the immediate restart.'
+echo 'Unchanged-image proof: a re-run of acceptance for the running image and inputs records the PASS without restarting T3.'
 echo 'Receipt guard demonstration: absent and mismatched receipts refuse tag movement and restart.'
 echo 'Upgrade proof: an existing matching PASS receipt initializes a missing accepted alias without rerunning checks or restarting.'
 echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, and skipped candidate load/restart.'

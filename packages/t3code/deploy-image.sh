@@ -270,6 +270,23 @@ container_identity() {
     '{id:$id,image:$image,started_at:$started_at,health:$health}'
 }
 
+# record_applied AGENT_PATH SECRET_INODE marks this deployment and its inputs
+# applied, with what the running container verifiably uses.
+record_applied() {
+  printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied.tmp"
+  mv -f "$STATE_DIR/applied.tmp" "$STATE_DIR/applied"
+  printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
+  mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
+  "$JQ_BIN" -cn --arg deployment_id "$DEPLOYMENT_ID" --arg agent_revision "$AGENT_REVISION" \
+    --arg agent_path "$1" --arg provider_secret_inode "$2" \
+    --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{deployment_id:$deployment_id,agent_revision:$agent_revision,agent_path:$agent_path,
+      provider_secret_inode:$provider_secret_inode,verified:true,verified_at:$verified_at}' \
+    > "$STATE_DIR/deployed-inputs.json.tmp"
+  chmod 0600 "$STATE_DIR/deployed-inputs.json.tmp"
+  mv -f "$STATE_DIR/deployed-inputs.json.tmp" "$STATE_DIR/deployed-inputs.json"
+}
+
 pre=$(container_identity)
 # Activation writes desired under the same lock, so a completed acceptance
 # cannot restart a unit for a newer image using this image's receipt.
@@ -278,6 +295,28 @@ current_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
 if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_inputs" ]]; then
   echo "T3 deployment request was superseded before restart; refusing stale image" >&2
   exit 0
+fi
+
+# A re-run of acceptance may find T3 already running exactly what it accepted:
+# every activation re-decrypts the provider secret to a new inode, which
+# changes the desired inputs without changing anything T3 uses. Restart only
+# when the image, the agent or the secret content differs; a restart onto the
+# same inputs would only end every session. The digests stay in memory.
+pre_image=$(printf '%s' "$pre" | "$JQ_BIN" -r '.image // empty')
+if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
+  running_agent=$("$PODMAN_BIN" exec t3code readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current" 2>/dev/null || true)
+  running_secret=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  desired_secret=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
+  if [[ "$running_agent" == "$TOOLING_PATH" && -n "$running_secret" && "$running_secret" == "$desired_secret" ]]; then
+    accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
+    if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
+      promote_accepted_alias
+    fi
+    running_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
+    record_applied "$running_agent" "$running_secret_inode"
+    echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
+    exit 0
+  fi
 fi
 
 # Only this receipt-checked path may move the unit's stable image alias. The
@@ -328,18 +367,7 @@ install -d -m 0700 "$(dirname "$RESTART_LEDGER")"
 printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
-printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied.tmp"
-mv -f "$STATE_DIR/applied.tmp" "$STATE_DIR/applied"
-printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
-mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
-"$JQ_BIN" -cn --arg deployment_id "$DEPLOYMENT_ID" --arg agent_revision "$AGENT_REVISION" \
-  --arg agent_path "$live_agent" --arg provider_secret_inode "$live_secret_inode" \
-  --arg verified_at "$now" \
-  '{deployment_id:$deployment_id,agent_revision:$agent_revision,agent_path:$agent_path,
-    provider_secret_inode:$provider_secret_inode,verified:true,verified_at:$verified_at}' \
-  > "$STATE_DIR/deployed-inputs.json.tmp"
-chmod 0600 "$STATE_DIR/deployed-inputs.json.tmp"
-mv -f "$STATE_DIR/deployed-inputs.json.tmp" "$STATE_DIR/deployed-inputs.json"
+record_applied "$live_agent" "$live_secret_inode"
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
 printf '%s\n' "action=candidate-accepted-restart deployment=$DEPLOYMENT_ID" >> "$AUDIT_LOG"
 chmod 0600 "$AUDIT_LOG"
