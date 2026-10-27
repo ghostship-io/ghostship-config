@@ -59,12 +59,13 @@ class T3RoutePolicyTests(unittest.TestCase):
         worker_block = T3CODE.split("worker = {", 1)[1].split("orchestrator = {", 1)[0]
         self.assertNotIn('model = "gpt-6.1-sol"', worker_block)
 
-    def test_orchestrator_routes_are_claude_opus_then_codex_successor(self):
+    def test_orchestrator_routes_allow_terra_as_codex_successor(self):
         orchestrator_block = T3CODE.split("orchestrator = {", 1)[1].split("reviewer.deny", 1)[0]
         self.assertIn('model = "claude-opus-5-5"', orchestrator_block)
-        self.assertIn('model = "gpt-6.1-sol"', orchestrator_block)
-        self.assertIn('rule = "owner: Codex succeeds Claude when Claude inference runs out"', orchestrator_block)
-        self.assertIn('expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ]',
+        self.assertIn('model = "gpt-6.1-terra"', orchestrator_block)
+        self.assertNotIn('model = "gpt-6.1-sol"', orchestrator_block)
+        self.assertIn('rule = "owner: Terra is the high-intelligence Codex orchestrator route"', orchestrator_block)
+        self.assertIn('expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-terra" ]',
                       (ROOT / "checks.nix").read_text())
 
 

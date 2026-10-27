@@ -131,8 +131,8 @@ let
             }
             {
               provider = "codex";
-              model = "gpt-6.1-sol";
-              rule = "owner: Codex succeeds Claude when Claude inference runs out";
+              model = "gpt-6.1-terra";
+              rule = "owner: Terra is the high-intelligence Codex orchestrator route";
             }
           ];
           deny = [

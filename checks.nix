@@ -155,7 +155,7 @@ let
   ]
   ++ expectedFreeRoutes;
   actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
-  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ];
+  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-terra" ];
   actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
   fastBillingDenied = role: builtins.any
     (entry: entry.provider == "*" && entry.model == "*"
