@@ -130,6 +130,9 @@
           # CI needs no downloaded browsers or agent-maintenance tools.
           ci = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              # Its normal Nix check phase runs the small native Go/process
+              # suite; unchanged rollout sources reuse the cached package.
+              (import ./packages/mcp-rollout { inherit pkgs; })
               git
               bash
               coreutils

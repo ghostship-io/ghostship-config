@@ -85,8 +85,10 @@ proof directory includes actual stage/file effects, execution timings and the
 unit plus instrumented-running-binary coverage union; development fixtures are
 not installed acceptance. Run existing focused configuration checks with
 `nix develop .#ci -c python3 -m unittest tests.test_mcp_runtime_entrypoint tests.test_private_integrations_desktop`.
-The normal fast repository checks build `checks.<system>.mcp-rollout`, whose
-Nix check phase runs the native tests. Build the exact package before release.
+The CI dev shell includes the same tested native package exposed by
+`checks.<system>.mcp-rollout`; its normal Nix check phase runs the native tests.
+Unchanged package sources reuse the normal cache. The fast check script does
+not add a fleet evaluation or an inner Nix invocation.
 
 Rollback reverts this unit/tooling change; it does not roll back an independently
 published plugin or a healthy native MCP server. Keep the existing plugin
