@@ -160,6 +160,9 @@ QUOTA_COVERAGE = tuple(
     (provider, QUOTA_SOURCE_OVERRIDES.get(provider, source))
     for provider, source in COVERAGE
 )
+QUOTA_PROVIDERS_BY_SOURCE: dict[str, list[str]] = {}
+for provider, source in QUOTA_COVERAGE:
+    QUOTA_PROVIDERS_BY_SOURCE.setdefault(source, []).append(provider)
 
 METRIC_HELP = {
     "ghostship_ai_source_success": "Whether the last collection of this source succeeded.",
@@ -1953,6 +1956,7 @@ def build_snapshot(
         sources.append(
             {
                 "id": result.source,
+                "quota_providers": sorted(QUOTA_PROVIDERS_BY_SOURCE.get(result.source, [])),
                 "status": result.status,
                 "reason": codes.reason(result.reason),
                 "observed_at": (

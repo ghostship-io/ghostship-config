@@ -22,6 +22,14 @@ main = importlib.util.module_from_spec(spec)
 sys.modules["ai_usage_privacy"] = main
 spec.loader.exec_module(main)
 
+REPO = ROOT.parents[3]
+acceptance_spec = importlib.util.spec_from_file_location(
+    "ai_usage_privacy_candidate_acceptance",
+    REPO / "packages/t3code/candidate-acceptance.py",
+)
+acceptance = importlib.util.module_from_spec(acceptance_spec)
+acceptance_spec.loader.exec_module(acceptance)
+
 spec = importlib.util.spec_from_file_location("ai_usage_privacy_providers", ROOT / "providers.py")
 providers = importlib.util.module_from_spec(spec)
 sys.modules["ai_usage_privacy_providers"] = providers
@@ -83,6 +91,20 @@ class PrivacyTests(unittest.TestCase):
         for sentinel in SENTINELS:
             self.assertNotIn(sentinel, text)
         self.assertIn(snapshot["coverage"]["sources"][0]["reason"], {"http_error", "unknown"})
+
+    def test_source_coverage_names_only_its_quota_accounts(self):
+        from metrics import SourceResult
+
+        snapshot = main.build_snapshot(
+            [SourceResult(source="claude_usage", status="error", reason="http_error")],
+            [], {}, 1000.0,
+        )
+        source = snapshot["coverage"]["sources"][0]
+        self.assertEqual(source["id"], "claude_usage")
+        self.assertEqual(source["quota_providers"], ["claude"])
+
+    def test_acceptance_source_map_matches_collector_quota_coverage(self):
+        self.assertEqual(acceptance.QUOTA_SOURCE_PROVIDERS, main.QUOTA_PROVIDERS_BY_SOURCE)
 
     def test_the_metrics_keep_the_message(self):
         from metrics import MetricWriter

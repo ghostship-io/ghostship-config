@@ -32,6 +32,19 @@ PROVIDER_ENV = (
 )
 T3_FREE_PROVIDER = "opencode-free"
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
+# The quota readers used by the collector, retained here to classify a
+# snapshot produced just before the new source annotations are installed.
+# New snapshots carry the same mapping on each source row.
+QUOTA_SOURCE_PROVIDERS = {
+    "t3": ["codex", "cursor"],
+    "claude_usage": ["claude"],
+    "grok": ["grok"],
+    "antigravity": ["antigravity"],
+    "opencode-go": ["opencode-go"],
+    "openrouter": ["openrouter"],
+    "ollama": ["ollama"],
+    "t3_usage": ["opencode", "pi"],
+}
 ALLOWED_CANDIDATE_MOUNTS = {
     "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
     "/etc/ghostship/approved-free-workers.json": "/etc/ghostship/approved-free-workers.json",
@@ -233,17 +246,102 @@ def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
             or document.get("schema_version") != 1
             or not isinstance(document.get("partial"), bool)):
         raise PreconditionError("live model routing snapshot is invalid")
-    # A partial snapshot still carries the full catalog; one unread quota
-    # source must not block every deploy. A failed source still does.
-    coverage = document.get("coverage")
-    failed = coverage.get("sources_failed") if isinstance(coverage, dict) else None
-    if document["partial"] and (not isinstance(failed, int) or isinstance(failed, bool) or failed != 0):
-        raise PreconditionError("live model routing snapshot has failed sources")
+    _validate_routing_source_coverage(document)
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)
     os.chown(target, candidate_uid, candidate_uid)
     return target
+
+
+def _validate_routing_source_coverage(document):
+    """Reject incomplete evidence only when it affects a selected route.
+
+    The collector annotates quota-source rows with the provider accounts they
+    cover. A failed reading for an unselected provider remains unavailable in
+    the copied snapshot, while a selected route cannot rely on that reading.
+    Unmapped failures fail closed because their scope is unknown.
+    """
+    coverage = document.get("coverage")
+    if not isinstance(coverage, dict):
+        if document["partial"]:
+            raise PreconditionError("live model routing coverage is unavailable")
+        return
+
+    failed_count = coverage.get("sources_failed")
+    if type(failed_count) is not int or failed_count < 0:
+        raise PreconditionError("live model routing failed-source count is invalid")
+    source_rows = coverage.get("sources")
+    if not isinstance(source_rows, list):
+        if document["partial"] or failed_count:
+            raise PreconditionError("live model routing source evidence is unavailable")
+        return
+
+    ids = set()
+    incomplete = []
+    failed = 0
+    partial = 0
+    ok = 0
+    for row in source_rows:
+        if not isinstance(row, dict):
+            raise PreconditionError("live model routing source evidence is malformed")
+        source_id = row.get("id")
+        status = row.get("status")
+        if not isinstance(source_id, str) or not source_id or source_id in ids:
+            raise PreconditionError("live model routing source identity is invalid")
+        if not isinstance(status, str) or not status:
+            raise PreconditionError("live model routing source status is invalid")
+        ids.add(source_id)
+        if status == "ok":
+            ok += 1
+        else:
+            incomplete.append(row)
+            if status == "partial":
+                partial += 1
+            else:
+                failed += 1
+
+    if failed_count != failed:
+        raise PreconditionError("live model routing failed-source count does not match evidence")
+    for name, actual in (("sources_total", len(source_rows)),
+                         ("sources_ok", ok),
+                         ("sources_partial", partial)):
+        count = coverage.get(name)
+        if count is not None and (type(count) is not int or count != actual):
+            raise PreconditionError(f"live model routing {name} count does not match evidence")
+    if document["partial"] != bool(incomplete):
+        raise PreconditionError("live model routing partial flag does not match source evidence")
+    if not incomplete:
+        return
+
+    model_selection = document.get("model_selection")
+    providers = model_selection.get("providers") if isinstance(model_selection, dict) else None
+    if not isinstance(providers, dict):
+        raise PreconditionError("live model routing selections are unavailable")
+    # Candidate acceptance proves a worker/code turn. An available
+    # orchestrator route (for example a UI-only Claude route) is not a source
+    # precondition for that unrelated worker turn.
+    selected_providers = set()
+    for provider, selection in providers.items():
+        selected = selection.get("selected") if isinstance(selection, dict) else None
+        if (not isinstance(provider, str) or not provider or not isinstance(selected, dict)
+                or "worker" not in selected):
+            raise PreconditionError("live model routing selections are malformed")
+        worker_route = selected.get("worker")
+        if worker_route is not None and (not isinstance(worker_route, dict) or not worker_route):
+            raise PreconditionError("live model routing selections are malformed")
+        if worker_route is not None:
+            selected_providers.add(provider)
+
+    for row in incomplete:
+        source_id = row["id"]
+        known_providers = QUOTA_SOURCE_PROVIDERS.get(source_id)
+        quota_providers = row.get("quota_providers")
+        if (not isinstance(known_providers, list) or not known_providers
+                or (quota_providers is not None and quota_providers != known_providers)):
+            raise PreconditionError("live model routing has an unclassified incomplete source")
+        if selected_providers.intersection(known_providers):
+            raise PreconditionError("live model routing has an incomplete source for a selected route")
 
 
 def resolve_container_home_path(source_home, path, container_home):

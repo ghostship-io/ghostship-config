@@ -242,24 +242,83 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o444)
         self.assertEqual(target.stat().st_uid, os.getuid())
 
-    def test_candidate_model_routing_accepts_partial_without_failed_sources(self):
+    def test_candidate_model_routing_accepts_failure_for_unselected_provider_as_unavailable(self):
         candidate_tmp = self.root / "candidate"
         candidate_tmp.mkdir()
         source = self.root / "routing.json"
-        source.write_text(json.dumps({
+        document = {
             "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
-            "coverage": {"sources_total": 13, "sources_ok": 12, "sources_partial": 1, "sources_failed": 0},
+            "coverage": {
+                "sources_total": 1, "sources_ok": 0, "sources_partial": 0, "sources_failed": 1,
+                "sources": [{"id": "claude_usage", "status": "error", "reason": "http_error",
+                             "quota_providers": ["claude"]}],
+            },
+            "model_selection": {"providers": {
+                "claude": {"selected": {"worker": None,
+                                         "orchestrator": {"instanceId": "claude", "model": "sonnet"}}},
+                "ollama": {"selected": {"worker": {"instanceId": "opencode", "model": "m"},
+                                         "orchestrator": None}},
+            }},
+            "policy": {"model_selection": {
+                "provider_roles": {"claude": ["orchestrator", "worker"]},
+                "worker_builds": {"claude": "claude-sonnet-5-5"},
+            }},
             "candidates": [],
-        }))
+        }
+        source.write_text(json.dumps(document))
         target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
-        self.assertEqual(target.read_text(), source.read_text())
-        for coverage in ({"sources_failed": 1}, {}, None):
-            source.write_text(json.dumps({
-                "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
-                "coverage": coverage, "candidates": [],
-            }))
-            with self.assertRaisesRegex(RuntimeError, "failed sources"):
-                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        copied = json.loads(target.read_text())
+        self.assertEqual(copied["coverage"]["sources"][0]["status"], "error")
+        self.assertEqual(copied["coverage"]["sources"][0]["reason"], "http_error")
+
+    def test_candidate_model_routing_rejects_failed_source_for_selected_provider(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        document = {
+            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+            "coverage": {"sources_failed": 1, "sources": [
+                {"id": "claude_usage", "status": "error", "reason": "http_unauthorized",
+                 "quota_providers": ["claude"]},
+            ]},
+            "model_selection": {"providers": {
+                "claude": {"selected": {"worker": {"instanceId": "claude", "model": "sonnet"},
+                                         "orchestrator": None}},
+            }},
+        }
+        source.write_text(json.dumps(document))
+        with self.assertRaisesRegex(RuntimeError, "incomplete source for a selected route"):
+            acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+
+    def test_candidate_model_routing_keeps_count_and_partial_fail_closed(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        base = {
+            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+            "coverage": {"sources_failed": 1, "sources": [
+                {"id": "claude_usage", "status": "unknown", "quota_providers": ["claude"]},
+            ]},
+            "model_selection": {"providers": {
+                "claude": {"selected": {"worker": {"instanceId": "claude", "model": "sonnet"},
+                                         "orchestrator": None}},
+            }},
+        }
+        for coverage in (
+            {"sources": base["coverage"]["sources"]},
+            {"sources_failed": "1", "sources": base["coverage"]["sources"]},
+            {"sources_failed": 0, "sources": base["coverage"]["sources"]},
+            {"sources_failed": 0, "sources": [{"id": "claude_usage", "status": "partial",
+                                                   "quota_providers": ["claude"]}]},
+            {"sources_failed": 1, "sources": [{"id": "claude_usage", "status": "missing_credentials",
+                                                   "quota_providers": ["claude"]}]},
+            {"sources_failed": 1, "sources": [{"id": "claude_usage", "status": "error"}]},
+            {"sources_failed": 1, "sources": [{"id": "unknown_source", "status": "error"}]},
+        ):
+            with self.subTest(coverage=coverage):
+                source.write_text(json.dumps({**base, "coverage": coverage}))
+                with self.assertRaises(RuntimeError):
+                    acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
 
     def test_routing_snapshot_refusals_are_retryable_preconditions(self):
         # The host's live snapshot is checked before the candidate runs, so its
