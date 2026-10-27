@@ -21,24 +21,26 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
    missing native project/thread read API. A failed snapshot invalidates the
    preceding completion report.
 2. `reconcile` checks the expected content-scoped runtime revision and fresh
-   snapshot, then runs the existing publisher with the **selected native MCP
-   source**, not an incidental installed CLI default. It validates the existing
-   personal plugin/app binding and the package record's source, archive digest,
-   `ghostship-review` skill and `references/agent-interfaces.md` before
-   publication; plugin creation is forbidden. Dirty checkouts and unknown
-   source provenance outside the Nix store are refused. The command rehashes
-   the ZIP and the two source files against the package record. The existing
-   archive builder validates file contents and in-archive Markdown link closure.
-   One exclusive lock serializes startup invalidation, snapshots and reconcile.
-   A durable intent is written before invoking the publisher. If acknowledgment
-   is lost, later attempts stay held and never resend, even if matching content
-   appears: another publisher may have created it while the original is still
-   in flight. The supported publisher exposes no per-request terminal receipt,
-   so automatic recovery remains unavailable. An operator must establish the
-   original request is terminal and cannot apply later before clearing the
-   private intent; a timeout or matching projection alone is not evidence.
+   snapshot, and packages the selected native MCP source with the existing
+   publisher. It checks the existing personal plugin/app binding and the
+   package record's source, archive digest, `ghostship-review` skill and
+   `references/agent-interfaces.md`. Dirty checkouts and unknown provenance
+   outside the Nix store are refused. The archive builder checks link closure.
+   One exclusive lock serializes invalidation, snapshots and reconcile.
+   Existing durable publication intents remain held, even if the remote
+   projection matches: it cannot establish that the original request is
+   terminal. Never resend or clear an uncertain intent without establishing
+   that the original request cannot apply later.
+   The existing publisher updates the live plugin before acceptance and no
+   supported staging or previous-release restoration is established. Therefore
+   this rollout invokes only its read-only `verify-chatgpt` command and never
+   calls `publish-chatgpt`. If the currently published release does not match,
+   publication remains pending with preservation unavailable. This makes no change to
+   the previous plugin but does not publish the requested bundle; deployment
+   remains blocked until a supported preservation/recovery capability or an
+   explicit contract change establishes a safe path.
 3. Published archive verification must match content, skills, app binding,
-   returned release ID and published version. A host-normalized version may
+   release ID and published version. A host-normalized version may
    differ from the build version; both are recorded, and normalization alone
    does not justify another upload. `release-manifest.json` binds the selected
    source SHA, observed native schema catalogue hash and tool names, container
@@ -114,14 +116,14 @@ The consumer observation must follow discovery. Changing the running revision,
 catalogue, container start, plugin release or package content invalidates old
 acceptance. A rerun of the same unchanged deployment can reuse its receipts;
 no duplicate upload, test message, test worker or paid inference is necessary.
-After supplying the missing receipt, restart only `ghostship-skills-reconcile`.
+If the current release already matches, after supplying the missing receipt, restart only `ghostship-skills-reconcile`. A pending preservation failure requires a separately established safe publication path.
 
 ## Native development and rollback
 
 Run `nix develop .#mcp-rollout -c ./tools/dev/mcp-rollout`. Pure validation and
-parallel real-process scenarios cover publication/restart, lost acknowledgment,
+parallel real-process scenarios cover held publication/restart, prior lost acknowledgment,
 wrong app binding, pending/stale consumer evidence and failed server readback.
-Only the unchanged external publisher and connector are doubled. The private
+Only the external publisher/readback and connector are doubled. The private
 proof directory includes actual stage/file effects, execution timings and the
 unit plus instrumented-running-binary coverage union; development fixtures are
 not installed acceptance. Run existing focused configuration checks with
@@ -132,5 +134,5 @@ Unchanged package sources reuse the normal cache. The fast check script does
 not add a fleet evaluation or an inner Nix invocation.
 
 Rollback reverts this unit/tooling change; it does not roll back an independently
-published plugin or a healthy native MCP server. Keep the existing plugin
+published plugin or a healthy native MCP server. This candidate does not publish a new plugin version. Keep the existing plugin
 identity and original receipts. No upload is needed to remove the added gate.

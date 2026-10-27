@@ -342,25 +342,11 @@ func reconcile(ctx context.Context, args []string) int {
 		}
 		r.Publication = stage{"unknown", "original publication outcome unresolved; matching projection alone cannot resolve it; inspect original request"}
 		return finish(1)
-	} else if save(intentPath, intent) != nil {
-		r.Publication = stage{"unknown", "publication intent could not be persisted"}
-		return finish(1)
 	}
-	var pub struct {
-		Action       string `json:"action"`
-		OK           bool   `json:"ok"`
-		PluginID     string `json:"plugin_id"`
-		ReleaseID    string `json:"release_id"`
-		Version      string `json:"version"`
-		Verification struct {
-			ReleaseID string `json:"release_id"`
-		} `json:"verification"`
-	}
-	if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
-		r.Publication = stage{"unknown", "publication outcome unresolved; inspect original request without another upload"}
-		return finish(1)
-	}
-	r.PublicationAction = pub.Action
+	// The current publisher updates the live plugin before consumer acceptance.
+	// No supported staging or previous-release restoration is established. Use
+	// read-only verification; never invoke the publisher on this route.
+
 	var verify struct {
 		OK        bool     `json:"ok"`
 		Skills    bool     `json:"skills_match"`
@@ -371,8 +357,8 @@ func reconcile(ctx context.Context, args []string) int {
 		Version   string   `json:"version"`
 		AppIDs    []string `json:"app_ids"`
 	}
-	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || pub.Version == "" || pub.Version != verify.Version || (pub.ReleaseID != "" && pub.ReleaseID != verify.ReleaseID) {
-		r.Publication = stage{"unknown", "publication unresolved; matching release readback required before retry"}
+	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || verify.Version == "" {
+		r.Publication = stage{"pending", "preservation unavailable; no publication attempted; matching release readback required"}
 		return finish(1)
 	}
 	provenance := "clean-git-checkout"
@@ -385,21 +371,10 @@ func reconcile(ctx context.Context, args []string) int {
 		return finish(1)
 	}
 	r.ManifestSHA = manifestHash(manifest)
-	if err := os.Remove(intentPath); err != nil {
-		r.Publication = stage{"unknown", "verified publication intent could not be cleared"}
-		return finish(1)
-	}
-	stateDir, err := os.Open(*dir)
-	if err != nil {
-		return finish(1)
-	}
-	err = stateDir.Sync()
-	stateDir.Close()
-	if err != nil {
-		return finish(1)
-	}
+
 	r.ReleaseID = verify.ReleaseID
-	r.Publication = stage{"verified", "existing publisher readback matched content and app binding; normalized version may differ"}
+	r.PublicationAction = "unchanged"
+	r.Publication = stage{"verified", "read-only existing release readback matched content and app binding; normalized version may differ"}
 	refresh, ok := bound(filepath.Join(*dir, "discovery.json"), r.binding)
 	if !ok || !refresh.Refreshed {
 		return finish(3)
