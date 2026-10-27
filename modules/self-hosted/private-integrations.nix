@@ -247,6 +247,37 @@ let
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
       ${privateAddons.runtime}/bin/ghostship-mcp
   '';
+  # The connector container sees only /run/ghostship-native-mcp. Publish the
+  # already scoped projections it needs into that directory, atomically and
+  # owning only uid 62020. A missing source removes the target so revoked
+  # access fails closed instead of leaving a stale credential.
+  project = pkgs.writeShellScript "ghostship-mcp-projections" ''
+    set -eu
+    umask 077
+    target=/run/ghostship-native-mcp
+    install -d -m 0750 -o root -g ghostship-mcp "$target"
+    for name in agent-desktop-key agent-desktop-known-hosts agent-desktop-host; do
+      source=/run/ghostship-integrations/$name
+      if [ -s "$source" ]; then
+        install -m 0400 -o 62020 -g 62020 "$source" "$target/$name.new"
+        mv "$target/$name.new" "$target/$name"
+      else
+        rm -f "$target/$name"
+      fi
+    done
+    for pair in \
+      "github:/srv/apps/t3code/home/.local/state/ghostship-controller/state/github.token" \
+      "workspace:/var/lib/ghostship-workspace/write-token"; do
+      name=''${pair%%:*}
+      source=''${pair#*:}
+      if [ -s "$source" ]; then
+        install -m 0400 -o 62020 -g 62020 "$source" "$target/$name-token.new"
+        mv "$target/$name-token.new" "$target/$name-token"
+      else
+        rm -f "$target/$name-token"
+      fi
+    done
+  '';
 in {
   options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP gateway";
   options.ghostship.privateIntegrations.skillsReconcile.enable = lib.mkEnableOption ''
@@ -283,6 +314,26 @@ in {
       "d /srv/apps/ghostship-private-integrations 0700 ghostship-mcp ghostship-mcp -"
       "d /srv/apps/ghostship-private-integrations/ghostship 0700 ghostship-mcp ghostship-mcp -"
     ];
+    # One server-held workspace write gate, generated once outside the Nix
+    # store. It is the connector's A2 mutation credential and is never shown to
+    # a model. The ACL grants only uid 62020 inside the approved workspace
+    # root, adds rather than replaces existing ACLs, and default entries keep
+    # future children inheriting it. No group membership and no other host path
+    # changes.
+    system.activationScripts.ghostship-workspace = {
+      deps = [ "users" ];
+      text = ''
+        install -d -m 0750 -o root -g ghostship-mcp /var/lib/ghostship-workspace
+        if [ ! -s /var/lib/ghostship-workspace/write-token ]; then
+          (umask 077; head -c 32 /dev/urandom | ${pkgs.coreutils}/bin/base64 | tr -d '\n' > /var/lib/ghostship-workspace/write-token)
+        fi
+        chmod 0600 /var/lib/ghostship-workspace/write-token
+        if [ -d /srv/ghostship/workspace ]; then
+          ${pkgs.acl}/bin/setfacl -R -m u:62020:rwX /srv/ghostship/workspace
+          ${pkgs.acl}/bin/setfacl -R -d -m u:62020:rwX /srv/ghostship/workspace
+        fi
+      '';
+    };
     # Root because the operations drive podman, systemctl and restic; every
     # operation is a fixed argv from the allowlist in the agent's
     # ghostship_hostops.ops, and only uid 62020 (the MCP container) may connect.
@@ -363,7 +414,8 @@ in {
       description = "Render scoped private MCP relay credentials";
       before = [ "podman-ghostship-private-integrations.service" ];
       requiredBy = [ "podman-ghostship-private-integrations.service" ];
-      serviceConfig = { Type = "oneshot"; ExecStart = render; UMask = "0077"; };
+      after = [ "ghostship-desktop-bridge.service" ];
+      serviceConfig = { Type = "oneshot"; UMask = "0077"; ExecStartPre = project; ExecStart = render; };
     };
     # Agent Desktop bridge remains available to the existing Keep broker and
     # installed CLI tooling. Its credentials do not enter the native T3 MCP.
@@ -471,7 +523,10 @@ in {
     # it on the T3 home store instead of guessing HOME (#403).
     environment.variables.GHOSTSHIP_MODEL_EVIDENCE_PATH =
       "/srv/apps/t3code/home/.local/state/ghostship/model-evidence/model-evidence.jsonl";
-    ghostship.containerRuntimes.ghostship-private-integrations.runtime = runtimes.integrations;
+    ghostship.containerRuntimes.ghostship-private-integrations = {
+      runtime = runtimes.integrations;
+      extraPackages = [ runtimes.private.openssh ];
+    };
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
       image = "ghostship-private-integrations:${baseImage.imageTag}";
       imageFile = baseImage;
@@ -485,16 +540,35 @@ in {
         GHOSTSHIP_T3_MCP_PRIVATE_HTTP = "1";
         GHOSTSHIP_T3_MCP_TOKEN_FILE = "/run/ghostship-integrations/t3-token";
         GHOSTSHIP_T3_MCP_AUTH_WAKE_FILE = "/state/native-auth/request";
+        # Controller-owned GitHub surface: the connector receives only the
+        # per-repository scoped token, never the owner PAT.
+        GHOSTSHIP_GITHUB_ENDPOINT = "http://t3code:37111";
+        GHOSTSHIP_GITHUB_TOKEN_FILE = "/run/ghostship-integrations/github-token";
+        # The host workspace is mounted at /workspace. Mutations are gated by
+        # the server-held write credential; agents never present it.
+        GHOSTSHIP_WORKSPACE_ROOT = "/workspace";
+        GHOSTSHIP_WORKSPACE_WRITE_TOKEN_FILE = "/run/ghostship-integrations/workspace-token";
+        # The existing Agent Desktop contract is a path contract; the
+        # projection files hold the key and pinned host key.
+        AGENT_DESKTOP_SSH_HOST = "10.89.7.2";
+        AGENT_DESKTOP_SSH_PORT = "2222";
+        AGENT_DESKTOP_SSH_USER = "abc";
+        AGENT_DESKTOP_SSH_KEY = "/run/ghostship-integrations/agent-desktop-key";
+        AGENT_DESKTOP_SSH_KNOWN_HOSTS = "/run/ghostship-integrations/agent-desktop-known-hosts";
       };
       volumes = [
-        # Only native T3 and official relay credentials enter this first Go
-        # runtime. Other domain migrations grant their own bounded access.
+        # Native T3/relay credentials, the controller-derived scoped GitHub
+        # token, the Agent Desktop contract and the workspace write gate.
         "/run/ghostship-native-mcp:/run/ghostship-integrations:ro"
         "/srv/apps/ghostship-private-integrations:/state:rw,noexec,nosuid,nodev"
+        # Same source as the t3code container's /workspace; repo layout kept.
+        "/srv/ghostship/workspace:/workspace"
       ];
       extraOptions = [
         "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"
         "--network=ghostship_net"
+        # Agent Desktop's pinned host key is [10.89.7.2]:2222 on its own net.
+        "--network=agent_desktop_net"
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777"
         # Each agent window drives parallel tabs through a pool of up to 8
         # Bladebro workers per identity (an SSH client plus reader threads
