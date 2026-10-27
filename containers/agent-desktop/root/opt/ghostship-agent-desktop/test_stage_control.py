@@ -78,6 +78,27 @@ class PairTest(unittest.TestCase):
         self.assertEqual(s.pair([node(5, "Shop"), node(6, "Shop")],
                                 {100: [tab("Shop")], 101: [tab("Shop")]}), {})
 
+    def test_a_blank_sway_window_never_takes_a_uniquely_titled_lease_window(self):
+        """Catches the live lease failure: one con and one window left were paired by order."""
+        s = stage()
+        self.assertEqual(s.pair([node(42, "about:blank")],
+                                {902: [tab("ghostship-" + RUN_A)]}), {})
+
+    def test_a_uniquely_titled_window_is_taken_back_from_a_stale_pair(self):
+        """Catches a blank window staying paired to the lease window after its title arrived."""
+        s = stage()
+        nodes = [{"id": 5, "name": "labwc - WL-1"},
+                 node(42, "about:blank"), node(45, "ghostship-" + RUN_A)]
+        groups = {900: [tab("about:blank")], 901: [tab("about:blank")],
+                  902: [tab("ghostship-" + RUN_A)]}
+        s.pairs = {42: 902}  # the wrong pair a previous pass left behind
+        self.assertEqual(s.pair(nodes, groups), {45: 902})
+
+    def test_the_last_blank_window_may_still_pair_with_a_blank_sway_window(self):
+        s = stage()
+        self.assertEqual(s.pair([{"id": 7, "name": ""}],
+                                {902: [tab("", url="about:blank")]}), {7: 902})
+
 
 class RestartTest(unittest.TestCase):
     def test_pairs_are_restored_after_a_stage_restart(self):

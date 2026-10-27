@@ -335,34 +335,63 @@ class Stage:
         return rows[0]["run_id"] if len(rows) == 1 else None
 
     def pair(self, nodes: list[dict], groups: dict[int, list[dict]]) -> dict[int, int]:
-        """Sway con id -> Chrome window id, extending the sticky pairs where it is unambiguous."""
+        """Sway con id -> Chrome window id, by exact title evidence.
+
+        A pair is made, moved or dropped only from exact page titles: a window
+        whose tabs name exactly one open sway window belongs to it, and a sway
+        window whose title names exactly one Chrome window belongs to that
+        window. Existing pairs stay while that evidence is absent (a title can
+        change while a page loads), but a pair contradicted by unambiguous
+        evidence is corrected, so a window that becomes identifiable never
+        stays attached to an unrelated window. Two windows with the same title
+        stay unpaired rather than showing another run's window.
+
+        The old "one sway window and one Chrome window left, so pair them"
+        rule guessed from creation order: a blank or non-browser sway window
+        could take a uniquely titled lease window, and the wrong pair then
+        stuck for the life of both windows. It is replaced by a blank-to-blank
+        fallback with no title evidence on either side.
+        """
         if not groups:
             return {}
         cons = {n["id"]: n for n in nodes}
         for con, window in list(self.pairs.items()):
             if con not in cons or window not in groups:
                 self.pairs.pop(con)
+
+        def title_of(con: int) -> str:
+            name = cons[con].get("name") or ""
+            return name[: -len(" - Google Chrome")] if name.endswith(" - Google Chrome") else name
+
+        names = {w: {str(t.get("title") or "") for t in targets} for w, targets in groups.items()}
         while True:
-            free_cons = [c for c in cons if c not in self.pairs]
-            free_windows = [w for w in groups if w not in self.pairs.values()]
-            if not free_cons or not free_windows:
+            candidates = {con: {w for w, shown in names.items() if title_of(con) and title_of(con) in shown}
+                          for con in cons}
+            claimants: dict[int, list[int]] = {}
+            for con, windows in candidates.items():
+                if len(windows) == 1:
+                    claimants.setdefault(next(iter(windows)), []).append(con)
+            changed = False
+            for con, windows in candidates.items():
+                if len(windows) != 1:
+                    continue
+                window = next(iter(windows))
+                if claimants.get(window) != [con]:
+                    continue
+                if self.pairs.get(con) != window:
+                    self.pairs[con] = window
+                    changed = True
+                for other, paired in list(self.pairs.items()):
+                    if paired == window and other != con:
+                        self.pairs.pop(other)
+                        changed = True
+            if not changed:
                 break
-            if len(free_cons) == 1 and len(free_windows) == 1 and len(cons) == len(groups):
-                self.pairs[free_cons[0]] = free_windows[0]
-                break
-            matches = {}
-            for con in free_cons:
-                title = cons[con].get("name") or ""
-                if title.endswith(" - Google Chrome"):
-                    title = title[: -len(" - Google Chrome")]
-                matches[con] = [w for w in free_windows if any(t.get("title") == title for t in groups[w])]
-            progress = False
-            for con, candidates in matches.items():
-                if len(candidates) == 1 and sum(candidates[0] in other for other in matches.values()) == 1:
-                    self.pairs[con] = candidates[0]
-                    progress = True
-            if not progress:
-                break
+        free_cons = [c for c in cons if c not in self.pairs]
+        free_windows = [w for w in groups if w not in self.pairs.values()]
+        if (len(free_cons) == 1 and len(free_windows) == 1
+                and not title_of(free_cons[0]) and not any(names[free_windows[0]])):
+            self.pairs[free_cons[0]] = free_windows[0]
         return dict(self.pairs)
 
     def window_rect(self, con: int) -> dict:
