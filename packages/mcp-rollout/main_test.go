@@ -101,6 +101,12 @@ func TestExternalProcess(t *testing.T) {
 		save(path, map[string]any{"chatgpt": map[string]string{"content_digest": strings.Repeat("b", 64)}})
 		result = map[string]any{"ok": true, "record": path}
 	case slices.Contains(args, "publish-chatgpt"):
+		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
+			f, _ := os.OpenFile(filepath.Join(dir, "attempts"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+			f.WriteString("upload\n")
+			f.Close()
+			os.Exit(6)
+		}
 		action := "unchanged"
 		f, e := os.OpenFile(filepath.Join(dir, "uploaded"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if e == nil {
@@ -113,6 +119,12 @@ func TestExternalProcess(t *testing.T) {
 		}
 		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "action": action}
 	case slices.Contains(args, "verify-chatgpt"):
+		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
+			if _, err := os.Stat(filepath.Join(dir, "applied")); err != nil {
+				result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture", "release_id": "old-release"}
+				break
+			}
+		}
 		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "app_ids": []string{appID}, "skills_match": true, "apps_match": true, "content_match": true}
 	default:
 		os.Exit(7)
@@ -129,7 +141,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -191,6 +203,24 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				save(filepath.Join(dir, "consumer.json"), proof)
 			}
 			args := []string{"reconcile", "--skills-cli", adapter, "--repo", filepath.Join(dir, "repo"), "--source-sha", strings.Repeat("c", 40), "--server", server, "--expect-version", "source-fixture", "--state", dir}
+			if scenario == "unresolved-later-apply" {
+				env := []string{"MCP_ROLLOUT_DELAY_APPLY=1"}
+				run(1, env, args...)
+				run(1, env, args...)
+				attempts, _ := os.ReadFile(filepath.Join(dir, "attempts"))
+				if string(attempts) != "upload\n" {
+					t.Fatalf("unresolved attempt was resent: %q", attempts)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "applied"), []byte("applied"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				run(0, env, args...)
+				attempts, _ = os.ReadFile(filepath.Join(dir, "attempts"))
+				if string(attempts) != "upload\n" {
+					t.Fatal("delayed apply caused duplicate upload")
+				}
+				return
+			}
 			if scenario == "early-startup" || scenario == "invalid-time" {
 				run(0, nil, args...)
 				var before report

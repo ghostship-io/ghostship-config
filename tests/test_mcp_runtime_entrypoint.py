@@ -27,8 +27,12 @@ class McpEntrypoint(unittest.TestCase):
         shell = shutil.which("sh")
         self.assertIsNotNone(shell)
         source = (MODULES / "private-integrations.nix").read_text()
+        service = source.split('systemd.services.ghostship-skills-reconcile = {', 1)[1]
+        service = service.split('serviceConfig = {', 1)[0]
+        self.assertIn('wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];', service)
+        self.assertNotIn('requires =', service)
         script = re.search(r'snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" \'\'(.*?)\n  \'\';', source, re.S).group(1)
-        for failure in ("health", "start-time"):
+        for failure in ("bridge", "health", "start-time"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "bin").mkdir()
@@ -37,11 +41,13 @@ class McpEntrypoint(unittest.TestCase):
                 (root / "bin/podman").chmod(0o755)
                 (root / "bin/chown").write_text(f'#!{shell}\nexit 0\n')
                 (root / "bin/chown").chmod(0o755)
+                (root / "bin/systemctl").write_text(f'#!{shell}\nexit ' + ('1' if failure == 'bridge' else '0') + '\n')
+                (root / "bin/systemctl").chmod(0o755)
                 (root / "wait").write_text(f'#!{shell}\nexit ' + ('1' if failure == 'health' else '0') + '\n')
                 (root / "wait").chmod(0o755)
                 (root / "rollout.json").write_text('{"complete":true}')
                 (root / "server.json").write_text('{}')
-                actual = script.replace('${mcpRollout}', str(root)).replace('${waitForMcpHealthy}', str(root / 'wait')).replace('${pkgs.podman}', str(root)).replace('${runtimes.private.sharedSocket}', '/unused').replace('/var/lib/ghostship-skills', str(root))
+                actual = script.replace('${mcpRollout}', str(root)).replace('${waitForMcpHealthy}', str(root / 'wait')).replace('${pkgs.podman}', str(root)).replace('${pkgs.systemd}', str(root)).replace('${runtimes.private.sharedSocket}', '/unused').replace('/var/lib/ghostship-skills', str(root))
                 result = subprocess.run([shell, '-c', actual], capture_output=True, text=True, timeout=5,
                                         env={"PATH": str(root / "bin")})
                 self.assertNotEqual(result.returncode, 0)

@@ -134,6 +134,7 @@ let
     ${mcpRollout}/bin/mcp-rollout begin --out /var/lib/ghostship-skills/server.json
     chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json
     trap 'chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json' EXIT
+    ${pkgs.systemd}/bin/systemctl is-active --quiet ghostship-desktop-bridge.service
     ${waitForMcpHealthy}
     ${mcpRollout}/bin/mcp-rollout snapshot \
       --out /var/lib/ghostship-skills/server.json \
@@ -530,10 +531,9 @@ in {
     systemd.services.ghostship-skills-reconcile = {
       description = "Publish MCP plugin and require discovery/consumer acceptance receipts";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "network-online.target" ];
+      wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
-      requires = [ "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
       path = [ pkgs.openssh pkgs.coreutils pkgs.git ];
       serviceConfig = {

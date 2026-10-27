@@ -24,8 +24,12 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
    snapshot, then runs the existing publisher with the **selected native MCP
    source**, not an incidental installed CLI default. It validates the existing
    personal plugin/app binding before publication; plugin creation is forbidden.
-   The existing publisher reconciles its current release before uploading and
-   skips identical content. No retry is added after an uncertain acknowledgment.
+   An exclusive lock serializes attempts. A durable intent is written before
+   invoking the existing publisher. If acknowledgment is lost, later attempts
+   only read back the intended content and binding; they never resend while
+   the intent is unresolved, even if the old release is still visible. A
+   matching release resolves the intent. Otherwise it remains held for an
+   operator to establish the original outcome; do not clear it on a timeout.
 3. Published archive verification must match content, skills, app binding and
    the returned release ID. A host-normalized semantic version is allowed;
    version normalization alone does not justify another upload.
@@ -38,6 +42,12 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
 Only all four verified stages set `complete:true`. Whole-host activation and
 controller safety are separate. Source/build success is not installed success.
 There is no new service, database, scheduler, inference loop or credential.
+The container and desktop bridge are wanted and ordered rather than required:
+a failed dependency therefore still lets the unit invalidate its old report.
+The startup script checks the bridge and container before publishing. A report
+is a dated observation, not continuous health: check current unit and dependency
+state before treating it as current, including if systemd could not start the
+unit or a dependency failed after the last successful run.
 
 ## Discovery and consumer receipts
 

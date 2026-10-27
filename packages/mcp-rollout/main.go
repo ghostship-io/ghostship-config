@@ -100,6 +100,16 @@ func save(path string, value any) error {
 	if err == nil {
 		err = os.Rename(f.Name(), path)
 	}
+	if err == nil {
+		d, e := os.Open(filepath.Dir(path))
+		if e != nil {
+			return e
+		}
+		err = d.Sync()
+		if closeErr := d.Close(); err == nil {
+			err = closeErr
+		}
+	}
 	return err
 }
 func runJSON(ctx context.Context, program string, args []string, value any, artifact string) error {
@@ -157,6 +167,15 @@ func reconcile(ctx context.Context, args []string) int {
 	if fs.Parse(args) != nil || *dir == "" || *skills == "" || *repo == "" || *sha == "" {
 		return 2
 	}
+	lock, err := os.OpenFile(filepath.Join(*dir, "reconcile.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return 1
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return 1
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	r := report{Server: stage{"unknown", "server readback required"}, Publication: stage{"pending", "not attempted"}, Discovery: stage{"manual_required", "Refresh tools in the existing app settings, then record discovery.json"}, Consumer: stage{"manual_required", "Verify actual consumer declarations and one read-only native call; record consumer.json. A stale host may need a fresh conversation."}}
 	finish := func(code int) int {
 		if save(filepath.Join(*dir, "rollout.json"), r) != nil {
@@ -210,8 +229,26 @@ func reconcile(ctx context.Context, args []string) int {
 		return finish(1)
 	}
 	r.ContentDigest = record.Chat.ContentDigest
-	// The existing publisher reads back first and skips identical content. It
-	// reconciles an uncertain upload before another upload; do not add retries.
+	// A readback of old content cannot prove an in-flight upload won't apply
+	// later. Persist intent before publication and never resend while unresolved.
+	intentPath := filepath.Join(*dir, "publication-intent.json")
+	intent := struct{ PluginID, AppID, ContentDigest, SourceSHA string }{r.PluginID, r.AppID, r.ContentDigest, *sha}
+	_, statErr := os.Lstat(intentPath)
+	unresolved := statErr == nil
+	if statErr != nil && !os.IsNotExist(statErr) {
+		r.Publication = stage{"unknown", "publication intent unreadable"}
+		return finish(1)
+	}
+	if unresolved {
+		var previous struct{ PluginID, AppID, ContentDigest, SourceSHA string }
+		if readJSON(intentPath, &previous) != nil || previous != intent {
+			r.Publication = stage{"unknown", "unresolved publication intent does not match selected content; inspect original outcome"}
+			return finish(1)
+		}
+	} else if save(intentPath, intent) != nil {
+		r.Publication = stage{"unknown", "publication intent could not be persisted"}
+		return finish(1)
+	}
 	var pub struct {
 		Action       string `json:"action"`
 		OK           bool   `json:"ok"`
@@ -221,9 +258,13 @@ func reconcile(ctx context.Context, args []string) int {
 			ReleaseID string `json:"release_id"`
 		} `json:"verification"`
 	}
-	if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
-		r.Publication = stage{"unknown", "publication failed or acknowledgment uncertain; reconcile existing release, do not blindly upload"}
-		return finish(1)
+	if !unresolved {
+		if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
+			r.Publication = stage{"unknown", "publication outcome unresolved; read back original intent without another upload"}
+			return finish(1)
+		}
+	} else {
+		pub.Action = "reconciled"
 	}
 	r.PublicationAction = pub.Action
 	var verify struct {
@@ -236,7 +277,20 @@ func reconcile(ctx context.Context, args []string) int {
 		AppIDs    []string `json:"app_ids"`
 	}
 	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || (pub.ReleaseID != "" && pub.ReleaseID != verify.ReleaseID) {
-		r.Publication = stage{"unknown", "published release readback mismatch"}
+		r.Publication = stage{"unknown", "publication unresolved; matching release readback required before retry"}
+		return finish(1)
+	}
+	if err := os.Remove(intentPath); err != nil {
+		r.Publication = stage{"unknown", "verified publication intent could not be cleared"}
+		return finish(1)
+	}
+	stateDir, err := os.Open(*dir)
+	if err != nil {
+		return finish(1)
+	}
+	err = stateDir.Sync()
+	stateDir.Close()
+	if err != nil {
 		return finish(1)
 	}
 	r.ReleaseID = verify.ReleaseID
