@@ -32,7 +32,7 @@ class CISchedulingTests(unittest.TestCase):
         text = (ROOT / '.github/workflows/ci.yml').read_text()
         fast = (ROOT / 'scripts/check').read_text()
         integration = (ROOT / 'scripts/check-integration').read_text()
-        self.assertIn('-c scripts/check\n', text)
+        self.assertIn('-c scripts/check "$PR_BASE" "$PR_HEAD"', text)
         self.assertIn('-c scripts/check-integration\n', text)
         self.assertIn('scripts/check-unit.py', fast)
         self.assertIn('gitleaks dir --redact --no-banner .', fast)
