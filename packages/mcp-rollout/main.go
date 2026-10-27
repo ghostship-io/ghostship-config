@@ -260,6 +260,31 @@ func reconcile(ctx context.Context, args []string) int {
 	return finish(0)
 }
 
+// invalidate is called before readiness and again before parsing the start time.
+// Write the incomplete report first so a failed snapshot removal cannot leave
+// a previous success visible.
+func invalidate(out string) error {
+	if err := save(filepath.Join(filepath.Dir(out), "rollout.json"), report{Server: stage{"unknown", "server snapshot in progress"}, Publication: stage{"pending", "not checked"}, Discovery: stage{"manual_required", "discovery receipt required"}, Consumer: stage{"manual_required", "real consumer receipt required"}}); err != nil {
+		return err
+	}
+	if err := os.Remove(out); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func begin(args []string) int {
+	fs := flag.NewFlagSet("begin", flag.ContinueOnError)
+	out := fs.String("out", "", "private server receipt")
+	if fs.Parse(args) != nil || *out == "" {
+		return 2
+	}
+	if invalidate(*out) != nil {
+		return 1
+	}
+	return 0
+}
+
 // snapshot uses only MCP initialize, tools/list and integration_status. The
 // host invokes the existing private socket proxy inside the same-UID container.
 func probe(ctx context.Context, args []string) int {
@@ -272,6 +297,9 @@ func probe(ctx context.Context, args []string) int {
 	if fs.Parse(args) != nil || *program == "" || *out == "" {
 		return 2
 	}
+	if invalidate(*out) != nil {
+		return 1
+	}
 	start, ok := validTime(*started)
 	if !ok { // Podman's Go-template Time.String representation.
 		var err error
@@ -281,10 +309,6 @@ func probe(ctx context.Context, args []string) int {
 		}
 	}
 	*started = start.UTC().Format(time.RFC3339Nano)
-	os.Remove(*out)
-	if save(filepath.Join(filepath.Dir(*out), "rollout.json"), report{Server: stage{"unknown", "server snapshot in progress"}, Publication: stage{"pending", "not checked"}, Discovery: stage{"manual_required", "discovery receipt required"}, Consumer: stage{"manual_required", "real consumer receipt required"}}) != nil {
-		return 1
-	}
 	cmd := exec.CommandContext(ctx, *program, fs.Args()...)
 	in, e := cmd.StdinPipe()
 	if e != nil {
@@ -377,6 +401,8 @@ func main() {
 	code := 2
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "begin":
+			code = begin(os.Args[2:])
 		case "snapshot":
 			code = probe(ctx, os.Args[2:])
 		case "reconcile":
@@ -384,7 +410,7 @@ func main() {
 		}
 	}
 	if code == 2 {
-		fmt.Fprintln(os.Stderr, "usage: mcp-rollout snapshot|reconcile (see --help)")
+		fmt.Fprintln(os.Stderr, "usage: mcp-rollout begin|snapshot|reconcile (see --help)")
 	}
 	os.Exit(code)
 }

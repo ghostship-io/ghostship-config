@@ -131,6 +131,9 @@ let
   '';
   snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" ''
     set -eu
+    ${mcpRollout}/bin/mcp-rollout begin --out /var/lib/ghostship-skills/server.json
+    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json
+    trap 'chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json' EXIT
     ${waitForMcpHealthy}
     ${mcpRollout}/bin/mcp-rollout snapshot \
       --out /var/lib/ghostship-skills/server.json \

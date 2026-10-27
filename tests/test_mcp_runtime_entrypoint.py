@@ -21,6 +21,33 @@ class McpEntrypoint(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
+    def test_startup_failures_invalidate_previous_completion(self):
+        binary = shutil.which("mcp-rollout")
+        self.assertIsNotNone(binary, "run inside the CI shell containing mcp-rollout")
+        shell = shutil.which("sh")
+        self.assertIsNotNone(shell)
+        source = (MODULES / "private-integrations.nix").read_text()
+        script = re.search(r'snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" \'\'(.*?)\n  \'\';', source, re.S).group(1)
+        for failure in ("health", "start-time"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "bin").mkdir()
+                (root / "bin/mcp-rollout").symlink_to(binary)
+                (root / "bin/podman").write_text(f'#!{shell}\nexit 1\n')
+                (root / "bin/podman").chmod(0o755)
+                (root / "bin/chown").write_text(f'#!{shell}\nexit 0\n')
+                (root / "bin/chown").chmod(0o755)
+                (root / "wait").write_text(f'#!{shell}\nexit ' + ('1' if failure == 'health' else '0') + '\n')
+                (root / "wait").chmod(0o755)
+                (root / "rollout.json").write_text('{"complete":true}')
+                (root / "server.json").write_text('{}')
+                actual = script.replace('${mcpRollout}', str(root)).replace('${waitForMcpHealthy}', str(root / 'wait')).replace('${pkgs.podman}', str(root)).replace('${runtimes.private.sharedSocket}', '/unused').replace('/var/lib/ghostship-skills', str(root))
+                result = subprocess.run([shell, '-c', actual], capture_output=True, text=True, timeout=5,
+                                        env={"PATH": str(root / "bin")})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(json.loads((root / 'rollout.json').read_text())['complete'])
+                self.assertFalse((root / 'server.json').exists())
+
     def test_deployed_base_exports_client_through_current_runtime(self):
         source = (MODULES / "private-integrations.nix").read_text()
         call = re.search(r'baseImage = (import ./service-base-image.nix \{.*?\n  \});',

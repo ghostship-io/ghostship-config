@@ -129,7 +129,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -191,6 +191,26 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				save(filepath.Join(dir, "consumer.json"), proof)
 			}
 			args := []string{"reconcile", "--skills-cli", adapter, "--repo", filepath.Join(dir, "repo"), "--source-sha", strings.Repeat("c", 40), "--server", server, "--expect-version", "source-fixture", "--state", dir}
+			if scenario == "early-startup" || scenario == "invalid-time" {
+				run(0, nil, args...)
+				var before report
+				if readJSON(filepath.Join(dir, "rollout.json"), &before) != nil || !before.Complete {
+					t.Fatal("fixture did not complete")
+				}
+				if scenario == "early-startup" {
+					run(0, nil, "begin", "--out", server)
+				} else {
+					run(2, nil, "snapshot", "--out", server, "--started-at", "invalid", "--program", adapter, "--", "--mcp")
+				}
+				var after report
+				if readJSON(filepath.Join(dir, "rollout.json"), &after) != nil || after.Complete {
+					t.Fatal("failed startup retained completion")
+				}
+				if _, err := os.Stat(server); !os.IsNotExist(err) {
+					t.Fatal("failed startup retained server snapshot")
+				}
+				return
+			}
 			expect := 0
 			var env []string
 			switch scenario {

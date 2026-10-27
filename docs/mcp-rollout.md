@@ -12,7 +12,9 @@ was checked. Publication was therefore not proof of a usable consumer catalogue.
 
 The small native Go command in `packages/mcp-rollout` extends that same unit:
 
-1. After existing container readiness, `snapshot` makes a private same-UID MCP
+1. `begin` invalidates the previous completion and server snapshot before
+   waiting for container readiness or reading its start time. After readiness,
+   `snapshot` invalidates again before validating that time, then makes a private same-UID MCP
    connection through the existing socket proxy. It reads actual Go
    `integration_status` and all catalogue pages; no native work is sent. It
    records the actual container start time and rejects retired facades or a
