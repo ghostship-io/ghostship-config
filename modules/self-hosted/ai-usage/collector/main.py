@@ -163,6 +163,16 @@ QUOTA_COVERAGE = tuple(
 QUOTA_PROVIDERS_BY_SOURCE: dict[str, list[str]] = {}
 for provider, source in QUOTA_COVERAGE:
     QUOTA_PROVIDERS_BY_SOURCE.setdefault(source, []).append(provider)
+QUOTA_PROVIDERS_BY_SOURCE.update({
+    "free_pool": ["opencode-free"],
+    "command_code_usage": ["commandCode"],
+    "t3_runtime": ["antigravity"],
+    # These readers can contain events for any route the collector inventoried;
+    # build_snapshot fills their exact provider scope from collect() context.
+    "opencode_events": [],
+    "pool_events": [],
+})
+DYNAMIC_QUOTA_SOURCES = frozenset({"opencode_events", "pool_events"})
 
 METRIC_HELP = {
     "ghostship_ai_source_success": "Whether the last collection of this source succeeded.",
@@ -789,6 +799,16 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
                 reason=codes.RPC_FAILED,
             )
         ]
+
+
+def collect_claude_usage(now: float, credentials: str) -> SourceResult:
+    """Publish Claude quota as explicitly unavailable when its route is unconfigured."""
+    if credentials:
+        return claude_usage.read(now, credentials)
+    return SourceResult(
+        source="claude_usage", status="not_configured",
+        reason=codes.MISSING_CREDENTIALS, observed_at=now,
+    )
 
 
 def free_model_samples(
@@ -1956,7 +1976,11 @@ def build_snapshot(
         sources.append(
             {
                 "id": result.source,
-                "quota_providers": sorted(QUOTA_PROVIDERS_BY_SOURCE.get(result.source, [])),
+                "quota_providers": sorted(
+                    context.get("inference_route_providers", [])
+                    if result.source in DYNAMIC_QUOTA_SOURCES
+                    else QUOTA_PROVIDERS_BY_SOURCE.get(result.source, [])
+                ),
                 "status": result.status,
                 "reason": codes.reason(result.reason),
                 "observed_at": (
@@ -2107,8 +2131,7 @@ def collect(
     context['secrets_env'] = secrets_env
     results: list[SourceResult] = []
     results.extend(collect_t3(moment, catalog, context))
-    if claude_credentials:
-        results.append(claude_usage.read(moment, claude_credentials))
+    results.append(collect_claude_usage(moment, claude_credentials))
     results.append(providers_module.read_grok(f"{t3_home}", moment))
     results.append(providers_module.read_opencode_go(f"{t3_home}", moment))
     results.append(providers_module.read_antigravity(f"{t3_home}", moment))
@@ -2168,6 +2191,9 @@ def collect(
     # contributes no events: the routes it would have fed keep the basis
     # they had.
     routes = _known_routes(offered, pool_models, extra)
+    context["inference_route_providers"] = sorted({
+        str(provider) for provider, _model in routes if str(provider)
+    })
     # The free instance's records live beside its own configuration, in the
     # same T3 Code home. The collector reads them the same way. An instance
     # that is not installed has no record to read, and its cache is not

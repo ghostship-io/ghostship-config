@@ -9,6 +9,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,8 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
 
 
 class CandidateAcceptanceTest(unittest.TestCase):
+    ROUTING_NOW = 1_800_000_000
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -107,6 +110,98 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
         self.command = command
         self.identity = ["prod-id", "2026-10-25T00:00:00Z", 42, "13", "16"]
+
+    def routing_row(self, provider, model, instance_id=None, *, role="worker"):
+        native = {"instanceId": instance_id or provider, "model": model}
+        return {
+            "provider": provider,
+            "model": model,
+            "native": native,
+            "available": True,
+            "selection_eligible": True,
+            "picker_eligible": True,
+            "billing": "subscription",
+            "approved_free": None,
+            "role": role,
+        }
+
+    def route_policy(self, roles=None):
+        return {"schema": "ghostship.route-policy/v1", "roles": roles or {},
+                "authorizations": []}
+
+    def routing_document(self, *, failed_sources=("claude_usage",), worker_rows=None,
+                         orchestrator_rows=None, generated_at=None, missing_coverage=False,
+                         provider_map_overrides=None):
+        now = self.ROUTING_NOW
+        timestamp = datetime.fromtimestamp(now, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        worker_rows = list(worker_rows or [self.routing_row("ollama", "deepseek-v4.1-flash")])
+        orchestrator_rows = list(
+            [self.routing_row("codex", "gpt-6.1-sol", role="orchestrator")]
+            if orchestrator_rows is None else orchestrator_rows
+        )
+        provider_names = {row["provider"] for row in worker_rows + orchestrator_rows}
+        providers = {}
+        for provider in provider_names:
+            lanes = {
+                "worker": [dict(row) for row in worker_rows if row["provider"] == provider],
+                "orchestrator": [dict(row) for row in orchestrator_rows if row["provider"] == provider],
+            }
+            providers[provider] = {
+                **lanes,
+                "selected": {
+                    role: (dict(next((row["native"] for row in lanes[role]
+                                      if row["available"] and row["selection_eligible"]), None))
+                           if any(row["available"] and row["selection_eligible"]
+                                  for row in lanes[role]) else None)
+                    for role in ("worker", "orchestrator")
+                },
+            }
+        sources = []
+        for source_id, source_providers in acceptance.QUOTA_SOURCE_PROVIDERS.items():
+            if source_id in acceptance.DYNAMIC_QUOTA_SOURCES:
+                source_providers = sorted(provider_names)
+            if provider_map_overrides and source_id in provider_map_overrides:
+                source_providers = provider_map_overrides[source_id]
+            failed = source_id in failed_sources
+            sources.append({
+                "id": source_id,
+                "quota_providers": list(source_providers),
+                "status": "error" if failed else "ok",
+                "reason": "http_error" if failed else "ok",
+                "observed_at": timestamp,
+                "observed_at_epoch": now,
+                "last_success_at": None if failed else timestamp,
+            })
+        failed_count = len(failed_sources)
+        total = len(sources)
+        document = {
+            "schema": "ghostship.ai-usage.routing",
+            "schema_version": 1,
+            "generated_at": generated_at or timestamp,
+            "max_age_seconds": 900,
+            "partial": bool(failed_count),
+            "coverage": {
+                "sources_total": total,
+                "sources_ok": total - failed_count,
+                "sources_partial": 0,
+                "sources_failed": failed_count,
+                "sources": sources,
+            },
+            "model_selection": {
+                "schema": "ghostship.model-selection/v1",
+                "generated_at": generated_at or timestamp,
+                "max_age_seconds": 900,
+                "partial": bool(failed_count),
+                "worker": worker_rows,
+                "orchestrator": orchestrator_rows,
+                "providers": providers,
+            },
+            "policy": {"model_selection": {"provider_roles": {}}},
+            "candidates": [],
+        }
+        if missing_coverage:
+            document.pop("coverage")
+        return document
 
     def test_candidate_hostname_fits_linux_limit_for_sha256_deployments(self):
         first = acceptance.candidate_name("a" * 64)
@@ -231,13 +326,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_candidate_model_routing_snapshot_is_validated_and_staged_read_only(self):
         source = self.root / "routing.json"
-        source.write_text(json.dumps({
-            "schema": "ghostship.ai-usage.routing", "schema_version": 1,
-            "partial": False, "candidates": [],
-        }))
+        source.write_text(json.dumps(self.routing_document(failed_sources=())))
         candidate_tmp = self.root / "candidate"
         candidate_tmp.mkdir()
-        target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
         self.assertEqual(target.read_text(), source.read_text())
         self.assertEqual(target.stat().st_mode & 0o777, 0o444)
         self.assertEqual(target.stat().st_uid, os.getuid())
@@ -246,49 +339,383 @@ class CandidateAcceptanceTest(unittest.TestCase):
         candidate_tmp = self.root / "candidate"
         candidate_tmp.mkdir()
         source = self.root / "routing.json"
-        document = {
-            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
-            "coverage": {
-                "sources_total": 1, "sources_ok": 0, "sources_partial": 0, "sources_failed": 1,
-                "sources": [{"id": "claude_usage", "status": "error", "reason": "http_error",
-                             "quota_providers": ["claude"]}],
-            },
-            "model_selection": {"providers": {
-                "claude": {"selected": {"worker": None,
-                                         "orchestrator": {"instanceId": "claude", "model": "sonnet"}}},
-                "ollama": {"selected": {"worker": {"instanceId": "opencode", "model": "m"},
-                                         "orchestrator": None}},
-            }},
-            "policy": {"model_selection": {
-                "provider_roles": {"claude": ["orchestrator", "worker"]},
-                "worker_builds": {"claude": "claude-sonnet-5-5"},
-            }},
-            "candidates": [],
+        document = self.routing_document()
+        document["policy"]["model_selection"]["provider_roles"] = {
+            "claude": ["orchestrator", "worker"], "ollama": ["worker"],
         }
         source.write_text(json.dumps(document))
-        target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
         copied = json.loads(target.read_text())
-        self.assertEqual(copied["coverage"]["sources"][0]["status"], "error")
-        self.assertEqual(copied["coverage"]["sources"][0]["reason"], "http_error")
+        unavailable = next(row for row in copied["coverage"]["sources"]
+                           if row["id"] == "claude_usage")
+        self.assertEqual(unavailable["status"], "error")
+        self.assertEqual(unavailable["reason"], "http_error")
+
+    def test_candidate_model_routing_requires_failed_sources_for_orchestrator_routes(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        claude = self.routing_row("claude", "claude-sonnet-5-5", role="orchestrator")
+        document = self.routing_document(orchestrator_rows=[claude])
+        source.write_text(json.dumps(document))
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "incomplete source for an enabled route"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_disabled_claude_requires_policy_denial_for_orchestrator_and_reviewer(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        claude = self.routing_row("claude", "claude-opus-5-5", role="orchestrator")
+        codex = self.routing_row("codex", "gpt-6.1-sol", role="orchestrator")
+        document = self.routing_document(orchestrator_rows=[claude, codex])
+        source.write_text(json.dumps(document))
+        codex_route = {"provider": "codex", "model": "gpt-6.1-sol"}
+        policy = self.route_policy({
+            "worker": {"allow": [{"provider": "ollama", "model": "deepseek-v4.1-flash"}]},
+            "orchestrator": {"allow": [codex_route]},
+            "reviewer": {"allow": [codex_route]},
+        })
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            target = acceptance.stage_candidate_model_routing(
+                source, candidate_tmp, os.getuid(), route_policy=policy
+            )
+        copied = json.loads(target.read_text())
+        failed = next(row for row in copied["coverage"]["sources"]
+                      if row["id"] == "claude_usage")
+        self.assertEqual((failed["status"], failed["reason"]), ("error", "http_error"))
+
+        policy["roles"]["reviewer"]["allow"].append(
+            {"provider": "claude", "model": "claude-opus-5-5"}
+        )
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "incomplete source for an enabled route"):
+                acceptance._validate_routing_source_coverage(
+                    document, route_policy=policy
+                )
+
+    def test_incomplete_sources_require_a_route_policy_and_unknown_or_partial_never_downgrade(self):
+        document = self.routing_document()
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "route policy is required"):
+                acceptance._validate_routing_source_coverage(document)
+            unknown_reason = self.routing_document()
+            next(row for row in unknown_reason["coverage"]["sources"]
+                 if row["id"] == "claude_usage")["reason"] = "unknown"
+            with self.assertRaisesRegex(RuntimeError, "unknown source failure"):
+                acceptance._validate_routing_source_coverage(
+                    unknown_reason, route_policy=self.route_policy()
+                )
+            for status, reason in (("mystery", "http_error"), ("partial", "source_partial"),
+                                   ("error", "http_unauthorized")):
+                claude = self.routing_row("claude", "claude-opus-5-5", role="orchestrator")
+                variant = self.routing_document(orchestrator_rows=[claude])
+                source = next(row for row in variant["coverage"]["sources"]
+                              if row["id"] == "claude_usage")
+                source["status"] = status
+                source["reason"] = reason
+                with self.subTest(status=status):
+                    with self.assertRaises(RuntimeError):
+                        acceptance._validate_routing_source_coverage(
+                            variant, route_policy=self.route_policy()
+                        )
+
+    def test_retired_route_missing_credentials_stays_unavailable_without_blocking(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        document = self.routing_document()
+        claude = next(row for row in document["coverage"]["sources"]
+                      if row["id"] == "claude_usage")
+        claude.update(status="not_configured", reason="missing_credentials")
+        source.write_text(json.dumps(document))
+        policy = self.route_policy({
+            "worker": {"allow": [{"provider": "ollama", "model": "deepseek-v4.1-flash"}]},
+            "orchestrator": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+            "reviewer": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+        })
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            target = acceptance.stage_candidate_model_routing(
+                source, candidate_tmp, os.getuid(), route_policy=policy
+            )
+        copied = json.loads(target.read_text())
+        source_row = next(row for row in copied["coverage"]["sources"]
+                          if row["id"] == "claude_usage")
+        self.assertEqual((source_row["status"], source_row["reason"]),
+                         ("not_configured", "missing_credentials"))
+
+    def test_stale_disabled_provider_source_stays_unavailable_without_blocking(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        document = self.routing_document(
+            failed_sources=("claude_usage", "command_code_usage")
+        )
+        command_source = next(row for row in document["coverage"]["sources"]
+                              if row["id"] == "command_code_usage")
+        old_epoch = self.ROUTING_NOW - 3600
+        old_timestamp = datetime.fromtimestamp(old_epoch, tz=timezone.utc).isoformat().replace(
+            "+00:00", "Z"
+        )
+        command_source.update(status="stale", reason="stale_reading",
+                              observed_at=old_timestamp, observed_at_epoch=old_epoch)
+        source.write_text(json.dumps(document))
+        policy = self.route_policy({
+            "worker": {"allow": [{"provider": "ollama", "model": "deepseek-v4.1-flash"}]},
+            "orchestrator": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+            "reviewer": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+        })
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            target = acceptance.stage_candidate_model_routing(
+                source, candidate_tmp, os.getuid(), route_policy=policy
+            )
+        copied = json.loads(target.read_text())
+        source_row = next(row for row in copied["coverage"]["sources"]
+                          if row["id"] == "command_code_usage")
+        self.assertEqual((source_row["status"], source_row["reason"]),
+                         ("stale", "stale_reading"))
+
+    def test_candidate_worker_lane_uses_the_native_policy_identity(self):
+        claude = self.routing_row("claude", "claude-sonnet-5-5")
+        ollama = self.routing_row("ollama", "deepseek-v4.1-flash")
+        document = self.routing_document(worker_rows=[claude, ollama], failed_sources=())
+        policy = self.route_policy({"worker": {
+            "allow": [{"provider": "ollama", "model": "deepseek-v4.1-flash"}],
+        }})
+        expected = acceptance._candidate_acceptance_worker_routes(
+            document, route_policy=policy, now=self.ROUTING_NOW
+        )
+        self.assertEqual(expected, {("ollama", "deepseek-v4.1-flash")})
+
+    def test_routing_acceptance_requires_the_policy_mount_it_will_run(self):
+        with self.assertRaisesRegex(RuntimeError, "route policy mount is required"):
+            acceptance.accept(
+                self.state, self.archive, "podman",
+                "/run/t3code-podman-candidate/podman.sock", self.home,
+                model_routing_file=self.root / "routing.json",
+                command_fn=self.command, identity_fn=lambda: self.identity,
+            )
+
+    def test_ranked_rows_and_provider_group_must_agree_with_native_selection(self):
+        document = self.routing_document(failed_sources=())
+        document["model_selection"]["providers"]["ollama"]["selected"]["worker"] = {
+            "instanceId": "ollama", "model": "different-model",
+        }
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "does not match producer lane"):
+                acceptance._validate_routing_source_coverage(
+                    document, route_policy=self.route_policy()
+                )
+
+    def test_pinned_picker_and_policy_define_required_route_for_acceptance(self):
+        agent_source = os.environ.get("GHOSTSHIP_TEST_AGENT_SOURCE")
+        if not agent_source:
+            self.skipTest("the flake-pinned agent source is available in config-tests")
+        source_path = str(Path(agent_source) / "tools/python")
+        if source_path not in sys.path:
+            sys.path.insert(0, source_path)
+        from ghostship_t3.models import _provider_choice
+        from ghostship_t3.route_policy import decision
+
+        claude = self.routing_row(
+            "claude", "claude-opus-5-5", instance_id="claudeAgent", role="orchestrator"
+        )
+        codex = self.routing_row("codex", "gpt-6.1-sol", role="orchestrator")
+        document = self.routing_document(orchestrator_rows=[claude, codex])
+        selection = document["model_selection"]
+        selected_claude = _provider_choice(selection, "claude", "orchestrator")
+        self.assertEqual(selected_claude, claude["native"])
+        codex_first = self.routing_row("codex", "gpt-6.1-sol", role="orchestrator")
+        codex_fallback = self.routing_row("codex", "gpt-6.1-terra", role="orchestrator")
+        fallback_document = self.routing_document(
+            orchestrator_rows=[codex_first, codex_fallback], failed_sources=()
+        )["model_selection"]
+        codex_group = fallback_document["providers"]["codex"]
+        codex_group["orchestrator"][0].update(
+            state="spent", limiting_window={"remaining_ratio": 0}
+        )
+        fallback_document["orchestrator"][0].update(
+            state="spent", limiting_window={"remaining_ratio": 0}
+        )
+        self.assertEqual(
+            _provider_choice(fallback_document, "codex", "orchestrator"),
+            codex_fallback["native"],
+        )
+
+        policy = self.route_policy({
+            "worker": {"allow": [{"provider": "ollama", "model": "deepseek-v4.1-flash"}]},
+            "orchestrator": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+            "reviewer": {"allow": [{"provider": "codex", "model": "gpt-6.1-sol"}]},
+        })
+        self.assertFalse(decision("claudeAgent", "claude-opus-5-5", "orchestrator",
+                                  policy=policy, now=self.ROUTING_NOW)[0])
+        self.assertFalse(decision("claudeAgent", "claude-opus-5-5", "reviewer",
+                                  policy=policy, now=self.ROUTING_NOW)[0])
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            acceptance._validate_routing_source_coverage(document, route_policy=policy)
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        worker_route = {
+            "provider": "ollama", "model": "deepseek-v4.1-flash",
+            "billing": "subscription", "execution": "t3", "available": True,
+        }
+
+        def candidate_command(_engine, *args, **_kwargs):
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": worker_route}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [worker_route]}}))
+            return Mock(returncode=0, stdout="passed")
+
+        with patch.object(acceptance, "command", side_effect=candidate_command):
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env,
+                tooling_path="/nix/store/test-agent", routing_document=document,
+                route_policy=policy,
+            ), "ollama/deepseek-v4.1-flash")
+
+        policy["roles"]["orchestrator"]["allow"].append(
+            {"provider": "claudeAgent", "model": "claude-opus-5-5"}
+        )
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "incomplete source for an enabled route"):
+                acceptance._validate_routing_source_coverage(document, route_policy=policy)
+
+    def test_candidate_model_routing_requires_failed_sources_for_worker_fallbacks(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        rows = [
+            self.routing_row("ollama", "deepseek-v4.1-flash"),
+            self.routing_row("claude", "claude-sonnet-5-5"),
+        ]
+        document = self.routing_document(worker_rows=rows)
+        source.write_text(json.dumps(document))
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "incomplete source for an enabled route"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_candidate_model_routing_rejects_auth_unknown_and_partial_required_sources(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        claude = self.routing_row("claude", "claude-sonnet-5-5", role="orchestrator")
+        for status, reason in (("error", "http_unauthorized"), ("unknown", "unknown"),
+                               ("partial", "source_partial")):
+            document = self.routing_document(orchestrator_rows=[claude])
+            row = next(item for item in document["coverage"]["sources"]
+                       if item["id"] == "claude_usage")
+            row["status"] = status
+            row["reason"] = reason
+            if status == "partial":
+                row["observed_at_epoch"] = self.ROUTING_NOW
+            document["coverage"]["sources_failed"] = 0 if status == "partial" else 1
+            document["coverage"]["sources_partial"] = 1 if status == "partial" else 0
+            document["partial"] = True
+            document["model_selection"]["partial"] = True
+            with self.subTest(status=status):
+                source.write_text(json.dumps(document))
+                with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+                    with self.assertRaises(RuntimeError):
+                        acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_candidate_model_routing_refuses_unproven_routes_and_partial_without_coverage(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        cases = (
+            self.routing_document(missing_coverage=True),
+            self.routing_document(provider_map_overrides={"claude_usage": []}),
+            self.routing_document(provider_map_overrides={"pool_events": []}),
+            self.routing_document(worker_rows=[{
+                **self.routing_row("ollama", "deepseek-v4.1-flash"), "native": {"junk": 1},
+            }]),
+        )
+        cases[0]["partial"] = False
+        cases[0]["model_selection"]["partial"] = False
+        empty_providers = self.routing_document()
+        empty_providers["model_selection"]["providers"] = {}
+        unknown_source = self.routing_document()
+        unknown_source["coverage"]["sources"][-1]["id"] = "unclassified_source"
+        missing_source = self.routing_document()
+        missing_source["coverage"]["sources"].pop()
+        missing_source["coverage"]["sources_total"] -= 1
+        missing_source["coverage"]["sources_ok"] -= 1
+        cases += (empty_providers, unknown_source, missing_source)
+        for document in cases:
+            with self.subTest(document=document):
+                source.write_text(json.dumps(document))
+                with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+                    with self.assertRaises(RuntimeError):
+                        acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_candidate_model_routing_requires_exact_source_counts_and_fresh_readings(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        good = self.routing_document()
+        bad_coverages = (
+            {**good["coverage"], "sources_failed": True},
+            {**good["coverage"], "sources_failed": "1"},
+            {**good["coverage"], "sources_total": good["coverage"]["sources_total"] + 1},
+            {**good["coverage"], "sources_ok": 0},
+            {**good["coverage"], "sources_partial": 1},
+        )
+        for coverage in bad_coverages:
+            with self.subTest(coverage=coverage):
+                source.write_text(json.dumps({**good, "coverage": coverage}))
+                with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+                    with self.assertRaises(RuntimeError):
+                        acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+        stale_source = self.routing_document(failed_sources=())
+        next(row for row in stale_source["coverage"]["sources"] if row["id"] == "ollama")[
+            "observed_at_epoch"] = self.ROUTING_NOW - 901
+        source.write_text(json.dumps(stale_source))
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "source reading is stale"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_candidate_model_routing_rejects_stale_snapshot(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        document = self.routing_document(generated_at="2000-01-01T00:00:00Z")
+        source.write_text(json.dumps(document))
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "snapshot is stale"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+
+    def test_candidate_routing_copy_is_the_exact_validated_snapshot(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        document = self.routing_document()
+        original = json.dumps(document).encode()
+        source.write_bytes(original)
+        validator = acceptance._validate_routing_source_coverage
+
+        def validate_then_replace(checked_document, now=None, route_policy=None):
+            validator(checked_document, now=now, route_policy=route_policy)
+            source.write_text("{}")
+
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW), \
+             patch.object(acceptance, "_validate_routing_source_coverage",
+                          side_effect=validate_then_replace):
+            target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+        self.assertEqual(target.read_bytes(), original)
 
     def test_candidate_model_routing_rejects_failed_source_for_selected_provider(self):
         candidate_tmp = self.root / "candidate"
         candidate_tmp.mkdir()
         source = self.root / "routing.json"
-        document = {
-            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
-            "coverage": {"sources_failed": 1, "sources": [
-                {"id": "claude_usage", "status": "error", "reason": "http_unauthorized",
-                 "quota_providers": ["claude"]},
-            ]},
-            "model_selection": {"providers": {
-                "claude": {"selected": {"worker": {"instanceId": "claude", "model": "sonnet"},
-                                         "orchestrator": None}},
-            }},
-        }
+        document = self.routing_document(worker_rows=[
+            self.routing_row("claude", "claude-sonnet-5-5"),
+        ])
         source.write_text(json.dumps(document))
-        with self.assertRaisesRegex(RuntimeError, "incomplete source for a selected route"):
-            acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "incomplete source for an enabled route"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
 
     def test_candidate_model_routing_keeps_count_and_partial_fail_closed(self):
         candidate_tmp = self.root / "candidate"
@@ -318,7 +745,15 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.subTest(coverage=coverage):
                 source.write_text(json.dumps({**base, "coverage": coverage}))
                 with self.assertRaises(RuntimeError):
-                    acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+                    acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
+        mismatched_epoch = self.routing_document(failed_sources=())
+        mismatched_epoch["model_selection"]["generated_at_epoch"] = self.ROUTING_NOW - 901
+        source.write_text(json.dumps(mismatched_epoch))
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            with self.assertRaisesRegex(RuntimeError, "selection epoch"):
+                acceptance.stage_candidate_model_routing(
+                    source, candidate_tmp, os.getuid(), route_policy=self.route_policy()
+                )
 
     def test_routing_snapshot_refusals_are_retryable_preconditions(self):
         # The host's live snapshot is checked before the candidate runs, so its
@@ -333,7 +768,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             if content is not None:
                 source.write_text(content)
             with self.assertRaises(acceptance.PreconditionError):
-                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid(), route_policy=self.route_policy())
         argv = ["candidate-acceptance", "--state-dir", "s", "--image-archive", "i", "--home-dir", "h",
                 "--candidate-runtime-dir", "r", "--candidate-home-target", "/c", "--candidate-uid", "1"]
         with patch.object(sys, "argv", argv), \
@@ -485,12 +920,15 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 "available": True,
             }}}))
 
+        routing_document = self.routing_document()
         with patch.object(acceptance, "command", side_effect=command), \
-             patch.object(acceptance, "check_provider_turn", return_value=True):
+             patch.object(acceptance, "check_provider_turn", return_value=True) as provider_turn:
             checks = acceptance.check_candidate(
-                ["podman"], "candidate", "provider.env", tooling_path="/nix/store/test-agent"
+                ["podman"], "candidate", "provider.env", tooling_path="/nix/store/test-agent",
+                routing_document=routing_document,
             )
         self.assertTrue(all(checks.values()))
+        self.assertIs(provider_turn.call_args.kwargs["routing_document"], routing_document)
         self.assertIn(("exec", "candidate", "systemctl", "start",
                        "t3code-access-proxy.service"), calls)
         self.assertIn(("exec", "--user=3000:3000", "candidate", "t3", "project",
@@ -583,6 +1021,56 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertTrue(any(any(item.endswith("provider-turn-probe.py") for item in call) and
                             "opencode-free/nvidia/minimaxai/minimax-m3.1-flash" in call
                             for call in calls))
+
+    def test_provider_turn_requires_cli_routes_to_match_the_validated_native_lane(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        expected = self.routing_row("ollama", "deepseek-v4.1-flash")
+        document = self.routing_document(worker_rows=[expected])
+        route = {"provider": "ollama", "model": "deepseek-v4.1-flash",
+                 "billing": "subscription", "execution": "t3", "available": True}
+        policy = self.route_policy()
+        with patch.object(acceptance.time, "time", return_value=self.ROUTING_NOW):
+            acceptance._validate_routing_source_coverage(document, route_policy=policy)
+
+        def command(engine, *args, **kwargs):
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": route}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [route]}}))
+            return Mock(returncode=0, stdout="passed")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            self.assertEqual(acceptance.check_provider_turn(
+                ["podman"], "candidate", provider_env,
+                tooling_path="/nix/store/test-agent", routing_document=document,
+                route_policy=policy,
+            ), "ollama/deepseek-v4.1-flash")
+
+    def test_provider_turn_rejects_cli_route_missing_from_validated_native_lane(self):
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        document = self.routing_document()
+        route = {"provider": "commandCode", "model": "deepseek/deepseek-v4.1-flash",
+                 "billing": "subscription", "execution": "t3", "available": True}
+        calls = []
+
+        def command(engine, *args, **kwargs):
+            calls.append(tuple(args))
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": route}}))
+            if "models" in args and "--json" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [route]}}))
+            return Mock(returncode=0, stdout="present")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, "route is absent from the validated routing snapshot"):
+                acceptance.check_provider_turn(
+                    ["podman"], "candidate", provider_env,
+                    tooling_path="/nix/store/test-agent", routing_document=document,
+                )
+        self.assertFalse(any(any(str(item).endswith("provider-turn-probe.py") for item in call)
+                             for call in calls))
 
     def test_candidate_error_classification_does_not_include_command_output(self):
         self.assertEqual(acceptance.candidate_error_category(Mock(
@@ -691,6 +1179,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
         fallback = {"provider": "opencode-free", "model": "nvidia/fallback",
                     "billing": "free", "approved_free": True,
                     "execution": "t3", "available": True}
+        first_row = self.routing_row("opencode-free", "nvidia/first")
+        first_row.update(billing="free", approved_free={"provider": "nvidia"})
+        fallback_row = self.routing_row("opencode-free", "nvidia/fallback")
+        fallback_row.update(billing="free", approved_free={"provider": "nvidia"})
+        routing_document = self.routing_document(worker_rows=[first_row, fallback_row])
         calls = []
 
         def command(engine, *args, **kwargs):
@@ -714,7 +1207,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command):
             self.assertEqual(acceptance.check_provider_turn(
                 ["podman"], "candidate", provider_env,
-                tooling_path="/nix/store/test-agent",
+                tooling_path="/nix/store/test-agent", routing_document=routing_document,
             ), "opencode-free/nvidia/fallback")
         proved = [next(item for item in call if item.startswith("opencode-free/"))
                   for call in calls

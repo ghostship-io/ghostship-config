@@ -58,11 +58,6 @@ let
               rule = "owner-approved Codex worker route";
             }
             {
-              provider = "claudeAgent";
-              model = "claude-sonnet-5-5";
-              rule = "owner: any roadmap work while Claude stays above its weekly worker guard";
-            }
-            {
               provider = "opencode";
               model = "command-code/deepseek/deepseek-v4.1-flash";
               rule = "owner-approved default paid worker route";
@@ -125,14 +120,9 @@ let
         orchestrator = {
           allow = [
             {
-              provider = "claudeAgent";
-              model = "claude-opus-5-5";
-              rule = "owner: no Codex orchestrator handover trial";
-            }
-            {
               provider = "codex";
               model = "gpt-6.1-sol";
-              rule = "owner: Codex succeeds Claude when Claude inference runs out";
+              rule = "owner-approved Codex orchestrator route; Claude entitlement retired";
             }
           ];
           deny = [
@@ -149,7 +139,16 @@ let
           ] ++ [ fastBillingTierDeny ];
           allow_rule = "not in the owner-approved orchestrator routes";
         };
-        reviewer.deny = [
+        reviewer = {
+          allow = [
+            {
+              provider = "codex";
+              model = "gpt-6.1-sol";
+              rule = "owner-approved Codex reviewer route; Claude entitlement retired";
+            }
+          ];
+          allow_rule = "not in the owner-approved reviewer routes";
+          deny = [
           {
             provider = "claudeAgent";
             model = "claude-fable-5";
@@ -160,8 +159,9 @@ let
             model = "claude-fable-5-1";
             rule = "Claude Fable denied by owner";
           }
-          fastBillingTierDeny
-        ];
+            fastBillingTierDeny
+          ];
+        };
       };
       authorizations = [ ];
     }

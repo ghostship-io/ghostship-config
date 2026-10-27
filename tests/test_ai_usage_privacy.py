@@ -103,6 +103,25 @@ class PrivacyTests(unittest.TestCase):
         self.assertEqual(source["id"], "claude_usage")
         self.assertEqual(source["quota_providers"], ["claude"])
 
+    def test_retired_claude_source_is_explicitly_unavailable_without_credentials(self):
+        result = main.collect_claude_usage(1_800_000_000, "")
+        self.assertEqual(result.source, "claude_usage")
+        self.assertEqual(result.status, "not_configured")
+        self.assertEqual(result.windows, [])
+        self.assertEqual(result.observed_at, 1_800_000_000)
+
+    def test_inference_sources_publish_their_route_scope(self):
+        from metrics import SourceResult
+
+        snapshot = main.build_snapshot(
+            [SourceResult(source="opencode_events", status="error", reason="unreadable")],
+            [], {"inference_route_providers": ["ollama", "opencode-free"]},
+            1_800_000_000,
+        )
+        source = snapshot["coverage"]["sources"][0]
+        self.assertEqual(source["id"], "opencode_events")
+        self.assertEqual(source["quota_providers"], ["ollama", "opencode-free"])
+
     def test_acceptance_source_map_matches_collector_quota_coverage(self):
         self.assertEqual(acceptance.QUOTA_SOURCE_PROVIDERS, main.QUOTA_PROVIDERS_BY_SOURCE)
 

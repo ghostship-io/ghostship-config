@@ -143,7 +143,6 @@ let
       .entries;
   expectedWorkerRoutes = [
     "codex/gpt-6-luna"
-    "claudeAgent/claude-sonnet-5-5"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
     "opencode/ollama-cloud/deepseek-v4.1-flash"
@@ -155,8 +154,10 @@ let
   ]
   ++ expectedFreeRoutes;
   actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
-  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ];
+  expectedOrchestratorRoutes = [ "codex/gpt-6.1-sol" ];
   actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
+  expectedReviewerRoutes = [ "codex/gpt-6.1-sol" ];
+  actualReviewerRoutes = map routeKey routePolicy.roles.reviewer.allow;
   fastBillingDenied = role: builtins.any
     (entry: entry.provider == "*" && entry.model == "*"
       && entry.billing_tier == "priority"
@@ -279,6 +280,9 @@ in
     assert
       builtins.sort builtins.lessThan actualOrchestratorRoutes
       == builtins.sort builtins.lessThan expectedOrchestratorRoutes;
+    assert
+      builtins.sort builtins.lessThan actualReviewerRoutes
+      == builtins.sort builtins.lessThan expectedReviewerRoutes;
     assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
     assert fastBillingDenied "worker" && fastBillingDenied "orchestrator" && fastBillingDenied "reviewer";
     assert routePolicy.authorizations == [ ];

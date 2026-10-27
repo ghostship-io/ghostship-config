@@ -10,10 +10,12 @@ from pathlib import PurePosixPath
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 
 _probe_spec = importlib.util.spec_from_file_location(
     "t3code_hardening_probe", Path(__file__).with_name("hardening-probe.py")
@@ -32,9 +34,8 @@ PROVIDER_ENV = (
 )
 T3_FREE_PROVIDER = "opencode-free"
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
-# The quota readers used by the collector, retained here to classify a
-# snapshot produced just before the new source annotations are installed.
-# New snapshots carry the same mapping on each source row.
+# Source IDs and quota-account scopes are part of the routing snapshot
+# contract. Dynamic inference readers publish their provider scope per row.
 QUOTA_SOURCE_PROVIDERS = {
     "t3": ["codex", "cursor"],
     "claude_usage": ["claude"],
@@ -44,7 +45,19 @@ QUOTA_SOURCE_PROVIDERS = {
     "openrouter": ["openrouter"],
     "ollama": ["ollama"],
     "t3_usage": ["opencode", "pi"],
+    "free_pool": ["opencode-free"],
+    "command_code_usage": ["commandCode"],
+    "t3_runtime": ["antigravity"],
+    "opencode_events": [],
+    "pool_events": [],
 }
+DYNAMIC_QUOTA_SOURCES = frozenset({"opencode_events", "pool_events"})
+MAX_ROUTING_SNAPSHOT_AGE_SECONDS = 900
+ROUTING_FUTURE_TOLERANCE_SECONDS = 60
+ROUTING_SOURCE_STATUSES = frozenset({
+    "ok", "partial", "error", "missing_credentials", "expired_credentials",
+    "not_configured", "not_checked", "stale", "unavailable", "blocked",
+})
 ALLOWED_CANDIDATE_MOUNTS = {
     "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
     "/etc/ghostship/approved-free-workers.json": "/etc/ghostship/approved-free-workers.json",
@@ -232,50 +245,311 @@ class PreconditionError(RuntimeError):
     """A host condition checked before the candidate runs was not met."""
 
 
-def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
+def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid, route_policy=None):
     """Snapshot the live routing catalog into private candidate scratch."""
     source = Path(source_file)
-    if source.is_symlink() or not source.is_file() or source.stat().st_size > 16 * 1024 * 1024:
-        raise PreconditionError("live model routing snapshot is unavailable")
     try:
-        document = json.loads(source.read_text())
-    except (OSError, ValueError):
+        descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        raise PreconditionError("live model routing snapshot is unavailable") from None
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > 16 * 1024 * 1024:
+            raise PreconditionError("live model routing snapshot is unavailable")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            raw = stream.read(16 * 1024 * 1024 + 1)
+        after = os.fstat(descriptor)
+        if (len(raw) > 16 * 1024 * 1024 or len(raw) != before.st_size
+                or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise PreconditionError("live model routing snapshot changed while being read")
+        document = json.loads(raw)
+    except PreconditionError:
+        raise
+    except (OSError, ValueError, UnicodeDecodeError):
         raise PreconditionError("live model routing snapshot is unreadable") from None
+    finally:
+        os.close(descriptor)
     if (not isinstance(document, dict)
             or document.get("schema") != "ghostship.ai-usage.routing"
             or document.get("schema_version") != 1
             or not isinstance(document.get("partial"), bool)):
         raise PreconditionError("live model routing snapshot is invalid")
-    _validate_routing_source_coverage(document)
+    _validate_routing_source_coverage(document, route_policy=route_policy)
     target = Path(candidate_tmp) / "model-routing.json"
-    shutil.copyfile(source, target)
+    try:
+        with target.open("xb") as staged:
+            staged.write(raw)
+    except OSError:
+        raise PreconditionError("candidate routing snapshot could not be staged") from None
     target.chmod(0o444)
     os.chown(target, candidate_uid, candidate_uid)
     return target
 
 
-def _validate_routing_source_coverage(document):
-    """Reject incomplete evidence only when it affects a selected route.
+def stage_candidate_route_policy(source_file, candidate_tmp, candidate_uid):
+    """Read and stage one immutable route-policy snapshot for candidate use."""
+    try:
+        source = Path(source_file).resolve(strict=True)
+        descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        raise PreconditionError("candidate route policy is unavailable") from None
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > 1024 * 1024:
+            raise PreconditionError("candidate route policy is invalid")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            raw = stream.read(1024 * 1024 + 1)
+        after = os.fstat(descriptor)
+        signature = lambda item: (item.st_dev, item.st_ino, item.st_size,
+                                  item.st_mtime_ns, item.st_ctime_ns)
+        if len(raw) > 1024 * 1024 or len(raw) != before.st_size or signature(before) != signature(after):
+            raise PreconditionError("candidate route policy changed while being read")
+        policy = json.loads(raw)
+    except PreconditionError:
+        raise
+    except (OSError, ValueError, UnicodeDecodeError):
+        raise PreconditionError("candidate route policy is unreadable") from None
+    finally:
+        os.close(descriptor)
+    if (not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v1"
+            or not isinstance(policy.get("roles"), dict)):
+        raise PreconditionError("candidate route policy is invalid")
+    target = Path(candidate_tmp) / "route-policy.json"
+    try:
+        with target.open("xb") as staged:
+            staged.write(raw)
+    except OSError:
+        raise PreconditionError("candidate route policy could not be staged") from None
+    target.chmod(0o444)
+    os.chown(target, candidate_uid, candidate_uid)
+    return target, policy
 
-    The collector annotates quota-source rows with the provider accounts they
-    cover. A failed reading for an unselected provider remains unavailable in
-    the copied snapshot, while a selected route cannot rely on that reading.
-    Unmapped failures fail closed because their scope is unknown.
-    """
+
+def _routing_timestamp(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.timestamp() if parsed.tzinfo is not None else None
+    except (OverflowError, ValueError):
+        return None
+
+
+def _routing_row_identity(row, *, require_native):
+    if not isinstance(row, dict):
+        raise PreconditionError("live model routing selection row is malformed")
+    provider = row.get("provider")
+    model = row.get("model")
+    native = row.get("native")
+    if not isinstance(provider, str) or not provider or not isinstance(model, str) or not model:
+        raise PreconditionError("live model routing selection identity is invalid")
+    if native is None and not require_native:
+        return provider, model, None
+    if (not isinstance(native, dict) or not isinstance(native.get("instanceId"), str)
+            or not native["instanceId"] or not isinstance(native.get("model"), str)
+            or not native["model"]):
+        raise PreconditionError("live model routing native identity is invalid")
+    return provider, model, json.dumps(native, sort_keys=True, separators=(",", ":"))
+
+
+def _route_policy_allows(policy, provider, model, role, now):
+    roles = policy.get("roles") if isinstance(policy, dict) else None
+    if not isinstance(roles, dict):
+        raise PreconditionError("candidate route policy is malformed")
+    rules = roles.get(role)
+    if rules is None:
+        return True
+    if not isinstance(rules, dict):
+        raise PreconditionError("candidate route policy role is malformed")
+    authorizations = policy.get("authorizations", [])
+    if not isinstance(authorizations, list):
+        raise PreconditionError("candidate route policy authorizations are malformed")
+    for auth in authorizations:
+        if not isinstance(auth, dict):
+            raise PreconditionError("candidate route policy authorization is malformed")
+        if auth.get("role") != role or auth.get("provider") != provider or auth.get("model") != model:
+            continue
+        expiry = _routing_timestamp(auth.get("expires_at"))
+        if expiry is not None and expiry > now:
+            return True
+    for field in ("allow", "deny"):
+        entries = rules.get(field, [])
+        if not isinstance(entries, list):
+            raise PreconditionError("candidate route policy rules are malformed")
+        if any(not isinstance(entry, dict)
+               or not isinstance(entry.get("provider"), str)
+               or not isinstance(entry.get("model"), str) for entry in entries):
+            raise PreconditionError("candidate route policy route identity is malformed")
+    deny = rules.get("deny", [])
+    if any(entry["provider"] == provider and entry["model"] == model for entry in deny):
+        return False
+    allow = rules.get("allow", [])
+    if allow and not any(entry["provider"] == provider and entry["model"] == model for entry in allow):
+        return False
+    return True
+
+
+def _enabled_routing_providers(document, route_policy=None, now=None):
+    """Return route providers eligible in the picker lanes and verify both views."""
+    now = time.time() if now is None else now
+    if route_policy is not None and (
+            not isinstance(route_policy, dict)
+            or route_policy.get("schema") != "ghostship.route-policy/v1"
+            or not isinstance(route_policy.get("roles"), dict)):
+        raise PreconditionError("candidate route policy is unavailable or invalid")
+    selection = document.get("model_selection")
+    if (not isinstance(selection, dict)
+            or selection.get("schema") != "ghostship.model-selection/v1"):
+        raise PreconditionError("live model routing selection evidence is unavailable")
+    lanes = {}
+    lane_routes = {}
+    enabled_providers = set()
+    for role in ("worker", "orchestrator"):
+        rows = selection.get(role)
+        if not isinstance(rows, list):
+            raise PreconditionError("live model routing role lane is unavailable")
+        identities = []
+        for row in rows:
+            provider, model, native = _routing_row_identity(row, require_native=False)
+            if (type(row.get("available")) is not bool
+                    or type(row.get("selection_eligible")) is not bool
+                    or type(row.get("picker_eligible")) is not bool):
+                raise PreconditionError("live model routing route eligibility is malformed")
+            if (row["picker_eligible"] and native is None) or (
+                    not row["picker_eligible"] and row.get("native") is not None):
+                raise PreconditionError("live model routing native identity disagrees with picker eligibility")
+            identity = (provider, model, native)
+            if identity in identities:
+                raise PreconditionError("live model routing role lane contains duplicate routes")
+            identities.append(identity)
+            if row["available"] and row["selection_eligible"] and row["picker_eligible"]:
+                if native is None:
+                    raise PreconditionError("enabled route is missing its native identity")
+                if row.get("billing") not in ("free", "promotion", "subscription"):
+                    raise PreconditionError("enabled route has unknown billing")
+                native_route = row["native"]
+                native_provider = native_route["instanceId"]
+                native_model = native_route["model"]
+                route_roles = ("worker",) if role == "worker" else ("orchestrator", "reviewer")
+                allowed_roles = (route_roles if route_policy is None else tuple(
+                    route_role for route_role in route_roles
+                    if _route_policy_allows(route_policy, native_provider, native_model,
+                                            route_role, now)
+                ))
+                if allowed_roles:
+                    enabled_providers.add(provider)
+                    for allowed_role in allowed_roles:
+                        lane_routes.setdefault(allowed_role, []).append(row)
+        lanes[role] = identities
+
+    provider_groups = selection.get("providers")
+    if not isinstance(provider_groups, dict) or not provider_groups:
+        raise PreconditionError("live model routing provider selections are unavailable")
+    grouped_enabled = {role: [] for role in lanes}
+    for provider, group in provider_groups.items():
+        if not isinstance(provider, str) or not provider or not isinstance(group, dict):
+            raise PreconditionError("live model routing provider group is malformed")
+        selected = group.get("selected")
+        if not isinstance(selected, dict):
+            raise PreconditionError("live model routing selected routes are unavailable")
+        for role in lanes:
+            rows = group.get(role)
+            if not isinstance(rows, list) or role not in selected:
+                raise PreconditionError("live model routing provider lane is unavailable")
+            group_identities = []
+            producer_selected = []
+            for row in rows:
+                row_provider, _model, native = _routing_row_identity(row, require_native=False)
+                if row_provider != provider:
+                    raise PreconditionError("live model routing provider identity is inconsistent")
+                if (type(row.get("available")) is not bool
+                        or type(row.get("selection_eligible")) is not bool
+                        or type(row.get("picker_eligible")) is not bool):
+                    raise PreconditionError("live model routing provider eligibility is malformed")
+                if (row["picker_eligible"] and native is None) or (
+                        not row["picker_eligible"] and row.get("native") is not None):
+                    raise PreconditionError("live model routing native identity disagrees with picker eligibility")
+                identity = (row_provider, row["model"], native)
+                if identity in group_identities:
+                    raise PreconditionError("live model routing provider has duplicate routes")
+                group_identities.append(identity)
+                grouped_enabled[role].append(identity)
+                if row["available"] and row["selection_eligible"] and native is not None:
+                    producer_selected.append(row["native"])
+            chosen = selected[role]
+            # The collector chooses the per-provider row from available and
+            # selection_eligible rows. The pinned picker then consumes that
+            # choice unless its limiting window is spent, in which case it
+            # uses the ranked picker_eligible fallback rows above.
+            expected = producer_selected[0] if producer_selected else None
+            if chosen != expected:
+                raise PreconditionError("live model routing selected route does not match producer lane")
+    for role in lanes:
+        if set(lanes[role]) != set(grouped_enabled[role]):
+            raise PreconditionError("live model routing ranked lane and provider routes disagree")
+    if not lane_routes.get("worker"):
+        raise PreconditionError("live model routing has no enabled worker route")
+    if not lane_routes.get("orchestrator"):
+        raise PreconditionError("live model routing has no enabled orchestrator route")
+    if route_policy is not None and not lane_routes.get("reviewer"):
+        raise PreconditionError("live model routing has no enabled reviewer route")
+
+    exclusions = selection.get("role_exclusions", [])
+    if not isinstance(exclusions, list):
+        raise PreconditionError("live model routing role exclusions are malformed")
+    for exclusion in exclusions:
+        if (not isinstance(exclusion, dict) or exclusion.get("category") not in lanes):
+            raise PreconditionError("live model routing role exclusion is malformed")
+        _routing_row_identity({
+            "provider": exclusion.get("provider"),
+            "model": (exclusion.get("native") or {}).get("model")
+            if isinstance(exclusion.get("native"), dict) else None,
+            "native": exclusion.get("native"),
+        }, require_native=True)
+
+    # A source not represented in the account map cannot be called optional.
+    mapped_providers = {provider for providers in QUOTA_SOURCE_PROVIDERS.values()
+                        for provider in providers}
+    for provider in enabled_providers:
+        if provider not in mapped_providers:
+            raise PreconditionError("enabled route has no quota-source classification")
+    return enabled_providers, lane_routes
+
+
+def _validate_routing_source_coverage(document, now=None, route_policy=None):
+    """Validate a fresh complete snapshot against every enabled route lane."""
+    now = time.time() if now is None else now
+    generated_at = document.get("generated_at")
+    generated_epoch = _routing_timestamp(generated_at)
+    age_limit = document.get("max_age_seconds")
+    if (generated_epoch is None or type(age_limit) is not int or not 0 < age_limit <= MAX_ROUTING_SNAPSHOT_AGE_SECONDS
+            or generated_epoch < now - age_limit
+            or generated_epoch > now + ROUTING_FUTURE_TOLERANCE_SECONDS):
+        raise PreconditionError("live model routing snapshot is stale or has invalid freshness")
+    selection = document.get("model_selection")
+    if (not isinstance(selection, dict) or selection.get("generated_at") != generated_at
+            or selection.get("max_age_seconds") != age_limit
+            or selection.get("partial") is not document["partial"]):
+        raise PreconditionError("live model routing selection does not match snapshot freshness")
+    selection_epoch = selection.get("generated_at_epoch")
+    if selection_epoch is not None and (
+            isinstance(selection_epoch, bool) or not isinstance(selection_epoch, (int, float))
+            or abs(float(selection_epoch) - generated_epoch) > 1
+            or not now - age_limit <= float(selection_epoch)
+            <= now + ROUTING_FUTURE_TOLERANCE_SECONDS):
+        raise PreconditionError("live model selection epoch does not match snapshot freshness")
+
     coverage = document.get("coverage")
     if not isinstance(coverage, dict):
-        if document["partial"]:
-            raise PreconditionError("live model routing coverage is unavailable")
-        return
-
-    failed_count = coverage.get("sources_failed")
-    if type(failed_count) is not int or failed_count < 0:
-        raise PreconditionError("live model routing failed-source count is invalid")
+        raise PreconditionError("live model routing coverage is unavailable")
     source_rows = coverage.get("sources")
-    if not isinstance(source_rows, list):
-        if document["partial"] or failed_count:
-            raise PreconditionError("live model routing source evidence is unavailable")
-        return
+    counts = {name: coverage.get(name) for name in
+              ("sources_total", "sources_ok", "sources_partial", "sources_failed")}
+    if any(type(count) is not int or count < 0 for count in counts.values()):
+        raise PreconditionError("live model routing source counts are invalid")
+    if not isinstance(source_rows, list) or counts["sources_total"] != len(source_rows):
+        raise PreconditionError("live model routing source evidence is incomplete")
 
     ids = set()
     incomplete = []
@@ -289,59 +563,96 @@ def _validate_routing_source_coverage(document):
         status = row.get("status")
         if not isinstance(source_id, str) or not source_id or source_id in ids:
             raise PreconditionError("live model routing source identity is invalid")
-        if not isinstance(status, str) or not status:
+        if source_id not in QUOTA_SOURCE_PROVIDERS:
+            if status != "ok":
+                raise PreconditionError("live model routing has an unknown incomplete source")
+        reason = row.get("reason")
+        if status not in ROUTING_SOURCE_STATUSES or not isinstance(reason, str) or not reason:
             raise PreconditionError("live model routing source status is invalid")
+        if (status == "ok") != (reason == "ok"):
+            raise PreconditionError("live model routing source status and reason disagree")
+        if reason == "unknown":
+            raise PreconditionError("live model routing has an unknown source failure")
         ids.add(source_id)
+        observed = row.get("observed_at_epoch")
+        observed_at = _routing_timestamp(row.get("observed_at"))
+        if status != "ok" and observed is None and row.get("observed_at") is None:
+            # The collector timestamps the snapshot even when a reader fails
+            # before it can produce a reading (for example T3 usage RPC
+            # failure). That fresh source status is the attempt receipt.
+            observed_epoch = generated_epoch
+        elif (isinstance(observed, bool) or not isinstance(observed, (int, float))
+              or observed_at is None or abs(observed_at - float(observed)) > 1):
+            raise PreconditionError("live model routing source reading is stale or undated")
+        else:
+            observed_epoch = float(observed)
+        if status == "ok" and not now - age_limit <= observed_epoch <= now + ROUTING_FUTURE_TOLERANCE_SECONDS:
+            raise PreconditionError("live model routing source reading is stale or undated")
         if status == "ok":
+            last_success = _routing_timestamp(row.get("last_success_at"))
+            if (last_success is None or not now - age_limit <= last_success
+                    <= now + ROUTING_FUTURE_TOLERANCE_SECONDS):
+                raise PreconditionError("live model routing successful source receipt is stale or missing")
             ok += 1
         else:
             incomplete.append(row)
             if status == "partial":
-                partial += 1
+                raise PreconditionError("live model routing has a genuinely partial source")
             else:
+                if row.get("last_success_at") is not None:
+                    raise PreconditionError("live model routing failed source has a success receipt")
                 failed += 1
 
-    if failed_count != failed:
-        raise PreconditionError("live model routing failed-source count does not match evidence")
-    for name, actual in (("sources_total", len(source_rows)),
-                         ("sources_ok", ok),
-                         ("sources_partial", partial)):
-        count = coverage.get(name)
-        if count is not None and (type(count) is not int or count != actual):
+    if ids != set(QUOTA_SOURCE_PROVIDERS):
+        raise PreconditionError("live model routing source inventory is incomplete")
+    for name, actual in (("sources_total", len(source_rows)), ("sources_ok", ok),
+                         ("sources_partial", partial), ("sources_failed", failed)):
+        if counts[name] != actual:
             raise PreconditionError(f"live model routing {name} count does not match evidence")
     if document["partial"] != bool(incomplete):
         raise PreconditionError("live model routing partial flag does not match source evidence")
-    if not incomplete:
-        return
+    # An incomplete source can be treated as optional only when the exact
+    # candidate policy proves every consumer role that could select it rejects
+    # that native route. Missing policy therefore fails closed on partial data.
+    if incomplete and route_policy is None:
+        raise PreconditionError("candidate route policy is required to classify incomplete sources")
+    enabled_providers, _lane_routes = _enabled_routing_providers(
+        document, route_policy=route_policy, now=now
+    )
 
-    model_selection = document.get("model_selection")
-    providers = model_selection.get("providers") if isinstance(model_selection, dict) else None
-    if not isinstance(providers, dict):
-        raise PreconditionError("live model routing selections are unavailable")
-    # Candidate acceptance proves a worker/code turn. An available
-    # orchestrator route (for example a UI-only Claude route) is not a source
-    # precondition for that unrelated worker turn.
-    selected_providers = set()
-    for provider, selection in providers.items():
-        selected = selection.get("selected") if isinstance(selection, dict) else None
-        if (not isinstance(provider, str) or not provider or not isinstance(selected, dict)
-                or "worker" not in selected):
-            raise PreconditionError("live model routing selections are malformed")
-        worker_route = selected.get("worker")
-        if worker_route is not None and (not isinstance(worker_route, dict) or not worker_route):
-            raise PreconditionError("live model routing selections are malformed")
-        if worker_route is not None:
-            selected_providers.add(provider)
+    for row in source_rows:
+        source_id = row["id"]
+        quota_providers = row.get("quota_providers")
+        if source_id in DYNAMIC_QUOTA_SOURCES:
+            if (not isinstance(quota_providers, list)
+                    or any(not isinstance(provider, str) or not provider for provider in quota_providers)
+                    or len(quota_providers) != len(set(quota_providers))
+                    or set(quota_providers) != {
+                        item["provider"]
+                        for role in ("worker", "orchestrator")
+                        for item in selection[role]
+                    }):
+                raise PreconditionError("live model routing has an unproven dynamic source scope")
+        else:
+            known_providers = QUOTA_SOURCE_PROVIDERS[source_id]
+            if quota_providers != known_providers:
+                raise PreconditionError("live model routing source scope does not match its source")
 
     for row in incomplete:
         source_id = row["id"]
         known_providers = QUOTA_SOURCE_PROVIDERS.get(source_id)
         quota_providers = row.get("quota_providers")
-        if (not isinstance(known_providers, list) or not known_providers
+        if source_id in DYNAMIC_QUOTA_SOURCES:
+            if (not isinstance(quota_providers, list)
+                    or any(not isinstance(provider, str) or not provider for provider in quota_providers)
+                    or not enabled_providers.issubset(set(quota_providers))):
+                raise PreconditionError("live model routing has an unproven dynamic source scope")
+            known_providers = quota_providers
+        elif (not isinstance(known_providers, list) or not known_providers
                 or (quota_providers is not None and quota_providers != known_providers)):
             raise PreconditionError("live model routing has an unclassified incomplete source")
-        if selected_providers.intersection(known_providers):
-            raise PreconditionError("live model routing has an incomplete source for a selected route")
+        if enabled_providers.intersection(known_providers):
+            raise PreconditionError("live model routing has an incomplete source for an enabled route")
 
 
 def resolve_container_home_path(source_home, path, container_home):
@@ -821,7 +1132,8 @@ def candidate_error_summary(result):
     return re.sub(r"[^A-Za-z0-9_.-]", "-", line)[:96] or "empty-output"
 
 
-def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None):
+def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
+                    routing_document=None, route_policy=None):
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
     # Start that same serving path explicitly in the disposable candidate.
@@ -874,7 +1186,8 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     register_candidate_workspace(engine, name)
     provider_route = check_provider_turn(
         engine, name, provider_env_file, timeout_s=timeout_s,
-        tooling_path=tooling_path,
+        tooling_path=tooling_path, routing_document=routing_document,
+        route_policy=route_policy,
     )
     checks["provider_turn"] = bool(provider_route)
     checks["provider_turn_route"] = provider_route
@@ -904,7 +1217,8 @@ def register_candidate_workspace(engine, name):
         )
 
 
-def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None):
+def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
+                        routing_document=None, route_policy=None):
     """Prove the live picker route with a real native provider turn."""
     del provider_env_file  # This route is served by the T3 opencode-free instance.
     diagnostics = candidate_provider_diagnostics(engine, name)
@@ -938,6 +1252,12 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     routes = ([initial_route] if initial_route else []) + [
         route for route in routes if route != initial_route
     ]
+    if routing_document is not None:
+        expected = _candidate_acceptance_worker_routes(routing_document, route_policy=route_policy)
+        observed = {_route_pair(route) for route in routes}
+        if (not observed.issubset(expected)
+                or (initial_route and _route_pair(initial_route) not in expected)):
+            raise RuntimeError("provider_turn failed: route is absent from the validated routing snapshot")
     if not routes:
         raise RuntimeError(
             "provider_turn failed: model-unavailable and live catalog has no approved available T3 fallback "
@@ -1007,6 +1327,41 @@ def valid_t3_acceptance_route(selection):
         and selection.get("execution") == "t3"
         and selection.get("available") is True
     )
+
+
+def _route_pair(route):
+    provider, separator, model = route.partition("/")
+    if not separator or not provider or not model:
+        raise RuntimeError("provider_turn failed: picker route identity is malformed")
+    return provider, model
+
+
+def _candidate_acceptance_worker_routes(document, route_policy=None, now=None):
+    selection = document.get("model_selection") if isinstance(document, dict) else None
+    rows = selection.get("worker") if isinstance(selection, dict) else None
+    if not isinstance(rows, list):
+        raise PreconditionError("validated routing snapshot has no worker lane")
+    routes = set()
+    for row in rows:
+        provider, model, native = _routing_row_identity(row, require_native=False)
+        if not (row.get("available") is True and row.get("selection_eligible") is True
+                and row.get("picker_eligible") is True and native is not None):
+            continue
+        if route_policy is not None and not _route_policy_allows(
+                route_policy, row["native"]["instanceId"], row["native"]["model"],
+                "worker", time.time() if now is None else now):
+            continue
+        billing = row.get("billing")
+        if billing in ("free", "promotion"):
+            if not row.get("approved_free"):
+                continue
+        elif billing == "subscription":
+            if provider in PROTECTED_ACCEPTANCE_PROVIDERS:
+                continue
+        else:
+            continue
+        routes.add((provider, model))
+    return routes
 
 
 def candidate_t3_routes(result):
@@ -1097,6 +1452,13 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
     validated_volumes = validate_candidate_mounts(volumes)
+    route_policy_mount = next(
+        (str(volume) for volume in validated_volumes
+         if str(volume).split(":", 2)[1:2] == ["/etc/ghostship/route-policy.json"]),
+        None,
+    )
+    if model_routing_file and route_policy_mount is None:
+        raise PreconditionError("candidate route policy mount is required for routing acceptance")
     approved_workers_file = next(
         (str(volume).split(":", 2)[0] for volume in validated_volumes
          if str(volume).split(":", 2)[1:2] == ["/etc/ghostship/approved-free-workers.json"]),
@@ -1122,6 +1484,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     created = False
     manager_started = False
     checks = {}
+    routing_document = None
     try:
         staged_toolchain = stage_candidate_inputs(
             home_dir, home_copy, input_copy, candidate_uid, tooling_path,
@@ -1130,10 +1493,29 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         )
         write_provider_env(provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
+        route_policy_copy = None
+        route_policy_document = None
+        if route_policy_mount is not None:
+            route_policy_source = route_policy_mount.split(":", 2)[0]
+            route_policy_copy, route_policy_document = stage_candidate_route_policy(
+                route_policy_source, candidate_tmp, candidate_uid
+            )
+            validated_volumes = [
+                f"{route_policy_copy}:/etc/ghostship/route-policy.json:ro"
+                if volume == route_policy_mount else volume
+                for volume in validated_volumes
+            ]
         routing_copy = (
-            stage_candidate_model_routing(model_routing_file, candidate_tmp, candidate_uid)
-            if model_routing_file else None
+            stage_candidate_model_routing(
+                model_routing_file, candidate_tmp, candidate_uid,
+                route_policy=route_policy_document,
+            ) if model_routing_file else None
         )
+        if routing_copy is not None:
+            routing_document = json.loads(routing_copy.read_bytes())
+            _validate_routing_source_coverage(
+                routing_document, route_policy=route_policy_document
+            )
         candidate_workspace = candidate_tmp / "workspace"
         candidate_workspace.mkdir(mode=0o700)
         (candidate_workspace / "README.txt").write_text(
@@ -1186,7 +1568,10 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         assert_ok(engine, *args, timeout=300)
         for source, _target in agent_store_paths:
             assert_ok(engine, "cp", source, f"{name}:/nix/store/", timeout=120)
-        checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path)
+        checks = check_candidate(
+            engine, name, provider_env, tooling_path=tooling_path,
+            routing_document=routing_document, route_policy=route_policy_document,
+        )
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
