@@ -151,7 +151,12 @@ operator; a store path alone is not a Git revision receipt.
 A published release with missing refresh or consumer evidence remains partial.
 If actual availability fails, promptly notify the owner with the release ID,
 report and retained-artifact paths; the owner alone decides and performs any
-rollback. Do not automatically restore. If an upload outcome is unknown,
+rollback. The operator observing the failure is responsible for that message.
+The configured systemd failure hook routes failed unit status to the operations
+notification service, but delivery to the owner and detection of failures in
+an already-running consumer are not established. A pending receipt is not by
+itself proof of an availability failure. Do not automatically restore. If an
+upload outcome is unknown,
 leave its intent intact and do not retry or start a competing rollback while
 the original request may still apply. Establish its terminal outcome first.
 The retained archive is a recovery aid; the host's ability to re-upload old
