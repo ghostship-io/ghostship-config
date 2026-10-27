@@ -9,7 +9,7 @@
     # Independently reviewed native connector increment; unrelated service
     # runtimes keep their existing release pin.
     ghostship-native-agent = {
-      url = "github:ghostship-io/ghostship-agent/9002986c5ef013e9402c9d1a5afbb135d55fd17e";
+      url = "github:ghostship-io/ghostship-agent/cb6f5c3d4a647fc59fe4b54c23b15d0dd2941b19";
       flake = false;
     };
 
