@@ -16,6 +16,9 @@ profile ghostship-private-integrations flags=(complain,attach_disconnected,media
   /nix/store/*-ghostship-native-mcp-0.1.0/bin/ghostship-mcp rix,
   /nix/store/*-ghostship-native-mcp-0.1.0/bin/ghostship-integration-supervisor rix,
   /nix/store/*-openai-tunnel-client-runtime-0.0.15/bin/tunnel-client rix,
+  # Agent Desktop is a stdio MCP reached with the stock ssh client.
+  /nix/store/*-openssh-*/** rix,
+  /nix/store/*-openssl-*/** mr,
   /nix/store/*-glibc-2.40-224/lib/{ld-linux-aarch64.so.1,libc.so.6,libdl.so.2,libm.so.6,libpthread.so.0,libresolv.so.2,librt.so.1} mr,
   /nix/store/*-nss-cacert-3.123/etc/ssl/certs/ca-bundle.crt r,
   /etc/{passwd,group,hosts,resolv.conf,nsswitch.conf,localtime} r,
@@ -29,6 +32,12 @@ profile ghostship-private-integrations flags=(complain,attach_disconnected,media
   /sys/fs/cgroup/{,cpu.max,memory.max} r,
   /run/ghostship-integrations/ r,
   /run/ghostship-integrations/{t3-token,ghostship.key,ghostship.yaml} r,
+  /run/ghostship-integrations/{agent-desktop-key,agent-desktop-known-hosts,agent-desktop-host,github-token,workspace-token} r,
+  /etc/ssh/{,**} r,
+  # The approved host workspace, and the connector's own state under /state.
+  /workspace/ r,
+  /workspace/** rwkl,
+  owner /state/.local/** rwkl,
   /state/ r,
   owner /state/native-auth/ rw,
   owner /state/native-auth/request rw,

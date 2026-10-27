@@ -14,6 +14,10 @@ let
       sourceRevision = private.sourceRevision;
     };
     relay = import (privateSource + "/lib/openai-relay.nix") { inherit pkgs; };
+    # The Agent Desktop contract is reached with the stock OpenSSH client. Pin
+    # it in the same nixpkgs as the runtime so the managed publication copies
+    # exactly the PATH entry the entrypoint names.
+    openssh = pkgs.openssh;
     sharedSocket = "/tmp/ghostship-mcp/ghostship.sock";
   };
   ingress = github sources.hooks;
@@ -56,6 +60,9 @@ in
       private.runtime
       (start "integrations" ''
         export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+        # The supervisor preserves this PATH for its children. OpenSSH is the
+        # only extra tool: the Agent Desktop contract is an ssh stdio MCP.
+        export PATH=${private.openssh}/bin:/run/ghostship-runtime/current/bin:$PATH
         exec ${private.runtime}/bin/ghostship-integration-supervisor \
           --backend ${private.runtime}/bin/ghostship-mcp \
           --relay ${private.relay}/bin/tunnel-client \
