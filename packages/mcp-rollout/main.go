@@ -156,6 +156,18 @@ func nativeTools(names []string) bool {
 	return true
 }
 
+func lockState(dir string) (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(dir, "reconcile.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
 func reconcile(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("reconcile", flag.ContinueOnError)
 	skills := fs.String("skills-cli", "", "existing pinned skills publisher")
@@ -167,14 +179,14 @@ func reconcile(ctx context.Context, args []string) int {
 	if fs.Parse(args) != nil || *dir == "" || *skills == "" || *repo == "" || *sha == "" {
 		return 2
 	}
-	lock, err := os.OpenFile(filepath.Join(*dir, "reconcile.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if filepath.Clean(filepath.Dir(*serverFile)) != filepath.Clean(*dir) {
+		return 2
+	}
+	lock, err := lockState(*dir)
 	if err != nil {
 		return 1
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return 1
-	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	r := report{Server: stage{"unknown", "server readback required"}, Publication: stage{"pending", "not attempted"}, Discovery: stage{"manual_required", "Refresh tools in the existing app settings, then record discovery.json"}, Consumer: stage{"manual_required", "Verify actual consumer declarations and one read-only native call; record consumer.json. A stale host may need a fresh conversation."}}
 	finish := func(code int) int {
@@ -245,6 +257,8 @@ func reconcile(ctx context.Context, args []string) int {
 			r.Publication = stage{"unknown", "unresolved publication intent does not match selected content; inspect original outcome"}
 			return finish(1)
 		}
+		r.Publication = stage{"unknown", "original publication outcome unresolved; matching projection alone cannot resolve it; inspect original request"}
+		return finish(1)
 	} else if save(intentPath, intent) != nil {
 		r.Publication = stage{"unknown", "publication intent could not be persisted"}
 		return finish(1)
@@ -258,13 +272,9 @@ func reconcile(ctx context.Context, args []string) int {
 			ReleaseID string `json:"release_id"`
 		} `json:"verification"`
 	}
-	if !unresolved {
-		if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
-			r.Publication = stage{"unknown", "publication outcome unresolved; read back original intent without another upload"}
-			return finish(1)
-		}
-	} else {
-		pub.Action = "reconciled"
+	if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
+		r.Publication = stage{"unknown", "publication outcome unresolved; inspect original request without another upload"}
+		return finish(1)
 	}
 	r.PublicationAction = pub.Action
 	var verify struct {
@@ -333,6 +343,12 @@ func begin(args []string) int {
 	if fs.Parse(args) != nil || *out == "" {
 		return 2
 	}
+	lock, err := lockState(filepath.Dir(*out))
+	if err != nil {
+		return 1
+	}
+	defer lock.Close()
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	if invalidate(*out) != nil {
 		return 1
 	}
@@ -351,6 +367,12 @@ func probe(ctx context.Context, args []string) int {
 	if fs.Parse(args) != nil || *program == "" || *out == "" {
 		return 2
 	}
+	lock, err := lockState(filepath.Dir(*out))
+	if err != nil {
+		return 1
+	}
+	defer lock.Close()
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	if invalidate(*out) != nil {
 		return 1
 	}

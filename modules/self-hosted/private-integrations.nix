@@ -132,7 +132,7 @@ let
   snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" ''
     set -eu
     ${mcpRollout}/bin/mcp-rollout begin --out /var/lib/ghostship-skills/server.json
-    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json
+    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json /var/lib/ghostship-skills/reconcile.lock
     trap 'chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json' EXIT
     ${pkgs.systemd}/bin/systemctl is-active --quiet ghostship-desktop-bridge.service
     ${waitForMcpHealthy}

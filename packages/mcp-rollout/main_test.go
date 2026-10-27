@@ -101,6 +101,19 @@ func TestExternalProcess(t *testing.T) {
 		save(path, map[string]any{"chatgpt": map[string]string{"content_digest": strings.Repeat("b", 64)}})
 		result = map[string]any{"ok": true, "record": path}
 	case slices.Contains(args, "publish-chatgpt"):
+		if os.Getenv("MCP_ROLLOUT_PAUSE_PUBLISH") == "1" {
+			os.WriteFile(filepath.Join(dir, "publisher-waiting"), []byte("waiting"), 0600)
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				if _, err := os.Stat(filepath.Join(dir, "publisher-release")); err == nil {
+					break
+				}
+				if time.Now().After(deadline) {
+					os.Exit(8)
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}
 		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
 			f, _ := os.OpenFile(filepath.Join(dir, "attempts"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 			f.WriteString("upload\n")
@@ -120,7 +133,7 @@ func TestExternalProcess(t *testing.T) {
 		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "action": action}
 	case slices.Contains(args, "verify-chatgpt"):
 		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
-			if _, err := os.Stat(filepath.Join(dir, "applied")); err != nil {
+			if _, err := os.Stat(filepath.Join(dir, "foreign-published")); err != nil {
 				result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture", "release_id": "old-release"}
 				break
 			}
@@ -141,7 +154,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -203,6 +216,68 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				save(filepath.Join(dir, "consumer.json"), proof)
 			}
 			args := []string{"reconcile", "--skills-cli", adapter, "--repo", filepath.Join(dir, "repo"), "--source-sha", strings.Repeat("c", 40), "--server", server, "--expect-version", "source-fixture", "--state", dir}
+			if scenario == "overlap-startup" {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				env := append(os.Environ(), "MCP_ROLLOUT_FIXTURE="+dir, "MCP_ROLLOUT_PAUSE_PUBLISH=1")
+				if root := os.Getenv("MCP_ROLLOUT_PROOF"); root != "" {
+					cov := filepath.Join(dir, "coverage")
+					os.MkdirAll(cov, 0700)
+					env = append(env, "GOCOVERDIR="+cov)
+				}
+				rc := exec.CommandContext(ctx, binary, args...)
+				rc.Env = env
+				if err := rc.Start(); err != nil {
+					t.Fatal(err)
+				}
+				defer os.WriteFile(filepath.Join(dir, "publisher-release"), []byte("release"), 0600)
+				deadline := time.Now().Add(5 * time.Second)
+				for {
+					if _, err := os.Stat(filepath.Join(dir, "publisher-waiting")); err == nil {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatal("publisher did not pause")
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+				begin := exec.CommandContext(ctx, binary, "begin", "--out", server)
+				begin.Env = env
+				if err := begin.Start(); err != nil {
+					t.Fatal(err)
+				}
+				beginDone := make(chan error, 1)
+				go func() { beginDone <- begin.Wait() }()
+				var early bool
+				select {
+				case <-beginDone:
+					early = true
+				case <-time.After(150 * time.Millisecond):
+				}
+				if err := os.WriteFile(filepath.Join(dir, "publisher-release"), []byte("release"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := rc.Wait(); err != nil {
+					t.Fatalf("reconcile: %v", err)
+				}
+				if !early {
+					if err := <-beginDone; err != nil {
+						t.Fatalf("begin: %v", err)
+					}
+				}
+				var final report
+				if readJSON(filepath.Join(dir, "rollout.json"), &final) != nil || final.Complete {
+					t.Fatal("overlapping invalidation left stale completion")
+				}
+				if _, err := os.Stat(server); !os.IsNotExist(err) {
+					t.Fatal("server snapshot survived begin")
+				}
+				if early {
+					t.Fatal("begin did not wait for reconciliation")
+				}
+				save(filepath.Join(dir, "execution.json"), map[string]any{"scenario": scenario, "last_exit": 0, "external_boundary": "publisher and connector only", "begin_waited": true})
+				return
+			}
 			if scenario == "unresolved-later-apply" {
 				env := []string{"MCP_ROLLOUT_DELAY_APPLY=1"}
 				run(1, env, args...)
@@ -211,13 +286,18 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				if string(attempts) != "upload\n" {
 					t.Fatalf("unresolved attempt was resent: %q", attempts)
 				}
-				if err := os.WriteFile(filepath.Join(dir, "applied"), []byte("applied"), 0600); err != nil {
+				// A different writer makes matching content visible; the original
+				// request can still apply later, so projection is not its receipt.
+				if err := os.WriteFile(filepath.Join(dir, "foreign-published"), []byte("matching projection from another writer"), 0600); err != nil {
 					t.Fatal(err)
 				}
-				run(0, env, args...)
+				run(1, env, args...)
 				attempts, _ = os.ReadFile(filepath.Join(dir, "attempts"))
 				if string(attempts) != "upload\n" {
 					t.Fatal("delayed apply caused duplicate upload")
+				}
+				if _, err := os.Stat(filepath.Join(dir, "publication-intent.json")); err != nil {
+					t.Fatal("matching projection cleared unresolved original request")
 				}
 				return
 			}
@@ -277,7 +357,11 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				return
 			}
 			if scenario == "complete-restart" || scenario == "lost-ack" {
-				run(0, nil, args...)
+				if scenario == "lost-ack" {
+					run(1, nil, args...)
+				} else {
+					run(0, nil, args...)
+				}
 				b, _ := os.ReadFile(filepath.Join(dir, "uploaded"))
 				if string(b) != "one upload\n" {
 					t.Fatal("duplicate upload")

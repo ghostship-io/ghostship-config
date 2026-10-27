@@ -24,12 +24,14 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
    snapshot, then runs the existing publisher with the **selected native MCP
    source**, not an incidental installed CLI default. It validates the existing
    personal plugin/app binding before publication; plugin creation is forbidden.
-   An exclusive lock serializes attempts. A durable intent is written before
-   invoking the existing publisher. If acknowledgment is lost, later attempts
-   only read back the intended content and binding; they never resend while
-   the intent is unresolved, even if the old release is still visible. A
-   matching release resolves the intent. Otherwise it remains held for an
-   operator to establish the original outcome; do not clear it on a timeout.
+   One exclusive lock serializes startup invalidation, snapshots and reconcile.
+   A durable intent is written before invoking the publisher. If acknowledgment
+   is lost, later attempts stay held and never resend, even if matching content
+   appears: another publisher may have created it while the original is still
+   in flight. The supported publisher exposes no per-request terminal receipt,
+   so automatic recovery remains unavailable. An operator must establish the
+   original request is terminal and cannot apply later before clearing the
+   private intent; a timeout or matching projection alone is not evidence.
 3. Published archive verification must match content, skills, app binding and
    the returned release ID. A host-normalized semantic version is allowed;
    version normalization alone does not justify another upload.
