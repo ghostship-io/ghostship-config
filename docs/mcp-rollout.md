@@ -23,7 +23,12 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
 2. `reconcile` checks the expected content-scoped runtime revision and fresh
    snapshot, then runs the existing publisher with the **selected native MCP
    source**, not an incidental installed CLI default. It validates the existing
-   personal plugin/app binding before publication; plugin creation is forbidden.
+   personal plugin/app binding and the package record's source, archive digest,
+   `ghostship-review` skill and `references/agent-interfaces.md` before
+   publication; plugin creation is forbidden. Dirty checkouts and unknown
+   source provenance outside the Nix store are refused. The command rehashes
+   the ZIP and the two source files against the package record. The existing
+   archive builder validates file contents and in-archive Markdown link closure.
    One exclusive lock serializes startup invalidation, snapshots and reconcile.
    A durable intent is written before invoking the publisher. If acknowledgment
    is lost, later attempts stay held and never resend, even if matching content
@@ -32,9 +37,16 @@ The small native Go command in `packages/mcp-rollout` extends that same unit:
    so automatic recovery remains unavailable. An operator must establish the
    original request is terminal and cannot apply later before clearing the
    private intent; a timeout or matching projection alone is not evidence.
-3. Published archive verification must match content, skills, app binding and
-   the returned release ID. A host-normalized semantic version is allowed;
-   version normalization alone does not justify another upload.
+3. Published archive verification must match content, skills, app binding,
+   returned release ID and published version. A host-normalized version may
+   differ from the build version; both are recorded, and normalization alone
+   does not justify another upload. `release-manifest.json` binds the selected
+   source SHA, observed native schema catalogue hash and tool names, container
+   start, package file/ZIP/content digests, plugin/app/release and both versions.
+   `manifest_sha256` binds consumer receipts to those exact manifest bytes.
+   For a Nix-store source, the manifest records that the revision-to-path
+   mapping comes from the configured flake pin; the store path alone does not
+   independently prove a Git revision.
 4. Discovery and consumer acceptance require deployment-bound operator receipts
    in the existing private skills state directory. Without them, exit **3** and
    `manual_required` are explicit; the unit cannot report rollout completion.
@@ -61,8 +73,9 @@ consumer retains retired declarations, explicitly require a fresh conversation
 with the existing app enabled. Do not restore a retired facade.
 
 An authorized deployment operator records `discovery.json` after the supported
-refresh and `consumer.json` after observing the **real consumer's** declarations
-and one successful read-only `t3_project_list`. These are private deployment
+refresh and `consumer.json` after observing the **real consumer's** tool
+catalogue, a successful read-only `t3_project_list`, discovery of
+`ghostship-review`, and reads of its skill and interface reference. These are private deployment
 evidence inputs, not identity assertions or authorization grants. Use named
 non-symlink files, not group/world-writable files, and link the observed evidence
 on existing issue #540. The tool does not infer a real consumer test from its
@@ -70,18 +83,32 @@ own private-socket readback or a simulated development fixture.
 
 Both JSON receipts carry the following exact binding, copied from the current
 rollout report: `connector_version`, `catalogue_hash`, `started_at`, `plugin_id`,
-`app_id`, `release_id`, and `content_digest`. They also carry an RFC3339
+`app_id`, `release_id`, `content_digest`, and `manifest_sha256`. They also carry an RFC3339
 `observed_at` at or after that deployment and a GitHub `evidence_ref` URL.
 Discovery adds `"refreshed":true`. Consumer adds:
 
 ```json
 {
-  "native_tools": ["t3_project_list", "t3_thread_list", "t3_thread_read"],
+  "native_tools": ["all names observed in the actual consumer catalogue"],
+  "consumer_catalogue_sha256": "hash computed from the actual consumer schemas",
   "retired_facades_absent": true,
   "read_tool": "t3_project_list",
-  "read_outcome": "returned"
+  "read_outcome": "returned",
+  "discovered_skills": ["ghostship-review"],
+  "skill_read_path": "skills/ghostship-review/SKILL.md",
+  "skill_read_sha256": "digest of the content actually read",
+  "skill_read_outcome": "returned",
+  "reference_read_path": "skills/ghostship-review/references/agent-interfaces.md",
+  "reference_read_sha256": "digest of the content actually read",
+  "reference_read_outcome": "returned"
 }
 ```
+
+The consumer catalogue hash must be independently obtained from the consumer's
+observed tool records using the connector's catalogue serialization, not copied
+from server health. If the host does not expose the necessary schemas or skill
+contents, that check stays pending; neither a socket probe nor archive readback
+substitutes for real consumer observation.
 
 The consumer observation must follow discovery. Changing the running revision,
 catalogue, container start, plugin release or package content invalidates old

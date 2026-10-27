@@ -5,6 +5,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -34,16 +36,77 @@ type binding struct {
 	AppID         string `json:"app_id"`
 	ReleaseID     string `json:"release_id"`
 	ContentDigest string `json:"content_digest"`
+	ManifestSHA   string `json:"manifest_sha256"`
 }
+
+const reviewSkill = "ghostship-review"
+const reviewSkillFile = "skills/ghostship-review/SKILL.md"
+const interfaceFile = "skills/ghostship-review/references/agent-interfaces.md"
+
+type releaseManifest struct {
+	SourceSHA        string            `json:"source_sha"`
+	SourceDirty      *bool             `json:"source_dirty"`
+	SourceProvenance string            `json:"source_provenance"`
+	ServerVersion    string            `json:"connector_version"`
+	CatalogueHash    string            `json:"catalogue_hash"`
+	StartedAt        string            `json:"started_at"`
+	Tools            []string          `json:"tools"`
+	PluginID         string            `json:"plugin_id"`
+	AppID            string            `json:"app_id"`
+	ReleaseID        string            `json:"release_id"`
+	BuildVersion     string            `json:"build_version"`
+	PublishedVersion string            `json:"published_version"`
+	ArchiveSHA       string            `json:"archive_sha256"`
+	ContentDigest    string            `json:"content_digest"`
+	Files            map[string]string `json:"files"`
+}
+
+func manifestHash(m releaseManifest) string {
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(append(b, '\n'))
+	return hex.EncodeToString(sum[:])
+}
+func validSHA(value string) bool {
+	b, err := hex.DecodeString(value)
+	return err == nil && len(b) == sha256.Size && value == strings.ToLower(value)
+}
+func fileSHA(path string) (string, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Size() > 64<<20 {
+		return "", errors.New("invalid package file")
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 type evidence struct {
 	binding
 	ObservedAt           string   `json:"observed_at"`
 	EvidenceRef          string   `json:"evidence_ref"`
 	Refreshed            bool     `json:"refreshed"`
 	NativeTools          []string `json:"native_tools"`
+	ConsumerCatalogueSHA string   `json:"consumer_catalogue_sha256"`
 	RetiredFacadesAbsent bool     `json:"retired_facades_absent"`
 	ReadTool             string   `json:"read_tool"`
 	ReadOutcome          string   `json:"read_outcome"`
+	DiscoveredSkills     []string `json:"discovered_skills"`
+	SkillReadPath        string   `json:"skill_read_path"`
+	SkillReadSHA         string   `json:"skill_read_sha256"`
+	ReferenceReadPath    string   `json:"reference_read_path"`
+	ReferenceReadSHA     string   `json:"reference_read_sha256"`
+	SkillReadOutcome     string   `json:"skill_read_outcome"`
+	ReferenceReadOutcome string   `json:"reference_read_outcome"`
 }
 type stage struct {
 	Status string `json:"status"`
@@ -155,6 +218,12 @@ func nativeTools(names []string) bool {
 	}
 	return true
 }
+func sameTools(a, b []string) bool {
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(a, b)
+}
 
 func lockState(dir string) (*os.File, error) {
 	f, err := os.OpenFile(filepath.Join(dir, "reconcile.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
@@ -197,7 +266,7 @@ func reconcile(ctx context.Context, args []string) int {
 		return code
 	}
 	var s snapshot
-	if readJSON(*serverFile, &s) != nil || *expect == "" || s.ServerVersion != *expect || len(s.CatalogueHash) != 64 || !nativeTools(s.Tools) {
+	if readJSON(*serverFile, &s) != nil || *expect == "" || s.ServerVersion != *expect || !validSHA(s.CatalogueHash) || !nativeTools(s.Tools) {
 		return finish(1)
 	}
 	observed, fresh := validTime(s.ObservedAt)
@@ -224,20 +293,34 @@ func reconcile(ctx context.Context, args []string) int {
 	r.AppID = config.App.ID
 	base := []string{"--repo", *repo, "--source-sha", *sha}
 	var pkg struct {
-		OK     bool   `json:"ok"`
-		Record string `json:"record"`
+		OK      bool   `json:"ok"`
+		Record  string `json:"record"`
+		Archive string `json:"archive"`
 	}
 	if runJSON(ctx, *skills, append(slices.Clone(base), "package", "--out", filepath.Join(*dir, "package")), &pkg, filepath.Join(*dir, "package-command.json")) != nil || !pkg.OK {
 		r.Publication = stage{"failed", "package validation failed"}
 		return finish(1)
 	}
 	var record struct {
-		Chat struct {
-			ContentDigest string `json:"content_digest"`
+		SourceSHA   string `json:"source_sha"`
+		SourceDirty *bool  `json:"source_dirty"`
+		Version     string `json:"version"`
+		Chat        struct {
+			ContentDigest string            `json:"content_digest"`
+			ArchiveSHA    string            `json:"zip_sha256"`
+			Skills        []string          `json:"skills"`
+			Files         map[string]string `json:"files"`
 		} `json:"chatgpt"`
 	}
-	if readJSON(pkg.Record, &record) != nil || len(record.Chat.ContentDigest) != 64 {
-		r.Publication = stage{"failed", "package content digest missing"}
+	if readJSON(pkg.Record, &record) != nil || record.SourceSHA != *sha || (record.SourceDirty != nil && *record.SourceDirty) || (record.SourceDirty == nil && !strings.HasPrefix(filepath.Clean(*repo), "/nix/store/")) || record.Version == "" || !validSHA(record.Chat.ContentDigest) || !validSHA(record.Chat.ArchiveSHA) || !slices.Contains(record.Chat.Skills, reviewSkill) || !validSHA(record.Chat.Files[reviewSkillFile]) || !validSHA(record.Chat.Files[interfaceFile]) {
+		r.Publication = stage{"failed", "source-bound package lacks required review skill, interface reference, or digests"}
+		return finish(1)
+	}
+	archiveDigest, archiveErr := fileSHA(pkg.Archive)
+	skillDigest, skillErr := fileSHA(filepath.Join(*repo, reviewSkillFile))
+	interfaceDigest, interfaceErr := fileSHA(filepath.Join(*repo, interfaceFile))
+	if archiveErr != nil || skillErr != nil || interfaceErr != nil || archiveDigest != record.Chat.ArchiveSHA || skillDigest != record.Chat.Files[reviewSkillFile] || interfaceDigest != record.Chat.Files[interfaceFile] {
+		r.Publication = stage{"failed", "package archive or required skill files do not match the selected source record"}
 		return finish(1)
 	}
 	r.ContentDigest = record.Chat.ContentDigest
@@ -268,6 +351,7 @@ func reconcile(ctx context.Context, args []string) int {
 		OK           bool   `json:"ok"`
 		PluginID     string `json:"plugin_id"`
 		ReleaseID    string `json:"release_id"`
+		Version      string `json:"version"`
 		Verification struct {
 			ReleaseID string `json:"release_id"`
 		} `json:"verification"`
@@ -284,12 +368,23 @@ func reconcile(ctx context.Context, args []string) int {
 		Content   bool     `json:"content_match"`
 		PluginID  string   `json:"plugin_id"`
 		ReleaseID string   `json:"release_id"`
+		Version   string   `json:"version"`
 		AppIDs    []string `json:"app_ids"`
 	}
-	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || (pub.ReleaseID != "" && pub.ReleaseID != verify.ReleaseID) {
+	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || pub.Version == "" || pub.Version != verify.Version || (pub.ReleaseID != "" && pub.ReleaseID != verify.ReleaseID) {
 		r.Publication = stage{"unknown", "publication unresolved; matching release readback required before retry"}
 		return finish(1)
 	}
+	provenance := "clean-git-checkout"
+	if record.SourceDirty == nil {
+		provenance = "configured-nix-store-pin; revision mapping supplied by caller"
+	}
+	manifest := releaseManifest{SourceSHA: *sha, SourceDirty: record.SourceDirty, SourceProvenance: provenance, ServerVersion: s.ServerVersion, CatalogueHash: s.CatalogueHash, StartedAt: s.StartedAt, Tools: s.Tools, PluginID: r.PluginID, AppID: r.AppID, ReleaseID: verify.ReleaseID, BuildVersion: record.Version, PublishedVersion: verify.Version, ArchiveSHA: record.Chat.ArchiveSHA, ContentDigest: record.Chat.ContentDigest, Files: record.Chat.Files}
+	if save(filepath.Join(*dir, "release-manifest.json"), manifest) != nil {
+		r.Publication = stage{"unknown", "release manifest could not be saved"}
+		return finish(1)
+	}
+	r.ManifestSHA = manifestHash(manifest)
 	if err := os.Remove(intentPath); err != nil {
 		r.Publication = stage{"unknown", "verified publication intent could not be cleared"}
 		return finish(1)
@@ -311,7 +406,7 @@ func reconcile(ctx context.Context, args []string) int {
 	}
 	r.Discovery = stage{"verified", refresh.EvidenceRef}
 	consumer, ok := bound(filepath.Join(*dir, "consumer.json"), r.binding)
-	if !ok || !consumer.RetiredFacadesAbsent || !nativeTools(consumer.NativeTools) || consumer.ReadTool != "t3_project_list" || consumer.ReadOutcome != "returned" {
+	if !ok || !consumer.RetiredFacadesAbsent || !nativeTools(consumer.NativeTools) || !sameTools(consumer.NativeTools, s.Tools) || consumer.ConsumerCatalogueSHA != s.CatalogueHash || consumer.ReadTool != "t3_project_list" || consumer.ReadOutcome != "returned" || !slices.Contains(consumer.DiscoveredSkills, reviewSkill) || consumer.SkillReadPath != reviewSkillFile || consumer.SkillReadSHA != record.Chat.Files[reviewSkillFile] || consumer.SkillReadOutcome != "returned" || consumer.ReferenceReadPath != interfaceFile || consumer.ReferenceReadSHA != record.Chat.Files[interfaceFile] || consumer.ReferenceReadOutcome != "returned" {
 		return finish(3)
 	}
 	ct, _ := validTime(consumer.ObservedAt)

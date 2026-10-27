@@ -98,8 +98,21 @@ func TestExternalProcess(t *testing.T) {
 	switch {
 	case slices.Contains(args, "package"):
 		path := filepath.Join(dir, "package-record.json")
-		save(path, map[string]any{"chatgpt": map[string]string{"content_digest": strings.Repeat("b", 64)}})
-		result = map[string]any{"ok": true, "record": path}
+		archive := filepath.Join(dir, "package.zip")
+		os.WriteFile(archive, []byte("archive fixture"), 0600)
+		archiveSHA, _ := fileSHA(archive)
+		skillSHA, _ := fileSHA(filepath.Join(dir, "repo", reviewSkillFile))
+		interfaceSHA, _ := fileSHA(filepath.Join(dir, "repo", interfaceFile))
+		files := map[string]string{reviewSkillFile: skillSHA, interfaceFile: interfaceSHA}
+		if os.Getenv("MCP_ROLLOUT_MISSING_REFERENCE") == "1" {
+			delete(files, interfaceFile)
+		}
+		if os.Getenv("MCP_ROLLOUT_CORRUPT_REFERENCE") == "1" {
+			files[interfaceFile] = strings.Repeat("f", 64)
+		}
+		dirty := os.Getenv("MCP_ROLLOUT_DIRTY_SOURCE") == "1"
+		save(path, map[string]any{"source_sha": strings.Repeat("c", 40), "source_dirty": dirty, "version": "0.47.325+fixture", "chatgpt": map[string]any{"content_digest": strings.Repeat("b", 64), "zip_sha256": archiveSHA, "skills": []string{reviewSkill}, "files": files}})
+		result = map[string]any{"ok": true, "record": path, "archive": archive}
 	case slices.Contains(args, "publish-chatgpt"):
 		if os.Getenv("MCP_ROLLOUT_PAUSE_PUBLISH") == "1" {
 			os.WriteFile(filepath.Join(dir, "publisher-waiting"), []byte("waiting"), 0600)
@@ -130,7 +143,7 @@ func TestExternalProcess(t *testing.T) {
 				os.Exit(6)
 			}
 		}
-		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "action": action}
+		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "version": "0.47.326", "action": action}
 	case slices.Contains(args, "verify-chatgpt"):
 		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
 			if _, err := os.Stat(filepath.Join(dir, "foreign-published")); err != nil {
@@ -138,7 +151,11 @@ func TestExternalProcess(t *testing.T) {
 				break
 			}
 		}
-		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "app_ids": []string{appID}, "skills_match": true, "apps_match": true, "content_match": true}
+		version := "0.47.326"
+		if os.Getenv("MCP_ROLLOUT_BAD_VERSION") == "1" {
+			version = "0.47.327"
+		}
+		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "version": version, "app_ids": []string{appID}, "skills_match": true, "apps_match": true, "content_match": true}
 	default:
 		os.Exit(7)
 	}
@@ -154,7 +171,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -169,6 +186,9 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			configDir := filepath.Join(dir, "repo/config/skills")
 			os.MkdirAll(configDir, 0700)
 			save(filepath.Join(configDir, "chatgpt-plugin.json"), map[string]any{"plugin_id": "Plugin_fixture", "identity": "personal", "app_binding": map[string]string{"id": "asdk_app_fixture"}})
+			os.MkdirAll(filepath.Join(dir, "repo/skills/ghostship-review/references"), 0700)
+			os.WriteFile(filepath.Join(dir, "repo", reviewSkillFile), []byte("fixture skill\n"), 0600)
+			os.WriteFile(filepath.Join(dir, "repo", interfaceFile), []byte("fixture interface\n"), 0600)
 			startTime := time.Now().Add(-time.Hour).UTC()
 			started := startTime.Format(time.RFC3339Nano)
 			startedInput := started
@@ -203,12 +223,28 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			}
 			server := filepath.Join(dir, "server.json")
 			run(0, nil, "snapshot", "--out", server, "--started-at", startedInput, "--program", adapter, "--", "--mcp")
-			want := binding{ServerVersion: "source-fixture", CatalogueHash: strings.Repeat("a", 64), StartedAt: started, PluginID: "Plugin_fixture", AppID: "asdk_app_fixture", ReleaseID: "release-fixture", ContentDigest: strings.Repeat("b", 64)}
-			proof := evidence{binding: want, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), EvidenceRef: "https://github.com/example/repo/issues/1#issuecomment-1", Refreshed: true, NativeTools: []string{"t3_project_list", "t3_thread_list", "t3_thread_read"}, RetiredFacadesAbsent: true, ReadTool: "t3_project_list", ReadOutcome: "returned"}
+			tools := []string{"t3_project_list", "t3_thread_list", "t3_thread_read"}
+			skillSHA, _ := fileSHA(filepath.Join(dir, "repo", reviewSkillFile))
+			interfaceSHA, _ := fileSHA(filepath.Join(dir, "repo", interfaceFile))
+			files := map[string]string{reviewSkillFile: skillSHA, interfaceFile: interfaceSHA}
+			archiveHash := fmt.Sprintf("%x", sha256.Sum256([]byte("archive fixture")))
+			dirty := false
+			manifest := releaseManifest{SourceSHA: strings.Repeat("c", 40), SourceDirty: &dirty, SourceProvenance: "clean-git-checkout", ServerVersion: "source-fixture", CatalogueHash: strings.Repeat("a", 64), StartedAt: started, Tools: tools, PluginID: "Plugin_fixture", AppID: "asdk_app_fixture", ReleaseID: "release-fixture", BuildVersion: "0.47.325+fixture", PublishedVersion: "0.47.326", ArchiveSHA: archiveHash, ContentDigest: strings.Repeat("b", 64), Files: files}
+			want := binding{ServerVersion: "source-fixture", CatalogueHash: strings.Repeat("a", 64), StartedAt: started, PluginID: "Plugin_fixture", AppID: "asdk_app_fixture", ReleaseID: "release-fixture", ContentDigest: strings.Repeat("b", 64), ManifestSHA: manifestHash(manifest)}
+			proof := evidence{binding: want, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano), EvidenceRef: "https://github.com/example/repo/issues/1#issuecomment-1", Refreshed: true, NativeTools: tools, ConsumerCatalogueSHA: strings.Repeat("a", 64), RetiredFacadesAbsent: true, ReadTool: "t3_project_list", ReadOutcome: "returned", DiscoveredSkills: []string{reviewSkill}, SkillReadPath: reviewSkillFile, SkillReadSHA: files[reviewSkillFile], ReferenceReadPath: interfaceFile, ReferenceReadSHA: files[interfaceFile], SkillReadOutcome: "returned", ReferenceReadOutcome: "returned"}
 			if scenario != "pending-discovery" {
 				save(filepath.Join(dir, "discovery.json"), proof)
 			}
 			if scenario != "pending-consumer" {
+				if scenario == "pending-skill" {
+					proof.DiscoveredSkills = nil
+				}
+				if scenario == "stale-skill" {
+					proof.ReferenceReadSHA = strings.Repeat("9", 64)
+				}
+				if scenario == "stale-schema" {
+					proof.ConsumerCatalogueSHA = strings.Repeat("9", 64)
+				}
 				save(filepath.Join(dir, "consumer.json"), proof)
 			}
 			if scenario == "stale-consumer" {
@@ -324,8 +360,20 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			expect := 0
 			var env []string
 			switch scenario {
-			case "pending-discovery", "pending-consumer", "stale-consumer":
+			case "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "stale-consumer":
 				expect = 3
+			case "missing-reference":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_MISSING_REFERENCE=1"}
+			case "corrupt-reference":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_CORRUPT_REFERENCE=1"}
+			case "dirty-source":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_DIRTY_SOURCE=1"}
+			case "wrong-version":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_BAD_VERSION=1"}
 			case "wrong-app":
 				expect = 1
 				env = []string{"MCP_ROLLOUT_WRONG_APP=1"}
@@ -349,6 +397,18 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			}
 			if r.Complete != (expect == 0) {
 				t.Fatal("false completion")
+			}
+			if expect == 0 || expect == 3 {
+				manifest, err := os.ReadFile(filepath.Join(dir, "release-manifest.json"))
+				if err != nil || fmt.Sprintf("%x", sha256.Sum256(manifest)) != r.ManifestSHA {
+					t.Fatal("report is not bound to actual release manifest")
+				}
+			}
+			if scenario == "missing-reference" || scenario == "corrupt-reference" || scenario == "dirty-source" {
+				if _, err := os.Stat(filepath.Join(dir, "uploaded")); !os.IsNotExist(err) {
+					t.Fatal("published without required reference")
+				}
+				return
 			}
 			if scenario == "snapshot-failure" || scenario == "stale-server" {
 				if _, e := os.Stat(filepath.Join(dir, "uploaded")); !os.IsNotExist(e) {
