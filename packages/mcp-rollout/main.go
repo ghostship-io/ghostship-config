@@ -343,9 +343,85 @@ func reconcile(ctx context.Context, args []string) int {
 		r.Publication = stage{"unknown", "original publication outcome unresolved; matching projection alone cannot resolve it; inspect original request"}
 		return finish(1)
 	}
-	// The current publisher updates the live plugin before consumer acceptance.
-	// No supported staging or previous-release restoration is established. Use
-	// read-only verification; never invoke the publisher on this route.
+	var current struct {
+		OK        bool     `json:"ok"`
+		Skills    bool     `json:"skills_match"`
+		Apps      bool     `json:"apps_match"`
+		Content   bool     `json:"content_match"`
+		PluginID  string   `json:"plugin_id"`
+		ReleaseID string   `json:"release_id"`
+		Version   string   `json:"version"`
+		AppIDs    []string `json:"app_ids"`
+	}
+	var pub struct {
+		Action    string `json:"action"`
+		OK        bool   `json:"ok"`
+		PluginID  string `json:"plugin_id"`
+		ReleaseID string `json:"release_id"`
+		Version   string `json:"version"`
+	}
+	currentOK := runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &current, filepath.Join(*dir, "current-verification-command.json")) == nil && current.OK && current.Skills && current.Apps && current.Content && current.PluginID == r.PluginID && len(current.AppIDs) == 1 && current.AppIDs[0] == r.AppID && current.ReleaseID != "" && current.Version != ""
+	if currentOK {
+		pub.OK, pub.Action, pub.PluginID, pub.ReleaseID, pub.Version = true, "unchanged", current.PluginID, current.ReleaseID, current.Version
+	} else {
+		// Last-known-good is prepared by the deployment operator before release.
+		// Verify the retained archive and freshly compare its source to the actual
+		// currently served plugin before allowing any potentially updating call.
+		var previous struct {
+			Repo       string `json:"repo"`
+			SourceSHA  string `json:"source_sha"`
+			Archive    string `json:"archive"`
+			ArchiveSHA string `json:"archive_sha256"`
+		}
+		if readJSON(filepath.Join(*dir, "last-known-good.json"), &previous) != nil || previous.Repo == "" || !validSHA(previous.ArchiveSHA) || (len(previous.SourceSHA) != 40 || strings.Trim(previous.SourceSHA, "0123456789abcdef") != "") || filepath.Clean(filepath.Dir(previous.Archive)) != filepath.Clean(*dir) {
+			r.Publication = stage{"pending", "last-known-good artifact required before publication"}
+			return finish(1)
+		}
+		priorDigest, priorErr := fileSHA(previous.Archive)
+		var priorPkg struct {
+			OK      bool   `json:"ok"`
+			Record  string `json:"record"`
+			Archive string `json:"archive"`
+		}
+		priorBase := []string{"--repo", previous.Repo, "--source-sha", previous.SourceSHA}
+		if priorErr != nil || priorDigest != previous.ArchiveSHA || runJSON(ctx, *skills, append(slices.Clone(priorBase), "package", "--out", filepath.Join(*dir, "previous-package")), &priorPkg, filepath.Join(*dir, "previous-package-command.json")) != nil || !priorPkg.OK {
+			r.Publication = stage{"pending", "last-known-good artifact cannot be validated"}
+			return finish(1)
+		}
+		builtDigest, builtErr := fileSHA(priorPkg.Archive)
+		var previousRecord struct {
+			SourceSHA   string `json:"source_sha"`
+			SourceDirty *bool  `json:"source_dirty"`
+			Chat        struct {
+				ArchiveSHA string `json:"zip_sha256"`
+			} `json:"chatgpt"`
+		}
+		if builtErr != nil || builtDigest != priorDigest || readJSON(priorPkg.Record, &previousRecord) != nil || previousRecord.SourceSHA != previous.SourceSHA || (previousRecord.SourceDirty != nil && *previousRecord.SourceDirty) || (previousRecord.SourceDirty == nil && !strings.HasPrefix(filepath.Clean(previous.Repo), "/nix/store/")) || previousRecord.Chat.ArchiveSHA != priorDigest {
+			r.Publication = stage{"pending", "retained artifact does not match clean last-known-good source"}
+			return finish(1)
+		}
+		var priorVerify struct {
+			OK        bool     `json:"ok"`
+			PluginID  string   `json:"plugin_id"`
+			AppIDs    []string `json:"app_ids"`
+			ReleaseID string   `json:"release_id"`
+		}
+		if runJSON(ctx, *skills, append(slices.Clone(priorBase), "verify-chatgpt"), &priorVerify, filepath.Join(*dir, "previous-verification-command.json")) != nil || !priorVerify.OK || priorVerify.PluginID != r.PluginID || len(priorVerify.AppIDs) != 1 || priorVerify.AppIDs[0] != r.AppID || priorVerify.ReleaseID == "" {
+			r.Publication = stage{"pending", "last-known-good artifact does not match current plugin readback"}
+			return finish(1)
+		}
+		if save(intentPath, intent) != nil {
+			r.Publication = stage{"unknown", "publication intent could not be persisted"}
+			return finish(1)
+		}
+
+		if runJSON(ctx, *skills, append(slices.Clone(base), "publish-chatgpt"), &pub, filepath.Join(*dir, "publication-command.json")) != nil || !pub.OK || pub.PluginID != r.PluginID || !slices.Contains([]string{"unchanged", "updated"}, pub.Action) {
+			r.Publication = stage{"unknown", "publication outcome unresolved; inspect original request without another upload"}
+			return finish(1)
+		}
+		r.PublicationAction = pub.Action
+
+	}
 
 	var verify struct {
 		OK        bool     `json:"ok"`
@@ -357,8 +433,8 @@ func reconcile(ctx context.Context, args []string) int {
 		Version   string   `json:"version"`
 		AppIDs    []string `json:"app_ids"`
 	}
-	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || verify.Version == "" {
-		r.Publication = stage{"pending", "preservation unavailable; no publication attempted; matching release readback required"}
+	if runJSON(ctx, *skills, append(slices.Clone(base), "verify-chatgpt"), &verify, filepath.Join(*dir, "verification-command.json")) != nil || !verify.OK || !verify.Skills || !verify.Apps || !verify.Content || verify.PluginID != r.PluginID || len(verify.AppIDs) != 1 || verify.AppIDs[0] != r.AppID || verify.ReleaseID == "" || pub.Version == "" || pub.Version != verify.Version || (pub.ReleaseID != "" && pub.ReleaseID != verify.ReleaseID) {
+		r.Publication = stage{"unknown", "publication unresolved; matching release readback required before retry"}
 		return finish(1)
 	}
 	provenance := "clean-git-checkout"
@@ -371,10 +447,21 @@ func reconcile(ctx context.Context, args []string) int {
 		return finish(1)
 	}
 	r.ManifestSHA = manifestHash(manifest)
-
+	if err := os.Remove(intentPath); err != nil && !os.IsNotExist(err) {
+		r.Publication = stage{"unknown", "verified publication intent could not be cleared"}
+		return finish(1)
+	}
+	stateDir, err := os.Open(*dir)
+	if err != nil {
+		return finish(1)
+	}
+	err = stateDir.Sync()
+	stateDir.Close()
+	if err != nil {
+		return finish(1)
+	}
 	r.ReleaseID = verify.ReleaseID
-	r.PublicationAction = "unchanged"
-	r.Publication = stage{"verified", "read-only existing release readback matched content and app binding; normalized version may differ"}
+	r.Publication = stage{"verified", "existing publisher readback matched content and app binding; normalized version may differ"}
 	refresh, ok := bound(filepath.Join(*dir, "discovery.json"), r.binding)
 	if !ok || !refresh.Refreshed {
 		return finish(3)

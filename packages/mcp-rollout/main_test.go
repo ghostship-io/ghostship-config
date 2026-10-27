@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// Only the external publisher/readback and MCP server are doubled. All
+// Only the external unchanged publisher and MCP server are doubled. All
 // rollout orchestration, file effects, stage decisions and recovery run in
 // the real native binary, concurrently in separate disposable directories.
 func TestExternalProcess(t *testing.T) {
@@ -115,13 +115,15 @@ func TestExternalProcess(t *testing.T) {
 		}
 		dirty := os.Getenv("MCP_ROLLOUT_DIRTY_SOURCE") == "1"
 		source := strings.Repeat("c", 40)
+		if slices.Contains(args, filepath.Join(dir, "previous-repo")) {
+			source = strings.Repeat("d", 40)
+		}
 		if os.Getenv("MCP_ROLLOUT_WRONG_SOURCE") == "1" {
 			source = strings.Repeat("9", 40)
 		}
 		save(path, map[string]any{"source_sha": source, "source_dirty": dirty, "version": "0.47.325+fixture", "chatgpt": map[string]any{"content_digest": strings.Repeat("b", 64), "zip_sha256": archiveSHA, "skills": []string{reviewSkill}, "files": files}})
 		result = map[string]any{"ok": true, "record": path, "archive": archive}
 	case slices.Contains(args, "publish-chatgpt"):
-		os.WriteFile(filepath.Join(dir, "publish-called"), []byte("called"), 0600)
 		if os.Getenv("MCP_ROLLOUT_PAUSE_PUBLISH") == "1" {
 			os.WriteFile(filepath.Join(dir, "publisher-waiting"), []byte("waiting"), 0600)
 			deadline := time.Now().Add(5 * time.Second)
@@ -153,24 +155,19 @@ func TestExternalProcess(t *testing.T) {
 		}
 		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "version": "0.47.326", "action": action}
 	case slices.Contains(args, "verify-chatgpt"):
-		if os.Getenv("MCP_ROLLOUT_PAUSE_PUBLISH") == "1" {
-			os.WriteFile(filepath.Join(dir, "publisher-waiting"), []byte("waiting"), 0600)
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				if _, err := os.Stat(filepath.Join(dir, "publisher-release")); err == nil {
-					break
-				}
-				if time.Now().After(deadline) {
-					os.Exit(8)
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
-		if os.Getenv("MCP_ROLLOUT_UNMATCHED") == "1" {
-			result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture", "release_id": "old-release"}
+		if slices.Contains(args, filepath.Join(dir, "previous-repo")) && os.Getenv("MCP_ROLLOUT_PREVIOUS_MISMATCH") == "1" {
+			result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture"}
 			break
 		}
-		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" {
+		// The old artifact is served until a fixture upload applies. Target
+		// readback therefore fails until then, without causing a write.
+		if !slices.Contains(args, filepath.Join(dir, "previous-repo")) {
+			if _, err := os.Stat(filepath.Join(dir, "uploaded")); os.IsNotExist(err) {
+				result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture"}
+				break
+			}
+		}
+		if os.Getenv("MCP_ROLLOUT_DELAY_APPLY") == "1" && !slices.Contains(args, filepath.Join(dir, "previous-repo")) {
 			if _, err := os.Stat(filepath.Join(dir, "foreign-published")); err != nil {
 				result = map[string]any{"ok": false, "plugin_id": "Plugin_fixture", "release_id": "old-release"}
 				break
@@ -178,7 +175,7 @@ func TestExternalProcess(t *testing.T) {
 		}
 		version := "0.47.326"
 		if os.Getenv("MCP_ROLLOUT_BAD_VERSION") == "1" {
-			version = ""
+			version = "0.47.327"
 		}
 		result = map[string]any{"ok": true, "plugin_id": "Plugin_fixture", "release_id": "release-fixture", "version": version, "app_ids": []string{appID}, "skills_match": true, "apps_match": true, "content_match": true}
 	default:
@@ -196,7 +193,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "corrupt-archive", "wrong-source", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup", "preservation-unavailable"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "corrupt-archive", "wrong-source", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup", "last-good-missing", "last-good-corrupt", "last-good-mismatch"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -276,6 +273,16 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				proof.ReleaseID = "old-release"
 				save(filepath.Join(dir, "consumer.json"), proof)
 			}
+			// The previous artifact is retained independently from the new package.
+			priorArchive := filepath.Join(dir, "last-good.zip")
+			os.WriteFile(priorArchive, []byte("archive fixture"), 0600)
+			save(filepath.Join(dir, "last-known-good.json"), map[string]any{"repo": filepath.Join(dir, "previous-repo"), "source_sha": strings.Repeat("d", 40), "archive": priorArchive, "archive_sha256": archiveHash})
+			if scenario == "last-good-missing" {
+				os.Remove(filepath.Join(dir, "last-known-good.json"))
+			}
+			if scenario == "last-good-corrupt" {
+				os.WriteFile(priorArchive, []byte("corrupt"), 0600)
+			}
 			args := []string{"reconcile", "--skills-cli", adapter, "--repo", filepath.Join(dir, "repo"), "--source-sha", strings.Repeat("c", 40), "--server", server, "--expect-version", "source-fixture", "--state", dir}
 			if scenario == "overlap-startup" {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -339,23 +346,29 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				save(filepath.Join(dir, "execution.json"), map[string]any{"scenario": scenario, "last_exit": 0, "external_boundary": "publisher and connector only", "begin_waited": true})
 				return
 			}
-			if scenario == "unresolved-later-apply" || scenario == "lost-ack" {
-				// Retained intent represents an earlier in-flight upload from the
-				// previous implementation. A matching foreign projection must not
-				// clear it, or trigger any new publisher invocation.
-				save(filepath.Join(dir, "publication-intent.json"), struct{ PluginID, AppID, ContentDigest, SourceSHA string }{"Plugin_fixture", "asdk_app_fixture", strings.Repeat("b", 64), strings.Repeat("c", 40)})
-				for _, env := range [][]string{{"MCP_ROLLOUT_UNMATCHED=1"}, nil} {
-					run(1, env, args...)
-					if _, err := os.Stat(filepath.Join(dir, "publication-intent.json")); err != nil {
-						t.Fatal("unresolved intent was cleared")
-					}
-					if _, err := os.Stat(filepath.Join(dir, "publish-called")); !os.IsNotExist(err) {
-						t.Fatal("unresolved publication was resent")
-					}
+			if scenario == "unresolved-later-apply" {
+				env := []string{"MCP_ROLLOUT_DELAY_APPLY=1"}
+				run(1, env, args...)
+				run(1, env, args...)
+				attempts, _ := os.ReadFile(filepath.Join(dir, "attempts"))
+				if string(attempts) != "upload\n" {
+					t.Fatalf("unresolved attempt was resent: %q", attempts)
+				}
+				// A different writer makes matching content visible; the original
+				// request can still apply later, so projection is not its receipt.
+				if err := os.WriteFile(filepath.Join(dir, "foreign-published"), []byte("matching projection from another writer"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				run(1, env, args...)
+				attempts, _ = os.ReadFile(filepath.Join(dir, "attempts"))
+				if string(attempts) != "upload\n" {
+					t.Fatal("delayed apply caused duplicate upload")
+				}
+				if _, err := os.Stat(filepath.Join(dir, "publication-intent.json")); err != nil {
+					t.Fatal("matching projection cleared unresolved original request")
 				}
 				return
 			}
-
 			if scenario == "early-startup" || scenario == "invalid-time" {
 				run(0, nil, args...)
 				var before report
@@ -399,9 +412,11 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			case "wrong-version":
 				expect = 1
 				env = []string{"MCP_ROLLOUT_BAD_VERSION=1"}
-			case "preservation-unavailable":
+			case "last-good-missing", "last-good-corrupt":
 				expect = 1
-				env = []string{"MCP_ROLLOUT_UNMATCHED=1"}
+			case "last-good-mismatch":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_PREVIOUS_MISMATCH=1"}
 			case "wrong-app":
 				expect = 1
 				env = []string{"MCP_ROLLOUT_WRONG_APP=1"}
@@ -444,19 +459,30 @@ func TestNativeRolloutRecovery(t *testing.T) {
 				}
 				return
 			}
-			if scenario == "complete-restart" {
-				run(0, nil, args...)
+			if scenario == "complete-restart" || scenario == "lost-ack" {
+				if scenario == "lost-ack" {
+					run(1, nil, args...)
+				} else {
+					run(0, nil, args...)
+				}
+				b, _ := os.ReadFile(filepath.Join(dir, "uploaded"))
+				if string(b) != "one upload\n" {
+					t.Fatal("duplicate upload")
+				}
 			}
-			if scenario == "preservation-unavailable" {
-				run(1, env, args...)
+			if scenario == "last-good-missing" || scenario == "last-good-corrupt" || scenario == "last-good-mismatch" {
+				if _, err := os.Stat(filepath.Join(dir, "uploaded")); !os.IsNotExist(err) {
+					t.Fatal("published without verified last-known-good")
+				}
+				if r.Publication.Status != "pending" {
+					t.Fatal("last-known-good failure not pending")
+				}
 			}
-			if _, err := os.Stat(filepath.Join(dir, "publish-called")); !os.IsNotExist(err) {
-				t.Fatal("publisher called without preservation")
+			if scenario == "pending-consumer" {
+				if r.PublicationAction != "updated" || r.Publication.Status != "verified" || r.Consumer.Status == "verified" {
+					t.Fatal("updated publication must remain partial until consumer acceptance")
+				}
 			}
-			if scenario == "preservation-unavailable" && (r.Complete || r.Publication.Status != "pending" || !strings.Contains(r.Publication.Detail, "preservation unavailable")) {
-				t.Fatal("preservation failure not reported as pending")
-			}
-
 			if scenario == "stale-consumer" {
 				if r.Discovery.Status != "verified" || r.Consumer.Status == "verified" {
 					t.Fatal("stale acceptance reused")
