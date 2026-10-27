@@ -93,6 +93,7 @@ CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
 # policy, not a measurement, and it never changes a provider reading.
 OWNER_POLICY = {
     "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-terra"),
+    "frontierPrimeInstances": {"claude-opus-5-5": "claudeAgent", "gpt-6.1-terra": "codex"},
     "allowedGptModels": ("gpt-6.1-sol",),
     "backgroundProviderInstances": ("opencode",),
     # The models the owner excludes from every selection. They stay visible

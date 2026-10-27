@@ -559,9 +559,15 @@ def _eligibility(
     is_gpt = model_text.startswith("gpt")
     gpt_allowed = (not is_gpt) or _exact_model_match(model, allowed_gpt)
     mapped = bool(native.get("mapped"))
+    prime_instances = policy.get("frontierPrimeInstances")
+    instance_allowed = not isinstance(prime_instances, dict) or (
+        str(prime_instances.get(model) or "").lower()
+        == str(native.get("provider_instance_id") or "").lower()
+        and bool(prime_instances.get(model))
+    )
     return {
         "frontier_prime": {
-            "allowed": mapped and _exact_model_match(model, prime_models),
+            "allowed": mapped and instance_allowed and _exact_model_match(model, prime_models),
             "basis": "policy:owner",
         },
         "delegate": {

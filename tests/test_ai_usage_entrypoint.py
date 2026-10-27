@@ -25,9 +25,12 @@ class TerraPolicyTest(unittest.TestCase):
         native = {"mapped": True, "provider_instance_id": "codex"}
         terra = main.snapshot_module._eligibility("codex", "gpt-6.1-terra", ["frontier"], native, main.OWNER_POLICY)
         sol = main.snapshot_module._eligibility("codex", "gpt-6.1-sol", ["bulk"], native, main.OWNER_POLICY)
+        wrong_instance = {"mapped": True, "provider_instance_id": "opencode"}
+        paid_terra = main.snapshot_module._eligibility("commandCode", "gpt-6.1-terra", ["frontier"], wrong_instance, main.OWNER_POLICY)
         self.assertTrue(terra["frontier_prime"]["allowed"])
         self.assertFalse(terra["delegate"]["allowed"])
         self.assertTrue(sol["delegate"]["allowed"])
+        self.assertFalse(paid_terra["frontier_prime"]["allowed"])
 
 
 def fake_aa_cache():
