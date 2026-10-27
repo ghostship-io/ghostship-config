@@ -9,7 +9,7 @@
     # Independently reviewed native connector increment; unrelated service
     # runtimes keep their existing release pin.
     ghostship-native-agent = {
-      url = "github:ghostship-io/ghostship-agent/b1de2d7bf3b242b2e5d6fa75379cc46a6607ec07";
+      url = "github:ghostship-io/ghostship-agent/6cd346d94c2aa77efac9fed5f9de47b74021bc6e";
       flake = false;
     };
 
@@ -123,9 +123,16 @@
           pkgs = pkgsFor system;
         in
         rec {
+          mcp-rollout = pkgs.mkShellNoCC {
+            packages = [ pkgs.go_1_26 pkgs.git pkgs.ripgrep ];
+            GOTOOLCHAIN = "local";
+          };
           # CI needs no downloaded browsers or agent-maintenance tools.
           ci = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              # Its normal Nix check phase runs the small native Go/process
+              # suite; unchanged rollout sources reuse the cached package.
+              (import ./packages/mcp-rollout { inherit pkgs; })
               git
               bash
               coreutils

@@ -21,6 +21,7 @@ import private_source
 # under its own pin.
 SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
+    'ghostship-native-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-agent-policy': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
 }
 

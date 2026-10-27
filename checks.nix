@@ -181,6 +181,7 @@ let
   ) hosts;
 in
 {
+  mcp-rollout = import ./packages/mcp-rollout { inherit pkgs; };
   antigravity-native-loader =
     (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { })
     .tests.native-loader;

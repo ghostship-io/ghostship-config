@@ -117,6 +117,7 @@ let
   # Post-deploy skills reconciliation (docs/skills-distribution.md in
   # ghostship-agent). The app pins the deployed flake source and revision.
   skillsCli = agent.apps.${system}.ghostship-skills.program;
+  mcpRollout = import ../../packages/mcp-rollout { inherit pkgs; };
   waitForMcpHealthy = pkgs.writeShellScript "ghostship-wait-mcp-healthy" ''
     set -eu
     for _ in $(seq 1 60); do
@@ -127,6 +128,22 @@ let
     done
     echo "ghostship-private-integrations did not become healthy" >&2
     exit 1
+  '';
+  snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" ''
+    set -eu
+    ${mcpRollout}/bin/mcp-rollout begin --out /var/lib/ghostship-skills/server.json
+    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json /var/lib/ghostship-skills/reconcile.lock
+    trap 'chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json' EXIT
+    ${pkgs.systemd}/bin/systemctl is-active --quiet ghostship-desktop-bridge.service
+    ${waitForMcpHealthy}
+    ${mcpRollout}/bin/mcp-rollout snapshot \
+      --out /var/lib/ghostship-skills/server.json \
+      --started-at "$(${pkgs.podman}/bin/podman inspect --format '{{.State.StartedAt}}' ghostship-private-integrations)" \
+      --program ${pkgs.podman}/bin/podman -- \
+      exec -i --user 62020 ghostship-private-integrations \
+      /run/ghostship-runtime/current/bin/ghostship-mcp \
+      --connect-socket ${runtimes.private.sharedSocket}
+    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/server.json /var/lib/ghostship-skills/rollout.json
   '';
 
   # Seerr generates its API key into its own settings; project it (with the
@@ -505,19 +522,19 @@ in {
       assertion = (agent.apps.${system} or { }) ? ghostship-skills;
       message = "skillsReconcile needs a ghostship-agent pin that provides apps.ghostship-skills.";
     } ];
-    # Runs once per deployed ghostship-agent revision (restart trigger), after
-    # the MCP container is healthy. Needs: the Agent Desktop SSH contract
+    # Runs for either selected agent/native MCP source, after container health.
+    # Completion also requires deployment-bound discovery/consumer receipts.
+    # Needs: the Agent Desktop SSH contract
     # published by ghostship-desktop-bridge (key, known_hosts, 10.89.7.2:2222),
     # a signed-in ChatGPT session on the `personal` (Assistant) identity, and
     # the plugin id committed in config/skills/chatgpt-plugin.json.
     systemd.services.ghostship-skills-reconcile = {
-      description = "Package, publish and verify Ghostship skills on ChatGPT after deploy";
+      description = "Publish MCP plugin and require discovery/consumer acceptance receipts";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "network-online.target" ];
+      wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
-      requires = [ "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
-      restartTriggers = [ agent.outPath ];
+      restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
       path = [ pkgs.openssh pkgs.coreutils pkgs.git ];
       serviceConfig = {
         Type = "oneshot";
@@ -539,11 +556,15 @@ in {
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
         # podman inspect needs root; the publication itself does not.
-        ExecStartPre = "+${waitForMcpHealthy}";
-        ExecStart = [
-          "${skillsCli} package"
-          "${skillsCli} publish-chatgpt"
-          "${skillsCli} verify-chatgpt"
+        ExecStartPre = "+${snapshotMcp}";
+        ExecStart = lib.escapeShellArgs [
+          "${mcpRollout}/bin/mcp-rollout" "reconcile"
+          "--skills-cli" skillsCli
+          "--repo" (toString inputs.ghostship-native-agent)
+          "--source-sha" inputs.ghostship-native-agent.rev
+          "--server" "/var/lib/ghostship-skills/server.json"
+          "--expect-version" runtimes.private.sourceRevision
+          "--state" "/var/lib/ghostship-skills"
         ];
         TimeoutStartSec = "30min";
         NoNewPrivileges = true;
