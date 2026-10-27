@@ -12,9 +12,17 @@ if [[ "$(git rev-parse --show-toplevel)" != "$repo_root" ]]; then
 fi
 cd "$repo_root"
 
+if [[ $# -ne 0 && $# -ne 2 ]]; then
+  echo "Usage: scripts/check [PR_BASE PR_HEAD]" >&2
+  exit 2
+fi
+
 shellcheck scripts/check scripts/check-integration
 shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh scripts/activate-host
 actionlint
+if [[ $# -eq 2 ]]; then
+  git diff --check "$1...$2"
+fi
 git diff --check
 git diff --cached --check
 python3 scripts/generate-model-dashboards.py --check
