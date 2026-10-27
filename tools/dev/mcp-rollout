@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+run=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/mcp-rollout-proof.XXXXXXXX")
+chmod 700 "$run"
+git rev-parse HEAD > "$run/source-head"
+git diff --binary HEAD -- packages/mcp-rollout > "$run/worktree.patch"
+rg --files packages/mcp-rollout | sort | xargs sha256sum > "$run/source-files.sha256"
+cd "$root/packages/mcp-rollout"
+mkdir "$run/unit" "$run/union" "$run/integration"
+MCP_ROLLOUT_PROOF="$run" go test -count=1 -v -covermode=atomic -coverpkg=ghostship/mcp-rollout ./... -args -test.gocoverdir="$run/unit" > "$run/tests.log" 2>&1
+cat "$run/tests.log"
+inputs="$run/unit"
+integration_inputs=""
+for coverage in "$run"/*/coverage; do
+  inputs="$inputs,$coverage"
+  integration_inputs="${integration_inputs:+$integration_inputs,}$coverage"
+done
+go tool covdata merge -i="$inputs" -o="$run/union"
+go tool covdata merge -i="$integration_inputs" -o="$run/integration"
+go tool covdata percent -i="$run/union" > "$run/coverage.txt"
+go tool covdata textfmt -i="$run/union" -o="$run/coverage.out"
+go tool covdata textfmt -i="$run/unit" -o="$run/unit.out"
+go tool covdata textfmt -i="$run/integration" -o="$run/integration.out"
+awk '
+  /^mode:/ { next }
+  NR==FNR { unit[$1]+=$3; statements[$1]=$2; next }
+  { integration[$1]+=$3; statements[$1]=$2 }
+  END {
+    print "block\tstatements\tunit_hits\tintegration_hits\tcontribution"
+    for (key in statements) {
+      u=unit[key]+0; i=integration[key]+0
+      kind=(u>0 && i>0) ? "overlap" : (u>0 ? "unit-only" : (i>0 ? "integration-only" : "uncovered"))
+      print key "\t" statements[key] "\t" u "\t" i "\t" kind
+    }
+  }' "$run/unit.out" "$run/integration.out" > "$run/coverage-contribution.tsv"
+cat "$run/coverage.txt"
+printf 'MCP rollout proof: %s\n' "$run"

@@ -8,9 +8,10 @@ let
   github = root: import (root + "/lib/github-integration.nix") { inherit pkgs; };
   privateSource = (import ./agent-service-sources.nix { agent = nativeAgent; inherit lib; }).integrations;
   private = {
+    sourceRevision = "source-" + builtins.hashString "sha256" (toString privateSource);
     runtime = import (privateSource + "/lib/native-mcp.nix") {
       inherit pkgs;
-      sourceRevision = "source-" + builtins.hashString "sha256" (toString privateSource);
+      sourceRevision = private.sourceRevision;
     };
     relay = import (privateSource + "/lib/openai-relay.nix") { inherit pkgs; };
     sharedSocket = "/tmp/ghostship-mcp/ghostship.sock";

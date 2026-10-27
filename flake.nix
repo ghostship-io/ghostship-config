@@ -123,6 +123,10 @@
           pkgs = pkgsFor system;
         in
         rec {
+          mcp-rollout = pkgs.mkShellNoCC {
+            packages = [ pkgs.go_1_26 pkgs.git pkgs.ripgrep ];
+            GOTOOLCHAIN = "local";
+          };
           # CI needs no downloaded browsers or agent-maintenance tools.
           ci = pkgs.mkShellNoCC {
             packages = with pkgs; [
