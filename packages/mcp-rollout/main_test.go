@@ -101,6 +101,9 @@ func TestExternalProcess(t *testing.T) {
 		archive := filepath.Join(dir, "package.zip")
 		os.WriteFile(archive, []byte("archive fixture"), 0600)
 		archiveSHA, _ := fileSHA(archive)
+		if os.Getenv("MCP_ROLLOUT_CORRUPT_ARCHIVE") == "1" {
+			os.WriteFile(archive, []byte("tampered archive"), 0600)
+		}
 		skillSHA, _ := fileSHA(filepath.Join(dir, "repo", reviewSkillFile))
 		interfaceSHA, _ := fileSHA(filepath.Join(dir, "repo", interfaceFile))
 		files := map[string]string{reviewSkillFile: skillSHA, interfaceFile: interfaceSHA}
@@ -111,7 +114,11 @@ func TestExternalProcess(t *testing.T) {
 			files[interfaceFile] = strings.Repeat("f", 64)
 		}
 		dirty := os.Getenv("MCP_ROLLOUT_DIRTY_SOURCE") == "1"
-		save(path, map[string]any{"source_sha": strings.Repeat("c", 40), "source_dirty": dirty, "version": "0.47.325+fixture", "chatgpt": map[string]any{"content_digest": strings.Repeat("b", 64), "zip_sha256": archiveSHA, "skills": []string{reviewSkill}, "files": files}})
+		source := strings.Repeat("c", 40)
+		if os.Getenv("MCP_ROLLOUT_WRONG_SOURCE") == "1" {
+			source = strings.Repeat("9", 40)
+		}
+		save(path, map[string]any{"source_sha": source, "source_dirty": dirty, "version": "0.47.325+fixture", "chatgpt": map[string]any{"content_digest": strings.Repeat("b", 64), "zip_sha256": archiveSHA, "skills": []string{reviewSkill}, "files": files}})
 		result = map[string]any{"ok": true, "record": path, "archive": archive}
 	case slices.Contains(args, "publish-chatgpt"):
 		if os.Getenv("MCP_ROLLOUT_PAUSE_PUBLISH") == "1" {
@@ -171,7 +178,7 @@ func TestNativeToolSet(t *testing.T) {
 }
 
 func TestNativeRolloutRecovery(t *testing.T) {
-	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"} {
+	for _, scenario := range []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "corrupt-archive", "wrong-source", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -371,6 +378,12 @@ func TestNativeRolloutRecovery(t *testing.T) {
 			case "dirty-source":
 				expect = 1
 				env = []string{"MCP_ROLLOUT_DIRTY_SOURCE=1"}
+			case "corrupt-archive":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_CORRUPT_ARCHIVE=1"}
+			case "wrong-source":
+				expect = 1
+				env = []string{"MCP_ROLLOUT_WRONG_SOURCE=1"}
 			case "wrong-version":
 				expect = 1
 				env = []string{"MCP_ROLLOUT_BAD_VERSION=1"}
@@ -404,7 +417,7 @@ func TestNativeRolloutRecovery(t *testing.T) {
 					t.Fatal("report is not bound to actual release manifest")
 				}
 			}
-			if scenario == "missing-reference" || scenario == "corrupt-reference" || scenario == "dirty-source" {
+			if scenario == "missing-reference" || scenario == "corrupt-reference" || scenario == "corrupt-archive" || scenario == "wrong-source" || scenario == "dirty-source" {
 				if _, err := os.Stat(filepath.Join(dir, "uploaded")); !os.IsNotExist(err) {
 					t.Fatal("published without required reference")
 				}

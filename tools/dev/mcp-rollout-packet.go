@@ -102,7 +102,7 @@ func main() {
 		}
 	}
 	log := string(read(filepath.Join(run, "tests.log")))
-	names := []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"}
+	names := []string{"complete-restart", "pending-discovery", "pending-consumer", "pending-skill", "stale-skill", "stale-schema", "missing-reference", "corrupt-reference", "corrupt-archive", "wrong-source", "dirty-source", "wrong-version", "wrong-app", "lost-ack", "stale-consumer", "stale-server", "snapshot-failure", "early-startup", "invalid-time", "unresolved-later-apply", "overlap-startup"}
 	profiles := map[string]map[string]block{}
 	for _, name := range names {
 		profiles[name] = profile(filepath.Join(run, name, "coverage.out"))
