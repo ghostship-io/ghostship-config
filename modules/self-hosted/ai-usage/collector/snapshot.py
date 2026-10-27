@@ -2936,13 +2936,13 @@ def _winners(
 
 # The owner's explicit selection exclusions. Astra and Fable remain in the
 # usage and quota readings, and they are never a winner or a recommendation in
-# any tier: the frontier workhorses are GPT-6.1 Sol and Claude Opus 5.5.
+# any tier: the frontier workhorses are GPT-6.1 Terra and Claude Opus 5.5.
 #
 # These are the fallback, not the source: the runtime policy carries the
 # owner's lists, and the policy is what is read. The fallback keeps the
 # collector honest when the policy is absent.
 SELECTION_EXCLUDED_MODELS = ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1")
-FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
+FRONTIER_WORKHORSES = ("gpt-6.1-terra", "claude-opus-5-5")
 
 # The names of the runtime policy fields that carry the owner's lists.
 POLICY_WORKHORSES = "frontierPrimeModels"

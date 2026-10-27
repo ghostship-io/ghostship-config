@@ -20,6 +20,16 @@ from metrics import SourceResult  # noqa: E402
 NOW = 1_800_000_000.0
 
 
+class TerraPolicyTest(unittest.TestCase):
+    def test_terra_is_frontier_without_expanding_gpt_delegate_permission(self):
+        native = {"mapped": True, "provider_instance_id": "codex"}
+        terra = main.snapshot_module._eligibility("codex", "gpt-6.1-terra", ["frontier"], native, main.OWNER_POLICY)
+        sol = main.snapshot_module._eligibility("codex", "gpt-6.1-sol", ["bulk"], native, main.OWNER_POLICY)
+        self.assertTrue(terra["frontier_prime"]["allowed"])
+        self.assertFalse(terra["delegate"]["allowed"])
+        self.assertTrue(sol["delegate"]["allowed"])
+
+
 def fake_aa_cache():
     return {
         "status": "ok",

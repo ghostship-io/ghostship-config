@@ -92,7 +92,7 @@ CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
 # The owner's direction for the agents that run in this environment. It is a
 # policy, not a measurement, and it never changes a provider reading.
 OWNER_POLICY = {
-    "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-sol"),
+    "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-terra"),
     "allowedGptModels": ("gpt-6.1-sol",),
     "backgroundProviderInstances": ("opencode",),
     # The models the owner excludes from every selection. They stay visible
