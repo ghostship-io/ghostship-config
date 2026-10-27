@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
+if [[ -n "${MCP_ROLLOUT_CONTRACT:-}" ]]; then
+  [[ -z "$(git status --porcelain)" ]] || { echo 'proof requires a clean checkout' >&2; exit 1; }
+  git merge-base --is-ancestor origin/main HEAD || { echo 'merge current origin/main before proof' >&2; exit 1; }
+fi
 run=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/mcp-rollout-proof.XXXXXXXX")
 chmod 700 "$run"
 git rev-parse HEAD > "$run/source-head"
@@ -15,6 +19,7 @@ integration_inputs=""
 for coverage in "$run"/*/coverage; do
   inputs="$inputs,$coverage"
   integration_inputs="${integration_inputs:+$integration_inputs,}$coverage"
+  go tool covdata textfmt -i="$coverage" -o="${coverage%/coverage}/coverage.out"
 done
 go tool covdata merge -i="$inputs" -o="$run/union"
 go tool covdata merge -i="$integration_inputs" -o="$run/integration"
@@ -35,4 +40,9 @@ awk '
     }
   }' "$run/unit.out" "$run/integration.out" > "$run/coverage-contribution.tsv"
 cat "$run/coverage.txt"
+if [[ -n "${MCP_ROLLOUT_CONTRACT:-}" ]]; then
+  cd "$root"
+  [[ -z "$(git status --porcelain)" ]] || { echo 'checkout changed during proof' >&2; exit 1; }
+  go run ./tools/dev/mcp-rollout-packet.go "$run" "$MCP_ROLLOUT_CONTRACT"
+fi
 printf 'MCP rollout proof: %s\n' "$run"

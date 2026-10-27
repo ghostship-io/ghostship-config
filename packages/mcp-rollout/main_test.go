@@ -29,8 +29,19 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	if root := os.Getenv("MCP_ROLLOUT_PROOF"); root != "" {
-		b, _ := os.ReadFile(binary)
-		os.WriteFile(filepath.Join(root, "binary.sha256"), []byte(fmt.Sprintf("%x\n", sha256.Sum256(b))), 0600)
+		b, err := os.ReadFile(binary)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(root, "binary"), b, 0700); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(root, "binary.sha256"), []byte(fmt.Sprintf("%x\n", sha256.Sum256(b))), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	code := m.Run()
 	os.RemoveAll(dir)
