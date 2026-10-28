@@ -154,15 +154,15 @@ let
       done
     fi
   '';
-  # The rollout compares the consumer with the connector; these families are
-  # the owner's required surface, so their absence is an explicit partial even
-  # when app and connector agree.
+  # The rollout compares the consumer with the connector. Only the browser
+  # surface is required; keep_* stays optional (the personal browser is the
+  # preferred path) and its absence must not block deployment acceptance.
   activateVerify = pkgs.writeShellScript "ghostship-activate-verify" ''
     exec ${pkgs.python3}/bin/python3 -c '
 import json, sys
 d = json.load(open("/var/lib/ghostship-skills/activate.json"))
 tools = set((d.get("stages", {}).get("consumer") or {}).get("consumer_tools") or [])
-missing = [n for n in ("desktop_see", "keep_list_notes") if n not in tools]
+missing = [n for n in ("desktop_see",) if n not in tools]
 if not d.get("ok") or missing:
     print(json.dumps({"ok": False, "pending": d.get("pending"), "missing_required": missing}))
     sys.exit(3)
