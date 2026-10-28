@@ -642,7 +642,13 @@ in {
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
-      restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
+      # The reconciler publishes skill content and verifies the consumer; both
+      # the skills program (skillsCli, --app-id) and the published bytes come
+      # from the private agent pin. Source the rollout and the recorded
+      # revision from that same pin so a native runtime bump does not rewrite
+      # this unit and start an unattended ChatGPT publication for unchanged
+      # content.
+      restartTriggers = [ agent.outPath ];
       path = [ pkgs.openssh pkgs.coreutils pkgs.git pkgs.podman ];
       serviceConfig = {
         Type = "oneshot";
@@ -663,10 +669,10 @@ in {
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
         ExecStart = lib.escapeShellArgs [
-          "${runtimes.private.runtime}/bin/ghostship-rollout" "activate"
+          "${agent.packages.${system}.native-mcp}/bin/ghostship-rollout" "activate"
           "--skills-cli" skillsOwner
-          "--repo" (toString inputs.ghostship-native-agent)
-          "--source-sha" inputs.ghostship-native-agent.rev
+          "--repo" (toString inputs.ghostship-private-agent)
+          "--source-sha" inputs.ghostship-private-agent.rev
           "--app-id" ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
           "--state" "/var/lib/ghostship-skills"
           "--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"
