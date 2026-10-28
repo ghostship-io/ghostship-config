@@ -642,13 +642,13 @@ in {
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
-      # The reconciler publishes skill content and verifies the consumer; both
-      # the skills program (skillsCli, --app-id) and the published bytes come
-      # from the private agent pin. Source the rollout and the recorded
-      # revision from that same pin so a native runtime bump does not rewrite
-      # this unit and start an unattended ChatGPT publication for unchanged
-      # content.
-      restartTriggers = [ agent.outPath ];
+      # The consumer refresh compares the deployed native catalogue, so a native
+      # runtime bump must still trigger it: a future native-only tool-list change
+      # would otherwise never be verified. The published payload, rollout binary
+      # and recorded revision stay on the private pin below, so an unchanged
+      # private payload package/publish/verify is a no-op and the original
+      # unintended source publication does not return.
+      restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
       path = [ pkgs.openssh pkgs.coreutils pkgs.git pkgs.podman ];
       serviceConfig = {
         Type = "oneshot";

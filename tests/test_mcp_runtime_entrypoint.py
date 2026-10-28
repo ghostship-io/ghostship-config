@@ -29,13 +29,15 @@ class McpEntrypoint(unittest.TestCase):
         self.assertIn('wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];', service)
         self.assertNotIn('requires =', service)
         body = rest.split('TimeoutStartSec', 1)[0]
-        # The reconciler publishes skill content, which the private agent pin
-        # owns. It must not carry a native-agent reference: a runtime-only bump
-        # would rewrite this unit and start an unattended ChatGPT publication.
+        # The consumer refresh compares the deployed native catalogue, so the
+        # native pin must remain a trigger. The published payload, rollout
+        # binary and recorded revision must stay on the private pin, or a native
+        # bump would publish source that did not change.
+        self.assertIn('restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];', service)
         self.assertIn('"${agent.packages.${system}.native-mcp}/bin/ghostship-rollout" "activate"', body)
         self.assertIn('"--source-sha" inputs.ghostship-private-agent.rev', body)
-        self.assertNotIn("ghostship-native-agent", body,
-                         "the skills reconciler must not follow the native runtime pin")
+        self.assertNotIn('"--source-sha" inputs.ghostship-native-agent.rev', body)
+        self.assertNotIn('"--repo" (toString inputs.ghostship-native-agent)', body)
         self.assertIn('"--app-id"', body)
         self.assertIn('"--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"', body)
         self.assertIn('"--skills-cli" skillsOwner', body)
