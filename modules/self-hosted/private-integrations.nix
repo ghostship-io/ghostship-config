@@ -599,6 +599,8 @@ in {
         StateDirectory = "ghostship-skills";
         StateDirectoryMode = "0700";
         UMask = "0077";
+        # A previous success must not stay visible while this attempt runs.
+        ExecStartPre = "${pkgs.coreutils}/bin/rm -f /var/lib/ghostship-skills/activate.json";
         Environment = [
           "HOME=/var/lib/ghostship-skills"
           "XDG_STATE_HOME=/var/lib/ghostship-skills"
