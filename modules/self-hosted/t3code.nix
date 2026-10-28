@@ -507,6 +507,7 @@ in
       STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
         DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
         AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \
+        TOOLING_PATH=${lib.escapeShellArg (toString tooling)} \
         PROVIDER_SECRETS_FILE=${lib.escapeShellArg t3codeSecrets} \
         SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl \
         ${lib.getExe t3codeActivateDeployment}
