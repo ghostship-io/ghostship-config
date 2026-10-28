@@ -39,6 +39,7 @@ class McpEntrypoint(unittest.TestCase):
         self.assertIn('ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run/lock" "/run/containers" "/run/libpod" ]', body,
                       "root podman needs its storage lock writable")
         self.assertIn('desktop.enabled', source, "a disabled desktop probe must trigger one restart")
+        self.assertIn('missing = [n for n in ("desktop_see",) if n not in tools]', source)
         self.assertIn('ghostship-skills-owner', source)
         self.assertNotIn('mcp-rollout', body, "manual receipt reconciliation is superseded")
         self.assertNotIn('snapshotJson', body)
