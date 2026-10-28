@@ -648,7 +648,7 @@ in {
         Type = "oneshot";
         RemainAfterExit = true;
         UMask = "0077";
-        ReadWritePaths = [ "/var/lib/ghostship-skills" ];
+        ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" ];
         ExecStartPre = activatePrepare;
         ExecStartPost = activateVerify;
         Environment = [
