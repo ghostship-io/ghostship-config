@@ -1,5 +1,12 @@
 # MCP deployment completion
 
+> Superseded for the unit: `ghostship-skills-reconcile` now runs the Go
+> `ghostship-rollout activate` command from the pinned native MCP source. It
+> publishes only on a content change, refreshes the app's tools and requires
+> its declarations to match the connector's `tools/list`; it exits 3 while any
+> stage is unverified. `packages/mcp-rollout` remains as the earlier
+> receipt-contract implementation and is no longer wired to the unit.
+
 The existing `ghostship-skills-reconcile` unit owns post-deploy plugin delivery.
 It now runs for changes to either the general agent source or the independent
 native MCP source. It does not replace the native relay, restart T3, change

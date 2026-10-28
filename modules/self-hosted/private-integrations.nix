@@ -117,34 +117,6 @@ let
   # Post-deploy skills reconciliation (docs/skills-distribution.md in
   # ghostship-agent). The app pins the deployed flake source and revision.
   skillsCli = agent.apps.${system}.ghostship-skills.program;
-  mcpRollout = import ../../packages/mcp-rollout { inherit pkgs; };
-  waitForMcpHealthy = pkgs.writeShellScript "ghostship-wait-mcp-healthy" ''
-    set -eu
-    for _ in $(seq 1 60); do
-      state=$(${pkgs.podman}/bin/podman inspect --format '{{.State.Health.Status}}' \
-        ghostship-private-integrations 2>/dev/null || true)
-      [ "$state" = healthy ] && exit 0
-      sleep 5
-    done
-    echo "ghostship-private-integrations did not become healthy" >&2
-    exit 1
-  '';
-  snapshotMcp = pkgs.writeShellScript "ghostship-snapshot-mcp" ''
-    set -eu
-    ${mcpRollout}/bin/mcp-rollout begin --out /var/lib/ghostship-skills/server.json
-    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json /var/lib/ghostship-skills/reconcile.lock
-    trap 'chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/rollout.json' EXIT
-    ${pkgs.systemd}/bin/systemctl is-active --quiet ghostship-desktop-bridge.service
-    ${waitForMcpHealthy}
-    ${mcpRollout}/bin/mcp-rollout snapshot \
-      --out /var/lib/ghostship-skills/server.json \
-      --started-at "$(${pkgs.podman}/bin/podman inspect --format '{{.State.StartedAt}}' ghostship-private-integrations)" \
-      --program ${pkgs.podman}/bin/podman -- \
-      exec -i --user 62020 ghostship-private-integrations \
-      /run/ghostship-runtime/current/bin/ghostship-mcp \
-      --connect-socket ${runtimes.private.sharedSocket}
-    chown ghostship-mcp:ghostship-mcp /var/lib/ghostship-skills/server.json /var/lib/ghostship-skills/rollout.json
-  '';
 
   # Seerr generates its API key into its own settings; project it (with the
   # internal base URL) the same way as the agenix-backed service credentials.
@@ -555,11 +527,21 @@ in {
         AGENT_DESKTOP_SSH_USER = "abc";
         AGENT_DESKTOP_SSH_KEY = "/run/ghostship-integrations/agent-desktop-key";
         AGENT_DESKTOP_SSH_KNOWN_HOSTS = "/run/ghostship-integrations/agent-desktop-known-hosts";
+        # The owner's existing Keep broker; the connector holds no Google
+        # credential and only relays its allow-listed operations.
+        GHOSTSHIP_KEEP_SOCKET = "/run/ghostship-keep/operations.sock";
+        # Restore the legacy browser_window/browser_op/browser_raw names the
+        # owner's ChatGPT workflows already use; they map onto the same
+        # desktop lease and add no second implementation.
+        GHOSTSHIP_DESKTOP_COMPAT = "1";
       };
       volumes = [
         # Native T3/relay credentials, the controller-derived scoped GitHub
         # token, the Agent Desktop contract and the workspace write gate.
         "/run/ghostship-native-mcp:/run/ghostship-integrations:ro"
+        # One private Unix socket owned by ghostship-mcp: the broker enforces
+        # the caller uid; no Google session or browser credential is mounted.
+        "/run/ghostship-keep:/run/ghostship-keep:rw"
         "/srv/apps/ghostship-private-integrations:/state:rw,noexec,nosuid,nodev"
         # Same source as the t3code container's /workspace; repo layout kept.
         "/srv/ghostship/workspace:/workspace"
@@ -597,27 +579,28 @@ in {
       message = "skillsReconcile needs a ghostship-agent pin that provides apps.ghostship-skills.";
     } ];
     # Runs for either selected agent/native MCP source, after container health.
-    # Completion also requires deployment-bound discovery/consumer receipts.
+    # Publishes only on a content change, then refreshes and reads back the
+    # real ChatGPT consumer; an unverified consumer stays partial (exit 3).
     # Needs: the Agent Desktop SSH contract
     # published by ghostship-desktop-bridge (key, known_hosts, 10.89.7.2:2222),
     # a signed-in ChatGPT session on the `personal` (Assistant) identity, and
     # the plugin id committed in config/skills/chatgpt-plugin.json.
     systemd.services.ghostship-skills-reconcile = {
-      description = "Publish MCP plugin and require discovery/consumer acceptance receipts";
+      description = "Publish the MCP plugin and verify the real ChatGPT consumer";
       wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
       restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
-      path = [ pkgs.openssh pkgs.coreutils pkgs.git ];
+      path = [ pkgs.openssh pkgs.coreutils pkgs.git pkgs.podman ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        User = "ghostship-mcp";
-        Group = "ghostship-mcp";
         StateDirectory = "ghostship-skills";
         StateDirectoryMode = "0700";
         UMask = "0077";
+        # A previous success must not stay visible while this attempt runs.
+        ExecStartPre = "${pkgs.coreutils}/bin/rm -f /var/lib/ghostship-skills/activate.json";
         Environment = [
           "HOME=/var/lib/ghostship-skills"
           "XDG_STATE_HOME=/var/lib/ghostship-skills"
@@ -629,16 +612,14 @@ in {
           "AGENT_DESKTOP_SSH_KEY=/run/ghostship-integrations/agent-desktop-key"
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
-        # podman inspect needs root; the publication itself does not.
-        ExecStartPre = "+${snapshotMcp}";
         ExecStart = lib.escapeShellArgs [
-          "${mcpRollout}/bin/mcp-rollout" "reconcile"
+          "${runtimes.private.runtime}/bin/ghostship-rollout" "activate"
           "--skills-cli" skillsCli
           "--repo" (toString inputs.ghostship-native-agent)
           "--source-sha" inputs.ghostship-native-agent.rev
-          "--server" "/var/lib/ghostship-skills/server.json"
-          "--expect-version" runtimes.private.sourceRevision
+          "--app-id" ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
           "--state" "/var/lib/ghostship-skills"
+          "--bridge" "podman exec -i --user 62020 ghostship-private-integrations /run/ghostship-runtime/current/bin/ghostship-mcp --connect-socket ${runtimes.private.sharedSocket}"
         ];
         TimeoutStartSec = "30min";
         NoNewPrivileges = true;
