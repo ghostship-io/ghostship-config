@@ -455,9 +455,10 @@ in
       ${pkgs.su-exec}/bin/su-exec 3000:3000 ${pkgs.bash}/bin/bash -euc ${lib.escapeShellArg ''
         tool_state=${t3codeHome}/.local/state/ghostship-t3-tools
         mkdir -p "$tool_state"
-        if [ ! -e "$tool_state/current" ] && [ ! -L "$tool_state/current" ]; then
-          ln -s ${tooling} "$tool_state/current"
-        fi
+        # Advance the pointer to the declared accepted tooling. A stale link
+        # left by an older closure must not survive: the deployment gate
+        # compares the loaded agent against this exact path.
+        ${pkgs.bash}/bin/bash ${../../packages/t3code/tooling-pointer.sh} ${tooling} "$tool_state/current"
         ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeHome}/.local/state/t3code-podman-bridge
       ''}
       install -d -m0755 ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools
