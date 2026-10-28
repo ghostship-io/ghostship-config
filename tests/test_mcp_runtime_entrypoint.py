@@ -36,7 +36,7 @@ class McpEntrypoint(unittest.TestCase):
         self.assertIn('"--skills-cli" skillsOwner', body)
         self.assertIn('ExecStartPre = activatePrepare;', body)
         self.assertIn('ExecStartPost = activateVerify;', body)
-        self.assertIn('ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run" ]', body,
+        self.assertIn('ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run/lock" "/run/containers" "/run/libpod" ]', body,
                       "root podman needs its storage lock writable")
         self.assertIn('desktop.enabled', source, "a disabled desktop probe must trigger one restart")
         self.assertIn('ghostship-skills-owner', source)
