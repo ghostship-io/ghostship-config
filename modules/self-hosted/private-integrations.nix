@@ -117,6 +117,57 @@ let
   # Post-deploy skills reconciliation (docs/skills-distribution.md in
   # ghostship-agent). The app pins the deployed flake source and revision.
   skillsCli = agent.apps.${system}.ghostship-skills.program;
+  # The publisher drives the Agent Desktop through the Python desktop stack,
+  # which needs its own login user; the rollout itself runs as root so it can
+  # read the connector over podman. runuser changes only the uid for this
+  # child, not the service or its grants.
+  skillsOwner = pkgs.writeShellScript "ghostship-skills-owner" ''
+    set -eu
+    exec ${pkgs.util-linux}/bin/runuser -u ghostship-mcp -- \
+      ${pkgs.coreutils}/bin/env \
+        HOME=/var/lib/ghostship-skills XDG_STATE_HOME=/var/lib/ghostship-skills \
+        SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt GHOSTSHIP_BROWSER_DRIVER=desktop \
+        AGENT_DESKTOP_SSH_HOST=10.89.7.2 AGENT_DESKTOP_SSH_PORT=2222 AGENT_DESKTOP_SSH_USER=abc \
+        AGENT_DESKTOP_SSH_KEY=/run/ghostship-integrations/agent-desktop-key \
+        AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts \
+        ${skillsCli} "$@"
+  '';
+  # A failed attempt must not leave the prior success visible. The connector's
+  # desktop probe runs once at startup; wait for the contract and give a failed
+  # probe one container restart before the rollout reads the catalogue.
+  activatePrepare = pkgs.writeShellScript "ghostship-activate-prepare" ''
+    set -eu
+    install -d -m 0700 -o ghostship-mcp -g ghostship-mcp /var/lib/ghostship-skills
+    rm -f /var/lib/ghostship-skills/activate.json
+    for _ in $(${pkgs.coreutils}/bin/seq 1 30); do
+      ${pkgs.openssh}/bin/ssh -i /run/ghostship-integrations/agent-desktop-key -p 2222 \
+        -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=5 \
+        -o UserKnownHostsFile=/run/ghostship-integrations/agent-desktop-known-hosts \
+        -o StrictHostKeyChecking=yes abc@10.89.7.2 true >/dev/null 2>&1 && break
+      sleep 2
+    done
+    if ! ${pkgs.podman}/bin/podman logs ghostship-private-integrations 2>&1 | ${pkgs.gnugrep}/bin/grep -q '"desktop.enabled"'; then
+      ${pkgs.podman}/bin/podman restart ghostship-private-integrations >/dev/null
+      for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+        [ "$(${pkgs.podman}/bin/podman inspect --format '{{.State.Health.Status}}' ghostship-private-integrations 2>/dev/null || true)" = healthy ] && break
+        sleep 5
+      done
+    fi
+  '';
+  # The rollout compares the consumer with the connector; these families are
+  # the owner's required surface, so their absence is an explicit partial even
+  # when app and connector agree.
+  activateVerify = pkgs.writeShellScript "ghostship-activate-verify" ''
+    exec ${pkgs.python3}/bin/python3 -c '
+import json, sys
+d = json.load(open("/var/lib/ghostship-skills/activate.json"))
+tools = set((d.get("stages", {}).get("consumer") or {}).get("consumer_tools") or [])
+missing = [n for n in ("desktop_see", "keep_list_notes") if n not in tools]
+if not d.get("ok") or missing:
+    print(json.dumps({"ok": False, "pending": d.get("pending"), "missing_required": missing}))
+    sys.exit(3)
+'
+  '';
 
   # Seerr generates its API key into its own settings; project it (with the
   # internal base URL) the same way as the agenix-backed service credentials.
@@ -596,11 +647,10 @@ in {
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        StateDirectory = "ghostship-skills";
-        StateDirectoryMode = "0700";
         UMask = "0077";
-        # A previous success must not stay visible while this attempt runs.
-        ExecStartPre = "${pkgs.coreutils}/bin/rm -f /var/lib/ghostship-skills/activate.json";
+        ReadWritePaths = [ "/var/lib/ghostship-skills" ];
+        ExecStartPre = activatePrepare;
+        ExecStartPost = activateVerify;
         Environment = [
           "HOME=/var/lib/ghostship-skills"
           "XDG_STATE_HOME=/var/lib/ghostship-skills"
@@ -614,12 +664,12 @@ in {
         ];
         ExecStart = lib.escapeShellArgs [
           "${runtimes.private.runtime}/bin/ghostship-rollout" "activate"
-          "--skills-cli" skillsCli
+          "--skills-cli" skillsOwner
           "--repo" (toString inputs.ghostship-native-agent)
           "--source-sha" inputs.ghostship-native-agent.rev
           "--app-id" ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
           "--state" "/var/lib/ghostship-skills"
-          "--bridge" "podman exec -i --user 62020 ghostship-private-integrations /run/ghostship-runtime/current/bin/ghostship-mcp --connect-socket ${runtimes.private.sharedSocket}"
+          "--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"
         ];
         TimeoutStartSec = "30min";
         NoNewPrivileges = true;

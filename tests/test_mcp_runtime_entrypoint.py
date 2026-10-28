@@ -32,9 +32,12 @@ class McpEntrypoint(unittest.TestCase):
         self.assertIn('"${runtimes.private.runtime}/bin/ghostship-rollout" "activate"', body)
         self.assertIn('"--source-sha" inputs.ghostship-native-agent.rev', body)
         self.assertIn('"--app-id"', body)
-        self.assertIn('"--bridge"', body)
-        self.assertIn('ExecStartPre = "${pkgs.coreutils}/bin/rm -f /var/lib/ghostship-skills/activate.json"',
-                      body, "a failed attempt must not leave the previous success visible")
+        self.assertIn('"--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"', body)
+        self.assertIn('"--skills-cli" skillsOwner', body)
+        self.assertIn('ExecStartPre = activatePrepare;', body)
+        self.assertIn('ExecStartPost = activateVerify;', body)
+        self.assertIn('desktop.enabled', source, "a disabled desktop probe must trigger one restart")
+        self.assertIn('ghostship-skills-owner', source)
         self.assertNotIn('mcp-rollout', body, "manual receipt reconciliation is superseded")
         self.assertNotIn('snapshotJson', body)
 
