@@ -215,6 +215,7 @@ in
         bash tests/test_t3code_deploy_image.sh
         bash tests/test_t3code_activate_deployment.sh
         bash tests/test_t3code_receipt_self_check.sh
+        bash tests/test_t3code_tooling_pointer.sh
         python -m unittest discover -s tests -v
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v1-sqlite.test.cjs
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v2-sqlite.test.cjs
