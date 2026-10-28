@@ -242,14 +242,36 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o444)
         self.assertEqual(target.stat().st_uid, os.getuid())
 
+    def test_candidate_model_routing_accepts_degraded_snapshot_with_a_usable_route(self):
+        candidate_tmp = self.root / "candidate"
+        candidate_tmp.mkdir()
+        source = self.root / "routing.json"
+        source.write_text(json.dumps({
+            "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
+            "coverage": {"sources_failed": 2, "tiers": {"bulk": {"state": "ok"}}},
+            "candidates": [{"available": True, "key": "p:m"}],
+        }))
+        target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        self.assertEqual(target.read_text(), source.read_text())
+        for broken in (
+            {"partial": True, "coverage": {"sources_failed": 2, "tiers": {"bulk": {"state": "no_eligible_model"}}},
+             "candidates": [{"available": True}]},
+            {"partial": True, "coverage": {"sources_failed": 2, "tiers": {"bulk": {"state": "ok"}}},
+             "candidates": [{"available": False}]},
+        ):
+            source.write_text(json.dumps({"schema": "ghostship.ai-usage.routing", "schema_version": 1, **broken}))
+            with self.assertRaisesRegex(RuntimeError, "no usable candidate"):
+                acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+
     def test_candidate_model_routing_accepts_partial_without_failed_sources(self):
         candidate_tmp = self.root / "candidate"
         candidate_tmp.mkdir()
         source = self.root / "routing.json"
         source.write_text(json.dumps({
             "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
-            "coverage": {"sources_total": 13, "sources_ok": 12, "sources_partial": 1, "sources_failed": 0},
-            "candidates": [],
+            "coverage": {"sources_total": 13, "sources_ok": 12, "sources_partial": 1, "sources_failed": 0,
+                         "tiers": {"bulk": {"state": "ok"}}},
+            "candidates": [{"available": True}],
         }))
         target = acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
         self.assertEqual(target.read_text(), source.read_text())
@@ -258,7 +280,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 "schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
                 "coverage": coverage, "candidates": [],
             }))
-            with self.assertRaisesRegex(RuntimeError, "failed sources"):
+            with self.assertRaisesRegex(RuntimeError, "no usable candidate"):
                 acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
 
     def test_routing_snapshot_refusals_are_retryable_preconditions(self):

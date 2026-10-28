@@ -236,9 +236,19 @@ def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
     # A partial snapshot still carries the full catalog; one unread quota
     # source must not block every deploy. A failed source still does.
     coverage = document.get("coverage")
-    failed = coverage.get("sources_failed") if isinstance(coverage, dict) else None
-    if document["partial"] and (not isinstance(failed, int) or isinstance(failed, bool) or failed != 0):
-        raise PreconditionError("live model routing snapshot has failed sources")
+    # A partial snapshot is degraded, not blocking: unrelated exhausted or
+    # unavailable sources must not stop a candidate that has a usable route.
+    # Require at least one usable candidate and one ok tier; the candidate's
+    # own provider turn remains the real functional verification.
+    if document["partial"]:
+        candidates = document.get("candidates")
+        usable = isinstance(candidates, list) and any(
+            isinstance(row, dict) and row.get("available") is True for row in candidates)
+        tiers = coverage.get("tiers") if isinstance(coverage, dict) else None
+        tier_ok = isinstance(tiers, dict) and any(
+            isinstance(tier, dict) and tier.get("state") == "ok" for tier in tiers.values())
+        if not usable or not tier_ok:
+            raise PreconditionError("live model routing snapshot has no usable candidate")
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)
