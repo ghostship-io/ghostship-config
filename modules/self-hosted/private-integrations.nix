@@ -642,6 +642,12 @@ in {
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
+      # The consumer refresh compares the deployed native catalogue, so a native
+      # runtime bump must still trigger it: a future native-only tool-list change
+      # would otherwise never be verified. The published payload, rollout binary
+      # and recorded revision stay on the private pin below, so an unchanged
+      # private payload package/publish/verify is a no-op and the original
+      # unintended source publication does not return.
       restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];
       path = [ pkgs.openssh pkgs.coreutils pkgs.git pkgs.podman ];
       serviceConfig = {
@@ -663,10 +669,10 @@ in {
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
         ExecStart = lib.escapeShellArgs [
-          "${runtimes.private.runtime}/bin/ghostship-rollout" "activate"
+          "${agent.packages.${system}.native-mcp}/bin/ghostship-rollout" "activate"
           "--skills-cli" skillsOwner
-          "--repo" (toString inputs.ghostship-native-agent)
-          "--source-sha" inputs.ghostship-native-agent.rev
+          "--repo" (toString inputs.ghostship-private-agent)
+          "--source-sha" inputs.ghostship-private-agent.rev
           "--app-id" ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
           "--state" "/var/lib/ghostship-skills"
           "--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"
