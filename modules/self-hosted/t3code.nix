@@ -11,6 +11,8 @@ let
   hardened = config.ghostship.t3code.hardening.enable;
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeTmp = "/srv/apps/t3code/tmp";
+  providerExecutables = import ../../packages/t3code/provider-flake-map.nix;
+  devEnvSource = "/nix/store/xm0qqd3y0kl1iz5zma6df6cvdlg5cvfq-source";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
@@ -368,6 +370,8 @@ in
       # model evidence, not a provider sandbox or another HOME (#403).
       GHOSTSHIP_MODEL_EVIDENCE_PATH = "/home/t3code/.local/state/ghostship/model-evidence/model-evidence.jsonl";
       GHOSTSHIP_ROUTE_POLICY_PATH = "/etc/ghostship/route-policy.json";
+      GHOSTSHIP_DEV_ENV_REPO = devEnvSource;
+      GHOSTSHIP_PROVIDER_EXECUTABLES = builtins.toJSON providerExecutables;
       # The Go CLI's --go operations and review records call the live service.
       GHOSTSHIP_COORDINATOR_URL = goCoordinatorUrl;
       # The token itself stays in the mounted file; only this path is inherited.
@@ -461,6 +465,9 @@ in
         ${pkgs.bash}/bin/bash ${../../packages/t3code/tooling-pointer.sh} ${tooling} "$tool_state/current"
         ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeHome}/.local/state/t3code-podman-bridge
       ''}
+      test -d "${t3codeNixRoot}${devEnvSource}"
+      install -d -m0755 ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-dev-env
+      ln -sfn ${devEnvSource} ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-dev-env/source
       install -d -m0755 ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools
       ln -sfn ${tooling} ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools/pinned
       ln -sfn ${config.ghostship.t3codePodman.bridgePackage} ${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3-tools/bridge
