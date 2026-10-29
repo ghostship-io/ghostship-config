@@ -816,6 +816,13 @@ def register_candidate_workspace(engine, name):
         )
 
 
+class ProviderTurnError(RuntimeError):
+    def __init__(self, pick, routes, message):
+        super().__init__(message)
+        self.pick = pick
+        self.routes = routes
+
+
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None):
     """Prove the live picker route with a real native provider turn."""
     del provider_env_file  # This route is served by the T3 opencode-free instance.
@@ -828,11 +835,13 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         "--kind", "code", "--json",
     )
     initial_route = None
+    selection = {}
+    pick_summary = "unavailable"
     if pick.returncode:
         category = candidate_error_category(pick)
         summary = candidate_error_summary(pick)
         if "model-unavailable" not in summary.lower():
-            raise RuntimeError(
+            raise ProviderTurnError(pick_summary, route_summary,
                 f"provider_turn failed: live T3 picker exited {pick.returncode} "
                 f"({category}-{summary}); candidate_state={diagnostics}"
             )
@@ -842,21 +851,19 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
             selection = payload.get("data", {}).get("pick") or {}
         except (ValueError, AttributeError):
             selection = {}
-        if not valid_t3_acceptance_route(selection):
-            raise RuntimeError(
-                "provider_turn failed: live picker returned no approved available free or subscription T3 route"
-            )
-        initial_route = f"{selection['provider']}/{selection['model']}"
+        if valid_t3_acceptance_route(selection):
+            initial_route = f"{selection['provider']}/{selection['model']}"
     routes = ([initial_route] if initial_route else []) + [
         route for route in routes if route != initial_route
     ]
+    pick_summary = summarize_t3_rows([selection])
     if not routes:
-        raise RuntimeError(
+        raise ProviderTurnError(pick_summary, route_summary,
             "provider_turn failed: model-unavailable and live catalog has no approved available T3 fallback "
             f"(candidate_state={diagnostics}; catalog={route_summary})"
         )
     if not tooling_path:
-        raise RuntimeError("provider_turn failed: candidate agent tools path unavailable")
+        raise ProviderTurnError(pick_summary, route_summary, "provider_turn failed: candidate agent tools path unavailable")
     failures = []
     # A route-level failure (provider API error, quota, unavailable model) says
     # nothing about the image: try the next admitted route. An image defect fails
@@ -873,7 +880,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         category = candidate_error_category(proof)
         summary = candidate_error_summary(proof)
         failures.append(f"{route}:{category}-{summary}")
-    raise RuntimeError(
+    raise ProviderTurnError(pick_summary, route_summary,
         "provider_turn failed: no live picker route proved a turn ("
         + ",".join(failures[:8])
         + f"); candidate_state={diagnostics}; catalog={route_summary}"
@@ -944,6 +951,10 @@ def candidate_t3_route_summary(result):
         return "unavailable"
     if not isinstance(rows, list):
         return "unavailable"
+    return summarize_t3_rows(rows)
+
+
+def summarize_t3_rows(rows):
     summary = []
     for row in rows:
         if not isinstance(row, dict):
@@ -955,7 +966,7 @@ def candidate_t3_route_summary(result):
         safe_provider = re.sub(r"[^A-Za-z0-9_.-]", "-", provider)[:64]
         safe_model = re.sub(r"[^A-Za-z0-9_./:-]", "-", model)[:96]
         summary.append(
-            f"{safe_provider}/{safe_model}:{row.get('execution')}:{row.get('available')}:{row.get('approved_free')}"
+            f"{safe_provider}/{safe_model}:{row.get('execution') if row.get('execution') in ('t3', 'free_pool') else 'other'}:{row.get('available') is True}:{row.get('approved_free') is True}"
         )
     return ",".join(summary[:8]) or "empty"
 
@@ -1128,6 +1139,20 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         os.chmod(temporary, 0o600)
         os.replace(temporary, receipt_path)
         return receipt
+    except ProviderTurnError as error:
+        attempts = state_dir / "attempts"
+        attempts.mkdir(mode=0o700, parents=True, exist_ok=True)
+        attempt = attempts / f"{desired}.json"
+        try:
+            record = json.loads(attempt.read_text())
+        except (OSError, ValueError):
+            record = {}
+        record["provider_turn"] = {"pick": error.pick, "routes": error.routes}
+        temporary = attempt.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(record, sort_keys=True) + "\n")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, attempt)
+        raise
     finally:
         cleanup_error = None
         if created:
