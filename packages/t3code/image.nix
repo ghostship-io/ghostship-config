@@ -39,7 +39,6 @@ let
       done
       mkdir -p usr/lib/ghostship-provider-launchers
       ${lib.concatMapStringsSep "\n" (name: "ln -s ${managedBin}/provider-flake-launch usr/lib/ghostship-provider-launchers/${name}") (builtins.attrNames providerExecutables)}
-      cp ${./provider-flake-setup.py} usr/share/t3code-provider-flake-setup.py
       # Existing provider settings use this path; the payload stays managed in home.
       ln -s ${managedBin}/agy_acp_server.par bin/agy_acp_server.par
       mkdir -p lib lib64
@@ -313,12 +312,12 @@ let
       # address, plus the path of the token file the Go CLI reads. No credential
       # value is passed: every worker in this cgroup can read the environment.
       PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH GHOSTSHIP_COORDINATOR_URL GHOSTSHIP_COORDINATOR_TOKEN_FILE GHOSTSHIP_DEV_ENV_REPO GHOSTSHIP_PROVIDER_EXECUTABLES
-      ExecStartPre=${managedBin}/python3 /usr/share/t3code-provider-flake-setup.py /home/t3code/.t3/userdata/settings.json
       ExecStartPre=${managedBin}/t3code-run-hooks before-t3code.d
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-command-code/configure.py
       ExecStartPre=-${managedBin}/python3 /usr/share/t3code-provider-privacy/setup.py
       ExecStartPre=-${managedBin}/t3code-opencode-model-catalog
-      ExecStartPre=-${managedBin}/t3code-free-instance-reconcile
+      ExecStartPre=${managedBin}/t3code-free-instance-reconcile --provider-flake-start
+      ExecStopPost=${managedBin}/t3code-free-instance-reconcile --restore-provider-flake
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
       ExecStart=${managedBin}/t3code-server-run
       ExecStartPost=${managedBin}/t3code-snapshot-config
