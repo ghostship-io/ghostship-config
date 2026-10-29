@@ -53,18 +53,6 @@
       ],
       "reason": "Unattended-use grant pending resolution of general hosted terms versus official API documentation"
     },
-    "huggingface": {
-      "enabled": true,
-      "free_only": true,
-      "free_credit_verified": false,
-      "reason": "Awaiting checked remaining free allowance; no credit spending guessed",
-      "data_policy_approved": false,
-      "allowed_workloads": [
-        "development",
-        "evaluation",
-        "research"
-      ]
-    },
     "zai": {
       "enabled": true,
       "data_policy_approved": true,
@@ -154,23 +142,6 @@
         "evaluation",
         "research"
       ]
-    },
-    "upstage": {
-      "enabled": true,
-      "data_policy_approved": true,
-      "allowed_workloads": [
-        "development",
-        "evaluation",
-        "research"
-      ],
-      "free_only": true,
-      "billing_verified": {
-        "basis": "$10 welcome coupon, no payment method, no auto-recharge (coordinator check 2026-10-18)",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00"
-      },
-      "free_credit_verified": true,
-      "credit_expires_at": "2027-01-16T00:00:00Z"
     },
     "inception": {
       "enabled": true,
