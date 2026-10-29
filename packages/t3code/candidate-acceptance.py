@@ -914,6 +914,8 @@ def valid_t3_acceptance_route(selection):
     DeepSeek Flash costs almost nothing. Codex and Claude stay excluded, and the
     receipt records the route that proved the turn.
     """
+    if isinstance(selection, dict) and isinstance(selection.get("provider"), str) and selection["provider"] in PROTECTED_ACCEPTANCE_PROVIDERS:
+        return False
     if valid_t3_free_route(selection):
         return True
     return (
@@ -922,7 +924,6 @@ def valid_t3_acceptance_route(selection):
         and isinstance(selection.get("model"), str)
         and bool(selection["model"])
         and selection.get("billing") == "subscription"
-        and selection["provider"] not in PROTECTED_ACCEPTANCE_PROVIDERS
         and selection.get("execution") == "t3"
         and selection.get("available") is True
     )

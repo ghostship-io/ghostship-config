@@ -640,6 +640,27 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=call):
             self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/fallback")
 
+    def test_protected_approved_free_picker_and_catalog_are_never_probed(self):
+        fallback = {"provider": "opencode-free", "model": "safe", "billing": "free",
+                    "approved_free": True, "execution": "t3", "available": True}
+        for provider in ("codex", "claude", "claudeAgent"):
+            protected = {**fallback, "provider": provider}
+            for protected_pick in (True, False):
+                with self.subTest(provider=provider, protected_pick=protected_pick):
+                    calls = []
+                    def call(engine, *args, **kwargs):
+                        calls.append(args)
+                        if "pick" in args:
+                            return Mock(returncode=0, stdout=json.dumps({"data": {"pick": protected if protected_pick else {}}}))
+                        if "models" in args:
+                            return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [protected, fallback]}}))
+                        return Mock(returncode=0, stdout="passed")
+                    with patch.object(acceptance, "command", side_effect=call):
+                        self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/safe")
+                    probes = [call for call in calls if any(str(arg).endswith("provider-turn-probe.py") for arg in call)]
+                    self.assertEqual(len(probes), 1)
+                    self.assertIn("opencode-free/safe", probes[0])
+
     def test_provider_failure_persists_summary_in_attempt(self):
         failure = acceptance.ProviderTurnError("claude/sonnet", "opencode-free/fallback", "failed")
         attempts = self.state / "attempts"
