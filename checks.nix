@@ -287,6 +287,10 @@ in
     # the server unit stops passing that environment into provider sessions,
     # or the read-only policy mount drifts from the configured path.
     assert t3codeContainer.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
+    assert t3codeContainer.environment.GHOSTSHIP_DEV_ENV_REPO == "/nix/store/xm0qqd3y0kl1iz5zma6df6cvdlg5cvfq-source";
+    assert builtins.fromJSON t3codeContainer.environment.GHOSTSHIP_PROVIDER_EXECUTABLES == import ./packages/t3code/provider-flake-map.nix;
+    assert pkgs.lib.hasInfix "GHOSTSHIP_DEV_ENV_REPO GHOSTSHIP_PROVIDER_EXECUTABLES" t3codeServerUnitSource;
+    assert pkgs.lib.hasInfix "ghostship-dev-env/source" t3codePreStart;
     assert pkgs.lib.hasInfix "PassEnvironment=GHOSTSHIP_ROUTE_POLICY_PATH" t3codeServerUnitSource;
     assert builtins.elem "${routePolicyPath}:${routePolicyPath}:ro" t3codeContainer.volumes;
     assert githubCoordinator.environment.GHOSTSHIP_ROUTE_POLICY_PATH == routePolicyPath;
