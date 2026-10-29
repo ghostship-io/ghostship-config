@@ -426,6 +426,8 @@ in
       user = "62033:62033";
       cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
       environment = {
+        # Leave headroom below the container limit for non-Go memory.
+        GOMEMLIMIT = "200MiB";
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";
