@@ -622,11 +622,58 @@ class CandidateAcceptanceTest(unittest.TestCase):
                                           "available": True}}}
                 with patch.object(acceptance, "command", return_value=Mock(
                         returncode=0, stdout=json.dumps(pick))) as command:
-                    with self.assertRaisesRegex(RuntimeError, "no approved available free or subscription T3 route"):
+                    with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
                         acceptance.check_provider_turn(["podman"], "candidate", provider_env,
                                                        tooling_path="/nix/store/test-agent")
                 self.assertFalse(any(any(str(item).endswith("provider-turn-probe.py") for item in call.args)
                                      for call in command.call_args_list))
+
+    def test_protected_pick_uses_admitted_fallback(self):
+        pick = {"provider": "claude", "model": "sonnet", "billing": "subscription", "execution": "t3", "available": True}
+        fallback = {"provider": "opencode-free", "model": "fallback", "billing": "free", "approved_free": True, "execution": "t3", "available": True}
+        def call(engine, *args, **kwargs):
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"pick": pick}}))
+            if "models" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [pick, fallback]}}))
+            return Mock(returncode=0, stdout="passed")
+        with patch.object(acceptance, "command", side_effect=call):
+            self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/fallback")
+
+    def test_protected_approved_free_picker_and_catalog_are_never_probed(self):
+        fallback = {"provider": "opencode-free", "model": "safe", "billing": "free",
+                    "approved_free": True, "execution": "t3", "available": True}
+        for provider in ("codex", "claude", "claudeAgent"):
+            protected = {**fallback, "provider": provider}
+            for protected_pick in (True, False):
+                with self.subTest(provider=provider, protected_pick=protected_pick):
+                    calls = []
+                    def call(engine, *args, **kwargs):
+                        calls.append(args)
+                        if "pick" in args:
+                            return Mock(returncode=0, stdout=json.dumps({"data": {"pick": protected if protected_pick else {}}}))
+                        if "models" in args:
+                            return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [protected, fallback]}}))
+                        return Mock(returncode=0, stdout="passed")
+                    with patch.object(acceptance, "command", side_effect=call):
+                        self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/safe")
+                    probes = [call for call in calls if any(str(arg).endswith("provider-turn-probe.py") for arg in call)]
+                    self.assertEqual(len(probes), 1)
+                    self.assertIn("opencode-free/safe", probes[0])
+
+    def test_provider_failure_persists_summary_in_attempt(self):
+        failure = acceptance.ProviderTurnError("claude/sonnet", "opencode-free/fallback", "failed")
+        attempts = self.state / "attempts"
+        attempts.mkdir()
+        (attempts / "generation-502.json").write_text('{"status":"running"}')
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.ProviderTurnError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((attempts / "generation-502.json").read_text())
+        self.assertEqual(record["provider_turn"], {"pick": "claude/sonnet", "routes": "opencode-free/fallback"})
 
     def test_provider_turn_refuses_free_pool_routes_for_t3_execution(self):
         provider_env = self.root / "provider.env"
@@ -637,7 +684,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }}}
         with patch.object(acceptance, "command", return_value=Mock(
                 returncode=0, stdout=json.dumps(pick))) as command:
-            with self.assertRaisesRegex(RuntimeError, "no approved available free or subscription T3 route"):
+            with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
                 acceptance.check_provider_turn(
                     ["podman"], "candidate", provider_env,
                     tooling_path="/nix/store/test-agent",

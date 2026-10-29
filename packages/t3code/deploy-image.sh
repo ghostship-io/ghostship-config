@@ -63,9 +63,9 @@ attempt_started_at_ms=$(date +%s%3N)
 write_attempt_result() {
   local exit_code=$?
   trap - EXIT
-  if "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
+  if "$JQ_BIN" -c --arg deployment "$DEPLOYMENT_ID" \
     --argjson started_at_ms "$attempt_started_at_ms" --argjson exit_code "$exit_code" \
-    '{deployment_id:$deployment,started_at_ms:$started_at_ms,exit_code:$exit_code}' \
+    '. + {deployment_id:$deployment,started_at_ms:$started_at_ms,exit_code:$exit_code} | del(.status)' "$attempt_file" \
     > "$attempt_temporary"; then
     chmod 0600 "$attempt_temporary"
     mv -f "$attempt_temporary" "$attempt_file"
