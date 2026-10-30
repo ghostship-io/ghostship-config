@@ -11,8 +11,8 @@ preflight_core() {
   [[ -f $STATE_DIR/deploy.lock && ! -L $STATE_DIR/deploy.lock ]] || fail 'missing deploy lock'
   [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
   flock -n -x "$STATE_DIR/deploy.lock" true || fail 'deploy writer holds lock'
-  [[ $(unit_state ghostship-t3code-deploy) == inactive ]] || fail 'deploy service active or failed'
-  [[ $(unit_state t3code-podman-candidate) == inactive ]] || fail 'candidate service active or failed'
+  case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
+  case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
   [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') == healthy ]] || fail 'target unhealthy or unknown'
 }
 candidate_locks_free() {
@@ -27,9 +27,29 @@ complete_locks_free() {
     flock -n -x "$f" true || fail 'complete writer holds lock'
   done
 }
+legacy_preflight() {
+  : "${LEGACY_DIR:?}" "${LEGACY_UNIT:?}"
+  [[ $LEGACY_DIR == /* && -d $LEGACY_DIR && ! -L $LEGACY_DIR ]] || fail 'legacy evidence directory invalid'
+  [[ -f $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'legacy recovery inhibit missing'
+  [[ -f $LEGACY_DIR/window.opened && ! -L $LEGACY_DIR/window.opened && -f $LEGACY_DIR/window.until && ! -L $LEGACY_DIR/window.until ]] || fail 'legacy window evidence missing'
+  local opened until
+  opened=$(cat "$LEGACY_DIR/window.opened"); until=$(cat "$LEGACY_DIR/window.until")
+  [[ $opened =~ ^[0-9]+$ && $until =~ ^[0-9]+$ ]] || fail 'legacy window timing unknown'
+  (( until >= opened && $(date +%s) >= until )) || fail 'legacy window has not expired'
+  case $(unit_state "$LEGACY_UNIT") in inactive|failed) ;; *) fail 'legacy holder active or unknown' ;; esac
+  [[ -f $LEGACY_DIR/complete.lock && ! -L $LEGACY_DIR/complete.lock ]] || fail 'legacy complete lock missing'
+  flock -n -x "$LEGACY_DIR/complete.lock" true || fail 'legacy complete writer active'
+  [[ ! -L $LEGACY_DIR/complete.started ]] || fail 'legacy switch marker invalid'
+}
 preflight() {
+  local mode=${1:-}
+  [[ -z $mode || $mode == --adopt-inhibit ]] || fail 'invalid preflight option'
   preflight_core
-  [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  if [[ $mode == --adopt-inhibit ]]; then
+    legacy_preflight
+  else
+    [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  fi
   [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN requires investigation'
   if [[ -e $WINDOW_ROOT || -L $WINDOW_ROOT ]]; then
     [[ -d $WINDOW_ROOT && ! -L $WINDOW_ROOT && -f $WINDOW_ROOT/window.lock && ! -L $WINDOW_ROOT/window.lock ]] || fail 'window root or lock invalid'
@@ -207,12 +227,18 @@ post_verify() {
   no_pending_restart
 }
 case ${1:-} in
- preflight) preflight ;;
+ preflight)
+  [[ $# -le 2 ]] || fail 'usage: preflight [--adopt-inhibit]'
+  preflight "${2:-}"
+  printf 'PASS preflight\n'
+  ;;
  start)
-  [[ $# == 2 ]] || fail 'usage: start WINDOW_ID'
+  adopt=0
+  if [[ ${2:-} == --adopt-inhibit ]]; then adopt=1; shift; fi
+  [[ $# == 2 ]] || fail 'usage: start [--adopt-inhibit] WINDOW_ID'
   id=$2; window_id_valid "$id" || fail 'invalid window id'
   : "${WINDOW_SECONDS:?}"
-  preflight
+  if (( adopt )); then preflight --adopt-inhibit; else preflight; fi
   if [[ ! -e $WINDOW_ROOT && ! -L $WINDOW_ROOT ]]; then
     : "${WINDOW_BOOTSTRAP:?}"
     bash "$WINDOW_BOOTSTRAP"
@@ -221,7 +247,12 @@ case ${1:-} in
   preflight_core
   candidate_locks_free
   complete_locks_free
-  [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  if (( adopt )); then
+    legacy_preflight
+    exec 3<"$LEGACY_DIR/complete.lock"; flock -n -x 3 || fail 'legacy complete writer active'
+  else
+    [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  fi
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery is not active'
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
@@ -233,6 +264,15 @@ case ${1:-} in
   serving=$(serving_identity) || fail 'serving identity unknown'
   mkdir -m 0700 "$WINDOW_ROOT/$id"
   dir=$WINDOW_ROOT/$id
+  if (( adopt )); then
+    started=absent
+    if [[ -e $LEGACY_DIR/complete.started ]]; then
+      [[ -f $LEGACY_DIR/complete.started && ! -L $LEGACY_DIR/complete.started ]] || fail 'legacy switch marker invalid'
+      started=present
+    fi
+    printf 'opened=%s until=%s complete_started=%s\n' "$(cat "$LEGACY_DIR/window.opened")" "$(cat "$LEGACY_DIR/window.until")" "$started" > "$dir/legacy.adopted"
+    sync -f "$dir/legacy.adopted"
+  fi
   printf '%s\n' "$serving" > "$dir/serving.before"
   sync -f "$dir/serving.before"
   { printf 'started=%s acquired_by=%s\n' "$acquired_at" "$$"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
@@ -249,10 +289,11 @@ case ${1:-} in
   read -r holder_pid < "$dir/holder.ready"
   { printf 'started=%s acquired_by=%s\n' "$acquired_at" "$$"; printf 'holder_pid=%s held_at=%s\n' "$holder_pid" "$(date -u +%FT%TZ)"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
-  install -d -m 0700 "$(dirname "$HOLD_FILE")"; : > "$HOLD_FILE"
+  if (( ! adopt )); then install -d -m 0700 "$(dirname "$HOLD_FILE")"; : > "$HOLD_FILE"; fi
   holder_ready || fail 'window holder lost its locks; recovery not stopped'
   "$SYSTEMCTL_BIN" stop t3code-recovery.service
   [[ $(unit_state t3code-recovery) == inactive ]] || fail 'recovery did not stop'
+  if (( adopt )); then printf 'PASS window started id=%s mode=adopted-inhibit\n' "$id"; else printf 'PASS window started id=%s mode=new\n' "$id"; fi
   ;;
  switch)
   shift
@@ -269,7 +310,11 @@ case ${1:-} in
   [[ ! -e $dir/complete.started ]] || fail 'switch already started; outcome unknown'
   printf '%s %s\n' "$(date -u +%FT%TZ)" "$(date +%s%3N)" > "$dir/complete.started"
   sync -f "$dir/complete.started"; sync -f "$dir"
-  "$@"
+  switch_rc=0
+  "$@" || switch_rc=$?
+  printf 'exit_code=%s\n' "$switch_rc" > "$dir/switch.result.tmp"
+  sync -f "$dir/switch.result.tmp"; mv "$dir/switch.result.tmp" "$dir/switch.result"; sync -f "$dir"
+  exit "$switch_rc"
   ;;
  post)
   [[ -f $WINDOW_ROOT/window.lock ]] || fail 'window lock missing'
@@ -428,17 +473,23 @@ case ${1:-} in
   if (( recorded )); then
     # shellcheck disable=SC2016
     "$JQ_BIN" -e --arg id "$id" --arg desired "$desired" --arg applied "$applied" --arg failed "$failed_hash" --arg serving "$(cat "$dir/serving.before")" '
-      .state == "UNKNOWN" and (.reason == "route_unknown" or .reason == "route_unavailable" or .reason == "candidate_failed") and .window == $id and .desired == $desired and .applied == $applied and .receipt == "absent" and .serving == $serving and .failed_marker_sha256 == $failed and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null || fail 'recorded UNKNOWN differs from current evidence'
+      .state == "UNKNOWN" and (.reason == "route_unknown" or .reason == "route_unavailable" or .reason == "candidate_failed" or .reason == "switch_unknown" or .reason == "legacy_unknown") and .window == $id and .desired == $desired and .applied == $applied and .receipt == "absent" and .serving == $serving and .failed_marker_sha256 == $failed and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null || fail 'recorded UNKNOWN differs from current evidence'
   else
     attempt="$STATE_DIR/attempts/$desired.json"
-    [[ -f $attempt && ! -L $attempt && ! -e $STATE_DIR/receipts/$desired.json && ! -L $STATE_DIR/receipts/$desired.json ]] || fail 'attempt or absent receipt not established'
+    [[ ! -e $STATE_DIR/receipts/$desired.json && ! -L $STATE_DIR/receipts/$desired.json ]] || fail 'absent receipt not established'
+    [[ ! -L $attempt ]] || fail 'attempt state unknown'
+    complete_locks_free
     # shellcheck disable=SC2016
-    if "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .outcome == "route_unknown" and .exit_code == 77 and .status == null' "$attempt" >/dev/null; then
+    if [[ -f $attempt ]] && "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .outcome == "route_unknown" and .exit_code == 77 and .status == null' "$attempt" >/dev/null; then
       reason=route_unknown
-    elif "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .outcome == "route_unavailable" and .exit_code == 76 and .status == null' "$attempt" >/dev/null; then
+    elif [[ -f $attempt ]] && "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .outcome == "route_unavailable" and .exit_code == 76 and .status == null' "$attempt" >/dev/null; then
       reason=route_unavailable
-    elif "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .exit_code == 1 and .status == null' "$attempt" >/dev/null && [[ $failed_hash != absent ]] && [[ $(cat "$STATE_DIR/failed-candidate") =~ ^${desired}\ [0-9a-f]{64}$ ]]; then
+    elif [[ -f $attempt ]] && "$JQ_BIN" -e --arg d "$desired" '.deployment_id == $d and .exit_code == 1 and .status == null' "$attempt" >/dev/null && [[ $failed_hash != absent ]] && [[ $(cat "$STATE_DIR/failed-candidate") =~ ^${desired}\ [0-9a-f]{64}$ ]]; then
       reason=candidate_failed
+    elif [[ -f $dir/complete.started && ! -L $dir/complete.started ]]; then
+      reason=switch_unknown
+    elif [[ -f $dir/legacy.adopted && ! -L $dir/legacy.adopted ]]; then
+      reason=legacy_unknown
     else
       fail 'route UNKNOWN or definitive candidate failure not established'
     fi
@@ -462,10 +513,12 @@ case ${1:-} in
   exit 77
   ;;
  end-no-activation)
+  [[ $(unit_state ghostship-t3code-deploy) == inactive && $(unit_state t3code-podman-candidate) == inactive ]] || fail 'failed service requires post or recovery'
   preflight_core
   lock_window
   preflight_core
   read_active
+  [[ ! -e $dir/legacy.adopted ]] || fail 'legacy window history is unknown; use post or recovery'
   [[ ! -e $dir/complete.started ]] || fail 'switch intent exists'
   shopt -s nullglob dotglob
   intents=("$dir"/effect-intent.*)
@@ -480,5 +533,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight|start WINDOW_ID|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-unknown|resolve-unknown|end-no-activation' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit] WINDOW_ID|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-unknown|resolve-unknown|end-no-activation' >&2; exit 2 ;;
 esac

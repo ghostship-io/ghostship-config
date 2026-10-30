@@ -13,7 +13,7 @@ printf '%s\n' "$*" >> "$FIXTURE/systemctl.events"
 if [[ $1 == show ]]; then
   if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
   if [[ $2 == window.service && $3 == -p && $4 == MainPID ]]; then cat "$FIXTURE/holder-pid"; exit; fi
-  case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; *) echo inactive ;; esac
+  case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; ghostship-t3code-deploy.service) [[ ${FIXTURE_DEPLOY_FAILED:-0} == 1 ]] && echo failed || echo inactive ;; *) echo inactive ;; esac
 elif [[ $1 == stop && $2 == t3code-recovery.service ]]; then touch "$FIXTURE/recovery-inactive"
 elif [[ $1 == start && $2 == t3code-recovery.service ]]; then rm -f "$FIXTURE/recovery-inactive"
 elif [[ $1 == stop && $2 == window.service ]]; then
@@ -53,9 +53,9 @@ cat > "$tmp/bin/systemd-run" <<'SH'
 while [[ $1 != -- ]]; do shift; done
 shift
 if [[ ${FIXTURE_NO_HANDSHAKE:-0} == 1 ]]; then
-  sleep 8 6<&- 7<&- 8<&- >/dev/null 2>&1 &
+  sleep 8 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
 else
-  "$@" 6<&- 7<&- 8<&- >/dev/null 2>&1 &
+  "$@" 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
 fi
 printf "%s\n" "$!" > "$FIXTURE/holder-pid"
 SH
@@ -81,6 +81,10 @@ done
 : > "$tmp/other.lock"; exec 6>"$tmp/other.lock"; flock -x 6
 "${cmd[@]}" preflight
 flock -u 6; exec 6>&-
+# A failed oneshot is not a running writer; its failure remains recorded.
+export FIXTURE_DEPLOY_FAILED=1
+"${cmd[@]}" preflight
+unset FIXTURE_DEPLOY_FAILED
 # ActiveState without a lock-holding handshake must not stop recovery.
 export FIXTURE_NO_HANDSHAKE=1
 if "${cmd[@]}" start failed-holder; then echo 'accepted holder without handshake' >&2; exit 1; fi
@@ -110,6 +114,9 @@ rm "$tmp/evidence/one/"effect-intent.*
 touch "$tmp/evidence/one/complete.started"
 if "${cmd[@]}" end-no-activation; then echo 'accepted switch intent' >&2; exit 1; fi
 rm "$tmp/evidence/one/complete.started"
+export FIXTURE_DEPLOY_FAILED=1
+if "${cmd[@]}" end-no-activation; then echo 'accepted a failed deployment' >&2; exit 1; fi
+unset FIXTURE_DEPLOY_FAILED
 mv "$tmp/evidence/one/window.start" "$tmp/saved"
 if "${cmd[@]}" end-no-activation; then echo 'accepted missing record' >&2; exit 1; fi
 mv "$tmp/saved" "$tmp/evidence/one/window.start"
@@ -267,5 +274,51 @@ jq -e '.state == "UNKNOWN" and .reason == "route_unavailable" and .recovery_inhi
 cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 "${cmd[@]}" resolve-unknown
 [[ $(cat "$STATE_DIR/failed-candidate") == "$failed_key" ]]
+# A failed-forward deployment unit is not a concurrent writer. If a switch
+# exits after an effect and no candidate attempt or receipt can be established,
+# release with explicit UNKNOWN and preserve the previous failed marker.
+export FIXTURE_DEPLOY_FAILED=1
+"${cmd[@]}" start seven
+unknown_desired=$(printf '%064d' 8)
+printf '%s\n' "$unknown_desired" > "$STATE_DIR/desired"
+rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+# shellcheck disable=SC2016
+if "${cmd[@]}" switch -- bash -c 'touch "$1"; exit 4' _ "$tmp/unknown-effect"; then echo 'accepted failed switch' >&2; exit 1; fi
+[[ -f $tmp/unknown-effect && $(cat "$tmp/evidence/seven/switch.result") == exit_code=4 ]]
+set +e
+"${cmd[@]}" end-unknown
+switch_unknown_rc=$?
+set -e
+[[ $switch_unknown_rc == 77 && -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+jq -e --arg d "$unknown_desired" '.state == "UNKNOWN" and .reason == "switch_unknown" and .desired == $d and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null
+cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+"${cmd[@]}" resolve-unknown
+unset FIXTURE_DEPLOY_FAILED
+[[ $(cat "$STATE_DIR/failed-candidate") == "$failed_key" ]]
+# An expired legacy holder can hand its existing inhibit to a new window. The
+# handoff does not assert that the old window had no effects.
+export LEGACY_DIR="$tmp/legacy" LEGACY_UNIT=legacy
+mkdir -p "$LEGACY_DIR"
+printf '%s\n' "$(( $(date +%s) - 100 ))" > "$LEGACY_DIR/window.opened"
+printf '%s\n' "$(( $(date +%s) - 1 ))" > "$LEGACY_DIR/window.until"
+touch "$LEGACY_DIR/complete.lock" "$LEGACY_DIR/complete.started" "$tmp/hold"
+hold_inode=$(stat -c %i "$tmp/hold")
+rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+exec 3>"$LEGACY_DIR/complete.lock"; flock -x 3
+if "${cmd[@]}" preflight --adopt-inhibit 3>&-; then echo 'accepted concurrent legacy writer' >&2; exit 1; fi
+flock -u 3; exec 3>&-
+"${cmd[@]}" preflight --adopt-inhibit
+"${cmd[@]}" start --adopt-inhibit legacy-adopted
+[[ $(stat -c %i "$tmp/hold") == "$hold_inode" ]]
+grep -q 'complete_started=present' "$tmp/evidence/legacy-adopted/legacy.adopted"
+if "${cmd[@]}" end-no-activation; then echo 'claimed no effects in legacy window' >&2; exit 1; fi
+set +e
+"${cmd[@]}" end-unknown
+legacy_unknown_rc=$?
+set -e
+[[ $legacy_unknown_rc == 77 && -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+jq -e '.state == "UNKNOWN" and .reason == "legacy_unknown" and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null
+cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+"${cmd[@]}" resolve-unknown
 if grep -q '^restart ' "$tmp/systemctl.events"; then echo 'unexpected restart' >&2; exit 1; fi
 echo 'Release window refusal and reopen fixture passed.'
