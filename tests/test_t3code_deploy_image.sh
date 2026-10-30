@@ -609,3 +609,19 @@ echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, a
 echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
+
+# A missing updater lock must be created owned by the home owner and unreadable
+# to others, because the in-container updater runs as that user and opens it for
+# append. Creating it as the deploying process with a default umask left a
+# root-owned 0644 lock that broke every app update with EACCES.
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/lock-bootstrap-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+export DEPLOYMENT_ID=deployment-lock-bootstrap
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+bash "$fixture_writer" > "$tmp/lock-bootstrap.log" 2>&1 || true
+[[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]]
+[[ $(stat -c '%a' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == 600 ]]
+[[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]]
+echo 'Updater lock bootstrap proof: a missing app lock is created owner-owned and private.'

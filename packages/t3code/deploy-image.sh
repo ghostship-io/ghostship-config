@@ -243,6 +243,21 @@ flock -x 7
 if [[ -d "$t3_tree" ]]; then
   # The updater opens this file with O_CREAT, so creating it here is the same
   # file the updater will lock, and holding it closes the create-then-lock race.
+  # Create it owned by the home owner, not by this root process: the updater
+  # runs as that user and opens the lock for append, so a root-owned 0600 or
+  # 0644 lock would fail every app update with EACCES until someone fixed the
+  # ownership by hand.
+  if [[ ! -e "$t3_update_lock" ]]; then
+    t3_owner=$(stat -c '%u:%g' "$HOME_DIR") || {
+      echo 'T3 app owner unknown; candidate is not inspected' >&2; exit 1;
+    }
+    [[ $t3_owner =~ ^[1-9][0-9]*:[0-9]+$ ]] || {
+      echo 'T3 app owner invalid; candidate is not inspected' >&2; exit 1;
+    }
+    install -m 0600 -o "${t3_owner%%:*}" -g "${t3_owner##*:}" /dev/null "$t3_update_lock" || {
+      echo 'T3 update lock bootstrap failed; candidate is not inspected' >&2; exit 1;
+    }
+  fi
   exec 6>>"$t3_update_lock"
   flock -x 6
 fi
