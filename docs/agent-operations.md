@@ -178,6 +178,10 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   is a stop for investigation, not permission to force a lock or invent a
   result.
 
+  If start fails before its holder is ready, `"$RELEASE_WINDOW" cancel-start`
+  cancels only an unchanged, intent-free incomplete start and preserves an
+  adopted inhibit. Investigate any refusal.
+
   For a forward PASS, set `EXPECTED_DEPLOYMENT`, `EXPECTED_IMAGE`,
   `EXPECTED_AGENT_REVISION`, `EXPECTED_TOOLING_PATH`, `PROVIDER_SECRETS_FILE`,
   `CURRENT_SYSTEM`, and `EXPECTED_SYSTEM` to the approved candidate values.
@@ -206,6 +210,13 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   actions, not just moves to an unreceipted image. Independent update timers
   require separate installed verification. Do not use a no-activation end for
   an adopted legacy window or treat holder expiry as a successful end.
+
+  If the candidate was restarted with its exact receipt but the runtime then
+  fails or its attempt remains unknown, `"$RELEASE_WINDOW" end-receipted-failure`
+  records that distinct UNKNOWN and exits 77 with the inhibit retained; after
+  investigation and a healthy exact-receipt readback, use `resolve-unknown`.
+  These checks require the container to remain inspectable and executable; a
+  fully stopped container is not covered by this procedure.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

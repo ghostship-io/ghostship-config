@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
-tmp=$(mktemp -d); trap '[[ ! -f $tmp/holder-pid ]] || kill "$(cat "$tmp/holder-pid")" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d); trap '[[ ! -f $tmp/holder-pid ]] || kill "$(cat "$tmp/holder-pid")" 2>/dev/null || true; [[ ! -f $tmp/competitor-pid ]] || kill "$(cat "$tmp/competitor-pid")" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/evidence" "$tmp/state" "$tmp/bin"
 printf '%s\n' "$tmp/evidence" > "$tmp/config"
 touch "$tmp/evidence/window.lock" "$tmp/state/deploy.lock" "$tmp/candidate.lock" "$tmp/hardening.lock"
@@ -18,6 +18,12 @@ elif [[ $1 == stop && $2 == t3code-recovery.service ]]; then touch "$FIXTURE/rec
 elif [[ $1 == start && $2 == t3code-recovery.service ]]; then rm -f "$FIXTURE/recovery-inactive"
 elif [[ $1 == stop && $2 == window.service ]]; then
   kill "$(cat "$FIXTURE/holder-pid")"; rm -f "$FIXTURE/holder-pid"
+  if [[ ${FIXTURE_COMPETE_AFTER_STOP:-0} == 1 ]]; then
+    setsid bash -c 'exec 6<"$1"; flock -x 6; touch "$2"; exec sleep 30' _ "$LOCK_CANDIDATE" "$FIXTURE/competitor-ready" 3<&- 4<&- 5<&- 6<&- 7<&- 8<&- 9<&- 10<&- 11<&- >/dev/null 2>&1 &
+    printf '%s\n' "$!" > "$FIXTURE/competitor-pid"
+    for _ in {1..100}; do [[ -f $FIXTURE/competitor-ready ]] && break; sleep .02; done
+    [[ -f $FIXTURE/competitor-ready ]] || exit 1
+  fi
   [[ ${FIXTURE_STOP_LOST_ACK:-0} != 1 ]] || exit 1
 else exit 1; fi
 SH
@@ -45,9 +51,15 @@ case "$1 $3 ${4:-}" in
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
   'exec cat '*) printf '{"revision":"%s"}\n' "$EXPECTED_AGENT_REVISION" ;;
   'exec stat -Lc') stat -Lc '%i' "$PROVIDER_SECRETS_FILE" ;;
+  'exec sha256sum '*) if [[ ${FIXTURE_SECRET_MISMATCH:-0} == 1 ]]; then printf '%064d  /run/secrets/t3code.env\n' 0; else sha256sum "$PROVIDER_SECRETS_FILE"; fi ;;
   'exec systemctl is-active'|'exec curl -fsS'|'exec sh -c') exit 0 ;;
   *) exit 1 ;;
 esac
+SH
+cat > "$tmp/bin/su-exec" <<'SH'
+#!/usr/bin/env bash
+shift
+exec "$@"
 SH
 cat > "$tmp/bin/systemd-run" <<'SH'
 #!/usr/bin/env bash
@@ -61,6 +73,7 @@ fi
 printf "%s\n" "$!" > "$FIXTURE/holder-pid"
 SH
 chmod +x "$tmp/bin/"*
+export SUEXEC_BIN="$tmp/bin/su-exec"
 export WINDOW_BOOTSTRAP="$repo/packages/t3code/window-bootstrap.sh"
 EXPECTED_IMAGE=$(printf '%064d' 2); EXPECTED_DEPLOYMENT=$(printf '%064d' 3); JQ_BIN=$(command -v jq)
 export EXPECTED_IMAGE EXPECTED_DEPLOYMENT JQ_BIN
@@ -70,7 +83,9 @@ mkdir -p "$HOME_DIR/.local/state/t3code-tool-update" "$HOME_DIR/.local/state/t3c
 touch "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
 mkdir -p "$tmp/system" "$tmp/tooling"; printf 'fixture\n' > "$PROVIDER_SECRETS_FILE"; ln -s "$tmp/system" "$CURRENT_SYSTEM"
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
-cmd=(bash "$repo/packages/t3code/release-window.sh")
+fixture_window="$tmp/fixture-window-command"
+cp "$repo/packages/t3code/release-window.sh" "$fixture_window"
+cmd=(bash "$fixture_window")
 # Preflight reads the actual lock files and ignores unrelated fixture locks.
 mkdir -p "$tmp/evidence/old"
 : > "$tmp/evidence/old/complete.lock"
@@ -90,8 +105,10 @@ unset FIXTURE_DEPLOY_FAILED
 export FIXTURE_NO_HANDSHAKE=1
 if "${cmd[@]}" start failed-holder; then echo 'accepted holder without handshake' >&2; exit 1; fi
 [[ ! -e $tmp/recovery-inactive && ! -e $tmp/hold ]]
-kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid" "$tmp/evidence/active-window"
+kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid"
 unset FIXTURE_NO_HANDSHAKE
+"${cmd[@]}" cancel-start
+[[ ! -e $tmp/evidence/active-window && ! -e $tmp/hold ]]
 # A candidate closure can preflight before first installation without touching
 # the missing evidence root. Start creates it only after the checks pass.
 mv "$tmp/evidence" "$tmp/old-evidence"
@@ -149,10 +166,15 @@ if "${cmd[@]}" post; then echo 'accepted unknown attempt' >&2; exit 1; fi
 printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":1}\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
 if "${cmd[@]}" post; then echo 'accepted stale attempt' >&2; exit 1; fi
 printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":%s}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
-# A receipted activation may restart the server; post validates the resulting
-# image and inputs rather than claiming that the old PID survived.
+# The gen-590 host may not yet have a standalone updater lock. Bootstrap its
+# existing path only after holding tool/refresh locks, without replacing it.
+rm "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
 export SERVER_PID=5678
+export FIXTURE_SECRET_MISMATCH=1
+if "${cmd[@]}" post; then echo 'accepted mismatched live secret content' >&2; exit 1; fi
+unset FIXTURE_SECRET_MISMATCH
 "${cmd[@]}" post
+[[ -f $HOME_DIR/.local/share/t3code-tools/t3/update.lock ]]
 export FIXTURE_STOP_LOST_ACK=1
 if "${cmd[@]}" end-post two; then echo 'unexpected post stop acknowledgement' >&2; exit 1; fi
 [[ -f $tmp/evidence/two/post.verified && -f $tmp/evidence/active-window && -f $tmp/hold ]]
@@ -171,6 +193,10 @@ if "${cmd[@]}" switch -- bash -c 'touch "$1"; exit 4' _ "$tmp/switch-effect"; th
 [[ -e $tmp/switch-effect ]]
 if "${cmd[@]}" post; then echo 'accepted attempt from before switch' >&2; exit 1; fi
 printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":%s}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+# A holder that expires after the switch does not make a verified post depend
+# on another expiry: recheck the receipt while excluding candidate writers.
+kill "$(cat "$tmp/holder-pid")"; rm "$tmp/holder-pid"
+for _ in {1..100}; do flock -n "$LOCK_CANDIDATE" true && flock -n "$LOCK_HARDENING" true && break; sleep .05; done
 "${cmd[@]}" post
 "${cmd[@]}" end-post late
 # Existing exact receipt permits a no-restart known-good return despite split state.
@@ -178,7 +204,7 @@ printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":%s}\n' "$EXPECTED_DE
 "${cmd[@]}" switch -- true
 new_desired=$(printf '%064d' 4)
 printf '%s\n' "$new_desired" > "$STATE_DIR/desired"
-printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown"}\n' "$new_desired" > "$STATE_DIR/attempts/$new_desired.json"
+printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown","started_at_ms":%s}\n' "$new_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$new_desired.json"
 if "${cmd[@]}" end-unknown; then echo 'accepted UNKNOWN with a matching receipt' >&2; exit 1; fi
 ALIAS_IMAGE=$(printf '%064d' 9); export ALIAS_IMAGE
 mv "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt-held"
@@ -203,6 +229,10 @@ jq -e --arg d "$new_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GO
 # Without a receipt, a changed server or a queued restart must refuse release.
 "${cmd[@]}" start four
 rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown","started_at_ms":1}\n' "$new_desired" > "$STATE_DIR/attempts/$new_desired.json"
+if "${cmd[@]}" end-unknown; then echo 'accepted a stale route result' >&2; exit 1; fi
+[[ ! -e $STATE_DIR/recovery-unknown.json ]]
+printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown","started_at_ms":%s}\n' "$new_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$new_desired.json"
 for lock in "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"; do
   exec 4>"$lock"; flock -x 4
   if "${cmd[@]}" end-unknown 4>&-; then echo 'accepted a managed writer' >&2; exit 1; fi
@@ -219,9 +249,14 @@ rm "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
 # The holder may stop while its acknowledgement is lost. The durable UNKNOWN
 # record lets a retry finish releasing the window without inventing success.
 export FIXTURE_STOP_LOST_ACK=1
+export FIXTURE_COMPETE_AFTER_STOP=1
 if "${cmd[@]}" end-unknown; then echo 'unexpected stop acknowledgement' >&2; exit 1; fi
 [[ -f $STATE_DIR/recovery-unknown.json && -e $tmp/evidence/active-window && -e $tmp/hold ]]
-unset FIXTURE_STOP_LOST_ACK
+unset FIXTURE_STOP_LOST_ACK FIXTURE_COMPETE_AFTER_STOP
+if "${cmd[@]}" end-unknown; then echo 'accepted a concurrent candidate writer' >&2; exit 1; fi
+[[ -e $tmp/evidence/active-window && -e $tmp/hold ]]
+kill "$(cat "$tmp/competitor-pid")"; rm "$tmp/competitor-pid"
+for _ in {1..100}; do flock -n "$LOCK_CANDIDATE" true && break; sleep .05; done
 set +e
 "${cmd[@]}" end-unknown
 unknown_rc=$?
@@ -244,7 +279,7 @@ cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 failed_desired=$(printf '%064d' 5)
 failed_key="$failed_desired $(printf '%064d' 6)"
 printf '%s\n' "$failed_desired" > "$STATE_DIR/desired"
-printf '{"deployment_id":"%s","exit_code":1}\n' "$failed_desired" > "$STATE_DIR/attempts/$failed_desired.json"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$failed_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$failed_desired.json"
 printf '%s\n' "$failed_key" > "$STATE_DIR/failed-candidate"
 rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 set +e
@@ -273,7 +308,7 @@ cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 "${cmd[@]}" start six
 unavailable_desired=$(printf '%064d' 7)
 printf '%s\n' "$unavailable_desired" > "$STATE_DIR/desired"
-printf '{"deployment_id":"%s","exit_code":76,"outcome":"route_unavailable"}\n' "$unavailable_desired" > "$STATE_DIR/attempts/$unavailable_desired.json"
+printf '{"deployment_id":"%s","exit_code":76,"outcome":"route_unavailable","started_at_ms":%s}\n' "$unavailable_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$unavailable_desired.json"
 rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 set +e
 "${cmd[@]}" end-unknown
@@ -295,6 +330,8 @@ rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 # shellcheck disable=SC2016
 if "${cmd[@]}" switch -- bash -c 'touch "$1"; exit 4' _ "$tmp/unknown-effect"; then echo 'accepted failed switch' >&2; exit 1; fi
 [[ -f $tmp/unknown-effect && $(cat "$tmp/evidence/seven/switch.result") == exit_code=4 ]]
+kill "$(cat "$tmp/holder-pid")"; rm "$tmp/holder-pid"
+for _ in {1..100}; do flock -n "$LOCK_CANDIDATE" true && flock -n "$LOCK_HARDENING" true && break; sleep .05; done
 set +e
 "${cmd[@]}" end-unknown
 switch_unknown_rc=$?
@@ -318,6 +355,13 @@ exec 3>"$LEGACY_DIR/complete.lock"; flock -x 3
 if "${cmd[@]}" preflight --adopt-inhibit 3>&-; then echo 'accepted concurrent legacy writer' >&2; exit 1; fi
 flock -u 3; exec 3>&-
 "${cmd[@]}" preflight --adopt-inhibit
+# A failed adoption start can be canceled without removing the older inhibit.
+export FIXTURE_NO_HANDSHAKE=1
+if "${cmd[@]}" start --adopt-inhibit legacy-incomplete; then echo 'accepted incomplete legacy holder' >&2; exit 1; fi
+kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid"
+unset FIXTURE_NO_HANDSHAKE
+"${cmd[@]}" cancel-start
+[[ $(stat -c %i "$tmp/hold") == "$hold_inode" && ! -e $tmp/evidence/active-window ]]
 "${cmd[@]}" start --adopt-inhibit legacy-adopted
 [[ $(stat -c %i "$tmp/hold") == "$hold_inode" ]]
 grep -q 'complete_started=present' "$tmp/evidence/legacy-adopted/legacy.adopted"
@@ -330,5 +374,54 @@ set -e
 jq -e '.state == "UNKNOWN" and .reason == "legacy_unknown" and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null
 cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 "${cmd[@]}" resolve-unknown
+# If a receipt-gated restart already happened but deployment later failed,
+# report the actual receipted runtime without claiming that it is healthy.
+"${cmd[@]}" start eight
+"${cmd[@]}" switch -- true
+receipted_desired=$(printf '%064d' 9)
+printf '%s\n' "$receipted_desired" > "$STATE_DIR/desired"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$receipted_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$receipted_desired.json"
+export SERVER_PID=8888
+if "${cmd[@]}" end-receipted-failure; then echo 'accepted failure without desired receipt' >&2; exit 1; fi
+[[ -e $tmp/hold && -e $tmp/evidence/active-window ]]
+jq --arg d "$receipted_desired" '.deployment_id=$d' "$tmp/known-good.json" > "$STATE_DIR/receipts/$receipted_desired.json"
+export FIXTURE_STOP_LOST_ACK=1
+if "${cmd[@]}" end-receipted-failure; then echo 'unexpected receipted stop acknowledgement' >&2; exit 1; fi
+[[ -e $tmp/hold && -e $tmp/evidence/active-window && -f $STATE_DIR/recovery-unknown.json ]]
+unset FIXTURE_STOP_LOST_ACK
+set +e
+"${cmd[@]}" end-receipted-failure
+receipted_rc=$?
+set -e
+[[ $receipted_rc == 77 && -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+jq -e --arg d "$receipted_desired" '.state == "UNKNOWN" and .reason == "receipted_runtime_failure" and .desired == $d and .receipt == "exact_candidate_pass" and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null
+set +e
+"${cmd[@]}" end-receipted-failure
+receipted_replay_rc=$?
+set -e
+[[ $receipted_replay_rc == 77 ]]
+"${cmd[@]}" resolve-unknown
+unset SERVER_PID
+[[ ! -e $tmp/hold && ! -e $STATE_DIR/recovery-unknown.json ]]
+# A stopped server inside a still-running, receipted container is recorded as
+# UNKNOWN. After simulated investigation restores it, exact live inputs are
+# checked again and both identities are retained in the audit.
+"${cmd[@]}" start nine
+"${cmd[@]}" switch -- true
+stopped_desired=$(printf '%064d' 10)
+printf '%s\n' "$stopped_desired" > "$STATE_DIR/desired"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$stopped_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$stopped_desired.json"
+jq --arg d "$stopped_desired" '.deployment_id=$d' "$tmp/known-good.json" > "$STATE_DIR/receipts/$stopped_desired.json"
+export SERVER_PID=0
+set +e
+"${cmd[@]}" end-receipted-failure
+stopped_rc=$?
+set -e
+[[ $stopped_rc == 77 && -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+if "${cmd[@]}" resolve-unknown; then echo 'cleared inhibit for a stopped server' >&2; exit 1; fi
+export SERVER_PID=7777
+"${cmd[@]}" resolve-unknown
+unset SERVER_PID
+jq -e '.serving_before != .serving_after and .state == "KNOWN_GOOD_SERVING"' "$tmp/evidence/nine/unknown-resolved.json" >/dev/null
 if grep -q '^restart ' "$tmp/systemctl.events"; then echo 'unexpected restart' >&2; exit 1; fi
 echo 'Release window refusal and reopen fixture passed.'
