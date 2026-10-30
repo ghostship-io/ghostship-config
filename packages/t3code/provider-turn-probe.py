@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import time
+from urllib.parse import quote
 
 
 def safe_failure_code(result):
@@ -29,6 +30,17 @@ PROBE_PROMPT = (
     "PROBE_PASS. Do not edit files, run commands, install anything or wait. "
     "If you cannot execute a tool call, reply PROBE_FAIL: <short reason>."
 )
+
+
+def has_tool_result(client, thread):
+    projection = (client._get(f"/api/orchestration/threads/{quote(thread, safe='')}") or {}).get("projection") or {}
+    runs = projection.get("runs") or []
+    if len(runs) != 1 or not isinstance(runs[0], dict) or not runs[0].get("id"):
+        return False
+    run_id = runs[0]["id"]
+    items = [item for item in projection.get("turnItems") or []
+             if isinstance(item, dict) and item.get("runId") == run_id]
+    return any(item.get("type") == "tool_result" and item.get("ok") is True for item in items)
 
 
 def prove_route(route, wait, client):
@@ -74,7 +86,9 @@ def prove_route(route, wait, client):
         detail = " ".join(str(state.get(k) or "") for k in ("last_error", "reply")).lower()
         if state.get("active_turn") and time.monotonic() - started >= wait:
             outcome = "timeout"
-        elif status in ("completed", "done", "idle", "succeeded") and "PROBE_PASS" in str(state.get("reply") or ""):
+        elif (status in ("completed", "done", "idle", "succeeded")
+              and "PROBE_PASS" in str(state.get("reply") or "")
+              and has_tool_result(client, thread)):
             outcome = "passed"
         elif "schema" in detail:
             outcome = "provider_schema"

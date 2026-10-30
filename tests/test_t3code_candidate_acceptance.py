@@ -800,6 +800,8 @@ class Bridge:
     def status(self, thread_id, wait_s=0):
         return {'state': 'completed', 'reply': 'PROBE_PASS', 'settled': wait_s == 10, 'active_turn': False}
     def settle(self, thread_id): pass
+    def _get(self, path):
+        return {'projection': {'runs': [{'id': 'run'}], 'turnItems': [{'runId': 'run', 'type': 'tool_result', 'ok': True}]}}
 """)
         (tools / "models.py").write_text("""def read_document(): return {}
 def _selection(document, now):
@@ -811,6 +813,35 @@ def _selection(document, now):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(json.loads(proc.stdout)['outcome'], 'passed')
         self.assertTrue(json.loads(proc.stdout)['settled'])
+
+    def test_provider_probe_rejects_marker_without_successful_tool_result(self):
+        bridge_module = types.ModuleType("ghostship_t3.bridge")
+        bridge_module.T3Error = type("T3Error", (Exception,), {})
+        models_module = types.ModuleType("ghostship_t3.models")
+        models_module.read_document = lambda: {}
+        models_module._selection = lambda document, now: {"worker": [{"provider": "p", "model": "m", "native": {"instanceId": "n", "model": "m"}}]}
+        client = Mock()
+        client.submit.return_value = {"thread_id": "probe"}
+        client.status.side_effect = [{"state": "completed", "reply": "PROBE_PASS"}, {}, {"settled": True}]
+        client._get.return_value = {"projection": {"runs": [{"id": "r"}], "turnItems": []}}
+        with patch.dict(sys.modules, {"ghostship_t3": types.ModuleType("ghostship_t3"),
+                                      "ghostship_t3.bridge": bridge_module,
+                                      "ghostship_t3.models": models_module}):
+            result = provider_probe.prove_route("p/m", 1, client)
+        self.assertEqual(result["outcome"], "no_tool_call")
+        self.assertTrue(result["settled"])
+
+    def test_tool_result_requires_same_single_run_and_explicit_success(self):
+        client = Mock()
+        for runs, items in [
+            ([{"id": "r"}], [{"runId": "other", "type": "tool_result", "ok": True}]),
+            ([{"id": "r"}], [{"runId": "r", "type": "tool_result", "ok": False}]),
+            ([{"id": "r"}], [{"runId": "r", "type": "tool_result"}]),
+            ([{"id": "r"}, {"id": "s"}], [{"runId": "r", "type": "tool_result", "ok": True}]),
+        ]:
+            with self.subTest(runs=runs, items=items):
+                client._get.return_value = {"projection": {"runs": runs, "turnItems": items}}
+                self.assertFalse(provider_probe.has_tool_result(client, "probe"))
 
     def test_provider_probe_requires_settlement_and_cancels_active_turn(self):
         bridge_module = types.ModuleType("ghostship_t3.bridge")
