@@ -13,9 +13,11 @@ printf '%s\n' "$*" >> "$FIXTURE/systemctl.events"
 if [[ $1 == show ]]; then
   if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
   if [[ $2 == window.service && $3 == -p && $4 == MainPID ]]; then cat "$FIXTURE/holder-pid"; exit; fi
-  case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; ghostship-t3code-deploy.service) [[ ${FIXTURE_DEPLOY_FAILED:-0} == 1 ]] && echo failed || echo inactive ;; *) echo inactive ;; esac
+  case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; ghostship-t3code-deploy.service) [[ ${FIXTURE_DEPLOY_FAILED:-0} == 1 ]] && echo failed || echo inactive ;; podman-t3code.service) [[ -e $FIXTURE/container-stopped ]] && echo inactive || echo active ;; *) echo inactive ;; esac
 elif [[ $1 == stop && $2 == t3code-recovery.service ]]; then touch "$FIXTURE/recovery-inactive"
 elif [[ $1 == start && $2 == t3code-recovery.service ]]; then rm -f "$FIXTURE/recovery-inactive"
+elif [[ $1 == start && $2 == podman-t3code.service ]]; then rm -f "$FIXTURE/container-stopped"
+elif [[ $1 == stop && $2 == podman-t3code.service ]]; then touch "$FIXTURE/container-stopped"
 elif [[ $1 == stop && $2 == window.service ]]; then
   kill "$(cat "$FIXTURE/holder-pid")"; rm -f "$FIXTURE/holder-pid"
   if [[ ${FIXTURE_COMPETE_AFTER_STOP:-0} == 1 ]]; then
@@ -29,6 +31,12 @@ else exit 1; fi
 SH
 cat > "$tmp/bin/podman" <<'SH'
 #!/usr/bin/env bash
+if [[ -e $FIXTURE/container-stopped ]]; then
+  if [[ $1 == inspect && $3 == '{{.State.Running}}' ]]; then echo false; exit; fi
+  if [[ $1 == inspect && $3 == '{{.State.Health.Status}}' ]]; then echo unhealthy; exit; fi
+  if [[ $1 == inspect && $3 == '{{.Id}} {{.Image}} {{.State.StartedAt}}' ]]; then exit 1; fi
+  if [[ $1 == exec ]]; then echo 'container is not running' >&2; exit 1; fi
+fi
 case "$*" in
   'exec fixture systemctl show t3code-server.service -p MainPID --value') echo "${SERVER_PID:-1234}"; exit ;;
   'exec fixture systemctl show t3code-server.service -p ActiveEnterTimestampMonotonic --value') echo 5678; exit ;;
@@ -45,6 +53,7 @@ if [[ $1 == tag ]]; then
   exit
 fi
 case "$1 $3 ${4:-}" in
+  'inspect --format {{.State.Running}}') echo true ;;
   'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
@@ -423,5 +432,37 @@ export SERVER_PID=7777
 "${cmd[@]}" resolve-unknown
 unset SERVER_PID
 jq -e '.serving_before != .serving_after and .state == "KNOWN_GOOD_SERVING"' "$tmp/evidence/nine/unknown-resolved.json" >/dev/null
+# A fully stopped container refuses rollback without a receipt. Once an exact
+# known-good receipt exists, rollback starts podman-t3code.service and releases.
+"${cmd[@]}" start ten
+"${cmd[@]}" switch -- true
+stopped_ten_desired=$(printf '%064d' 11)
+printf '%s\n' "$stopped_ten_desired" > "$STATE_DIR/desired"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$stopped_ten_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$stopped_ten_desired.json"
+touch "$tmp/container-stopped"
+rm -f "$STATE_DIR"/receipts/*.json
+if "${cmd[@]}" rollback ten; then echo 'recovered stopped container without receipt' >&2; exit 1; fi
+[[ -e $tmp/container-stopped && -e $tmp/hold ]]
+cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+"${cmd[@]}" rollback ten
+[[ ! -e $tmp/container-stopped && ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+jq -e --arg d "$stopped_ten_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/ten/known-good.json" >/dev/null
+
+# A fully stopped container in resolve-unknown is brought back up with the exact receipt.
+"${cmd[@]}" start eleven
+"${cmd[@]}" switch -- true
+stopped_eleven_desired=$(printf '%064d' 12)
+printf '%s\n' "$stopped_eleven_desired" > "$STATE_DIR/desired"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$stopped_eleven_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$stopped_eleven_desired.json"
+jq --arg d "$stopped_eleven_desired" '.deployment_id=$d' "$tmp/known-good.json" > "$STATE_DIR/receipts/$stopped_eleven_desired.json"
+export SERVER_PID=0
+set +e
+"${cmd[@]}" end-receipted-failure
+set -e
+touch "$tmp/container-stopped"
+"${cmd[@]}" resolve-unknown
+[[ ! -e $tmp/container-stopped && ! -e $tmp/hold && ! -e $STATE_DIR/recovery-unknown.json ]]
+unset SERVER_PID
+
 if grep -q '^restart ' "$tmp/systemctl.events"; then echo 'unexpected restart' >&2; exit 1; fi
 echo 'Release window refusal and reopen fixture passed.'

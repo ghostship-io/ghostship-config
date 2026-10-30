@@ -194,29 +194,34 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   When the serving T3 has not changed and its image and inputs match an
   existing exact receipt, `"$RELEASE_WINDOW" rollback "$WINDOW_ID"` restores
   the accepted alias if necessary and releases without restarting T3 or
-  requesting another provider turn. It records the actual desired and applied
-  IDs; it does not claim to revert the system generation or reconcile a split
-  deployment. A definitive failed-candidate marker remains in place until the
-  existing audited invalidation procedure is explicitly invoked.
+  requesting another provider turn. If T3's container was fully stopped during
+  the attempt, `rollback` verifies the exact receipt for the known-good image,
+  restores the accepted alias, starts `podman-t3code.service`, verifies live
+  health and receipt inputs, and releases the window without requiring a fresh
+  provider turn or moving to an unreceipted image. It records the actual desired
+  and applied IDs; it does not claim to revert the system generation or
+  reconcile a split deployment. A definitive failed-candidate marker remains in
+  place until the existing audited invalidation procedure is explicitly
+  invoked.
 
   If no exact known-good receipt exists, `"$RELEASE_WINDOW" end-unknown`
   records UNKNOWN and the observed desired, applied and absent-receipt state,
   releases the window locks, retains the recovery inhibit, and exits 77. It
-  leaves the serving T3 untouched and prints the investigation command. After
-  an exact matching serving receipt is available,
-  `"$RELEASE_WINDOW" resolve-unknown` rechecks the receipt and alias before
-  clearing the existing inhibit. Until then, a T3 crash does not auto-recover
-  and its agents die with it: the legacy recovery inhibit blocks all recovery
-  actions, not just moves to an unreceipted image. Independent update timers
-  require separate installed verification. Do not use a no-activation end for
-  an adopted legacy window or treat holder expiry as a successful end.
+  prints the investigation command. After an exact matching serving receipt is
+  available, `"$RELEASE_WINDOW" resolve-unknown` rechecks the receipt and alias,
+  starts `podman-t3code.service` if the container was stopped, verifies healthy
+  serving readback, and clears the existing inhibit. Until then, a T3 crash does
+  not auto-recover and its agents die with it: the legacy recovery inhibit
+  blocks all recovery actions, not just moves to an unreceipted image.
+  Independent update timers require separate installed verification. Do not use
+  a no-activation end for an adopted legacy window or treat holder expiry as a
+  successful end.
 
   If the candidate was restarted with its exact receipt but the runtime then
   fails or its attempt remains unknown, `"$RELEASE_WINDOW" end-receipted-failure`
   records that distinct UNKNOWN and exits 77 with the inhibit retained; after
-  investigation and a healthy exact-receipt readback, use `resolve-unknown`.
-  These checks require the container to remain inspectable and executable; a
-  fully stopped container is not covered by this procedure.
+  investigation and a healthy exact-receipt readback (including container
+  recovery if stopped), use `resolve-unknown`.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

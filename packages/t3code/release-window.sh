@@ -158,6 +158,54 @@ no_pending_restart() {
   "$PODMAN_BIN" exec "$PODMAN_TARGET" sh -c \
     'for f in /run/t3code-tool-update/restart.pending /run/t3code-tool-update/update-deferred.pending /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance; do [ ! -e "$f" ] && [ ! -L "$f" ] || exit 1; done' || fail 'container maintenance state unknown or pending'
 }
+is_container_running() {
+  local running
+  running=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Running}}' 2>/dev/null) || return 1
+  [[ $running == true ]] || return 1
+  case $(unit_state "${PODMAN_SERVICE:-podman-t3code}") in
+    inactive|failed) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+receipt_for_image() {
+  : "${JQ_BIN:?}"
+  local img=${1#sha256:} receipt wanted="${2:-}"
+  [[ ! -L $STATE_DIR/receipts && -d $STATE_DIR/receipts ]] || return 2
+  shopt -s nullglob
+  for receipt in "$STATE_DIR"/receipts/*.json; do
+    [[ -f $receipt && ! -L $receipt && -r $receipt ]] || return 2
+    # shellcheck disable=SC2016
+    if "$JQ_BIN" -e --arg i "$img" --arg wanted "$wanted" '
+      (.image_id | sub("^sha256:"; "")) == $i and
+      (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
+      (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
+      .live_before != null and .live_before == .live_after and
+      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null 2>&1; then
+      printf '%s\n' "$receipt"
+      return 0
+    fi
+  done
+  return 1
+}
+wait_and_verify_serving() {
+  local expected_image=${1#sha256:} cur_img
+  for _ in {1..100}; do
+    if [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}' 2>/dev/null) == healthy ]] &&
+       "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service 2>/dev/null &&
+       "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.1
+  done
+  [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}' ) == healthy ]] || fail 'recovered container unhealthy'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'recovered server inactive'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'recovered server unresponsive'
+  cur_img=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'recovered container image unknown'
+  [[ ${cur_img#sha256:} == "$expected_image" ]] || fail 'recovered container running unexpected image'
+  matched_receipt=$(known_good_receipt "$expected_image") || fail 'recovered container inputs do not match receipt'
+  lock_managed_tools
+  no_pending_restart
+}
 serving_matches_start() {
   [[ -f $dir/serving.before && ! -L $dir/serving.before ]] || fail 'serving identity baseline missing'
   local current
@@ -196,13 +244,9 @@ known_good_receipt() {
   done
   return 1
 }
-require_matching_receipt_and_alias() {
+restore_alias_to_image() {
   : "${ACCEPTED_IMAGE_REF:?}"
-  local status=0 cid image started alias hash marker="$dir/alias-restore.started"
-  read -r cid image started < "$dir/serving.before"
-  image=${validated_serving_image:-${image#sha256:}}
-  matched_receipt=$(known_good_receipt "$image") || status=$?
-  [[ $status == 0 ]] || fail 'no exact known-good receipt or receipt state unknown'
+  local image=${1#sha256:} alias hash marker="$dir/alias-restore.started"
   alias=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}') || fail 'accepted image alias unknown'
   [[ ${alias#sha256:} != "$image" ]] || return 0
   [[ ${alias#sha256:} =~ ^[0-9a-f]{64}$ ]] || fail 'accepted image alias invalid'
@@ -223,6 +267,14 @@ require_matching_receipt_and_alias() {
   "$PODMAN_BIN" tag "sha256:$image" "$ACCEPTED_IMAGE_REF" || true
   alias=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}') || fail 'UNKNOWN: alias restore readback unavailable'
   [[ ${alias#sha256:} == "$image" ]] || fail 'UNKNOWN: alias restore did not reconcile'
+}
+require_matching_receipt_and_alias() {
+  local status=0 cid image started
+  read -r cid image started < "$dir/serving.before"
+  image=${validated_serving_image:-${image#sha256:}}
+  matched_receipt=$(known_good_receipt "$image") || status=$?
+  [[ $status == 0 ]] || fail 'no exact known-good receipt or receipt state unknown'
+  restore_alias_to_image "$image"
 }
 record_known_good() {
   local destination=$1 hash desired applied
@@ -475,11 +527,28 @@ case ${1:-} in
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
   case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
   case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
-  serving_matches_start
-  require_matching_receipt_and_alias
+  container_was_stopped=0
   if (( already_released )); then
+    is_container_running || fail 'container is stopped after release'
+    serving_matches_start
+    require_matching_receipt_and_alias
     printf '%s\n' 'PASS known-good serving identity and existing receipt; window already released.'
     exit 0
+  fi
+  if ! is_container_running; then
+    container_was_stopped=1
+    receipt_status=0
+    read -r _ baseline_image _ < "$dir/serving.before" || fail 'serving identity baseline missing'
+    baseline_image=${baseline_image#sha256:}
+    matched_receipt=$(receipt_for_image "$baseline_image") || receipt_status=$?
+    [[ $receipt_status == 0 ]] || fail 'no exact known-good receipt for stopped container'
+    restore_alias_to_image "$baseline_image"
+    "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
+    [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
+    wait_and_verify_serving "$baseline_image"
+  else
+    serving_matches_start
+    require_matching_receipt_and_alias
   fi
   record_known_good "$dir/known-good.json"
   "$SYSTEMCTL_BIN" start t3code-recovery.service
@@ -493,7 +562,11 @@ case ${1:-} in
   [[ ! -L $HOLD_FILE ]] || fail 'recovery hold is a symlink'
   [[ ! -e $HOLD_FILE ]] || rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
-  printf '%s\n' 'PASS known-good serving identity and existing receipt; window released without T3 restart.'
+  if (( container_was_stopped )); then
+    printf '%s\n' 'PASS known-good serving identity and existing receipt; container recovered and window released.'
+  else
+    printf '%s\n' 'PASS known-good serving identity and existing receipt; window released without T3 restart.'
+  fi
   ;;
  resolve-unknown)
   : "${JQ_BIN:?}"
@@ -512,7 +585,26 @@ case ${1:-} in
   case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
   case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
   reason=$("$JQ_BIN" -er '.reason' "$STATE_DIR/recovery-unknown.json") || fail 'UNKNOWN reason missing'
-  if [[ $reason == receipted_runtime_failure ]]; then
+  container_was_stopped=0
+  if ! is_container_running; then
+    container_was_stopped=1
+    target_img=
+    if [[ $reason == receipted_runtime_failure ]]; then
+      recorded_serving=$("$JQ_BIN" -er '.serving' "$STATE_DIR/recovery-unknown.json") || fail 'recorded serving identity missing'
+      read -r _ target_img _ <<< "$recorded_serving"
+    else
+      read -r _ target_img _ < "$dir/serving.before" || fail 'serving identity baseline missing'
+    fi
+    target_img=${target_img#sha256:}
+    receipt_status=0
+    matched_receipt=$(receipt_for_image "$target_img") || receipt_status=$?
+    [[ $receipt_status == 0 ]] || fail 'no exact known-good receipt for stopped container'
+    restore_alias_to_image "$target_img"
+    "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
+    [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
+    wait_and_verify_serving "$target_img"
+    validated_serving_image=$target_img
+  elif [[ $reason == receipted_runtime_failure ]]; then
     current=$(serving_identity) || fail 'serving identity unknown'
     recorded_serving=$("$JQ_BIN" -er '.serving' "$STATE_DIR/recovery-unknown.json") || fail 'recorded serving identity missing'
     # Investigation may have restarted a receipted runtime. The current healthy
@@ -524,12 +616,13 @@ case ${1:-} in
     no_pending_restart
     read -r _ validated_serving_image _ <<< "$current"
     validated_serving_image=${validated_serving_image#sha256:}
+    require_matching_receipt_and_alias
   else
     serving_matches_start
+    require_matching_receipt_and_alias
   fi
-  require_matching_receipt_and_alias
   record_known_good "$dir/unknown-resolved.json"
-  if [[ $reason == receipted_runtime_failure ]]; then
+  if [[ $reason == receipted_runtime_failure && $container_was_stopped == 0 ]]; then
     # shellcheck disable=SC2016
     "$JQ_BIN" --arg before "$recorded_serving" --arg after "$current" '. + {serving_before:$before,serving_after:$after}' "$dir/unknown-resolved.json" > "$dir/unknown-resolved.json.tmp"
     chmod 0600 "$dir/unknown-resolved.json.tmp"; sync -f "$dir/unknown-resolved.json.tmp"; mv "$dir/unknown-resolved.json.tmp" "$dir/unknown-resolved.json"; sync -f "$dir"
@@ -538,7 +631,11 @@ case ${1:-} in
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery not active; inhibit retained'
   rm "$HOLD_FILE"
   rm "$STATE_DIR/recovery-unknown.json"; sync -f "$STATE_DIR"
-  printf '%s\n' 'PASS UNKNOWN resolved with exact serving receipt; recovery inhibit cleared without T3 restart.'
+  if (( container_was_stopped )); then
+    printf '%s\n' 'PASS UNKNOWN resolved with exact serving receipt; container recovered and recovery inhibit cleared.'
+  else
+    printf '%s\n' 'PASS UNKNOWN resolved with exact serving receipt; recovery inhibit cleared without T3 restart.'
+  fi
   ;;
  end-receipted-failure)
   : "${JQ_BIN:?}"
@@ -597,12 +694,19 @@ case ${1:-} in
   fi
   lock_managed_tools
   no_pending_restart
-  current=$(serving_identity allow-stopped-server) || fail 'current container or server identity unknown'
-  read -r _ current_image _ <<< "$current"; current_image=${current_image#sha256:}
-  status=0; matched_receipt=$(known_good_receipt "$current_image" "$desired") || status=$?
-  [[ $status == 0 ]] || fail 'no exact receipt for the running candidate'
-  hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
-  [[ $(serving_identity allow-stopped-server) == "$current" ]] || fail 'serving T3 changed during verification'
+  if is_container_running; then
+    current=$(serving_identity allow-stopped-server) || fail 'current container or server identity unknown'
+    read -r _ current_image _ <<< "$current"; current_image=${current_image#sha256:}
+    status=0; matched_receipt=$(known_good_receipt "$current_image" "$desired") || status=$?
+    [[ $status == 0 ]] || fail 'no exact receipt for the running candidate'
+    hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
+    [[ $(serving_identity allow-stopped-server) == "$current" ]] || fail 'serving T3 changed during verification'
+  else
+    current="stopped sha256:$desired stopped"
+    status=0; matched_receipt=$(receipt_for_image "$desired" "$desired") || status=$?
+    [[ $status == 0 ]] || fail 'no exact receipt for the stopped candidate'
+    hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
+  fi
   if (( recorded )); then
     # shellcheck disable=SC2016
     "$JQ_BIN" -e --arg id "$id" --arg desired "$desired" --arg applied "$applied" --arg serving "$current" --arg hash "$hash" --arg attempt "$attempt_state" '

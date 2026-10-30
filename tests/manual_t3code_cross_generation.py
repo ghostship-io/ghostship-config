@@ -6,7 +6,7 @@ acceptance records and a server restart are simulated by fixture stubs.
 """
 from pathlib import Path
 import argparse
-import tempfile, subprocess, os, hashlib, signal
+import tempfile, subprocess, os, hashlib, signal, shutil
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--legacy-executor', type=Path, required=True)
 parser.add_argument('--legacy-fixture', type=Path, required=True)
@@ -118,6 +118,21 @@ run_cross() {
     printf '%s STATE: serving receipt verified; desired/applied remain split; failed marker retained\n' "$mode"
     return
   fi
+  if [[ $mode == stopped ]]; then
+    touch "$W/container-stopped"
+    rm -f "$STATE_DIR"/receipts/*.json
+    output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?
+    printf '%s ROLLBACK_NO_RECEIPT rc=%s: %s\n' "$mode" "$rc" "$output"
+    [[ $rc == 1 && -e $HOLD_FILE && -e $W/container-stopped ]] || exit 27
+    inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
+    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
+    output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?
+    printf '%s ROLLBACK_RECOVER rc=%s: %s\n' "$mode" "$rc" "$output"
+    [[ $rc == 0 && ! -e $HOLD_FILE && ! -e $W/container-stopped && -f $STATE_DIR/failed-candidate ]] || exit 28
+    [[ $(cat "$STATE_DIR/applied") != "$(cat "$STATE_DIR/desired")" ]] || exit 29
+    printf '%s RECOVERY: stopped container recovered from receipt; window released\n' "$mode"
+    return
+  fi
   output=$(bash "$PROOF_DIR/fixture-release-window" rollback 2>&1); rc=$?; printf '%s ROLLBACK rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 1 ]] || exit 19
   output=$(bash "$PROOF_DIR/fixture-release-window" end-unknown 2>&1); rc=$?; printf '%s END_UNKNOWN rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 77 && -f $HOLD_FILE && ! -e $W/newroot/active-window ]] || exit 20
   jq -e --arg expected "$([[ $mode == route || $mode == before ]] && echo route_unknown || echo candidate_failed)" '.state=="UNKNOWN" and .reason==$expected and .receipt=="absent" and .recovery_inhibit=="retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null || exit 21
@@ -128,11 +143,23 @@ run_cross before
 run_cross route
 run_cross failed
 run_cross known
+run_cross stopped
 run_cross restart
 '''
  harness=d/'proof.sh';harness.write_text(source+'\n'+extra)
- env={'PATH':os.environ['PATH'],'HOME':str(d),'TMPDIR':str(d),'PROOF_DIR':str(d),'S':str(d/'old.sh'),'LEGACY_GENERATION':str(args.legacy_generation)}
- p=subprocess.Popen(['unshare','-Ur','bash',str(harness)],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+ unshare_bin = shutil.which('unshare')
+ if not unshare_bin:
+  for candidate in Path('/nix/store').glob('*util-linux*/bin/unshare'):
+   if candidate.is_file() and os.access(candidate, os.X_OK):
+    unshare_bin = str(candidate)
+    break
+ if not unshare_bin:
+  raise SystemExit('unshare binary not found')
+ path = os.environ['PATH']
+ bin_dir = os.path.dirname(unshare_bin)
+ if bin_dir not in path.split(':'): path = bin_dir + ':' + path
+ env={'PATH':path,'HOME':str(d),'TMPDIR':str(d),'PROOF_DIR':str(d),'S':str(d/'old.sh'),'LEGACY_GENERATION':str(args.legacy_generation)}
+ p=subprocess.Popen([unshare_bin,'-Ur','bash',str(harness)],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
  try:
   stdout,stderr=p.communicate(timeout=180)
  except subprocess.TimeoutExpired:
