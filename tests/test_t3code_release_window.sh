@@ -160,7 +160,9 @@ printf 'old\n' > "$tmp/state/desired"
 "${cmd[@]}" switch -- true
 if "${cmd[@]}" end-no-activation; then echo 'accepted announced switch' >&2; exit 1; fi
 [[ -f "$tmp/evidence/two/complete.started" ]]
-compgen -G "$tmp/evidence/two/effect-intent.switch.*" >/dev/null
+shopt -s nullglob
+intents=("$tmp/evidence/two"/effect-intent.switch.*)
+(( ${#intents[@]} > 0 ))
 # Post refuses an absent receipt and an unknown attempt, and only passes after
 # exact receipt, deployed state, live image, tooling and secret all agree.
 ln -sfn "$tmp/system" "$tmp/profile"

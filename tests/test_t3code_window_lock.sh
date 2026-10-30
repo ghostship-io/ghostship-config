@@ -15,7 +15,9 @@ for _ in {1..100}; do [[ -e $tmp/ready ]] && break; sleep 0.01; done
 [[ -e $tmp/ready ]]
 if flock -n -x "$WINDOW_DIR/window.lock" true; then echo 'exclusive lock was not blocked' >&2; exit 1; fi
 wait "$writer"
-compgen -G "$WINDOW_DIR/current/effect-intent.deploy.*" >/dev/null
+shopt -s nullglob
+intents=("$WINDOW_DIR/current"/effect-intent.deploy.*)
+(( ${#intents[@]} > 0 ))
 # Exclusive window operation prevents another writer from announcing.
 exec 8>"$WINDOW_DIR/window.lock"
 flock -x 8
