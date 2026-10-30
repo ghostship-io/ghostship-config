@@ -21,9 +21,11 @@ WSL, and resolvconf's existing network subscribers on the server.
 
 WARP gets a private resolver file inside its service mount namespace and
 cannot change host DNS through D-Bus. Its root-only registration state and
-umask remain unchanged. WSL resolver generation is disabled because the local
-dispatcher owns the host resolver. Verify a distribution restart, Windows DNS
-reachability and fresh DNS queries before accepting startup behavior.
+umask remain unchanged. WSL resolver generation stays enabled for Windows
+DNS tunneling and VPN compatibility. A read-only file mount protects the
+loopback dispatcher entry while Windows keeps updating its separate upstream
+file. Verify a distribution restart, Windows DNS reachability and fresh DNS
+queries before accepting startup behavior.
 
 Gateway DNS overrides resolve the three known Mesh names. Block unknown names
 under the private zone so they are not forwarded to public DNS. Prove normal
@@ -78,7 +80,9 @@ add-ons, WAN, T3 Connect or paid certificates for this setup.
    Set automatic connection in the Windows managed device profile.
 2. Establish default-deny Mesh network policy, with higher-priority allowances
    for the owner's devices and the three node identities on TCP 22/443 in both
-   initiating directions. Enrollment alone must not authorize other services.
+   initiating directions. Use Source Internal IP for Mesh source addresses;
+   Source IP is the changing public WAN address. Require the enrolled Mesh
+   identity separately. Enrollment alone must not authorize other services.
 3. Create three separately named Mesh nodes. Reusing one token across hosts
    makes replicas, not independent nodes. Record each node's actual Mesh IP.
 4. Set Gateway DNS overrides for `launch-octopus.mesh.ghostship.io`,

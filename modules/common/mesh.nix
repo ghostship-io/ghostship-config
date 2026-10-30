@@ -54,6 +54,7 @@ in
     services.dnsmasq = {
       enable = true;
       alwaysKeepRunning = true;
+      resolveLocalQueries = lib.mkIf (config.ghostship.host.roles.wsl or false) false;
       settings = {
         conf-file = [
           "${./mesh-dns.conf}"

@@ -100,14 +100,53 @@ in
       automount.enabled = true;
       interop.enabled = true;
       interop.appendWindowsPath = true;
-      # The local DNS dispatcher owns resolv.conf; WSL must not overwrite it
-      # when another Windows client enters the running distribution.
-      network.generateResolvConf = lib.mkIf config.ghostship.mesh.enable false;
+      # Keep Windows DNS tunneling available, including on VPN networks.
+      network.generateResolvConf = true;
     };
     docker-desktop.enable = true;
     extraBin = [
       { src = "${pkgs.coreutils}/bin/whoami"; }
     ];
+  };
+
+  # WSL must keep generating /mnt/wsl/resolv.conf for DNS tunneling. A
+  # read-only file mount protects the local dispatcher entry from /init's
+  # resolver symlink replacement without freezing the Windows upstream file.
+  systemd.services.ghostship-mesh-resolver-file = lib.mkIf config.ghostship.mesh.enable {
+    description = "Prepare the WSL Mesh resolver mount target";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      if test -L /etc/resolv.conf; then
+        ${pkgs.coreutils}/bin/cp --remove-destination /mnt/wsl/resolv.conf /etc/resolv.conf
+      elif ! test -e /etc/resolv.conf; then
+        ${pkgs.coreutils}/bin/install -m 0644 /dev/null /etc/resolv.conf
+      fi
+    '';
+  };
+  systemd.mounts = lib.mkIf config.ghostship.mesh.enable [
+    {
+      what = "${pkgs.writeText "ghostship-mesh-resolv.conf" "nameserver 127.0.0.1\n"}";
+      where = "/etc/resolv.conf";
+      type = "none";
+      options = "bind,ro";
+      # This is a late resolver mount, not a prerequisite of local-fs.target.
+      unitConfig.DefaultDependencies = false;
+      after = [ "ghostship-mesh-resolver-file.service" ];
+      requires = [ "ghostship-mesh-resolver-file.service" ];
+      before = [
+        "dnsmasq.service"
+        "umount.target"
+      ];
+      conflicts = [ "umount.target" ];
+      wantedBy = [ "multi-user.target" ];
+    }
+  ];
+  systemd.services.dnsmasq = lib.mkIf config.ghostship.mesh.enable {
+    requires = [ "etc-resolv.conf.mount" ];
+    after = [ "etc-resolv.conf.mount" ];
   };
 
   ghostship.wsl.fhsShims = [

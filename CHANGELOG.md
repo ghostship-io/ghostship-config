@@ -12,8 +12,8 @@
   preserve user brainstorming and Codex bundled skills during cleanup.
 - Provide `/bin/true` for WSL's generated mount guard.
 - Isolate WARP resolver writes and route only private Mesh DNS through it;
-  keep normal Internet/LAN DNS independent and disable competing WSL resolver
-  generation on Mesh hosts.
+  keep normal Internet/LAN DNS independent and protect the local resolver
+  while retaining Windows DNS tunneling on Mesh hosts.
 
 Refs #707.
 
