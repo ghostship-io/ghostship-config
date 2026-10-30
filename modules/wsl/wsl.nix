@@ -133,6 +133,11 @@ in
       source = "${pkgs.coreutils}/bin/cat";
     }
     {
+      # WSL's generated mount guard executes this absolute path.
+      target = "/bin/true";
+      source = "${pkgs.coreutils}/bin/true";
+    }
+    {
       target = "/bin/whoami";
       source = "${pkgs.coreutils}/bin/whoami";
     }

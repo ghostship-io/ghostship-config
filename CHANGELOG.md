@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.18.0] - 2026-10-30
+
+- Prepare Free-plan Cloudflare Mesh on both WSL workers and Chill Penguin, with
+  automatic startup, identity-preserving recovery, private HTTPS T3 access and
+  renewable DNS-01 certificates. Enrollment and activation remain owner-gated.
+- Refresh public Nix inputs and WinCLI Windows runtime locks, preserve existing
+  private release/firmware pins, and load WSL upgrade credentials through
+  protected systemd credentials without updating obsolete root channels.
+- Install pinned Ghostship engineering/review/planning skills on WSL workers;
+  preserve user brainstorming and Codex bundled skills during cleanup.
+- Provide `/bin/true` for WSL's generated mount guard.
+
+Refs #707.
+
 ## [3.17.403] - 2026-10-26
 
 - Flake: pin ghostship-private-agent to 63a05bf7; the lock's narHash is the `nix flake prefetch` hash of that revision.

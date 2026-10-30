@@ -5,6 +5,10 @@ server, one AMD desktop, and two WSL2 development hosts. The repo is flake
 based, uses Home Manager for the `nixos` user profile, and uses `ragenix`
 logical-unit secret files.
 
+The staged [Cloudflare Mesh setup](docs/cloudflare-mesh.md) connects both WSL
+workers and Chill Penguin on the Free plan, with automatic startup and recovery.
+It requires one-time approved enrollment and installed bidirectional verification.
+
 ## Hosts
 
 | Host | Role | Notes |

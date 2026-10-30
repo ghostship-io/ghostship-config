@@ -40,18 +40,6 @@ let
       ];
     }
     {
-      name = "brainstorming";
-      paths = [
-        ".agents/skills/brainstorming"
-      ];
-      pathGlobs = [ ];
-      geminiExtensionKeys = [ ];
-      skillLockNames = [
-        "brainstorming"
-      ];
-      codexHookCommands = [ ];
-    }
-    {
       name = "autoreview";
       paths = [
         ".agents/skills/autoreview"
@@ -170,7 +158,6 @@ let
         ".agents/skills/ssh"
         ".agents/skills/wsl2"
         ".agents/skills/github-pr-workflow"
-        ".codex/skills/.system/skill-creator"
       ];
       geminiExtensionKeys = [ ];
       codexHookCommands = [ ];
