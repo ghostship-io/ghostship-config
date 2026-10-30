@@ -287,6 +287,8 @@ in
     };
   };
 
+  environment.etc."ghostship/t3code-release-window-dir".text = "${t3codeDeploymentState}/release-window\n";
+
   ghostship.t3codePodman.enable = true;
 
   systemd.tmpfiles.rules = [

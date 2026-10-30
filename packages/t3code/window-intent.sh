@@ -6,13 +6,12 @@ announce_intent() {
   : "${WINDOW_DIR:?WINDOW_DIR is required}"
   install -d -m 0700 "$WINDOW_DIR"
   exec {window_fd}>"$WINDOW_DIR/window.lock"
-  flock -x "$window_fd"
+  flock -s "$window_fd"
   if [[ -e $WINDOW_DIR/window.start ]]; then
     record=$(mktemp "$WINDOW_DIR/effect-intent.$writer.XXXXXXXX")
     printf '%s %s\n' "$writer" "$(date -u +%FT%TZ)" > "$record"
     sync -f "$record"
     sync -f "$WINDOW_DIR"
   fi
-  flock -u "$window_fd"
-  exec {window_fd}>&-
+  # Keep the descriptor open until the writer exits, including its effect.
 }
