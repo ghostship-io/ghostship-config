@@ -250,7 +250,7 @@ def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
         tier_ok = isinstance(tiers, dict) and any(
             isinstance(tier, dict) and tier.get("state") == "ok" for tier in tiers.values())
         if not usable or not tier_ok:
-            raise RouteUnavailableError("unavailable", "snapshot: no usable candidate", "route_unavailable: live model routing snapshot has no usable candidate")
+            raise RouteUnknownError("unknown", "partial snapshot: no usable candidate", "provider_turn outcome unknown: partial live model routing snapshot has no usable candidate")
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)

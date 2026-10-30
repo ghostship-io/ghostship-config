@@ -484,7 +484,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.PreconditionError):
                 acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
         source.write_text(json.dumps(failed))
-        with self.assertRaises(acceptance.RouteUnavailableError):
+        with self.assertRaises(acceptance.RouteUnknownError):
             acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
         argv = ["candidate-acceptance", "--state-dir", "s", "--image-archive", "i", "--home-dir", "h",
                 "--candidate-runtime-dir", "r", "--candidate-home-target", "/c", "--candidate-uid", "1"]
