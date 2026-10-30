@@ -927,7 +927,7 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         if key in entries:
             raise PreconditionError("duplicate admitted native route")
         entries[key] = item
-    primary, fallback, seen, observed, unknown = [], [], set(), set(), set()
+    primary, fallback, seen = [], [], set()
     for row in rows:
         if not isinstance(row, dict) or row.get("execution") not in (None, "t3"):
             continue
@@ -943,10 +943,6 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         item = entries.get(key)
         if not item:
             continue
-        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
-            observed.add(key)
-        else:
-            unknown.add(key)
         if (row.get("available") is not True or target.get("available") is False
                 or ("provider_instance_id" in target and (target.get("mapped") is not True or target.get("available") is not True))
                 or key in seen or key in exhausted):
@@ -969,12 +965,9 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         seen.add(key)
     if primary:
         return primary
-    # An absent or unknown primary is not proof that it is exhausted.
-    primary_keys = {key for key, item in entries.items() if item.get("fallback_only") is not True}
-    if (primary_keys & unknown) - observed - set(exhausted):
-        return []
-    if primary_keys - observed - set(exhausted) and not complete:
-        return []
+    # Unknown capacity for an unrelated route does not invalidate an exact,
+    # policy-admitted fallback with its own available native row. Prefer every
+    # observed usable primary first; missing fallback evidence remains unknown.
     return fallback
 
 
@@ -999,6 +992,35 @@ def fresh_snapshot_routes(snapshot):
     rows = snapshot.get("candidates")
     workers = selected.get("worker")
     return (rows if isinstance(rows, list) else []) + (workers if isinstance(workers, list) else [])
+
+
+def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, observations):
+    """Require fresh, unambiguous mapped capacity for this exact fallback."""
+    if not fresh_rows or not isinstance(snapshot, dict) or not isinstance(snapshot.get("candidates"), list):
+        return False
+    matches = []
+    for row in snapshot["candidates"]:
+        if not isinstance(row, dict) or not isinstance(row.get("native"), dict):
+            continue
+        native = row["native"]
+        if (native.get("provider_instance_id"), native.get("model_id")) == identity:
+            matches.append(row)
+    if not matches or not all(row.get("available") is True
+                              and row["native"].get("mapped") is True
+                              and row["native"].get("available") is True
+                              for row in matches):
+        return False
+    for row in observations:
+        if not isinstance(row, dict):
+            continue
+        native = row.get("native") or row.get("target") or {}
+        if not isinstance(native, dict):
+            continue
+        key = (native.get("provider_instance_id") or native.get("instanceId") or native.get("providerInstanceId"),
+               native.get("model_id") or native.get("model"))
+        if key == identity and (row.get("available") is not True or native.get("available") is False):
+            return False
+    return True
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
@@ -1050,6 +1072,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
                 raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: primary probe limit reached")
             primary_attempts += 1
         identity = (target["instance"], target["model"])
+        if target["fallback"] and not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
+            raise RouteUnknownError(pick_summary, route_summary,
+                                    "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
         exhausted.add(identity)
         route = f"{identity[0]}/{identity[1]}"
         proof = candidate_agent_command(
@@ -1087,6 +1112,22 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
                 raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
             proven_failure = True
             break
+    # A fallback whose own current capacity cannot be proved is unknown even
+    # when an unversioned catalog or an explicitly unavailable row is present.
+    if not proven_failure:
+        for item in policy["routes"]:
+            if not isinstance(item, dict) or item.get("fallback_only") is not True or item.get("admit") is not True:
+                continue
+            provider = policy["providers"].get(item.get("provider"))
+            identity = (item.get("provider_instance"), item.get("model"))
+            if (not isinstance(provider, dict) or provider.get("admit") is not True
+                    or not isinstance(item.get("roles"), list) or "worker" not in item["roles"]
+                    or item.get("billing") not in ("subscription", "free", "promotion")
+                    or identity in exhausted):
+                continue
+            if not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
+                raise RouteUnknownError(pick_summary, route_summary,
+                                        "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
     # An absent, malformed or unreadable route is not evidence of exhaustion.
     # A complete fresh snapshot may establish absence; otherwise every admitted
     # route must have an explicit capacity observation or exhausted probe.
@@ -1393,6 +1434,7 @@ def safe_unknown_evidence(error):
     known = ("partial live model routing snapshot has no usable candidate",
              "fallback probe limit reached", "primary probe limit reached",
              "exact settled proof is missing", "probe settlement not proven",
+             "fallback fresh mapped capacity is missing or conflicting",
              "route failure is not attributable to the candidate")
     for reason in known:
         if message == "provider_turn outcome unknown: " + reason:
