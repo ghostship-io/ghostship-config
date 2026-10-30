@@ -138,9 +138,7 @@ let
     "opencode/opencode-go/deepseek-v4.1-flash"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "opencode/literouter/deepseek-v4.1-flash-1017:full-context"
-    "antigravity/gemini-3.8-flash-high"
-    "antigravity/gemini-3.8-flash-medium"
-    "antigravity/gemini-3.8-flash-low"
+    "antigravity/gemini-3.8-flash"
     "claudeAgent/claude-sonnet-5-5"
     "codex/gpt-6.1-terra"
   ];
@@ -261,6 +259,10 @@ in
     assert
       builtins.sort builtins.lessThan actualApprovedRoutes
       == builtins.sort builtins.lessThan approvedRoutes;
+    assert builtins.any
+      (r: r.provider_instance == "antigravity" && r.model == "gemini-3.8-flash"
+        && r.effort_source == "provider_default" && r.efforts == [ "provider_default" ]
+        && r.buckets == [ "low" "medium" "high" ]) routePolicy.routes;
     assert pkgs.lib.assertMsg
       (builtins.any (r: r.provider_instance == "opencode"
         && r.model == "ollama-cloud/deepseek-v4-pro") routePolicy.routes)
