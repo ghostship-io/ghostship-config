@@ -1,5 +1,6 @@
 set -euo pipefail
 
+# shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
 announce_intent activate
 

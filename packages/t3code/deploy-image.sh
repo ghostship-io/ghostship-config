@@ -5,6 +5,7 @@ if [[ ${1:-} == --list-manifest ]]; then
   exec tar -xOf "$2" manifest.json
 fi
 
+# shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
 announce_intent deploy
 
