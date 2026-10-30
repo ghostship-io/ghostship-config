@@ -1,5 +1,26 @@
 set -euo pipefail
 
+publish_attestation() {
+  local payload="$1" directory="$STATE_DIR/attestations" temporary
+  [[ ! -L "$directory" ]] || { echo 'Attestation directory is a symlink' >&2; return 1; }
+  install -d -m 0755 "$directory"
+  [[ $(stat -c '%u' "$directory") == "$EUID" ]] || { echo 'Attestation directory has unexpected owner' >&2; return 1; }
+  chmod 0755 "$directory"
+  temporary=$(mktemp "$directory/.current.XXXXXXXX")
+  printf '%s\n' "$payload" > "$temporary"
+  chmod 0444 "$temporary"
+  sync -f "$temporary"
+  mv -f "$temporary" "$directory/current.json"
+  sync -f "$directory"
+}
+
+publish_unknown_attestation() {
+  local failed=false
+  if [[ -e "$STATE_DIR/failed-candidate" || -L "$STATE_DIR/failed-candidate" ]]; then failed=true; fi
+  publish_attestation "$("$JQ_BIN" -cn --argjson failed "$failed" \
+    '{schema:1,state:"unknown",failed_candidate:$failed}')"
+}
+
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
   exec tar -xOf "$2" manifest.json
@@ -15,6 +36,7 @@ if [[ ${1:-} == --invalidate-failure ]]; then
   install -d -m 0700 "$STATE_DIR"
   exec 9>"$STATE_DIR/deploy.lock"
   flock -x 9
+  publish_unknown_attestation
   failed_file="$STATE_DIR/failed-candidate"
   [[ -f "$failed_file" && ! -L "$failed_file" ]] || { echo 'No failed candidate marker to invalidate' >&2; exit 1; }
   marker=$(cat "$failed_file")
@@ -27,6 +49,7 @@ if [[ ${1:-} == --invalidate-failure ]]; then
     '{event:"invalidation_requested",at:$at,failed_key:$failed_key,reason:$reason}' >> "$audit"
   sync -f "$audit"
   rm "$failed_file"
+  publish_unknown_attestation
   echo 'Failed candidate marker invalidated; acceptance must run again.'
   exit 0
 fi
@@ -74,6 +97,7 @@ health_wait_sleep() {
 install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
 flock -x 9
+publish_unknown_attestation
 
 desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
 desired_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
@@ -148,6 +172,35 @@ any_receipt_matches_image() {
   return 1
 }
 
+acquire_managed_locks() {
+  local tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
+  local refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
+  local t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
+  [[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" && -f "$t3_lock" && ! -L "$t3_lock" ]] || {
+    echo 'Managed tool, refresh or T3 update lock missing; candidate is not inspected' >&2; return 1;
+  }
+  exec 8<>"$tool_lock"
+  flock -x 8
+  exec 7<>"$refresh_lock"
+  flock -x 7
+  exec 6<>"$t3_lock"
+  flock -x 6
+}
+
+publish_pass_attestation() {
+  local fields container_id live_image started health receipt_hash
+  [[ ! -e "$STATE_DIR/failed-candidate" && ! -L "$STATE_DIR/failed-candidate" ]] || return 1
+  receipt_matches_image || return 1
+  fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}') || return 1
+  read -r container_id live_image started health <<< "$fields"
+  [[ $container_id =~ ^[0-9a-f]{64}$ && ${live_image#sha256:} == "$image_id" && $health == healthy ]] || return 1
+  receipt_hash=$(sha256sum < "$receipt" | cut -d ' ' -f 1)
+  publish_attestation "$("$JQ_BIN" -cn --arg image "$image_id" --arg container "$container_id" \
+    --arg receipt "$DEPLOYMENT_ID" --arg receipt_hash "$receipt_hash" \
+    '{schema:1,state:"pass",image_id:$image,container_id:$container,receipt_id:$receipt,
+      receipt_sha256:$receipt_hash,failed_candidate:false}')"
+}
+
 promote_image_id() {
   local source_id="$1" accepted_id
   "$PODMAN_BIN" tag "$source_id" "$ACCEPTED_IMAGE_REF"
@@ -165,6 +218,7 @@ promote_accepted_alias() {
 
 if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]]; then
   if receipt_matches_image; then
+    acquire_managed_locks
     accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
@@ -172,6 +226,7 @@ if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]
     else
       echo "T3 image, runtime inputs, and accepted image alias are already applied: $DEPLOYMENT_ID"
     fi
+    publish_pass_attestation
     exit 0
   fi
 fi
@@ -199,21 +254,8 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
-# Managed tool updates acquire the tool lock before the shared refresh lock.
-# The standalone updater also takes its own lock, including when invoked
-# directly. Hold all three through acceptance and activation.
-tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
-refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
-t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
-[[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" && -f "$t3_lock" && ! -L "$t3_lock" ]] || {
-  echo 'Managed tool, refresh or T3 update lock missing; candidate is not inspected' >&2; exit 1;
-}
-exec 8<>"$tool_lock"
-flock -x 8
-exec 7<>"$refresh_lock"
-flock -x 7
-exec 6<>"$t3_lock"
-flock -x 6
+# Lock order matches managed maintenance: tool, refresh, then T3 updater.
+acquire_managed_locks
 # Hash only the executable acceptance bundle and the candidate/tooling identity.
 # The bundle is copied as named files by t3codeDeploymentScripts; adding a
 # dependency requires updating that bundle and this manifest together. Paths
@@ -255,6 +297,7 @@ mark_candidate_failed() {
   printf '%s\n' "$failed_key" > "$temporary"
   chmod 0600 "$temporary"
   mv -f "$temporary" "$failed_file"
+  publish_unknown_attestation
 }
 
 candidate_args=(
@@ -405,6 +448,7 @@ if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
     fi
     running_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
     record_applied "$running_agent" "$running_secret_inode"
+    publish_pass_attestation
     echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
     exit 0
   fi
@@ -459,6 +503,7 @@ printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
 record_applied "$live_agent" "$live_secret_inode"
+publish_pass_attestation
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
 printf '%s\n' "action=candidate-accepted-restart deployment=$DEPLOYMENT_ID" >> "$AUDIT_LOG"
 chmod 0600 "$AUDIT_LOG"

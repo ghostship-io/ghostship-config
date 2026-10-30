@@ -99,9 +99,9 @@ if [[ $1 == inspect && $2 == t3code ]]; then
       ;;
     *)
       if [[ -r "$LIVE_IMAGE_FILE" ]]; then
-        printf 'container-id %s started healthy\n' "$(cat "$LIVE_IMAGE_FILE")"
+        printf '%064d %s started healthy\n' 1 "$(cat "$LIVE_IMAGE_FILE")"
       else
-        printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
+        printf '%064d sha256:%s started healthy\n' 1 "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
       fi
       ;;
   esac
@@ -216,6 +216,12 @@ grep -q '^Restarting podman-t3code.service immediately after exact-image candida
 [[ $(sed -n '4p' "$EVENTS") == restart ]]
 [[ $(cat "$tmp/state/applied") == "$DEPLOYMENT_ID" ]]
 [[ $(jq -r '.mode' "$tmp/ledger.jsonl") == candidate-accepted ]]
+attestation="$STATE_DIR/attestations/current.json"
+jq -e --arg image "$(tar -xOf "$IMAGE_ARCHIVE" config.json | sha256sum | cut -d ' ' -f 1)" \
+  --arg receipt "$DEPLOYMENT_ID" --arg sha "$(sha256sum "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" | cut -d ' ' -f 1)" \
+  '.state == "pass" and .image_id == $image and .receipt_id == $receipt and .receipt_sha256 == $sha and .failed_candidate == false and (.container_id | length == 64)' \
+  "$attestation" >/dev/null
+[[ $(stat -c %a "$attestation") == 444 ]]
 
 # A restart that remains starting for more than 120 simulated seconds must
 # still reach the existing post-restart checks and applied marker.
@@ -260,6 +266,7 @@ set -e
 [[ $first_status != 0 ]]
 grep -q 'Candidate acceptance FAILED' "$tmp/failure.log"
 [[ $(cut -d ' ' -f 1 "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
+jq -e '.state == "unknown" and .failed_candidate == true' "$attestation" >/dev/null
 [[ $(jq -r '.deployment_id + ":" + (.exit_code | tostring)' "$tmp/state/attempts/$DEPLOYMENT_ID.json") == "$DEPLOYMENT_ID:1" ]]
 [[ $(jq -r '.started_at_ms | numbers' "$tmp/state/attempts/$DEPLOYMENT_ID.json") =~ ^[0-9]+$ ]]
 [[ $(wc -l < "$EVENTS") == 5 ]]
