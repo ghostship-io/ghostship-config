@@ -12,8 +12,10 @@ from pathlib import PurePosixPath
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 
@@ -300,6 +302,56 @@ def resolve_container_home_path(source_home, path, container_home):
     return resolved
 
 
+def verify_standalone_release(release, version, digest):
+    """Compare the selected tree with its checksum-identified source archive."""
+    archive = release / ".source.tar.gz"
+    if archive.is_symlink() or not archive.is_file():
+        raise RuntimeError("standalone T3 source archive missing")
+    with archive.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
+            raise RuntimeError("standalone T3 archive checksum mismatch")
+    marker = release / ".install-complete"
+    if marker.is_symlink() or not marker.is_file() or marker.read_text().strip() != version:
+        raise RuntimeError("standalone T3 installation marker mismatch")
+    if not (release / "bin/t3").is_symlink() or os.readlink(release / "bin/t3") != "../t3":
+        raise RuntimeError("standalone T3 launcher mismatch")
+
+    def manifest(root, ignored=()):
+        entries = {}
+        for path in root.rglob("*"):
+            relative = path.relative_to(root).as_posix()
+            if relative in ignored:
+                continue
+            mode = path.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                entries[relative] = ("link", os.readlink(path))
+            elif stat.S_ISDIR(mode):
+                entries[relative] = ("directory",)
+            elif stat.S_ISREG(mode):
+                with path.open("rb") as stream:
+                    entries[relative] = ("file", mode & 0o111, hashlib.file_digest(stream, "sha256").hexdigest())
+            else:
+                raise RuntimeError("standalone T3 contains unsupported file")
+        return entries
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="t3-acceptance-source-") as temporary:
+            with tarfile.open(archive, "r:gz") as payload:
+                payload.extractall(temporary, filter="data")
+            roots = list(Path(temporary).iterdir())
+            if len(roots) != 1 or not roots[0].is_dir() or not re.fullmatch(
+                    r"t3-" + re.escape(version) + r"-linux-(arm64|x64)", roots[0].name):
+                raise RuntimeError("standalone T3 archive layout mismatch")
+            expected = manifest(roots[0])
+            actual = manifest(release, {".source.tar.gz", ".install-complete", "bin/t3"})
+            if "bin" not in expected:
+                actual.pop("bin", None)
+            if actual != expected:
+                raise RuntimeError("standalone T3 contents mismatch")
+    except (OSError, tarfile.TarError) as error:
+        raise RuntimeError("standalone T3 archive invalid") from error
+
+
 def stage_candidate_toolchain(source_home, candidate_home, candidate_uid,
                               container_home="/home/t3code"):
     """Copy only the active CLI runtimes needed to boot a fresh candidate HOME.
@@ -328,26 +380,34 @@ def stage_candidate_toolchain(source_home, candidate_home, candidate_uid,
     if t3_release.parent != t3_root / "releases":
         raise RuntimeError("candidate T3 CLI release is outside its managed release tree")
     version = t3_release.name
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", version):
+    standalone = re.fullmatch(r"(\d+\.\d+\.\d+)-([0-9a-f]{64})", version)
+    if not standalone and not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", version):
         raise RuntimeError("candidate T3 CLI release has an invalid version")
     t3_binary = resolve_container_home_path(
         source_home, t3_release / "bin/t3", container_home
     )
     if not t3_binary.is_file() or not os.access(t3_binary, os.X_OK):
         raise RuntimeError("candidate requires an executable installed T3 CLI")
-    runtime_version = t3_binary.parent
-    runtime_root = source_home / ".t3/runtime/versions"
-    if runtime_version.parent != runtime_root or not runtime_version.is_dir():
-        raise RuntimeError("candidate T3 runtime is outside its managed version tree")
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", runtime_version.name):
-        raise RuntimeError("candidate T3 runtime has an invalid version")
-    copy_tree(
-        runtime_version,
-        candidate_home / ".t3/runtime/versions" / runtime_version.name,
-        "T3 runtime",
-    )
+    if standalone:
+        if t3_binary != t3_release / "t3":
+            raise RuntimeError("standalone T3 executable escapes its release")
+        verify_standalone_release(t3_release, standalone[1], standalone[2])
+    else:
+        runtime_version = t3_binary.parent
+        runtime_root = source_home / ".t3/runtime/versions"
+        if runtime_version.parent != runtime_root or not runtime_version.is_dir():
+            raise RuntimeError("candidate T3 runtime is outside its managed version tree")
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", runtime_version.name):
+            raise RuntimeError("candidate T3 runtime has an invalid version")
+        copy_tree(
+            runtime_version,
+            candidate_home / ".t3/runtime/versions" / runtime_version.name,
+            "T3 runtime",
+        )
     t3_destination = candidate_home / ".local/share/t3code-tools/t3"
     copy_tree(t3_release, t3_destination / "releases" / version, "T3 CLI")
+    if standalone:
+        verify_standalone_release(t3_destination / "releases" / version, standalone[1], standalone[2])
     t3_link = t3_destination / "current"
     t3_link.symlink_to(f"releases/{version}")
 
