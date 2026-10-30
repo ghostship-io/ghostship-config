@@ -50,6 +50,12 @@ never automatically delete `enrollment-attempted` or native `reg.json`.
 Verify the enrolled Linux client's JSON account type and organization during
 rollout; an unknown schema is refused without changing the identity.
 
+Keep native MASQUE HTTP/3 with HTTP/2 fallback enabled. When testing a
+UDP-blocked network, block UDP to the tunnel endpoints across all ports:
+the client can recover by choosing another UDP port before needing TCP.
+The local preflight verified TCP fallback with the registration and host DNS
+unchanged; this does not replace actual VPN and captive-portal acceptance.
+
 Nodes can initiate connections to each other's Mesh IPs. This does not need
 LAN/subnet advertisements or IP forwarding. Use MASQUE with only
 `100.96.0.0/12` included, preserving normal Internet and existing LAN routes.
