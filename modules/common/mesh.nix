@@ -71,7 +71,8 @@ in
       # through read-only links, with a private writable resolver entry.
       ${pkgs.coreutils}/bin/rm -rf /run/cloudflare-warp/etc
       ${pkgs.coreutils}/bin/mkdir -m 0700 /run/cloudflare-warp/etc
-      ${pkgs.coreutils}/bin/cp -as /run/cloudflare-warp/host-etc/. /run/cloudflare-warp/etc/
+      ${pkgs.coreutils}/bin/cp -as --no-preserve=ownership \
+        /run/cloudflare-warp/host-etc/. /run/cloudflare-warp/etc/
       ${pkgs.coreutils}/bin/rm -f /run/cloudflare-warp/etc/resolv.conf
       ${pkgs.coreutils}/bin/install -m 0600 \
         /run/cloudflare-warp/host-etc/resolv.conf /run/cloudflare-warp/etc/resolv.conf
