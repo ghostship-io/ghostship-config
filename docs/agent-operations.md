@@ -156,6 +156,24 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   builds the committed revision, checks dry-activation, records the generation
   and verifies live health. It accepts the target T3 candidate image before the
   switch; a passing exact-image receipt permits the immediate restart.
+- For an executor-held T3 release window, retire per-release copied executor
+  scripts. After this package is installed, run the tracked command on the
+  target host with `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
+  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, and `WINDOW_SECONDS` set from
+  host configuration. Use a unique window ID and the authorized flake reference:
+
+  ```sh
+  ghostship-t3code-release-window preflight
+  ghostship-t3code-release-window start "$WINDOW_ID"
+  ghostship-t3code-release-window switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
+  ```
+
+  Complete the established exact-image acceptance, installed readback and
+  post/rollback procedure after a switch; an intent or an unknown result is
+  never a no-activation success. If no writer announced an effect, the executor
+  can instead run `ghostship-t3code-release-window end-no-activation` to release
+  the window. Windows opened before the tracked start record cannot use that
+  operation. This command does not replace acceptance or post/rollback checks.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
