@@ -27,7 +27,16 @@ case "$*" in
   'exec fixture systemctl show t3code-server.service -p MainPID --value') echo "${SERVER_PID:-1234}"; exit ;;
   'exec fixture systemctl show t3code-server.service -p ActiveEnterTimestampMonotonic --value') echo 5678; exit ;;
 esac
-if [[ $1 == image && $2 == inspect ]]; then printf 'sha256:%s\n' "${ALIAS_IMAGE:-$EXPECTED_IMAGE}"; exit; fi
+if [[ $1 == image && $2 == inspect ]]; then
+  if [[ -f $FIXTURE/alias-image ]]; then cat "$FIXTURE/alias-image"; else printf 'sha256:%s\n' "${ALIAS_IMAGE:-$EXPECTED_IMAGE}"; fi
+  exit
+fi
+if [[ $1 == tag ]]; then
+  printf '%s\n' "$2" > "$FIXTURE/alias-image"
+  printf 'tag\n' >> "$FIXTURE/podman.events"
+  [[ ${FIXTURE_TAG_LOST_ACK:-0} != 1 ]] || exit 1
+  exit
+fi
 case "$1 $3 ${4:-}" in
   'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
@@ -159,14 +168,19 @@ printf '%s\n' "$new_desired" > "$STATE_DIR/desired"
 printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown"}\n' "$new_desired" > "$STATE_DIR/attempts/$new_desired.json"
 if "${cmd[@]}" end-unknown; then echo 'accepted UNKNOWN with a matching receipt' >&2; exit 1; fi
 ALIAS_IMAGE=$(printf '%064d' 9); export ALIAS_IMAGE
-if "${cmd[@]}" rollback; then echo 'accepted a different image alias' >&2; exit 1; fi
-unset ALIAS_IMAGE
+mv "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt-held"
+if "${cmd[@]}" rollback; then echo 'restored alias without a receipt' >&2; exit 1; fi
+[[ ! -e $tmp/podman.events ]]
+mv "$tmp/receipt-held" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+export FIXTURE_TAG_LOST_ACK=1
 export FIXTURE_STOP_LOST_ACK=1
 if "${cmd[@]}" rollback three; then echo 'unexpected rollback stop acknowledgement' >&2; exit 1; fi
 [[ -f $tmp/evidence/three/known-good.json && -f $tmp/evidence/active-window && -f $tmp/hold ]]
-unset FIXTURE_STOP_LOST_ACK
+[[ $(cat "$tmp/alias-image") == "sha256:$EXPECTED_IMAGE" && $(wc -l < "$tmp/podman.events") == 1 ]]
+unset FIXTURE_TAG_LOST_ACK FIXTURE_STOP_LOST_ACK ALIAS_IMAGE
 "${cmd[@]}" rollback three
 "${cmd[@]}" rollback three
+[[ $(wc -l < "$tmp/podman.events") == 1 ]]
 [[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
 jq -e --arg d "$new_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/three/known-good.json" >/dev/null
 # Without a receipt, a changed server or a queued restart must refuse release.

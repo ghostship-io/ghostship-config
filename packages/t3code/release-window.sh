@@ -96,8 +96,9 @@ no_pending_restart() {
     "$HOME_DIR/.local/share/t3code-tools/t3/activation.pending"; do
     [[ ! -e $f && ! -L $f ]] || fail 'pending restart or maintenance marker'
   done
+  # shellcheck disable=SC2016
   "$PODMAN_BIN" exec "$PODMAN_TARGET" sh -c \
-    'test ! -e /run/t3code-tool-update/restart.pending -a ! -e /run/t3code-tool-update/update-deferred.pending -a ! -e /run/t3code-tool-update/hold -a ! -e /run/t3code-tool-update/maintenance' || fail 'container maintenance state unknown or pending'
+    'for f in /run/t3code-tool-update/restart.pending /run/t3code-tool-update/update-deferred.pending /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance; do [ ! -e "$f" ] && [ ! -L "$f" ] || exit 1; done' || fail 'container maintenance state unknown or pending'
 }
 serving_matches_start() {
   [[ -f $dir/serving.before && ! -L $dir/serving.before ]] || fail 'serving identity baseline missing'
@@ -139,12 +140,25 @@ known_good_receipt() {
 }
 require_matching_receipt_and_alias() {
   : "${ACCEPTED_IMAGE_REF:?}"
-  local status=0 cid image started alias
+  local status=0 cid image started alias hash marker="$dir/alias-restore.started"
   matched_receipt=$(known_good_receipt) || status=$?
   [[ $status == 0 ]] || fail 'no exact known-good receipt or receipt state unknown'
   read -r cid image started < "$dir/serving.before"
+  image=${image#sha256:}
   alias=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}') || fail 'accepted image alias unknown'
-  [[ ${alias#sha256:} == "${image#sha256:}" ]] || fail 'accepted alias differs from receipted serving image'
+  [[ ${alias#sha256:} != "$image" ]] || return 0
+  # Never retry an uncertain alias write. Reconcile by inspecting the alias;
+  # if it is still different, keep the inhibit and require investigation.
+  [[ ! -e $marker && ! -L $marker ]] || fail 'UNKNOWN: an earlier alias restore did not reconcile'
+  [[ ${alias#sha256:} =~ ^[0-9a-f]{64}$ ]] || fail 'accepted image alias invalid'
+  hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
+  printf '%s %s %s\n' "$image" "${alias#sha256:}" "$hash" > "$marker.tmp"
+  chmod 0600 "$marker.tmp"; sync -f "$marker.tmp"; mv "$marker.tmp" "$marker"; sync -f "$dir"
+  # The exact existing receipt above authorizes this alias move. The serving
+  # container is not restarted; a lost tag acknowledgement is read back.
+  "$PODMAN_BIN" tag "sha256:$image" "$ACCEPTED_IMAGE_REF" || true
+  alias=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}') || fail 'UNKNOWN: alias restore readback unavailable'
+  [[ ${alias#sha256:} == "$image" ]] || fail 'UNKNOWN: alias restore did not reconcile'
 }
 record_known_good() {
   local destination=$1 hash desired applied
