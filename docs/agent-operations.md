@@ -222,6 +222,20 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   records that distinct UNKNOWN and exits 77 with the inhibit retained; after
   investigation and a healthy exact-receipt readback (including container
   recovery if stopped), use `resolve-unknown`.
+- The hand-placed `/root/tools-332-fallback` starter tree and its
+  `tools-332-fallback-window` unit are no longer used. They were a temporary
+  bootstrap for the release-window transition: an untracked, host-specific copy
+  of a per-release executor that identified competing writers by script name.
+  The next release that installs the #716/#721 tooling supersedes them with the
+  tracked, config-driven `release-window` binary in the candidate closure, which
+  keys on the real window lock, deployment lock and podman target instead. After
+  that release, do not re-create the fallback tree, do not start its window
+  unit, and do not copy a new per-release executor into it. If `release-window`
+  is unavailable on a host that is not yet on the #716/#721 tooling, that is a
+  stop to investigate, not a reason to reintroduce the fallback path.
+  A stale fallback tree left on disk is inert: nothing in the tracked
+  configuration refers to it, and the tooling pointer is owned by
+  `packages/t3code/tooling-pointer.sh` rather than by the fallback directory.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
@@ -236,6 +250,21 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   command.
 
 ## Nix, Builds, and Host Boot
+
+- `checks.<system>.config-tests` is the single derivation that runs the T3
+  deployment shell proofs, including `tests/test_t3code_release_window.sh` and
+  `tests/test_t3code_window_lock.sh`. Keep every `tests/test_t3code_*.sh`
+  script wired into that derivation; an unwired script is unverified script.
+  Config CI currently builds `config-tests` only for `x86_64-linux` (the
+  `integration` job in `.github/workflows/ci.yml`), while the production host is
+  `aarch64-linux`, so the shell proofs are not exercised on the architecture
+  that runs them. The `check` PR gate already runs on the ARM64 self-hosted
+  runner (`[self-hosted, Linux, ARM64, ghostship-fast]`) but runs
+  `scripts/check` rather than this derivation; making `aarch64` coverage real
+  therefore needs only that job (or the integration job) to also build
+  `checks.aarch64-linux.config-tests`, and it may need a longer timeout than the
+  current 4 minutes because the suite runs one Python test discovery over
+  thousands of tests.
 
 - Use native Nix commands in repo docs and operations: `nix`, `nixos-rebuild`,
   and `switch-to-configuration`.
