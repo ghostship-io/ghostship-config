@@ -16,8 +16,11 @@ shopt -s nullglob
 unwired=()
 for script in "$root"/tests/test_t3code_*.sh; do
   name="tests/${script##*/}"
-  # Match the invocation as a whole path, so a prefix cannot satisfy it.
-  if ! grep -qF "bash $name" "$checks"; then
+  # Require the path as a whole token on a line that is not a comment, so a
+  # longer name that merely contains it, or a commented-out invocation, cannot
+  # satisfy the guard.
+  if ! grep -vE '^[[:space:]]*#' "$checks" \
+    | grep -qE "(^|[[:space:]])${name//./\\.}([[:space:]]|\$)"; then
     unwired+=("$name")
   fi
 done
