@@ -1005,10 +1005,22 @@ def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity):
         native = row["native"]
         if (native.get("provider_instance_id"), native.get("model_id")) == identity:
             matches.append(row)
-    return bool(matches) and all(row.get("available") is True
-                                 and row["native"].get("mapped") is True
-                                 and row["native"].get("available") is True
-                                 for row in matches)
+    if not matches or not all(row.get("available") is True
+                              and row["native"].get("mapped") is True
+                              and row["native"].get("available") is True
+                              for row in matches):
+        return False
+    for row in fresh_rows:
+        if not isinstance(row, dict):
+            continue
+        native = row.get("native") or row.get("target") or {}
+        if not isinstance(native, dict):
+            continue
+        key = (native.get("provider_instance_id") or native.get("instanceId") or native.get("providerInstanceId"),
+               native.get("model_id") or native.get("model"))
+        if key == identity and (row.get("available") is not True or native.get("available") is False):
+            return False
+    return True
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,

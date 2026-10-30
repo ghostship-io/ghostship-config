@@ -156,7 +156,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         stale = {**unavailable, "model_selection":{**unavailable["model_selection"], "generated_at_epoch":time.time() - 3600},
                  "candidates":[{"available":True, "native":{"mapped":True, "available":True, "provider_instance_id":"codex", "model_id":"gpt-6.1-terra"}}]}
         conflicting = {**unavailable, "candidates":unavailable["candidates"] + stale["candidates"]}
-        for snapshot in (None, unavailable, stale, conflicting):
+        worker_conflict = {**stale, "model_selection":{**unavailable["model_selection"],
+                           "worker":[{"available":False, "native":{"instanceId":"codex", "model":"gpt-6.1-terra"}}]}}
+        for snapshot in (None, unavailable, stale, conflicting, worker_conflict):
             with self.subTest(snapshot=snapshot), patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
                 with self.assertRaises(acceptance.RouteUnknownError):
                     acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=snapshot)
