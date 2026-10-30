@@ -29,6 +29,18 @@
     },
     {
       "provider": "nvidia",
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "canonical deepseek/deepseek-v4.1-flash; build vs 1017 unverified"
+    },
+    {
+      "provider": "nvidia",
       "model": "google/gemma-4-31b-it",
       "allow_training": true,
       "sensitivity": [
@@ -122,6 +134,18 @@
       "approved_at": "2026-10-24",
       "source": "owner 2026-10-24 US-hosted free providers",
       "note": "AA 30.33; US-hosted provider; ZDR/training per docs/provider-zdr.md"
+    },
+    {
+      "provider": "opencode",
+      "model": "deepseek-v4.1-flash-free",
+      "allow_training": true,
+      "sensitivity": [
+        "public",
+        "internal"
+      ],
+      "approved_at": "2026-10-24",
+      "source": "owner 2026-10-24 US-hosted free providers",
+      "note": "canonical deepseek/deepseek-v4.1-flash; build vs 1017 unverified"
     },
     {
       "provider": "opencode",
