@@ -1,5 +1,9 @@
 set -euo pipefail
 
+: "${WINDOW_DIR:=${STATE_DIR:?}/release-window}"
+source "${WINDOW_INTENT_HELPER:?}"
+announce_intent activate
+
 : "${STATE_DIR:?}"
 : "${DEPLOYMENT_ID:?}"
 : "${AGENT_REVISION:?}"

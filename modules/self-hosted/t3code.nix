@@ -71,7 +71,10 @@ let
     # The single-quoted jq programs intentionally avoid shell interpolation.
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
-    text = builtins.readFile ../../packages/t3code/deploy-image.sh;
+    text = 
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/deploy-image.sh}
+    ;
   };
   t3codeInvalidateFailure = pkgs.writeShellApplication {
     name = "ghostship-t3code-invalidate-failure";
@@ -84,7 +87,10 @@ let
   t3codeActivateDeployment = pkgs.writeShellApplication {
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-    text = builtins.readFile ../../packages/t3code/activate-deployment.sh;
+    text = 
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/activate-deployment.sh}
+    ;
   };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";

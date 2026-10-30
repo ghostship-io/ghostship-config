@@ -1,5 +1,9 @@
 set -euo pipefail
 
+: "${WINDOW_DIR:=${STATE_DIR:?}/release-window}"
+source "${WINDOW_INTENT_HELPER:?}"
+announce_intent deploy
+
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
   exec tar -xOf "$2" manifest.json
