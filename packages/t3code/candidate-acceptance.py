@@ -742,6 +742,18 @@ def evidence_hash(value):
     return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+_SAFE_ROUTE_VALUES = frozenset({
+    "t3", "free_pool", "worker", "subscription", "free", "promotion", "ok",
+    "proven", "unknown", "unavailable", "exhausted", "partial", "failed",
+    "ghostship.route-policy/v2", "ghostship.model-selection/v1", "ghostship.ai-usage.routing",
+    "codex", "commandCode", "opencode-free", "claudeAgent", "ollama", "google",
+    "gpt-6.1-terra", "gpt-6.1-sol", "deepseek/deepseek-v4.1-flash",
+    "nvidia/minimaxai/minimax-m3.1-flash",
+})
+_SAFE_DYNAMIC_KEYS = frozenset({"codex", "commandCode", "opencode-free", "claudeAgent",
+                                "ollama", "google", "bulk", "interactive", "premium"})
+
+
 def route_evidence(value, depth=0):
     if depth > 10:
         return None
@@ -751,20 +763,28 @@ def route_evidence(value, depth=0):
             if k not in _EVIDENCE_FIELDS:
                 continue
             if k in ("providers", "tiers") and isinstance(v, dict):
-                result[k] = {evidence_hash(name): route_evidence(item, depth + 1) for name, item in list(v.items())[:128]
-                             if isinstance(name, str)}
+                result[k] = {name: route_evidence(item, depth + 1) for name, item in list(v.items())[:128]
+                             if name in _SAFE_DYNAMIC_KEYS}
             else:
                 result[k] = route_evidence(v, depth + 1)
         return result
     if isinstance(value, list):
         return [route_evidence(v, depth + 1) for v in value[:128]]
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, (bool, int)):
         return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
     if isinstance(value, str):
-        if value in {"t3", "free_pool", "worker", "subscription", "free", "promotion", "ok", "proven", "unknown", "ghostship.route-policy/v2", "ghostship.model-selection/v1", "ghostship.ai-usage.routing"}:
+        if value in _SAFE_ROUTE_VALUES:
             return value
-        return evidence_hash(value)
-    return "[redacted]"
+        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})", value):
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return value
+            except ValueError:
+                pass
+        return f"<redacted:{len(value)}>"
+    return "<redacted>"
 
 def capture_json_result(result):
     try:
@@ -1382,21 +1402,24 @@ def safe_unknown_evidence(error):
 
 def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir, *args, **kwargs):
     """Capture best-effort evidence for every failure, including setup and teardown."""
-    state = Path(state_dir)
-    desired = kwargs.get("deployment_id")
-    if desired is None:
-        try:
-            desired = (state / "desired").read_text().strip()
-        except OSError:
-            desired = None
-    safe_desired = desired if isinstance(desired, str) and re.fullmatch(r"(?:[0-9a-f]{64}|generation-[0-9]+)", desired) else "unknown"
+    state = None
+    safe_desired = "unknown"
     evidence = {"candidate": {"deployment_id": safe_desired, "image_id": None}}
     try:
+        state = Path(state_dir)
+        desired = kwargs.get("deployment_id")
+        if desired is None:
+            try:
+                desired = (state / "desired").read_text().strip()
+            except OSError:
+                desired = None
+        safe_desired = desired if isinstance(desired, str) and re.fullmatch(r"(?:[0-9a-f]{64}|generation-[0-9]+)", desired) else "unknown"
+        evidence["candidate"]["deployment_id"] = safe_desired
         return _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                        *args, _evidence=evidence, **kwargs)
     except Exception as error:
         try:
-            attempts = state / "attempts"
+            attempts = Path(state_dir) / "attempts"
             attempts.mkdir(mode=0o700, parents=True, exist_ok=True)
             attempt = attempts / f"{safe_desired}.json"
             try:

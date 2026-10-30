@@ -195,15 +195,18 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertNotIn("never-retain", path.read_text())
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
-    def test_route_provenance_hashes_untrusted_values_and_dynamic_keys(self):
+    def test_route_provenance_redacts_tokens_in_every_allowed_field(self):
         token = "sk-example-secret-token-1234567890"
-        dynamic = "secret-token-example"
-        evidence = acceptance.route_evidence({"model": token, "providers": {dynamic: {"state": "ok"}}})
-        serialized = json.dumps(evidence)
-        self.assertNotIn(token, serialized)
-        self.assertNotIn(dynamic, serialized)
-        self.assertEqual(evidence["model"], acceptance.evidence_hash(token))
-        self.assertIn(acceptance.evidence_hash(dynamic), evidence["providers"])
+        for field in acceptance._EVIDENCE_FIELDS:
+            with self.subTest(field=field):
+                data = acceptance.route_evidence({field: token})
+                self.assertNotIn(token, json.dumps(data))
+                self.assertEqual(data[field], f"<redacted:{len(token)}>")
+        data = acceptance.route_evidence({"providers": {token: {"state":"ok"}, "codex":{"state":"ok"}},
+                                          "tiers": {token: {"state":"ok"}}})
+        self.assertNotIn(token, json.dumps(data))
+        self.assertEqual(list(data["providers"]), ["codex"])
+        self.assertEqual(data["tiers"], {})
 
     def test_early_failure_records_provenance_without_masking_error(self):
         with patch.object(acceptance, "image_details", side_effect=ValueError("broken image")):
