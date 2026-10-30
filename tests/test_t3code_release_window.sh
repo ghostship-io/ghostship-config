@@ -33,6 +33,7 @@ fi
 printf "%s\n" "$!" > "$FIXTURE/holder-pid"
 SH
 chmod +x "$tmp/bin/"*
+export WINDOW_BOOTSTRAP="$repo/packages/t3code/window-bootstrap.sh"
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
 cmd=(bash "$repo/packages/t3code/release-window.sh")
 # Preflight reads the actual lock files and ignores unrelated fixture locks.
@@ -52,6 +53,19 @@ if "${cmd[@]}" start failed-holder; then echo 'accepted holder without handshake
 [[ ! -e $tmp/recovery-inactive && ! -e $tmp/hold ]]
 kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid" "$tmp/evidence/active-window"
 unset FIXTURE_NO_HANDSHAKE
+# A candidate closure can preflight before first installation without touching
+# the missing evidence root. Start creates it only after the checks pass.
+mv "$tmp/evidence" "$tmp/old-evidence"
+exec 6>"$tmp/candidate.lock"; flock -x 6
+if "${cmd[@]}" start refused; then echo 'accepted existing candidate writer' >&2; exit 1; fi
+[[ ! -e $tmp/evidence && ! -e $tmp/hold ]]
+flock -u 6; exec 6>&-
+touch "$tmp/hold"
+if "${cmd[@]}" preflight; then echo 'accepted existing recovery hold' >&2; exit 1; fi
+rm "$tmp/hold"
+[[ ! -e $tmp/evidence ]]
+"${cmd[@]}" preflight
+[[ ! -e $tmp/evidence ]]
 "${cmd[@]}" start one
 [[ $(head -1 "$tmp/evidence/one/window.start") == *acquired_by=* ]]
 [[ $(sed -n '2p' "$tmp/evidence/one/window.start") == holder_pid=* ]]

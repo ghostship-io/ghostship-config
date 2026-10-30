@@ -8,7 +8,7 @@ window_root
 fail() { echo "STOP: $*" >&2; exit 1; }
 unit_state() { "$SYSTEMCTL_BIN" show "$1.service" -p ActiveState --value; }
 preflight_core() {
-  [[ -d $WINDOW_ROOT && -f $WINDOW_ROOT/window.lock && -f $STATE_DIR/deploy.lock ]] || fail 'missing stable lock or state'
+  [[ -f $STATE_DIR/deploy.lock && ! -L $STATE_DIR/deploy.lock ]] || fail 'missing deploy lock'
   [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
   flock -n -x "$STATE_DIR/deploy.lock" true || fail 'deploy writer holds lock'
   [[ $(unit_state ghostship-t3code-deploy) == inactive ]] || fail 'deploy service active or failed'
@@ -29,7 +29,13 @@ complete_locks_free() {
 }
 preflight() {
   preflight_core
-  flock -n -x "$WINDOW_ROOT/window.lock" true || fail 'window lock held'
+  [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  if [[ -e $WINDOW_ROOT || -L $WINDOW_ROOT ]]; then
+    [[ -d $WINDOW_ROOT && ! -L $WINDOW_ROOT && -f $WINDOW_ROOT/window.lock && ! -L $WINDOW_ROOT/window.lock ]] || fail 'window root or lock invalid'
+    flock -n -x "$WINDOW_ROOT/window.lock" true || fail 'window lock held'
+  else
+    [[ -d $(dirname "$WINDOW_ROOT") ]] || fail 'window root parent missing'
+  fi
   candidate_locks_free
   complete_locks_free
 }
@@ -66,10 +72,16 @@ case ${1:-} in
   id=$2; window_id_valid "$id" || fail 'invalid window id'
   : "${WINDOW_SECONDS:?}"
   preflight
+  if [[ ! -e $WINDOW_ROOT && ! -L $WINDOW_ROOT ]]; then
+    : "${WINDOW_BOOTSTRAP:?}"
+    bash "$WINDOW_BOOTSTRAP"
+  fi
   lock_window
   preflight_core
   candidate_locks_free
   complete_locks_free
+  [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
+  [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery is not active'
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
   exec 6<"$LOCK_CANDIDATE" 7<"$LOCK_HARDENING"
