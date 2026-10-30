@@ -164,6 +164,25 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
 
+    def test_generic_execution_error_on_proven_route_is_unknown(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        row = {"available":True, "execution":"t3", "target":{"providerInstanceId":"primary", "model":"flash"}, "tool_loop":{"state":"proven"}}
+        def run(engine, name, *args, **kwargs):
+            if "pick" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"pick":row}}))
+            if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[row]}}))
+            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"execution"}}', stderr="")
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
+    def test_unreadable_route_evidence_is_unknown(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        with patch.object(acceptance, "candidate_agent_command", return_value=Mock(returncode=1, stdout="", stderr="network error")), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
     def test_success_without_exact_settled_proof_is_unknown(self):
         policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
                   "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
@@ -708,7 +727,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
 
         with patch.object(acceptance, "command", side_effect=command):
-            with self.assertRaises(acceptance.RouteUnavailableError):
+            with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn(["podman"], "candidate", provider_env, tooling_path="/nix/store/test-agent")
         self.assertTrue(any("pick" in call and "--role" in call and "worker" in call
                             and "--kind" in call and "code" in call for call in calls))
@@ -790,7 +809,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                                           "available": True}}}
                 with patch.object(acceptance, "command", return_value=Mock(
                         returncode=0, stdout=json.dumps(pick))) as command:
-                    with self.assertRaises(acceptance.RouteUnavailableError):
+                    with self.assertRaises(acceptance.RouteUnknownError):
                         acceptance.check_provider_turn(["podman"], "candidate", provider_env,
                                                        tooling_path="/nix/store/test-agent")
                 self.assertFalse(any(any(str(item).endswith("provider-turn-probe.py") for item in call.args)
@@ -852,7 +871,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }}}
         with patch.object(acceptance, "command", return_value=Mock(
                 returncode=0, stdout=json.dumps(pick))) as command:
-            with self.assertRaises(acceptance.RouteUnavailableError):
+            with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn(
                     ["podman"], "candidate", provider_env,
                     tooling_path="/nix/store/test-agent",

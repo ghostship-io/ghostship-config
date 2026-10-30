@@ -1020,10 +1020,36 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         if not capacity:
             # Without current evidence that the route works, a provider or
             # transport error cannot be attributed to the candidate image.
-            if not target["proven"]:
+            if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
                 raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
             proven_failure = True
             break
+    # An absent, malformed or unreadable route is not evidence of exhaustion.
+    # A complete fresh snapshot may establish absence; otherwise every admitted
+    # route must have an explicit capacity observation or exhausted probe.
+    admitted = {(item.get("provider_instance"), item.get("model")) for item in policy["routes"]
+                if isinstance(item, dict) and item.get("admit") is True
+                and "worker" in item.get("roles", []) and item.get("billing") in ("subscription", "free", "promotion")
+                and isinstance(policy["providers"].get(item.get("provider")), dict)
+                and policy["providers"][item["provider"]].get("admit") is True}
+    observed = set(exhausted)
+    unknown = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        target = row.get("target") or row.get("native") or {}
+        if not isinstance(target, dict):
+            continue
+        key = (target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id"),
+               target.get("model") or target.get("model_id"))
+        if key not in admitted:
+            continue
+        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
+            observed.add(key)
+        else:
+            unknown.add(key)
+    if not proven_failure and ((unknown - observed) or (admitted - observed and not complete)):
+        raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route capacity evidence incomplete")
     evidence = ",".join(failures[:MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES]) or "no-admitted-available-route"
     error_type = ProviderTurnError if proven_failure else RouteUnavailableError
     raise error_type(pick_summary, route_summary,
