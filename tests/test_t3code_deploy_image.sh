@@ -7,6 +7,10 @@ trap 'rm -rf "$tmp"' EXIT
 # The real executor matches deploy script names; run only an isolated copy.
 fixture_writer="$tmp/fixture-image-writer"
 cp "$root/packages/t3code/deploy-image.sh" "$fixture_writer"
+printf '%s\n' "$tmp/window" > "$tmp/window-config"
+mkdir -p "$tmp/window"
+touch "$tmp/window/window.lock"
+export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
 mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"
 mkdir -p "$tmp/home/.local/state/t3code-tool-update"

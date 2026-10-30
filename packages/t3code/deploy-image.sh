@@ -26,6 +26,10 @@ if [[ ${1:-} == --list-manifest ]]; then
   exec tar -xOf "$2" manifest.json
 fi
 
+# shellcheck disable=SC1090
+source "${WINDOW_INTENT_HELPER:?}"
+announce_intent deploy
+
 if [[ ${1:-} == --invalidate-failure ]]; then
   [[ $# == 2 && -n ${2//[[:space:]]/} && ${#2} -le 500 && $2 != *$'\n'* && $2 != *$'\r'* ]] || {
     echo 'usage: ghostship-t3code-invalidate-failure REASON (one nonempty line)' >&2; exit 2;
