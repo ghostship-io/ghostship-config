@@ -4,6 +4,9 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+# The real executor matches deploy script names; run only an isolated copy.
+fixture_writer="$tmp/fixture-image-writer"
+cp "$root/packages/t3code/deploy-image.sh" "$fixture_writer"
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
 mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"
 mkdir -p "$tmp/home/.local/state/t3code-tool-update"
@@ -193,13 +196,13 @@ jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
 
 t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
 mv "$t3_lock" "$t3_lock.saved"
-if bash "$root/packages/t3code/deploy-image.sh" > "$tmp/missing-t3-lock.log" 2>&1; then
+if bash "$fixture_writer" > "$tmp/missing-t3-lock.log" 2>&1; then
   echo 'missing T3 update lock unexpectedly allowed deployment' >&2; exit 1
 fi
 grep -q 'T3 update lock missing' "$tmp/missing-t3-lock.log"
 [[ ! -s "$EVENTS" ]]
 ln -s "$t3_lock.saved" "$t3_lock"
-if bash "$root/packages/t3code/deploy-image.sh" > "$tmp/symlink-t3-lock.log" 2>&1; then
+if bash "$fixture_writer" > "$tmp/symlink-t3-lock.log" 2>&1; then
   echo 'symlink T3 update lock unexpectedly allowed deployment' >&2; exit 1
 fi
 grep -q 'T3 update lock missing' "$tmp/symlink-t3-lock.log"
@@ -207,7 +210,7 @@ grep -q 'T3 update lock missing' "$tmp/symlink-t3-lock.log"
 rm "$t3_lock"
 mv "$t3_lock.saved" "$t3_lock"
 
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/success.log"
+bash "$fixture_writer" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
 grep -q '^Restarting podman-t3code.service immediately after exact-image candidate acceptance$' "$tmp/success.log"
 [[ $(sed -n '1p' "$EVENTS") == candidate-accepted ]]
@@ -232,7 +235,7 @@ export DEPLOYMENT_ID=deployment-slow-healthy HEALTHY_AFTER_SECONDS=130
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
 printf '0\n' > "$HEALTH_CLOCK_FILE"
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/slow-healthy.log"
+bash "$fixture_writer" > "$tmp/slow-healthy.log"
 [[ $(cat "$STATE_DIR/applied") == "$DEPLOYMENT_ID" ]]
 [[ $(cat "$HEALTH_CLOCK_FILE") -ge 130 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 2 ]]
@@ -246,7 +249,7 @@ applied_before=$(cat "$STATE_DIR/applied")
 applied_inputs_before=$(cat "$STATE_DIR/applied-inputs")
 printf '0\n' > "$HEALTH_CLOCK_FILE"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/never-healthy.log" 2>&1
+bash "$fixture_writer" > "$tmp/never-healthy.log" 2>&1
 never_healthy_status=$?
 set -e
 [[ $never_healthy_status != 0 ]]
@@ -260,7 +263,7 @@ EVENTS=$saved_events
 export DEPLOYMENT_ID=deployment-2 CANDIDATE_FAIL=1
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/failure.log" 2>&1
+bash "$fixture_writer" > "$tmp/failure.log" 2>&1
 first_status=$?
 set -e
 [[ $first_status != 0 ]]
@@ -271,7 +274,7 @@ jq -e '.state == "unknown" and .failed_candidate == true' "$attestation" >/dev/n
 [[ $(jq -r '.started_at_ms | numbers' "$tmp/state/attempts/$DEPLOYMENT_ID.json") =~ ^[0-9]+$ ]]
 [[ $(wc -l < "$EVENTS") == 5 ]]
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/replay.log" 2>&1
+bash "$fixture_writer" > "$tmp/replay.log" 2>&1
 replay_status=$?
 set -e
 [[ $replay_status == 0 ]]
@@ -283,7 +286,7 @@ grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
 # that acceptance runs must trigger a new acceptance for the same image.
 mark_failed_key=$(cat "$tmp/state/failed-candidate")
 printf 'unrelated\n' > "$tmp/unrelated.txt"
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/unrelated.log" 2>&1
+bash "$fixture_writer" > "$tmp/unrelated.log" 2>&1
 grep -q 'already failed .* image remains blocked' "$tmp/unrelated.log"
 saved_events=$EVENTS
 EVENTS="$tmp/probe-rerun-events"
@@ -291,7 +294,7 @@ for input in provider-turn-probe.py hardening-probe.py runtime-caps.json route-p
   cp "$tmp/$input" "$tmp/input-original"
   printf '# acceptance input fix\n' >> "$tmp/$input"
   set +e
-  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/probe-rerun.log" 2>&1
+  bash "$fixture_writer" > "$tmp/probe-rerun.log" 2>&1
   probe_status=$?
   set -e
   [[ $probe_status != 0 ]]
@@ -303,7 +306,7 @@ done
 cp "$tmp/home/.local/state/t3code-shared-agents/bin/agent" "$tmp/agent-original"
 printf '#!/bin/sh\nexec /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-agent/bin/agent "$@"\n' > "$tmp/home/.local/state/t3code-shared-agents/bin/agent"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/agent-rerun.log" 2>&1
+bash "$fixture_writer" > "$tmp/agent-rerun.log" 2>&1
 agent_status=$?
 set -e
 [[ $agent_status != 0 ]]
@@ -314,7 +317,7 @@ printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
 export DEPLOYMENT_ID=deployment-route-unavailable CANDIDATE_ROUTE_UNAVAILABLE=1 CANDIDATE_FAIL=0
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/route-unavailable.log" 2>&1
+bash "$fixture_writer" > "$tmp/route-unavailable.log" 2>&1
 route_status=$?
 set -e
 [[ $route_status == 76 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
@@ -323,7 +326,7 @@ unset CANDIDATE_ROUTE_UNAVAILABLE
 export DEPLOYMENT_ID=deployment-acceptance-unknown CANDIDATE_UNKNOWN=1
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/acceptance-unknown.log" 2>&1
+bash "$fixture_writer" > "$tmp/acceptance-unknown.log" 2>&1
 unknown_status=$?
 set -e
 [[ $unknown_status == 77 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
@@ -336,7 +339,7 @@ printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 printf '# probe fix\n' >> "$tmp/provider-turn-probe.py"
 export MUTATE_AGENT=1 CANDIDATE_FAIL=0
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/changed-during.log" 2>&1
+bash "$fixture_writer" > "$tmp/changed-during.log" 2>&1
 changed_status=$?
 set -e
 unset MUTATE_AGENT
@@ -352,7 +355,7 @@ cp "$tmp/config.json" "$tmp/config-original.json"
 printf '%s\n' '{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["different-candidate"]}}' > "$tmp/config.json"
 tar -cf "$tmp/image.tar" -C "$tmp" manifest.json config.json
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/new-image.log" 2>&1
+bash "$fixture_writer" > "$tmp/new-image.log" 2>&1
 new_image_status=$?
 set -e
 [[ $new_image_status != 0 ]]
@@ -362,7 +365,7 @@ cp "$tmp/config-original.json" "$tmp/config.json"
 printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
 mv "$tmp/hardening-probe.py" "$tmp/hardening-probe.saved"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/missing-input.log" 2>&1
+bash "$fixture_writer" > "$tmp/missing-input.log" 2>&1
 missing_status=$?
 set -e
 [[ $missing_status != 0 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
@@ -372,17 +375,17 @@ EVENTS=$saved_events
 # Operators can explicitly invalidate only with a durable recorded reason;
 # this does not itself run acceptance or move the accepted image.
 set +e
-bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure '' > "$tmp/invalidate-empty.log" 2>&1
+bash "$fixture_writer" --invalidate-failure '' > "$tmp/invalidate-empty.log" 2>&1
 empty_status=$?
 set -e
 [[ $empty_status != 0 && -e "$tmp/state/failed-candidate" ]]
 set +e
-JQ_BIN=/bin/false bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure 'audit unavailable' > "$tmp/invalidate-error.log" 2>&1
+JQ_BIN=/bin/false bash "$fixture_writer" --invalidate-failure 'audit unavailable' > "$tmp/invalidate-error.log" 2>&1
 audit_error=$?
 set -e
 [[ $audit_error != 0 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
 before_events=$(wc -l < "$EVENTS")
-bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure 'probe repaired' > "$tmp/invalidate.log"
+bash "$fixture_writer" --invalidate-failure 'probe repaired' > "$tmp/invalidate.log"
 [[ ! -e "$tmp/state/failed-candidate" ]]
 [[ $(wc -l < "$EVENTS") == "$before_events" ]]
 jq -e --arg marker "$mark_failed_key" '.event == "invalidation_requested" and .reason == "probe repaired" and .failed_key == $marker and (.at | type == "string")' "$tmp/state/failure-invalidations.jsonl" > /dev/null
@@ -396,7 +399,7 @@ EVENTS="$tmp/rerun-events"
 cp "$CANDIDATE_ACCEPTANCE" "$tmp/accept-candidate.orig"
 printf '\n# acceptance fix\n' >> "$CANDIDATE_ACCEPTANCE"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/rerun.log" 2>&1
+bash "$fixture_writer" > "$tmp/rerun.log" 2>&1
 rerun_status=$?
 set -e
 [[ $rerun_status != 0 ]]
@@ -418,7 +421,7 @@ export DEPLOYMENT_ID=deployment-precondition CANDIDATE_PRECONDITION=1 CANDIDATE_
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 precondition_run() {
   set +e
-  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-$1.log" 2>&1
+  bash "$fixture_writer" > "$tmp/precondition-$1.log" 2>&1
   precondition_status=$?
   set -e
   ! grep -q 'already failed' "$tmp/precondition-$1.log"
@@ -442,7 +445,7 @@ grep -q '(attempt 1 of 3)' "$tmp/precondition-4.log"
 # image and clears the count.
 export CANDIDATE_PRECONDITION=0 CANDIDATE_FAIL=1
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/precondition-then-fail.log" 2>&1
+bash "$fixture_writer" > "$tmp/precondition-then-fail.log" 2>&1
 precondition_status=$?
 set -e
 [[ $precondition_status == 1 ]]
@@ -460,7 +463,7 @@ export DEPLOYMENT_ID=deployment-absent CANDIDATE_FAIL=0 RECEIPT_MISSING=1 RECEIP
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/absent.log" 2>&1
+bash "$fixture_writer" > "$tmp/absent.log" 2>&1
 absent_status=$?
 set -e
 [[ $absent_status != 0 ]]
@@ -474,7 +477,7 @@ export DEPLOYMENT_ID=deployment-mismatch RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATC
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/mismatch.log" 2>&1
+bash "$fixture_writer" > "$tmp/mismatch.log" 2>&1
 mismatch_status=$?
 set -e
 [[ $mismatch_status != 0 ]]
@@ -489,7 +492,7 @@ export DEPLOYMENT_ID=deployment-3 SUPERSEDE_TO=deployment-4 CANDIDATE_FAIL=0 REC
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/superseded.log" 2>&1
+bash "$fixture_writer" > "$tmp/superseded.log" 2>&1
 superseded_status=$?
 set -e
 [[ $superseded_status == 0 ]]
@@ -517,7 +520,7 @@ jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
 rm -f "$ACCEPTED_POINTER_FILE"
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/repair.log"
+bash "$fixture_writer" > "$tmp/repair.log"
 grep -q '^Initialized accepted image alias from the existing PASS receipt:' "$tmp/repair.log"
 [[ $(sed -n '9p' "$EVENTS") == image-load ]]
 [[ $(sed -n '10p' "$EVENTS") == image-tag ]]
@@ -537,7 +540,7 @@ export RUNNING_CONTAINER=1 ALARM_LOG="$tmp/bootstrap-alarms.log" EVENTS="$tmp/bo
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/bootstrap.log" 2>&1
+bash "$fixture_writer" > "$tmp/bootstrap.log" 2>&1
 bootstrap_status=$?
 set -e
 [[ $bootstrap_status == 0 ]]
@@ -557,7 +560,7 @@ export ALARM_LOG="$tmp/empty-alarms.log" EVENTS="$tmp/empty-events"
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
 printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
 set +e
-bash "$root/packages/t3code/deploy-image.sh" > "$tmp/no-running.log" 2>&1
+bash "$fixture_writer" > "$tmp/no-running.log" 2>&1
 no_running_status=$?
 set -e
 [[ $no_running_status != 0 ]]
@@ -581,7 +584,7 @@ unchanged_run() {
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
   printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
   printf '0\n' > "$HEALTH_CLOCK_FILE"
-  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/$1.log" 2>&1
+  bash "$fixture_writer" > "$tmp/$1.log" 2>&1
   [[ $(cat "$STATE_DIR/applied") == "$1" ]]
   grep -q candidate-accepted "$EVENTS"
 }
