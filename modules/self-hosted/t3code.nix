@@ -415,7 +415,11 @@ in
   };
 
   system.activationScripts.t3code-deployment = {
+    deps = [ "etc" ];
     text = ''
+      WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig} \
+        WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh} \
+        ${pkgs.bash}/bin/bash ${../../packages/t3code/window-bootstrap.sh} || exit 1
       STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
         DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
         AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \

@@ -5,8 +5,14 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
-mkdir -p "$tmp/window"
-touch "$tmp/window/window.lock"
+# First installation: the activation bootstrap creates missing paths before
+# the deployment hook. Re-running it must preserve an existing lock inode.
+export WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
+export WINDOW_CONFIG="$tmp/window-config"
+bash "$root/packages/t3code/window-bootstrap.sh"
+inode=$(stat -c %i "$tmp/window/window.lock")
+bash "$root/packages/t3code/window-bootstrap.sh"
+[[ $(stat -c %i "$tmp/window/window.lock") == "$inode" ]]
 export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
 mkdir -p "$tmp/bin" "$tmp/state"
 printf '%s\n' old-deployment > "$tmp/state/desired"
