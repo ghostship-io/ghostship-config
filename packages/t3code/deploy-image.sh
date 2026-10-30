@@ -200,17 +200,20 @@ fi
 
 failed_file="$STATE_DIR/failed-candidate"
 # Managed tool updates acquire the tool lock before the shared refresh lock.
-# Hold both while identifying and running the candidate, so a failed receipt is
-# bound to the launcher code it actually staged.
+# The standalone updater also takes its own lock, including when invoked
+# directly. Hold all three through acceptance and activation.
 tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
 refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
-[[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" ]] || {
-  echo 'Managed tool or refresh lock missing; candidate is not inspected' >&2; exit 1;
+t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
+[[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" && -f "$t3_lock" && ! -L "$t3_lock" ]] || {
+  echo 'Managed tool, refresh or T3 update lock missing; candidate is not inspected' >&2; exit 1;
 }
 exec 8<>"$tool_lock"
 flock -x 8
 exec 7<>"$refresh_lock"
 flock -x 7
+exec 6<>"$t3_lock"
+flock -x 6
 # Hash only the executable acceptance bundle and the candidate/tooling identity.
 # The bundle is copied as named files by t3codeDeploymentScripts; adding a
 # dependency requires updating that bundle and this manifest together. Paths

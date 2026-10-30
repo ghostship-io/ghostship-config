@@ -7,8 +7,10 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
 mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"
 mkdir -p "$tmp/home/.local/state/t3code-tool-update"
+mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
 : > "$tmp/home/.local/state/t3code-tool-update/tool-update.lock"
 : > "$tmp/home/.local/state/t3code-shared-agents/refresh.lock"
+: > "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 for tool in agent ghostship ghostship-bladebro; do
   printf '#!/bin/sh\nexec /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-agent/bin/%s "$@"\n' "$tool" > "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
   chmod 0755 "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
@@ -42,7 +44,7 @@ SH
 cat > "$tmp/accept-candidate" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true || flock -n "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" true; then
+if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true || flock -n "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" true || flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
   echo 'candidate ran without managed locks' >&2
   exit 3
 fi
@@ -127,6 +129,10 @@ cat > "$tmp/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $1 == restart && $2 == podman-t3code.service ]]; then
+  if flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
+    echo 'restart ran without the T3 update lock' >&2
+    exit 1
+  fi
   printf '%s\n' restart >> "$EVENTS"
   rm -f "$LIVE_IMAGE_FILE"
 elif [[ $1 == is-active ]]; then
