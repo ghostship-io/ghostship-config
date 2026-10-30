@@ -24,6 +24,7 @@ let
   t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
     mkdir -p "$out"
     cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
+    cp ${../../packages/t3code/acceptance-launcher-key.py} "$out/acceptance-launcher-key.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/provider-turn-probe.py} "$out/provider-turn-probe.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
@@ -72,6 +73,14 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = builtins.readFile ../../packages/t3code/deploy-image.sh;
   };
+  t3codeInvalidateFailure = pkgs.writeShellApplication {
+    name = "ghostship-t3code-invalidate-failure";
+    text = ''
+      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
+      export JQ_BIN=${lib.getExe pkgs.jq}
+      exec ${lib.getExe t3codeImmediateDeploy} --invalidate-failure "$@"
+    '';
+  };
   t3codeActivateDeployment = pkgs.writeShellApplication {
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
@@ -111,6 +120,8 @@ let
 in
 {
   imports = [ ./t3code-recovery.nix ];
+
+  environment.systemPackages = [ t3codeInvalidateFailure ];
 
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {

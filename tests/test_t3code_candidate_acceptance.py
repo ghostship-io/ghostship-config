@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 import tarfile
 import tempfile
+import time
 import types
 import unittest
 from unittest.mock import Mock, patch
@@ -31,13 +32,16 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         module = (ROOT / "modules/self-hosted/t3code.nix").read_text()
         self.assertIn('t3codeDeploymentScripts = pkgs.runCommand', module)
         for name in (
-            "candidate-acceptance.py", "hardening-probe.py",
+            "candidate-acceptance.py", "acceptance-launcher-key.py", "hardening-probe.py",
             "provider-turn-probe.py", "runtime-caps.json",
         ):
             with self.subTest(name=name):
                 self.assertIn(f"$out/{name}", module)
                 self.assertIn(f"packages/t3code/{name}", module)
         self.assertIn('name = "ghostship-t3code-deploy-image"', module)
+        self.assertIn('name = "ghostship-t3code-invalidate-failure"', module)
+        self.assertIn('environment.systemPackages = [ t3codeInvalidateFailure ];', module)
+        self.assertIn('exec ${lib.getExe t3codeImmediateDeploy} --invalidate-failure', module)
         self.assertIn('builtins.readFile ../../packages/t3code/deploy-image.sh', module)
         self.assertIn('CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py"', module)
         activation = (ROOT / "packages/t3code/activate-deployment.sh").read_text()
@@ -52,7 +56,187 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
 
 
 class CandidateAcceptanceTest(unittest.TestCase):
+    def test_policy_rejects_minimax_only_snapshot(self):
+        policy = {"schema": "ghostship.route-policy/v2", "providers": {"opencode-free": {"admit": False}}, "routes": []}
+        rows = [{"provider": "opencode-free", "model": "nvidia/minimaxai/minimax-m3.1-flash", "available": True, "execution": "t3", "target": {"providerInstanceId": "opencode-free", "model": "nvidia/minimaxai/minimax-m3.1-flash"}}]
+        self.assertEqual(acceptance.admitted_route_candidates(policy, rows), [])
+        self.assertFalse(provider_probe.native_is_admitted(policy, "opencode-free", "nvidia/minimaxai/minimax-m3.1-flash"))
+
+    def test_policy_uses_terra_only_after_primaries_exhausted(self):
+        policy = {"schema": "ghostship.route-policy/v2", "providers": {"primary": {"admit": True}, "codex": {"admit": True}}, "routes": [
+            {"provider": "primary", "provider_instance": "primary", "model": "flash", "admit": True, "roles": ["worker"], "billing": "subscription"},
+            {"provider": "codex", "provider_instance": "codex", "model": "gpt-6.1-terra", "admit": True, "roles": ["worker"], "fallback_only": True, "billing": "subscription"},
+        ]}
+        rows = [{"provider": "primary", "model": "flash", "available": False, "execution": "t3", "target": {"providerInstanceId": "primary", "model": "flash"}},
+                {"provider": "codex", "model": "gpt-6.1-terra", "available": True, "execution": "t3", "target": {"providerInstanceId": "codex", "model": "gpt-6.1-terra", "options": {"serviceTier": "priority", "fastMode": True}}}]
+        selected = acceptance.admitted_route_candidates(policy, rows)
+        self.assertEqual([(row['instance'], row['model']) for row in selected], [('codex', 'gpt-6.1-terra')])
+        self.assertEqual(selected[0]['options']['serviceTier'], 'standard')
+        self.assertFalse(selected[0]['options']['fastMode'])
+        self.assertEqual(acceptance.admitted_route_candidates(policy, rows[1:]), [])
+        self.assertEqual(acceptance.admitted_route_candidates(policy, rows[1:], complete=True)[0]['instance'], 'codex')
+        rows[0]['available'] = None
+        self.assertEqual(acceptance.admitted_route_candidates(policy, rows), [])
+        self.assertEqual(acceptance.admitted_route_candidates(policy, rows, complete=True), [])
+        rows[0]['available'] = True
+        self.assertEqual([row['instance'] for row in acceptance.admitted_route_candidates(policy, rows)], ['primary'])
+
+    def test_all_exhausted_is_route_unavailable(self):
+        with patch.object(acceptance, 'candidate_provider_diagnostics', return_value='fixture'), \
+             patch.object(acceptance, 'candidate_agent_command', return_value=Mock(returncode=0, stdout='{"data":{"selected":[]}}')):
+            with self.assertRaises(acceptance.RouteUnavailableError):
+                acceptance.check_provider_turn(['podman'], 'candidate', None, tooling_path='agent', policy={'schema':'ghostship.route-policy/v2','providers':{},'routes':[]})
+
+    def test_exhausted_primary_probes_admitted_terra_at_standard_tier(self):
+        policy = {"schema": "ghostship.route-policy/v2", "providers": {"primary": {"admit": True}, "codex": {"admit": True}}, "routes": [
+            {"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"},
+            {"provider":"codex", "provider_instance":"codex", "model":"gpt-6.1-terra", "admit":True, "roles":["worker"], "billing":"subscription", "fallback_only":True},
+        ]}
+        snapshot = {"model_selection":{"schema":"ghostship.model-selection/v1", "generated_at_epoch":time.time(), "worker":[]},
+                    "candidates":[{"available":True, "native":{"mapped":True, "available":True, "provider_instance_id":"codex", "model_id":"gpt-6.1-terra"}}]}
+        primary = {"provider":"primary", "model":"flash", "available":True, "execution":"t3", "target":{"providerInstanceId":"primary", "model":"flash"}}
+        calls = []
+        def run(engine, name, *args, **kwargs):
+            calls.append(args)
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data":{"pick":primary}}))
+            if "models" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[primary]}}))
+            if "primary" in args:
+                return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
+            return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed", stderr="")
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            result = acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=snapshot)
+        self.assertEqual(result, "codex/gpt-6.1-terra")
+        probes = self.probe_calls(calls)
+        self.assertEqual(len(probes), 2)
+        opts = json.loads(probes[1][probes[1].index("--options-json") + 1])
+        self.assertEqual(opts, {"serviceTier":"standard", "fastMode":False})
+        snapshot["model_selection"]["generated_at_epoch"] = time.time() - 3600
+        self.assertEqual(acceptance.fresh_snapshot_routes(snapshot), [])
+
+    def test_three_exhausted_primaries_leave_one_fallback_attempt(self):
+        providers = {name: {"admit":True} for name in ("a", "b", "c", "codex")}
+        routes = [{"provider":name, "provider_instance":name, "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"} for name in ("a", "b", "c")]
+        routes.append({"provider":"codex", "provider_instance":"codex", "model":"gpt-6.1-terra", "admit":True, "roles":["worker"], "billing":"subscription", "fallback_only":True})
+        rows = [{"provider":name, "model":"flash", "available":True, "execution":"t3", "target":{"providerInstanceId":name, "model":"flash"}} for name in ("a", "b", "c")]
+        rows.append({"provider":"codex", "model":"gpt-6.1-terra", "available":True, "execution":"t3", "target":{"providerInstanceId":"codex", "model":"gpt-6.1-terra"}})
+        calls = []
+        def run(engine, name, *args, **kwargs):
+            calls.append(args)
+            if "pick" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"pick":rows[0]}}))
+            if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":rows}}))
+            if "codex" in args: return self.probe_success(args)
+            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            self.assertEqual(acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy={"schema":"ghostship.route-policy/v2", "providers":providers, "routes":routes}), "codex/gpt-6.1-terra")
+        self.assertEqual(len(self.probe_calls(calls)), 4)
+
+    def test_route_unavailable_records_evidence_and_no_receipt(self):
+        failure = acceptance.RouteUnavailableError("picker exhausted", "primary:quota", "route_unavailable: quota")
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.RouteUnavailableError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["outcome"], "route_unavailable")
+        self.assertIn("quota", record["provider_turn"]["evidence"])
+        self.assertFalse((self.state / "receipts/generation-502.json").exists())
+
+    def test_only_a_proven_route_failure_can_be_attributed_to_candidate(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        row = {"provider":"primary", "model":"flash", "available":True, "execution":"t3",
+               "target":{"providerInstanceId":"primary", "model":"flash"}, "tool_loop":{"state":"proven"}}
+        def run(engine, name, *args, **kwargs):
+            if "pick" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data":{"pick":row}}))
+            if "models" in args:
+                return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[row]}}))
+            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"no-tool-call"}}', stderr="")
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.ProviderTurnError) as failure:
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertNotIsInstance(failure.exception, (acceptance.RouteUnavailableError, acceptance.RouteUnknownError))
+            row["tool_loop"]["state"] = "unknown"
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
+    def test_generic_execution_error_on_proven_route_is_unknown(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        row = {"available":True, "execution":"t3", "target":{"providerInstanceId":"primary", "model":"flash"}, "tool_loop":{"state":"proven"}}
+        def run(engine, name, *args, **kwargs):
+            if "pick" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"pick":row}}))
+            if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[row]}}))
+            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"execution"}}', stderr="")
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
+    def test_unreadable_route_evidence_is_unknown(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        with patch.object(acceptance, "candidate_agent_command", return_value=Mock(returncode=1, stdout="", stderr="network error")), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
+    def test_success_without_exact_settled_proof_is_unknown(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        row = {"provider":"primary", "model":"flash", "available":True, "execution":"t3", "target":{"providerInstanceId":"primary", "model":"flash"}}
+        def run(engine, name, *args, **kwargs):
+            if "pick" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"pick":row}}))
+            if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[row]}}))
+            return Mock(returncode=0, stdout='{"outcome":"passed","settled":true,"instance":"other","model":"flash"}')
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+
+    def test_native_codex_options_require_supported_standard_and_never_fast(self):
+        client = Mock()
+        model = {"id":"gpt-6.1-terra", "options":[{"id":"serviceTier", "type":"enum", "values":["standard", "priority"]}]}
+        client.capabilities.return_value = {"providers":[{"providerInstanceId":"codex", "available":True, "models":[model]}]}
+        self.assertEqual(provider_probe.standard_options(client, "codex", "gpt-6.1-terra"), {"serviceTier":"standard"})
+        model["options"].append({"id":"fastMode", "type":"boolean"})
+        self.assertEqual(provider_probe.standard_options(client, "codex", "gpt-6.1-terra"), {"serviceTier":"standard", "fastMode":False})
+        model["options"][0]["values"] = ["priority"]
+        with self.assertRaises(ValueError):
+            provider_probe.standard_options(client, "codex", "gpt-6.1-terra")
+
+    def test_direct_native_probe_submits_exact_standard_target(self):
+        bridge_module = types.ModuleType("ghostship_t3.bridge")
+        bridge_module.T3Error = type("T3Error", (Exception,), {})
+        models_module = types.ModuleType("ghostship_t3.models")
+        models_module.read_document = lambda: (_ for _ in ()).throw(AssertionError("picker must not choose the direct target"))
+        models_module._selection = lambda *_: {}
+        client = Mock()
+        client.submit.return_value = {"thread_id":"fixture"}
+        client.status.side_effect = [{"state":"completed", "reply":"PROBE_PASS"}, {"active_turn":False}, {"settled":True}]
+        client._get.return_value = {"projection":{"runs":[{"id":"r"}], "turnItems":[{"runId":"r", "type":"tool_result", "ok":True}]}}
+        with patch.dict(sys.modules, {"ghostship_t3":types.ModuleType("ghostship_t3"), "ghostship_t3.bridge":bridge_module, "ghostship_t3.models":models_module}):
+            result = provider_probe.prove_route("codex/gpt-6.1-terra", 10, client, ("codex", "gpt-6.1-terra", {"serviceTier":"standard", "fastMode":False}))
+        self.assertEqual(result["outcome"], "passed")
+        self.assertTrue(result["settled"])
+        self.assertEqual(client.submit.call_args.kwargs["options"], {"serviceTier":"standard", "fastMode":False})
+        self.assertEqual(client.submit.call_args.kwargs["instance_id"], "codex")
+
     def setUp(self):
+        allowed = {
+            "opencode-free": ["safe", "fallback", "nvidia/first", "nvidia/fallback"],
+            "commandCode": ["deepseek/deepseek-v4.1-flash"],
+            "ollama": ["deepseek-v4.1-flash:1017"],
+            "a": ["one"], "b": ["two"], "c": ["three"], "d": ["four"], "e": ["five"],
+        }
+        policy = {"schema": "ghostship.route-policy/v2", "providers": {p: {"admit": True} for p in allowed},
+                  "routes": [{"provider": p, "provider_instance": p, "model": m, "admit": True,
+                              "roles": ["worker"], "billing": "subscription"}
+                             for p, models in allowed.items() for m in models]}
+        policy_patch = patch.object(acceptance, "read_route_policy", return_value=policy)
+        policy_patch.start()
+        self.addCleanup(policy_patch.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -293,12 +477,15 @@ class CandidateAcceptanceTest(unittest.TestCase):
         source = self.root / "routing.json"
         failed = {"schema": "ghostship.ai-usage.routing", "schema_version": 1, "partial": True,
                   "coverage": {"sources_failed": 1}, "candidates": []}
-        for content in (None, "not json", json.dumps({"schema": "other"}), json.dumps(failed)):
+        for content in (None, "not json", json.dumps({"schema": "other"})):
             source.unlink(missing_ok=True)
             if content is not None:
                 source.write_text(content)
             with self.assertRaises(acceptance.PreconditionError):
                 acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
+        source.write_text(json.dumps(failed))
+        with self.assertRaises(acceptance.RouteUnknownError):
+            acceptance.stage_candidate_model_routing(source, candidate_tmp, os.getuid())
         argv = ["candidate-acceptance", "--state-dir", "s", "--image-archive", "i", "--home-dir", "h",
                 "--candidate-runtime-dir", "r", "--candidate-home-target", "/c", "--candidate-uid", "1"]
         with patch.object(sys, "argv", argv), \
@@ -523,7 +710,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             owner = link.stat(follow_symlinks=False)
             self.assertEqual((owner.st_uid, owner.st_gid), (os.getuid(), os.getuid()))
 
-    def test_provider_turn_proves_the_native_opencode_free_t3_route(self):
+    def test_provider_turn_does_not_probe_unadmitted_minimax(self):
         provider_env = self.root / "provider.env"
         provider_env.write_text("")
         calls = []
@@ -535,19 +722,16 @@ class CandidateAcceptanceTest(unittest.TestCase):
                     "provider": "opencode-free", "model": "nvidia/minimaxai/minimax-m3.1-flash",
                     "billing": "free", "approved_free": True, "execution": "t3",
                     "available": True,
+                    "target": {"providerInstanceId": "opencode-free", "model": "nvidia/minimaxai/minimax-m3.1-flash"},
                 }}}))
-            return Mock(returncode=0, stdout="passed")
+            return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
 
         with patch.object(acceptance, "command", side_effect=command):
-            self.assertEqual(acceptance.check_provider_turn(
-                ["podman"], "candidate", provider_env,
-                tooling_path="/nix/store/test-agent",
-            ), "opencode-free/nvidia/minimaxai/minimax-m3.1-flash")
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn(["podman"], "candidate", provider_env, tooling_path="/nix/store/test-agent")
         self.assertTrue(any("pick" in call and "--role" in call and "worker" in call
                             and "--kind" in call and "code" in call for call in calls))
-        self.assertTrue(any(any(item.endswith("provider-turn-probe.py") for item in call) and
-                            "opencode-free/nvidia/minimaxai/minimax-m3.1-flash" in call
-                            for call in calls))
+        self.assertFalse(self.probe_calls(calls))
 
     def test_candidate_error_classification_does_not_include_command_output(self):
         self.assertEqual(acceptance.candidate_error_category(Mock(
@@ -581,7 +765,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
         with patch.object(acceptance, "command", side_effect=no_route), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
-            with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
+            with self.assertRaises(acceptance.RouteUnavailableError):
                 acceptance.accept(
                     self.state, self.archive, "podman",
                     "/run/t3code-podman-candidate/podman.sock", self.home,
@@ -602,8 +786,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": {
                     "provider": "commandCode", "model": "deepseek/deepseek-v4.1-flash",
                     "billing": "subscription", "execution": "t3", "available": True,
+                    "target": {"providerInstanceId": "commandCode", "model": "deepseek/deepseek-v4.1-flash"},
                 }}}))
-            return Mock(returncode=0, stdout="passed")
+            return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
 
         with patch.object(acceptance, "command", side_effect=command):
             self.assertEqual(acceptance.check_provider_turn(
@@ -624,7 +809,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                                           "available": True}}}
                 with patch.object(acceptance, "command", return_value=Mock(
                         returncode=0, stdout=json.dumps(pick))) as command:
-                    with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
+                    with self.assertRaises(acceptance.RouteUnknownError):
                         acceptance.check_provider_turn(["podman"], "candidate", provider_env,
                                                        tooling_path="/nix/store/test-agent")
                 self.assertFalse(any(any(str(item).endswith("provider-turn-probe.py") for item in call.args)
@@ -632,21 +817,21 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_protected_pick_uses_admitted_fallback(self):
         pick = {"provider": "claude", "model": "sonnet", "billing": "subscription", "execution": "t3", "available": True}
-        fallback = {"provider": "opencode-free", "model": "fallback", "billing": "free", "approved_free": True, "execution": "t3", "available": True}
+        fallback = {"provider": "opencode-free", "model": "fallback", "billing": "free", "approved_free": True, "execution": "t3", "available": True, "target": {"providerInstanceId": "opencode-free", "model": "fallback"}}
         def call(engine, *args, **kwargs):
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": pick}}))
             if "models" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [pick, fallback]}}))
-            return Mock(returncode=0, stdout="passed")
+            return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
         with patch.object(acceptance, "command", side_effect=call):
             self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/fallback")
 
     def test_protected_approved_free_picker_and_catalog_are_never_probed(self):
         fallback = {"provider": "opencode-free", "model": "safe", "billing": "free",
-                    "approved_free": True, "execution": "t3", "available": True}
+                    "approved_free": True, "execution": "t3", "available": True, "target": {"providerInstanceId": "opencode-free", "model": "safe"}}
         for provider in ("codex", "claude", "claudeAgent"):
-            protected = {**fallback, "provider": provider}
+            protected = {**fallback, "provider": provider, "target": {"providerInstanceId": provider, "model": "safe"}}
             for protected_pick in (True, False):
                 with self.subTest(provider=provider, protected_pick=protected_pick):
                     calls = []
@@ -656,7 +841,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                             return Mock(returncode=0, stdout=json.dumps({"data": {"pick": protected if protected_pick else {}}}))
                         if "models" in args:
                             return Mock(returncode=0, stdout=json.dumps({"data": {"selected": [protected, fallback]}}))
-                        return Mock(returncode=0, stdout="passed")
+                        return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
                     with patch.object(acceptance, "command", side_effect=call):
                         self.assertEqual(acceptance.check_provider_turn(["podman"], "candidate", None, tooling_path="agent"), "opencode-free/safe")
                     probes = [call for call in calls if any(str(arg).endswith("provider-turn-probe.py") for arg in call)]
@@ -675,7 +860,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
                                   command_fn=self.command, identity_fn=lambda: self.identity)
         record = json.loads((attempts / "generation-502.json").read_text())
-        self.assertEqual(record["provider_turn"], {"pick": "claude/sonnet", "routes": "opencode-free/fallback"})
+        self.assertEqual(record["provider_turn"], {"pick": "claude/sonnet", "routes": "opencode-free/fallback", "evidence": "failed"})
 
     def test_provider_turn_refuses_free_pool_routes_for_t3_execution(self):
         provider_env = self.root / "provider.env"
@@ -686,7 +871,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }}}
         with patch.object(acceptance, "command", return_value=Mock(
                 returncode=0, stdout=json.dumps(pick))) as command:
-            with self.assertRaisesRegex(RuntimeError, "no approved available T3 fallback"):
+            with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn(
                     ["podman"], "candidate", provider_env,
                     tooling_path="/nix/store/test-agent",
@@ -699,10 +884,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
         provider_env.write_text("")
         first = {"provider": "opencode-free", "model": "nvidia/first",
                  "billing": "free", "approved_free": True,
-                 "execution": "t3", "available": True}
+                 "execution": "t3", "available": True, "target": {"providerInstanceId": "opencode-free", "model": "nvidia/first"}}
         fallback = {"provider": "opencode-free", "model": "nvidia/fallback",
                     "billing": "free", "approved_free": True,
-                    "execution": "t3", "available": True}
+                    "execution": "t3", "available": True, "target": {"providerInstanceId": "opencode-free", "model": "nvidia/fallback"}}
         calls = []
 
         def command(engine, *args, **kwargs):
@@ -712,11 +897,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 if route.endswith("/first"):
                     return Mock(returncode=1, stderr="", stdout=json.dumps({
                         "outcome": "execution",
+                        "settled": True,
                         "error": {"code": provider_probe.safe_failure_code({
                             "outcome": "execution", "detail": "model unavailable"
                         })},
                     }))
-                return Mock(returncode=0, stdout="passed")
+                return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": first}}))
             if "models" in args and "--json" in args:
@@ -735,11 +921,16 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def subscription_rows(self, *names):
         return [{"provider": provider, "model": model, "billing": "subscription",
-                 "execution": "t3", "available": True}
+                 "execution": "t3", "available": True, "target": {"providerInstanceId": provider, "model": model}}
                 for provider, model in (name.split("/", 1) for name in names)]
 
     def probe_calls(self, calls):
         return [call for call in calls if any(item.endswith("provider-turn-probe.py") for item in call)]
+
+    def probe_success(self, args):
+        instance = args[args.index("--instance") + 1]
+        model = args[args.index("--native-model") + 1]
+        return Mock(returncode=0, stdout=json.dumps({"outcome":"passed", "settled":True, "instance":instance, "model":model}), stderr="")
 
     def test_provider_turn_tries_the_next_admitted_route_after_an_api_error(self):
         provider_env = self.root / "provider.env"
@@ -751,8 +942,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
             calls.append(tuple(args))
             if any(item.endswith("provider-turn-probe.py") for item in args):
                 if "ollama/deepseek-v4.1-flash:1017" in args:
-                    return Mock(returncode=1, stderr="", stdout='{"status":"error","message":"provider api"}')
-                return Mock(returncode=0, stdout="passed")
+                    return Mock(returncode=1, stderr="", stdout='{"settled":true,"error":{"code":"quota"}}')
+                return self.probe_success(args) if "--instance" in args else Mock(returncode=0, stdout="passed")
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": rows[0]}}))
             if "models" in args and "--json" in args:
@@ -774,7 +965,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         def command(engine, *args, **kwargs):
             calls.append(tuple(args))
             if any(item.endswith("provider-turn-probe.py") for item in args):
-                return Mock(returncode=1, stderr="", stdout='{"status":"error","message":"provider api"}')
+                return Mock(returncode=1, stderr="", stdout='{"settled":true,"error":{"code":"quota"}}')
             if "pick" in args:
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": rows[0]}}))
             if "models" in args and "--json" in args:
@@ -782,7 +973,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             return Mock(returncode=0, stdout="present")
 
         with patch.object(acceptance, "command", side_effect=command):
-            with self.assertRaisesRegex(RuntimeError, "no live picker route proved a turn"):
+            with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn(["podman"], "candidate", provider_env,
                                                tooling_path="/nix/store/test-agent")
         self.assertEqual(len(self.probe_calls(calls)), acceptance.MAX_ACCEPTANCE_ROUTES)

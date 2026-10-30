@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
+from datetime import datetime
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
@@ -248,7 +250,7 @@ def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
         tier_ok = isinstance(tiers, dict) and any(
             isinstance(tier, dict) and tier.get("state") == "ok" for tier in tiers.values())
         if not usable or not tier_ok:
-            raise PreconditionError("live model routing snapshot has no usable candidate")
+            raise RouteUnknownError("unknown", "partial snapshot: no usable candidate", "provider_turn outcome unknown: partial live model routing snapshot has no usable candidate")
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)
@@ -733,7 +735,8 @@ def candidate_error_summary(result):
     return re.sub(r"[^A-Za-z0-9_.-]", "-", line)[:96] or "empty-output"
 
 
-def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None):
+def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
+                    route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None):
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
     # Start that same serving path explicitly in the disposable candidate.
@@ -787,6 +790,7 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     provider_route = check_provider_turn(
         engine, name, provider_env_file, timeout_s=timeout_s,
         tooling_path=tooling_path,
+        policy=read_route_policy(route_policy_file), snapshot=routing_snapshot,
     )
     checks["provider_turn"] = bool(provider_route)
     checks["provider_turn_route"] = provider_route
@@ -823,137 +827,238 @@ class ProviderTurnError(RuntimeError):
         self.routes = routes
 
 
-def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None):
-    """Prove the live picker route with a real native provider turn."""
-    del provider_env_file  # This route is served by the T3 opencode-free instance.
+class RouteUnavailableError(ProviderTurnError):
+    """No admitted route was proven usable; this is not an image failure."""
+
+
+class RouteUnknownError(ProviderTurnError):
+    """A probe may still be active and must not be replayed."""
+
+
+def read_route_policy(path="/etc/ghostship/route-policy.json"):
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        raise PreconditionError("route admission policy is unavailable") from None
+    if (not isinstance(data, dict) or data.get("schema") != "ghostship.route-policy/v2"
+            or not isinstance(data.get("providers"), dict) or not isinstance(data.get("routes"), list)):
+        raise PreconditionError("route admission policy is invalid")
+    return data
+
+
+def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
+    """Match exact native targets against the route policy, never picker approval."""
+    if (not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2"
+            or not isinstance(policy.get("providers"), dict) or not isinstance(policy.get("routes"), list)):
+        raise PreconditionError("route admission policy is invalid")
+    if not isinstance(rows, list):
+        return []
+    entries = {}
+    for item in policy["routes"]:
+        if not isinstance(item, dict):
+            continue
+        provider, instance, model = item.get("provider"), item.get("provider_instance"), item.get("model")
+        provider_record = policy["providers"].get(provider) if isinstance(provider, str) else None
+        if (item.get("admit") is not True or not isinstance(item.get("roles"), list) or "worker" not in item["roles"]
+                or not isinstance(provider, str) or not isinstance(instance, str) or not isinstance(model, str)
+                or not isinstance(provider_record, dict) or provider_record.get("admit") is not True):
+            continue
+        key = (instance, model)
+        if key in entries:
+            raise PreconditionError("duplicate admitted native route")
+        entries[key] = item
+    primary, fallback, seen, observed, unknown = [], [], set(), set(), set()
+    for row in rows:
+        if not isinstance(row, dict) or row.get("execution") not in (None, "t3"):
+            continue
+        target = row.get("target") or row.get("native") or {}
+        if not isinstance(target, dict):
+            continue
+        instance = target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id")
+        model = target.get("model") or target.get("model_id")
+        if (not isinstance(instance, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", instance)
+                or not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9._:/+-]{1,200}", model)):
+            continue
+        key = (instance, model)
+        item = entries.get(key)
+        if not item:
+            continue
+        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
+            observed.add(key)
+        else:
+            unknown.add(key)
+        if (row.get("available") is not True or target.get("available") is False
+                or ("provider_instance_id" in target and (target.get("mapped") is not True or target.get("available") is not True))
+                or key in seen or key in exhausted):
+            continue
+        # The owner authorizes subscription/free routes only; no fast or
+        # priority option may be inherited from the picker.
+        if item.get("billing") not in ("subscription", "free", "promotion"):
+            continue
+        options = {}
+        if instance == "codex":
+            options["serviceTier"] = "standard"
+            options["fastMode"] = False
+        elif instance == "claudeAgent":
+            options["fastMode"] = False
+        evidence = row.get("tool_loop")
+        candidate = {"instance": instance, "model": model, "options": options,
+                     "proven": isinstance(evidence, dict) and evidence.get("state") == "proven",
+                     "fallback": item.get("fallback_only") is True}
+        (fallback if item.get("fallback_only") is True else primary).append(candidate)
+        seen.add(key)
+    if primary:
+        return primary
+    # An absent or unknown primary is not proof that it is exhausted.
+    primary_keys = {key for key, item in entries.items() if item.get("fallback_only") is not True}
+    if (primary_keys & unknown) - observed - set(exhausted):
+        return []
+    if primary_keys - observed - set(exhausted) and not complete:
+        return []
+    return fallback
+
+
+def fresh_snapshot_routes(snapshot):
+    """Only a fresh picker snapshot can establish fallback capacity."""
+    if not isinstance(snapshot, dict):
+        return []
+    selected = snapshot.get("model_selection")
+    if not isinstance(selected, dict) or selected.get("schema") != "ghostship.model-selection/v1":
+        return []
+    stamp = selected.get("generated_at_epoch")
+    if stamp is None:
+        try:
+            stamp = datetime.fromisoformat(str(selected.get("generated_at")).replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError, OverflowError):
+            return []
+    max_age = selected.get("max_age_seconds", 900)
+    if (isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or not math.isfinite(stamp)
+            or isinstance(max_age, bool) or not isinstance(max_age, (int, float))
+            or not 0 < max_age <= 86400 or not -60 <= time.time() - stamp <= max_age):
+        return []
+    rows = snapshot.get("candidates")
+    workers = selected.get("worker")
+    return (rows if isinstance(rows, list) else []) + (workers if isinstance(workers, list) else [])
+
+
+def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
+                        policy=None, snapshot=None):
+    """Prove an exact policy-admitted native route; availability is evidence, not approval."""
+    del provider_env_file
+    policy = read_route_policy() if policy is None else policy
     diagnostics = candidate_provider_diagnostics(engine, name)
     route_result = candidate_agent_command(engine, name, "agent", "models", "--json")
-    routes = candidate_t3_routes(route_result)
-    route_summary = candidate_t3_route_summary(route_result)
-    pick = candidate_agent_command(
-        engine, name, "agent", "models", "pick", "--role", "worker",
-        "--kind", "code", "--json",
-    )
-    initial_route = None
-    selection = {}
-    pick_summary = "unavailable"
-    if pick.returncode:
-        category = candidate_error_category(pick)
-        summary = candidate_error_summary(pick)
-        if "model-unavailable" not in summary.lower():
-            raise ProviderTurnError(pick_summary, route_summary,
-                f"provider_turn failed: live T3 picker exited {pick.returncode} "
-                f"({category}-{summary}); candidate_state={diagnostics}"
-            )
-    else:
-        try:
-            payload = json.loads(pick.stdout)
-            selection = payload.get("data", {}).get("pick") or {}
-        except (ValueError, AttributeError):
-            selection = {}
-        if valid_t3_acceptance_route(selection):
-            initial_route = f"{selection['provider']}/{selection['model']}"
-    routes = ([initial_route] if initial_route else []) + [
-        route for route in routes if route != initial_route
-    ]
-    pick_summary = summarize_t3_rows([selection])
-    if not routes:
-        raise ProviderTurnError(pick_summary, route_summary,
-            "provider_turn failed: model-unavailable and live catalog has no approved available T3 fallback "
-            f"(candidate_state={diagnostics}; catalog={route_summary})"
-        )
+    pick = candidate_agent_command(engine, name, "agent", "models", "pick", "--role", "worker", "--kind", "code", "--json")
+    rows = []
+    try:
+        rows = json.loads(route_result.stdout).get("data", {}).get("selected", []) if not route_result.returncode else []
+        if not isinstance(rows, list):
+            rows = []
+    except (ValueError, TypeError, AttributeError):
+        rows = []
+    try:
+        choice = json.loads(pick.stdout).get("data", {}).get("pick", {}) if not pick.returncode else {}
+        if isinstance(choice, dict) and choice:
+            rows.insert(0, choice)
+    except (ValueError, TypeError, AttributeError):
+        choice = {}
+    fresh_rows = fresh_snapshot_routes(snapshot)
+    rows.extend(fresh_rows)
+    complete = bool(fresh_rows) and snapshot.get("partial") is False if isinstance(snapshot, dict) else False
+    route_summary = summarize_t3_rows(rows)
+    pick_summary = summarize_t3_rows([choice])
     if not tooling_path:
-        raise ProviderTurnError(pick_summary, route_summary, "provider_turn failed: candidate agent tools path unavailable")
+        raise RouteUnavailableError(pick_summary, route_summary, "provider_turn route_unavailable: managed tools unavailable")
+    exhausted = set()
     failures = []
-    # A route-level failure (provider API error, quota, unavailable model) says
-    # nothing about the image: try the next admitted route. An image defect fails
-    # every route. Bounded so a broken image still fails fast (config#616).
-    for route in routes[:MAX_ACCEPTANCE_ROUTES]:
+    proven_failure = False
+    primary_attempts = fallback_attempts = 0
+    for _ in range(MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES):
+        candidates = admitted_route_candidates(policy, rows, exhausted, complete=complete)
+        if not candidates:
+            break
+        target = candidates[0]
+        if target["fallback"]:
+            if fallback_attempts >= MAX_FALLBACK_ROUTES:
+                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: fallback probe limit reached")
+            fallback_attempts += 1
+        else:
+            if primary_attempts >= MAX_ACCEPTANCE_ROUTES:
+                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: primary probe limit reached")
+            primary_attempts += 1
+        identity = (target["instance"], target["model"])
+        exhausted.add(identity)
+        route = f"{identity[0]}/{identity[1]}"
         proof = candidate_agent_command(
             engine, name, "agent", "run", "--", "python3",
-            "/run/t3code-candidate-inputs/provider-turn-probe.py",
-            route, "--wait", str(min(max(timeout_s - 30, 1), 240)),
-            timeout=min(timeout_s, 270),
+            "/run/t3code-candidate-inputs/provider-turn-probe.py", route,
+            "--instance", identity[0], "--native-model", identity[1],
+            "--options-json", json.dumps(target["options"], sort_keys=True),
+            "--wait", str(min(max(timeout_s - 30, 1), 240)), timeout=min(timeout_s, 270),
         )
         if proof.returncode == 0:
+            try:
+                passed = json.loads(proof.stdout)
+            except (ValueError, TypeError):
+                passed = None
+            if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
+                    or passed.get("settled") is not True or passed.get("instance") != identity[0]
+                    or passed.get("model") != identity[1]):
+                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: exact settled proof is missing")
             return route
         category = candidate_error_category(proof)
         summary = candidate_error_summary(proof)
         failures.append(f"{route}:{category}-{summary}")
-    raise ProviderTurnError(pick_summary, route_summary,
-        "provider_turn failed: no live picker route proved a turn ("
-        + ",".join(failures[:8])
-        + f"); candidate_state={diagnostics}; catalog={route_summary}"
-    )
+        try:
+            result = json.loads(proof.stdout or "{}")
+        except (ValueError, TypeError):
+            result = {}
+        if not isinstance(result, dict) or result.get("settled") is not True:
+            raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: probe settlement not proven")
+        code = str((result.get("error") or {}).get("code") or "") if isinstance(result, dict) and isinstance(result.get("error"), dict) else ""
+        capacity = code in ("quota", "model-unavailable", "route-unavailable", "rate_limit", "unavailable") or category == "route-unavailable"
+        if not capacity:
+            # Without current evidence that the route works, a provider or
+            # transport error cannot be attributed to the candidate image.
+            if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
+                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
+            proven_failure = True
+            break
+    # An absent, malformed or unreadable route is not evidence of exhaustion.
+    # A complete fresh snapshot may establish absence; otherwise every admitted
+    # route must have an explicit capacity observation or exhausted probe.
+    admitted = {(item.get("provider_instance"), item.get("model")) for item in policy["routes"]
+                if isinstance(item, dict) and item.get("admit") is True
+                and "worker" in item.get("roles", []) and item.get("billing") in ("subscription", "free", "promotion")
+                and isinstance(policy["providers"].get(item.get("provider")), dict)
+                and policy["providers"][item["provider"]].get("admit") is True}
+    observed = set(exhausted)
+    unknown = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        target = row.get("target") or row.get("native") or {}
+        if not isinstance(target, dict):
+            continue
+        key = (target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id"),
+               target.get("model") or target.get("model_id"))
+        if key not in admitted:
+            continue
+        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
+            observed.add(key)
+        else:
+            unknown.add(key)
+    if not proven_failure and ((unknown - observed) or (admitted - observed and not complete)):
+        raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route capacity evidence incomplete")
+    evidence = ",".join(failures[:MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES]) or "no-admitted-available-route"
+    error_type = ProviderTurnError if proven_failure else RouteUnavailableError
+    raise error_type(pick_summary, route_summary,
+                     f"provider_turn {'candidate_failed' if proven_failure else 'route_unavailable'}: {evidence}; candidate_state={diagnostics}; catalog={route_summary}")
 
-
-def valid_t3_free_route(selection):
-    return (
-        isinstance(selection, dict)
-        and isinstance(selection.get("provider"), str)
-        and isinstance(selection.get("model"), str)
-        and bool(selection["model"])
-        and selection.get("billing") in ("free", "promotion")
-        and selection.get("approved_free") is True
-        and selection.get("execution") == "t3"
-        and selection.get("available") is True
-    )
 
 
 MAX_ACCEPTANCE_ROUTES = 3
-
-# Protected premium allowances never pay for an image acceptance probe.
-PROTECTED_ACCEPTANCE_PROVIDERS = frozenset({"codex", "claude", "claudeAgent"})
-
-
-def valid_t3_acceptance_route(selection):
-    """An approved free T3 route, or else an admitted subscription T3 route.
-
-    The image gate must not depend on a free route happening to have quota
-    (config#616): one short probe turn on an admitted subscription route such as
-    DeepSeek Flash costs almost nothing. Codex and Claude stay excluded, and the
-    receipt records the route that proved the turn.
-    """
-    if isinstance(selection, dict) and isinstance(selection.get("provider"), str) and selection["provider"] in PROTECTED_ACCEPTANCE_PROVIDERS:
-        return False
-    if valid_t3_free_route(selection):
-        return True
-    return (
-        isinstance(selection, dict)
-        and isinstance(selection.get("provider"), str)
-        and isinstance(selection.get("model"), str)
-        and bool(selection["model"])
-        and selection.get("billing") == "subscription"
-        and selection.get("execution") == "t3"
-        and selection.get("available") is True
-    )
-
-
-def candidate_t3_routes(result):
-    try:
-        payload = json.loads(result.stdout)
-        rows = payload.get("data", {}).get("selected", [])
-    except (TypeError, ValueError, AttributeError):
-        return []
-    routes = []
-    for row in rows:
-        if valid_t3_acceptance_route(row):
-            route = f"{row['provider']}/{row['model']}"
-            if route not in routes:
-                routes.append(route)
-    return routes
-
-
-def candidate_t3_route_summary(result):
-    try:
-        payload = json.loads(result.stdout)
-        rows = payload.get("data", {}).get("selected", [])
-    except (TypeError, ValueError, AttributeError):
-        return "unavailable"
-    if not isinstance(rows, list):
-        return "unavailable"
-    return summarize_t3_rows(rows)
-
+MAX_FALLBACK_ROUTES = 2
 
 def summarize_t3_rows(rows):
     summary = []
@@ -1025,6 +1130,11 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         (str(volume).split(":", 2)[0] for volume in validated_volumes
          if str(volume).split(":", 2)[1:2] == ["/etc/ghostship/approved-free-workers.json"]),
         None,
+    )
+    route_policy_file = next(
+        (str(volume).split(":", 2)[0] for volume in validated_volumes
+         if str(volume).split(":", 2)[1:2] == ["/etc/ghostship/route-policy.json"]),
+        "/etc/ghostship/route-policy.json",
     )
     state_dir = Path(state_dir)
     desired = deployment_id or (state_dir / "desired").read_text().strip()
@@ -1110,7 +1220,9 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         assert_ok(engine, *args, timeout=300)
         for source, _target in agent_store_paths:
             assert_ok(engine, "cp", source, f"{name}:/nix/store/", timeout=120)
-        checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path)
+        routing_snapshot = json.loads(routing_copy.read_text()) if routing_copy else None
+        checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path,
+                                 route_policy_file=route_policy_file, routing_snapshot=routing_snapshot)
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
@@ -1148,7 +1260,12 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             record = json.loads(attempt.read_text())
         except (OSError, ValueError):
             record = {}
-        record["provider_turn"] = {"pick": error.pick, "routes": error.routes}
+        record["provider_turn"] = {"pick": error.pick, "routes": error.routes,
+                                   "evidence": str(error)[:1200]}
+        if isinstance(error, RouteUnavailableError):
+            record["outcome"] = "route_unavailable"
+        elif isinstance(error, RouteUnknownError):
+            record["outcome"] = "route_unknown"
         temporary = attempt.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(record, sort_keys=True) + "\n")
         os.chmod(temporary, 0o600)
@@ -1211,6 +1328,15 @@ def main():
     except PreconditionError as error:
         print(f"candidate acceptance precondition not met: {error}", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
+    except RouteUnavailableError as error:
+        print(f"candidate acceptance route_unavailable: {error}", file=sys.stderr)
+        sys.exit(76)
+    except RouteUnknownError as error:
+        print(f"candidate acceptance route_unknown: {error}", file=sys.stderr)
+        sys.exit(77)
+    except ProviderTurnError as error:
+        print(f"candidate acceptance candidate_failed: {error}", file=sys.stderr)
+        sys.exit(78)
 
 
 if __name__ == "__main__":
