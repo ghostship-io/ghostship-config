@@ -735,8 +735,68 @@ def candidate_error_summary(result):
     return re.sub(r"[^A-Za-z0-9_.-]", "-", line)[:96] or "empty-output"
 
 
+# Retain only route-schema fields, never arbitrary error text or credentials.
+_EVIDENCE_FIELDS = frozenset({"schema", "schema_version", "partial", "generated_at", "generated_at_epoch", "max_age_seconds", "model_selection", "worker", "candidates", "coverage", "tiers", "state", "data", "selected", "pick", "provider", "provider_instance", "providerInstanceId", "instanceId", "provider_instance_id", "model", "model_id", "available", "execution", "approved_free", "native", "target", "mapped", "tool_loop", "fallback_only", "admit", "roles", "billing", "providers", "routes"})
+
+def evidence_hash(value):
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+_SAFE_ROUTE_VALUES = frozenset({
+    "t3", "free_pool", "worker", "subscription", "free", "promotion", "ok",
+    "proven", "unknown", "unavailable", "exhausted", "partial", "failed",
+    "ghostship.route-policy/v2", "ghostship.model-selection/v1", "ghostship.ai-usage.routing",
+    "codex", "commandCode", "opencode-free", "claudeAgent", "ollama", "google",
+    "gpt-6.1-terra", "gpt-6.1-sol", "deepseek/deepseek-v4.1-flash",
+    "nvidia/minimaxai/minimax-m3.1-flash",
+})
+_SAFE_DYNAMIC_KEYS = frozenset({"codex", "commandCode", "opencode-free", "claudeAgent",
+                                "ollama", "google", "bulk", "interactive", "premium"})
+
+
+def route_evidence(value, depth=0):
+    if depth > 10:
+        return None
+    if isinstance(value, dict):
+        result = {}
+        for k, v in list(value.items())[:256]:
+            if k not in _EVIDENCE_FIELDS:
+                continue
+            if k in ("providers", "tiers") and isinstance(v, dict):
+                result[k] = {name: route_evidence(item, depth + 1) for name, item in list(v.items())[:128]
+                             if name in _SAFE_DYNAMIC_KEYS}
+            else:
+                result[k] = route_evidence(v, depth + 1)
+        return result
+    if isinstance(value, list):
+        return [route_evidence(v, depth + 1) for v in value[:128]]
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        if value in _SAFE_ROUTE_VALUES:
+            return value
+        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})", value):
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return value
+            except ValueError:
+                pass
+        return f"<redacted:{len(value)}>"
+    return "<redacted>"
+
+def capture_json_result(result):
+    try:
+        data = json.loads(result.stdout[:1048576])
+    except (TypeError, ValueError):
+        data = None
+    return {"exit_code": result.returncode, "json": route_evidence(data),
+            "parse_error": data is None}
+
+
 def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
-                    route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None):
+                    route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None, evidence=None):
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
     # Start that same serving path explicitly in the disposable candidate.
@@ -790,7 +850,7 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     provider_route = check_provider_turn(
         engine, name, provider_env_file, timeout_s=timeout_s,
         tooling_path=tooling_path,
-        policy=read_route_policy(route_policy_file), snapshot=routing_snapshot,
+        policy=read_route_policy(route_policy_file), snapshot=routing_snapshot, evidence=evidence,
     )
     checks["provider_turn"] = bool(provider_route)
     checks["provider_turn_route"] = provider_route
@@ -942,13 +1002,16 @@ def fresh_snapshot_routes(snapshot):
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
-                        policy=None, snapshot=None):
+                        policy=None, snapshot=None, evidence=None):
     """Prove an exact policy-admitted native route; availability is evidence, not approval."""
     del provider_env_file
     policy = read_route_policy() if policy is None else policy
     diagnostics = candidate_provider_diagnostics(engine, name)
     route_result = candidate_agent_command(engine, name, "agent", "models", "--json")
     pick = candidate_agent_command(engine, name, "agent", "models", "pick", "--role", "worker", "--kind", "code", "--json")
+    if evidence is not None:
+        evidence.update(model_list=capture_json_result(route_result), picker=capture_json_result(pick),
+                        snapshot=route_evidence(snapshot), admission=route_evidence(policy))
     rows = []
     try:
         rows = json.loads(route_result.stdout).get("data", {}).get("selected", []) if not route_result.returncode else []
@@ -1049,7 +1112,36 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         else:
             unknown.add(key)
     if not proven_failure and ((unknown - observed) or (admitted - observed and not complete)):
-        raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route capacity evidence incomplete")
+        missing = sorted(admitted - observed)
+        fields = []
+        for instance, model in missing:
+            if not isinstance(instance, str) or not isinstance(model, str):
+                continue
+            prefix = f"{evidence_hash(instance)}/{evidence_hash(model)}"
+            matching = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                target = row.get("target") or row.get("native") or {}
+                if not isinstance(target, dict):
+                    continue
+                if ((target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id")) == instance
+                        and (target.get("model") or target.get("model_id")) == model):
+                    matching.append((row, target))
+            if not matching:
+                fields.append(prefix + ":row_missing")
+            for row, target in matching:
+                if not isinstance(row.get("available"), bool):
+                    fields.append(prefix + ":row.available")
+                if "provider_instance_id" in target and not isinstance(target.get("available"), bool):
+                    fields.append(prefix + ":native.available")
+        raise RouteUnknownError(
+            pick_summary, route_summary,
+            "provider_turn outcome unknown: route capacity evidence incomplete; "
+            f"fields={','.join(fields) or 'invalid-policy-target'}; "
+            f"sources=agent-models-selected,agent-models-pick,model-routing.json; "
+            f"models_exit={route_result.returncode}; pick_exit={pick.returncode}; "
+            f"snapshot_complete={complete}")
     evidence = ",".join(failures[:MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES]) or "no-admitted-available-route"
     error_type = ProviderTurnError if proven_failure else RouteUnavailableError
     raise error_type(pick_summary, route_summary,
@@ -1116,12 +1208,12 @@ def candidate_agent_path(engine, name, candidate_home_target):
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
            volumes=(), systemctl_bin="systemctl",
            command_fn=command, identity_fn=None, candidate_uid=None,
            candidate_runtime_dir=None, provider_secrets_file=None, tooling_path=None,
            expected_agent_revision=None, candidate_home_target="/candidate-home",
-           deployment_id=None, model_routing_file=None):
+           deployment_id=None, model_routing_file=None, _evidence=None):
     """Boot, check, record and remove one candidate without changing production."""
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
@@ -1139,6 +1231,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     state_dir = Path(state_dir)
     desired = deployment_id or (state_dir / "desired").read_text().strip()
     image_id, image_tag = image_details(image_archive)
+    _evidence["candidate"]["image_id"] = image_id
     name = candidate_name(desired)
     receipts = state_dir / "receipts"
     receipt_path = receipts / f"{desired}.json"
@@ -1156,6 +1249,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     created = False
     manager_started = False
     checks = {}
+    evidence = _evidence
     try:
         staged_toolchain = stage_candidate_inputs(
             home_dir, home_copy, input_copy, candidate_uid, tooling_path,
@@ -1164,6 +1258,17 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         )
         write_provider_env(provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
+        if model_routing_file:
+            try:
+                source = Path(model_routing_file)
+                if not source.is_symlink() and source.stat().st_size <= 16 * 1024 * 1024:
+                    evidence["snapshot"] = route_evidence(json.loads(source.read_text()))
+            except (OSError, ValueError):
+                evidence["snapshot"] = None
+        try:
+            evidence["admission"] = route_evidence(read_route_policy(route_policy_file))
+        except PreconditionError:
+            evidence["admission"] = None
         routing_copy = (
             stage_candidate_model_routing(model_routing_file, candidate_tmp, candidate_uid)
             if model_routing_file else None
@@ -1222,7 +1327,7 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             assert_ok(engine, "cp", source, f"{name}:/nix/store/", timeout=120)
         routing_snapshot = json.loads(routing_copy.read_text()) if routing_copy else None
         checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path,
-                                 route_policy_file=route_policy_file, routing_snapshot=routing_snapshot)
+                                 route_policy_file=route_policy_file, routing_snapshot=routing_snapshot, evidence=evidence)
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
@@ -1252,25 +1357,6 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         os.chmod(temporary, 0o600)
         os.replace(temporary, receipt_path)
         return receipt
-    except ProviderTurnError as error:
-        attempts = state_dir / "attempts"
-        attempts.mkdir(mode=0o700, parents=True, exist_ok=True)
-        attempt = attempts / f"{desired}.json"
-        try:
-            record = json.loads(attempt.read_text())
-        except (OSError, ValueError):
-            record = {}
-        record["provider_turn"] = {"pick": error.pick, "routes": error.routes,
-                                   "evidence": str(error)[:1200]}
-        if isinstance(error, RouteUnavailableError):
-            record["outcome"] = "route_unavailable"
-        elif isinstance(error, RouteUnknownError):
-            record["outcome"] = "route_unknown"
-        temporary = attempt.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(record, sort_keys=True) + "\n")
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, attempt)
-        raise
     finally:
         cleanup_error = None
         if created:
@@ -1296,6 +1382,73 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             raise RuntimeError(cleanup_error)
         if before != after:
             raise RuntimeError("production T3 identity changed during candidate teardown")
+
+
+def safe_unknown_evidence(error):
+    message = str(error)
+    route_fields = re.findall(r"sha256:[0-9a-f]{64}/sha256:[0-9a-f]{64}:(?:row_missing|row\.available|native\.available)", message)
+    if route_fields and "route capacity evidence incomplete" in message:
+        return ("route capacity evidence incomplete; fields=" + ",".join(route_fields[:64])
+                + "; sources=agent-models-selected,agent-models-pick,model-routing.json")
+    known = ("partial live model routing snapshot has no usable candidate",
+             "fallback probe limit reached", "primary probe limit reached",
+             "exact settled proof is missing", "probe settlement not proven",
+             "route failure is not attributable to the candidate")
+    for reason in known:
+        if message == "provider_turn outcome unknown: " + reason:
+            return message
+    return "provider_turn outcome unknown"
+
+
+def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir, *args, **kwargs):
+    """Capture best-effort evidence for every failure, including setup and teardown."""
+    state = None
+    safe_desired = "unknown"
+    evidence = {"candidate": {"deployment_id": safe_desired, "image_id": None}}
+    try:
+        state = Path(state_dir)
+        desired = kwargs.get("deployment_id")
+        if desired is None:
+            try:
+                desired = (state / "desired").read_text().strip()
+            except OSError:
+                desired = None
+        safe_desired = desired if isinstance(desired, str) and re.fullmatch(r"(?:[0-9a-f]{64}|generation-[0-9]+)", desired) else "unknown"
+        evidence["candidate"]["deployment_id"] = safe_desired
+        return _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
+                       *args, _evidence=evidence, **kwargs)
+    except Exception as error:
+        try:
+            attempts = Path(state_dir) / "attempts"
+            attempts.mkdir(mode=0o700, parents=True, exist_ok=True)
+            attempt = attempts / f"{safe_desired}.json"
+            try:
+                record = json.loads(attempt.read_text())
+                if not isinstance(record, dict):
+                    record = {}
+            except (OSError, ValueError):
+                record = {}
+            if isinstance(error, ProviderTurnError):
+                # Provider-provided strings can contain arbitrary credentials.
+                record["provider_turn"] = {"pick": evidence_hash(error.pick),
+                                           "routes": evidence_hash(error.routes),
+                                           "evidence": safe_unknown_evidence(error) if isinstance(error, RouteUnknownError) else ("route_unavailable: quota" if isinstance(error, RouteUnavailableError) and "quota" in str(error).lower() else "provider route failure")}
+            evidence["incomplete"] = safe_unknown_evidence(error) if isinstance(error, RouteUnknownError) else None
+            if len(json.dumps(evidence)) > 131072:
+                evidence = {"candidate": evidence["candidate"], "incomplete": evidence.get("incomplete"),
+                            "truncated": True, "reason": "route provenance exceeds 128 KiB"}
+            record["route_provenance"] = evidence
+            if isinstance(error, RouteUnavailableError):
+                record["outcome"] = "route_unavailable"
+            elif isinstance(error, RouteUnknownError):
+                record["outcome"] = "route_unknown"
+            temporary = attempt.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(record, sort_keys=True) + "\n")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, attempt)
+        except (OSError, ValueError, TypeError):
+            print("candidate acceptance provenance could not be recorded", file=sys.stderr)
+        raise
 
 
 def main():

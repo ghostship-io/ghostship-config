@@ -149,6 +149,24 @@ class UnitNotifyTests(unittest.TestCase):
 
 
 class MonitoringTests(unittest.TestCase):
+    def test_monitor_list_ack_timing_and_timeout_are_logged_without_retry(self):
+        import contextlib
+        import io
+        import socketio
+        for timeout in (False, True):
+            with self.subTest(timeout=timeout):
+                call_rpc = Mock(side_effect=socketio.exceptions.TimeoutError() if timeout else None)
+                output = io.StringIO()
+                with patch.object(provision.time, "monotonic", side_effect=[10, 30]), contextlib.redirect_stderr(output):
+                    if timeout:
+                        with self.assertRaises(socketio.exceptions.TimeoutError):
+                            provision.get_monitor_list_with_diagnostics(call_rpc)
+                    else:
+                        provision.get_monitor_list_with_diagnostics(call_rpc)
+                call_rpc.assert_called_once_with("getMonitorList")
+                self.assertIn("20.000s", output.getvalue())
+                self.assertIn("timed out" if timeout else "acknowledged", output.getvalue())
+
     def test_provisioning_waits_for_the_initial_info_before_setup_rpc(self):
         import threading
         import socketio
