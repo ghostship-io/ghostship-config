@@ -446,6 +446,20 @@ rm -f "$STATE_DIR"/receipts/*.json
 if "${cmd[@]}" rollback ten; then echo 'recovered stopped container without receipt' >&2; exit 1; fi
 [[ -e $tmp/container-stopped && -e $tmp/hold ]]
 cp "$tmp/known-good.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+# Rollback must take the managed writer locks before it mutates. In the
+# stopped-container path the alias restore and the container start used to run
+# before verification acquired those locks, so an app activation could land in
+# between and the rollback would record a known-good serving identity that no
+# longer described the app tree. While a managed writer holds a lock, the
+# rollback refuses and neither restores the alias nor starts the container.
+for lock in "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" \
+  "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"; do
+  exec 4>"$lock"; flock -x 4
+  if "${cmd[@]}" rollback ten 4>&-; then echo 'stopped rollback accepted a managed writer' >&2; exit 1; fi
+  [[ -e $tmp/container-stopped ]]
+  [[ -e $tmp/hold && -e $tmp/evidence/active-window ]]
+  flock -u 4; exec 4>&-
+done
 "${cmd[@]}" rollback ten
 [[ ! -e $tmp/container-stopped && ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
 jq -e --arg d "$stopped_ten_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/ten/known-good.json" >/dev/null
