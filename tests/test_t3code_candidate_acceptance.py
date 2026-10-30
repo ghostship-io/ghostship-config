@@ -141,6 +141,31 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=snapshot)
 
+    def test_fallback_picker_cannot_override_missing_or_unavailable_snapshot(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"codex":{"admit":True}},
+                  "routes":[{"provider":"codex", "provider_instance":"codex", "model":"gpt-6.1-terra", "admit":True, "roles":["worker"], "billing":"subscription", "fallback_only":True}]}
+        pick = {"available":True, "execution":"t3", "target":{"providerInstanceId":"codex", "model":"gpt-6.1-terra"}}
+        unavailable = {"partial":True, "model_selection":{"schema":"ghostship.model-selection/v1", "generated_at_epoch":time.time(), "worker":[]},
+                       "candidates":[{"available":False, "native":{"mapped":True, "available":False, "provider_instance_id":"codex", "model_id":"gpt-6.1-terra"}}]}
+        calls = []
+        def run(engine, name, *args, **kwargs):
+            calls.append(args)
+            if "pick" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"pick":pick}}))
+            if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":[pick]}}))
+            return self.probe_success(args)
+        stale = {**unavailable, "model_selection":{**unavailable["model_selection"], "generated_at_epoch":time.time() - 3600},
+                 "candidates":[{"available":True, "native":{"mapped":True, "available":True, "provider_instance_id":"codex", "model_id":"gpt-6.1-terra"}}]}
+        conflicting = {**unavailable, "candidates":unavailable["candidates"] + stale["candidates"]}
+        for snapshot in (None, unavailable, stale, conflicting):
+            with self.subTest(snapshot=snapshot), patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+                with self.assertRaises(acceptance.RouteUnknownError):
+                    acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=snapshot)
+        self.assertEqual(self.probe_calls(calls), [])
+        empty = Mock(returncode=0, stdout='{"data":{"selected":[], "pick":null}}')
+        with patch.object(acceptance, "candidate_agent_command", return_value=empty), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=unavailable)
+
     def test_three_exhausted_primaries_leave_one_fallback_attempt(self):
         providers = {name: {"admit":True} for name in ("a", "b", "c", "codex")}
         routes = [{"provider":name, "provider_instance":name, "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"} for name in ("a", "b", "c")]
@@ -154,8 +179,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
             if "models" in args: return Mock(returncode=0, stdout=json.dumps({"data":{"selected":rows}}))
             if "codex" in args: return self.probe_success(args)
             return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
+        snapshot = {"model_selection":{"schema":"ghostship.model-selection/v1", "generated_at_epoch":time.time(), "worker":[]},
+                    "candidates":[{"available":True, "native":{"mapped":True, "available":True, "provider_instance_id":"codex", "model_id":"gpt-6.1-terra"}}]}
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
-            self.assertEqual(acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy={"schema":"ghostship.route-policy/v2", "providers":providers, "routes":routes}), "codex/gpt-6.1-terra")
+            self.assertEqual(acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy={"schema":"ghostship.route-policy/v2", "providers":providers, "routes":routes}, snapshot=snapshot), "codex/gpt-6.1-terra")
         self.assertEqual(len(self.probe_calls(calls)), 4)
 
     def test_route_unavailable_records_evidence_and_no_receipt(self):
