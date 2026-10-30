@@ -34,7 +34,8 @@ export AGENT_REVISION=new-agent TOOLING_PATH=/nix/store/expected-tooling \
 # leave the current target intact until the deploy completes.
 exec 8>"$STATE_DIR/deploy.lock"
 flock -x 8
-bash "$root/packages/t3code/activate-deployment.sh" &
+cp "$root/packages/t3code/activate-deployment.sh" "$tmp/fixture-activation-writer"
+bash "$tmp/fixture-activation-writer" &
 activation_pid=$!
 for _ in $(seq 1 40); do
   [[ $(cat "$STATE_DIR/desired") == old-deployment ]] || break

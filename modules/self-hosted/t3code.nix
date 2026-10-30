@@ -11,6 +11,7 @@ let
   hardened = config.ghostship.t3code.hardening.enable;
   t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
+  t3codeWindowConfigFile = pkgs.writeText "t3code-release-window-dir" "${t3codeDeploymentState}/release-window\n";
   t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -97,14 +98,17 @@ let
   };
   t3codeReleaseWindow = pkgs.writeShellApplication {
     name = "ghostship-t3code-release-window";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman ];
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
     text = ''
-      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
+      export WINDOW_CONFIG=${t3codeWindowConfigFile}
+      export WINDOW_BOOTSTRAP=${../../packages/t3code/window-bootstrap.sh}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
       export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
       export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
       export PODMAN_BIN=${pkgs.podman}/bin/podman
+      export JQ_BIN=${pkgs.jq}/bin/jq
+      export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
