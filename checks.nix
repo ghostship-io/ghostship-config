@@ -193,6 +193,7 @@ in
         cd source
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
+        bash tests/test_t3code_window_lock_slow.sh
         bash tests/test_t3code_activate_deployment.sh
         bash tests/test_t3code_receipt_self_check.sh
         bash tests/test_t3code_tooling_pointer.sh
