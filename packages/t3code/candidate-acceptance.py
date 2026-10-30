@@ -927,7 +927,7 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         if key in entries:
             raise PreconditionError("duplicate admitted native route")
         entries[key] = item
-    primary, fallback, seen, observed, unknown = [], [], set(), set(), set()
+    primary, fallback, seen = [], [], set()
     for row in rows:
         if not isinstance(row, dict) or row.get("execution") not in (None, "t3"):
             continue
@@ -943,10 +943,6 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         item = entries.get(key)
         if not item:
             continue
-        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
-            observed.add(key)
-        else:
-            unknown.add(key)
         if (row.get("available") is not True or target.get("available") is False
                 or ("provider_instance_id" in target and (target.get("mapped") is not True or target.get("available") is not True))
                 or key in seen or key in exhausted):
@@ -969,12 +965,9 @@ def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
         seen.add(key)
     if primary:
         return primary
-    # An absent or unknown primary is not proof that it is exhausted.
-    primary_keys = {key for key, item in entries.items() if item.get("fallback_only") is not True}
-    if (primary_keys & unknown) - observed - set(exhausted):
-        return []
-    if primary_keys - observed - set(exhausted) and not complete:
-        return []
+    # Unknown capacity for an unrelated route does not invalidate an exact,
+    # policy-admitted fallback with its own available native row. Prefer every
+    # observed usable primary first; missing fallback evidence remains unknown.
     return fallback
 
 

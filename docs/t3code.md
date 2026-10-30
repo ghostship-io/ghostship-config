@@ -585,8 +585,9 @@ once and blocks the same image and acceptance bundle only when a previously
 proven-working route demonstrates the candidate failure. The probe matches exact
 native provider/model identities to the worker-admitted route policy; picker
 free-model approval is not work admission. It uses admitted fallback-only routes
-only when current capacity evidence establishes no primary is usable. Codex
-uses standard tier and fast mode is never enabled. Exhausted or unavailable
+after observed usable primary routes are tried; an unrelated missing primary row
+does not prevent testing a fallback with its own fresh capacity evidence. A
+missing or unreadable row for the fallback remains unknown. Codex uses standard tier and fast mode is never enabled. Exhausted or unavailable
 routes are recorded as `route_unavailable` without a candidate-failed marker;
 unresolved probe or unclassified acceptance outcomes are recorded as unknown
 and are not automatically replayed. Neither is an acceptance PASS.
