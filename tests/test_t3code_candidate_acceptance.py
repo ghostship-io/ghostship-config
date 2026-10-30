@@ -181,7 +181,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
              patch.object(acceptance, "candidate_agent_command", return_value=result), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
-            with self.assertRaisesRegex(acceptance.RouteUnknownError, "primary/flash:available"):
+            with self.assertRaisesRegex(acceptance.RouteUnknownError, "row_missing"):
                 acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
                                   command_fn=self.command, identity_fn=lambda: self.identity, model_routing_file=source)
         path = self.state / "attempts/generation-502.json"
@@ -191,9 +191,49 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(provenance["snapshot"]["partial"], True)
         self.assertEqual(provenance["model_list"]["json"]["data"]["selected"], [])
         self.assertEqual(provenance["candidate"]["image_id"], self.image_id)
-        self.assertIn("primary/flash:available", provenance["incomplete"])
+        self.assertIn("row_missing", provenance["incomplete"])
         self.assertNotIn("never-retain", path.read_text())
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_route_provenance_hashes_untrusted_values_and_dynamic_keys(self):
+        token = "sk-example-secret-token-1234567890"
+        dynamic = "secret-token-example"
+        evidence = acceptance.route_evidence({"model": token, "providers": {dynamic: {"state": "ok"}}})
+        serialized = json.dumps(evidence)
+        self.assertNotIn(token, serialized)
+        self.assertNotIn(dynamic, serialized)
+        self.assertEqual(evidence["model"], acceptance.evidence_hash(token))
+        self.assertIn(acceptance.evidence_hash(dynamic), evidence["providers"])
+
+    def test_early_failure_records_provenance_without_masking_error(self):
+        with patch.object(acceptance, "image_details", side_effect=ValueError("broken image")):
+            with self.assertRaisesRegex(ValueError, "broken image"):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["route_provenance"]["candidate"]["image_id"], None)
+
+    def test_teardown_failure_records_provenance_and_removes_receipt(self):
+        def failing_remove(engine, *args, **kwargs):
+            if args[:2] == ("rm", "--force"):
+                return Mock(returncode=1, stdout="", stderr="")
+            return self.command(engine, *args, **kwargs)
+        checks = {key: True for key in acceptance.CHECKS}
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value=checks), \
+             patch.object(acceptance, "candidate_agent_path", return_value="agent"), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "teardown failed"):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=failing_remove, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["route_provenance"]["candidate"]["image_id"], self.image_id)
+        self.assertFalse((self.state / "receipts/generation-502.json").exists())
+
+    def test_record_write_failure_does_not_mask_unknown(self):
+        with patch.object(acceptance, "_accept", side_effect=acceptance.RouteUnknownError("", "", "unknown")), \
+             patch.object(Path, "mkdir", side_effect=OSError("read only")):
+            with self.assertRaisesRegex(acceptance.RouteUnknownError, "unknown"):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home)
 
     def test_generic_execution_error_on_proven_route_is_unknown(self):
         policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
@@ -213,7 +253,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", return_value=Mock(returncode=1, stdout="", stderr="network error")), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
-            self.assertIn("primary/flash:available", str(failure.exception))
+            self.assertIn("row_missing", str(failure.exception))
             self.assertIn("agent-models-selected,agent-models-pick,model-routing.json", str(failure.exception))
             self.assertIn("models_exit=1; pick_exit=1", str(failure.exception))
 
@@ -894,7 +934,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
                                   command_fn=self.command, identity_fn=lambda: self.identity)
         record = json.loads((attempts / "generation-502.json").read_text())
-        self.assertEqual(record["provider_turn"], {"pick": "claude/sonnet", "routes": "opencode-free/fallback", "evidence": "failed"})
+        self.assertEqual(record["provider_turn"], {"pick": acceptance.evidence_hash("claude/sonnet"), "routes": acceptance.evidence_hash("opencode-free/fallback"), "evidence": "provider route failure"})
 
     def test_provider_turn_refuses_free_pool_routes_for_t3_execution(self):
         provider_env = self.root / "provider.env"
