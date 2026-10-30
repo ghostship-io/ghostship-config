@@ -3,6 +3,7 @@ set -euo pipefail
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
 announce_intent activate
+[[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
 : "${STATE_DIR:?}"
 : "${DEPLOYMENT_ID:?}"
