@@ -156,24 +156,56 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   builds the committed revision, checks dry-activation, records the generation
   and verifies live health. It accepts the target T3 candidate image before the
   switch; a passing exact-image receipt permits the immediate restart.
-- For an executor-held T3 release window, retire per-release copied executor
-  scripts. After this package is installed, run the tracked command on the
-  target host with `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
-  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, and `WINDOW_SECONDS` set from
-  host configuration. Use a unique window ID and the authorized flake reference:
+- Retire per-release copied T3 window executors. For the transition from an
+  expired legacy holder with its existing recovery inhibit still present, use
+  the release-window binary built in the reviewed candidate closure, before
+  that closure is installed. Set `RELEASE_WINDOW` to that binary. Set
+  `LEGACY_DIR`, `LEGACY_UNIT`, `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
+  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, `WINDOW_SECONDS`, `HOME_DIR`,
+  `CANDIDATE_HOME_TARGET`, and `ACCEPTED_IMAGE_REF` from host configuration.
+  With a unique window ID, the executor runs:
 
   ```sh
-  ghostship-t3code-release-window preflight
-  ghostship-t3code-release-window start "$WINDOW_ID"
-  ghostship-t3code-release-window switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
+  "$RELEASE_WINDOW" preflight --adopt-inhibit
+  "$RELEASE_WINDOW" start --adopt-inhibit "$WINDOW_ID"
+  "$RELEASE_WINDOW" switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
   ```
 
-  Complete the established exact-image acceptance, installed readback and
-  post/rollback procedure after a switch; an intent or an unknown result is
-  never a no-activation success. If no writer announced an effect, the executor
-  can instead run `ghostship-t3code-release-window end-no-activation` to release
-  the window. Windows opened before the tracked start record cannot use that
-  operation. This command does not replace acceptance or post/rollback checks.
+  Preflight is read-only. Adoption requires the expired legacy holder, its
+  intact window evidence, and free writer locks; it preserves the existing
+  inhibit. It does not assert that the legacy window had no effects. Do not
+  run the legacy `window-end` to clear the inhibit. A failed or unknown check
+  is a stop for investigation, not permission to force a lock or invent a
+  result.
+
+  For a forward PASS, set `EXPECTED_DEPLOYMENT`, `EXPECTED_IMAGE`,
+  `EXPECTED_AGENT_REVISION`, `EXPECTED_TOOLING_PATH`, `PROVIDER_SECRETS_FILE`,
+  `CURRENT_SYSTEM`, and `EXPECTED_SYSTEM` to the approved candidate values.
+  `"$RELEASE_WINDOW" post` verifies the existing exact-image receipt, completed
+  attempt, installed system, live image and inputs. After PASS,
+  `"$RELEASE_WINDOW" end-post "$WINDOW_ID"` repeats those checks before
+  releasing the window. It can be retried with the window ID after a lost
+  acknowledgement.
+
+  When the serving T3 has not changed and its image and inputs match an
+  existing exact receipt, `"$RELEASE_WINDOW" rollback "$WINDOW_ID"` restores
+  the accepted alias if necessary and releases without restarting T3 or
+  requesting another provider turn. It records the actual desired and applied
+  IDs; it does not claim to revert the system generation or reconcile a split
+  deployment. A definitive failed-candidate marker remains in place until the
+  existing audited invalidation procedure is explicitly invoked.
+
+  If no exact known-good receipt exists, `"$RELEASE_WINDOW" end-unknown`
+  records UNKNOWN and the observed desired, applied and absent-receipt state,
+  releases the window locks, retains the recovery inhibit, and exits 77. It
+  leaves the serving T3 untouched and prints the investigation command. After
+  an exact matching serving receipt is available,
+  `"$RELEASE_WINDOW" resolve-unknown` rechecks the receipt and alias before
+  clearing the existing inhibit. Until then, a T3 crash does not auto-recover
+  and its agents die with it: the legacy recovery inhibit blocks all recovery
+  actions, not just moves to an unreceipted image. Independent update timers
+  require separate installed verification. Do not use a no-activation end for
+  an adopted legacy window or treat holder expiry as a successful end.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

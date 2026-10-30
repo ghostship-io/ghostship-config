@@ -32,8 +32,9 @@ if [[ $1 == image && $2 == inspect ]]; then
   exit
 fi
 if [[ $1 == tag ]]; then
-  printf '%s\n' "$2" > "$FIXTURE/alias-image"
   printf 'tag\n' >> "$FIXTURE/podman.events"
+  [[ ${FIXTURE_TAG_NO_EFFECT:-0} != 1 ]] || exit 1
+  printf '%s\n' "$2" > "$FIXTURE/alias-image"
   [[ ${FIXTURE_TAG_LOST_ACK:-0} != 1 ]] || exit 1
   exit
 fi
@@ -107,6 +108,11 @@ rm "$tmp/hold"
 "${cmd[@]}" start one
 [[ $(head -1 "$tmp/evidence/one/window.start") == *acquired_by=* ]]
 [[ $(sed -n '2p' "$tmp/evidence/one/window.start") == holder_pid=* ]]
+# A live shared writer causes an immediate refusal, never a forced clear.
+exec 4<"$tmp/evidence/window.lock"; flock -s 4
+if "${cmd[@]}" end-no-activation 4<&-; then echo 'accepted a concurrent window writer' >&2; exit 1; fi
+[[ -e $tmp/hold && -e $tmp/evidence/active-window ]]
+flock -u 4; exec 4<&-
 # An announced deploy, including one that crashes, must refuse end.
 bash -c 'source "$WINDOW_INTENT_HELPER"; announce_intent deploy; exit 99' || [[ $? == 99 ]]
 if "${cmd[@]}" end-no-activation; then echo 'accepted deploy intent' >&2; exit 1; fi
@@ -179,15 +185,19 @@ mv "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt-held"
 if "${cmd[@]}" rollback; then echo 'restored alias without a receipt' >&2; exit 1; fi
 [[ ! -e $tmp/podman.events ]]
 mv "$tmp/receipt-held" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+export FIXTURE_TAG_NO_EFFECT=1
+if "${cmd[@]}" rollback three; then echo 'accepted unknown alias restore' >&2; exit 1; fi
+[[ -f $tmp/evidence/three/alias-restore.started && -e $tmp/hold ]]
+unset FIXTURE_TAG_NO_EFFECT
 export FIXTURE_TAG_LOST_ACK=1
 export FIXTURE_STOP_LOST_ACK=1
 if "${cmd[@]}" rollback three; then echo 'unexpected rollback stop acknowledgement' >&2; exit 1; fi
 [[ -f $tmp/evidence/three/known-good.json && -f $tmp/evidence/active-window && -f $tmp/hold ]]
-[[ $(cat "$tmp/alias-image") == "sha256:$EXPECTED_IMAGE" && $(wc -l < "$tmp/podman.events") == 1 ]]
+[[ $(cat "$tmp/alias-image") == "sha256:$EXPECTED_IMAGE" && $(wc -l < "$tmp/podman.events") == 2 ]]
 unset FIXTURE_TAG_LOST_ACK FIXTURE_STOP_LOST_ACK ALIAS_IMAGE
 "${cmd[@]}" rollback three
 "${cmd[@]}" rollback three
-[[ $(wc -l < "$tmp/podman.events") == 1 ]]
+[[ $(wc -l < "$tmp/podman.events") == 2 ]]
 [[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
 jq -e --arg d "$new_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/three/known-good.json" >/dev/null
 # Without a receipt, a changed server or a queued restart must refuse release.

@@ -70,7 +70,7 @@ holder_ready() {
   [[ $current == "$pid" && /proc/$pid/fd/7 -ef $LOCK_CANDIDATE && /proc/$pid/fd/9 -ef $LOCK_HARDENING ]] || return 1
   ! flock -n -s "$LOCK_CANDIDATE" true && ! flock -n -s "$LOCK_HARDENING" true
 }
-lock_window() { exec 8<"$WINDOW_ROOT/window.lock"; flock -x 8; }
+lock_window() { exec 8<"$WINDOW_ROOT/window.lock"; flock -n -x 8 || fail 'window writer active'; }
 read_active() {
   [[ -f $WINDOW_ROOT/active-window && ! -L $WINDOW_ROOT/active-window ]] || fail 'missing active window'
   id=$(cat "$WINDOW_ROOT/active-window")
@@ -167,13 +167,19 @@ require_matching_receipt_and_alias() {
   image=${image#sha256:}
   alias=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}') || fail 'accepted image alias unknown'
   [[ ${alias#sha256:} != "$image" ]] || return 0
-  # Never retry an uncertain alias write. Reconcile by inspecting the alias;
-  # if it is still different, keep the inhibit and require investigation.
-  [[ ! -e $marker && ! -L $marker ]] || fail 'UNKNOWN: an earlier alias restore did not reconcile'
   [[ ${alias#sha256:} =~ ^[0-9a-f]{64}$ ]] || fail 'accepted image alias invalid'
   hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
-  printf '%s %s %s\n' "$image" "${alias#sha256:}" "$hash" > "$marker.tmp"
-  chmod 0600 "$marker.tmp"; sync -f "$marker.tmp"; mv "$marker.tmp" "$marker"; sync -f "$dir"
+  if [[ -e $marker || -L $marker ]]; then
+    [[ -f $marker && ! -L $marker ]] || fail 'UNKNOWN: alias restore evidence invalid'
+    local previous_target previous_alias previous_hash
+    read -r previous_target previous_alias previous_hash < "$marker" || fail 'UNKNOWN: alias restore evidence unreadable'
+    [[ $previous_target == "$image" && $previous_alias == "${alias#sha256:}" && $previous_hash == "$hash" ]] || fail 'UNKNOWN: alias restore state changed'
+    # Reapplying the same receipt-bound tag is idempotent; the previous effect
+    # stays UNKNOWN until the alias is read back as the exact target.
+  else
+    printf '%s %s %s\n' "$image" "${alias#sha256:}" "$hash" > "$marker.tmp"
+    chmod 0600 "$marker.tmp"; sync -f "$marker.tmp"; mv "$marker.tmp" "$marker"; sync -f "$dir"
+  fi
   # The exact existing receipt above authorizes this alias move. The serving
   # container is not restarted; a lost tag acknowledgement is read back.
   "$PODMAN_BIN" tag "sha256:$image" "$ACCEPTED_IMAGE_REF" || true
