@@ -994,7 +994,7 @@ def fresh_snapshot_routes(snapshot):
     return (rows if isinstance(rows, list) else []) + (workers if isinstance(workers, list) else [])
 
 
-def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity):
+def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, observations):
     """Require fresh, unambiguous mapped capacity for this exact fallback."""
     if not fresh_rows or not isinstance(snapshot, dict) or not isinstance(snapshot.get("candidates"), list):
         return False
@@ -1010,7 +1010,7 @@ def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity):
                               and row["native"].get("available") is True
                               for row in matches):
         return False
-    for row in fresh_rows:
+    for row in observations:
         if not isinstance(row, dict):
             continue
         native = row.get("native") or row.get("target") or {}
@@ -1072,7 +1072,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
                 raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: primary probe limit reached")
             primary_attempts += 1
         identity = (target["instance"], target["model"])
-        if target["fallback"] and not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity):
+        if target["fallback"] and not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
             raise RouteUnknownError(pick_summary, route_summary,
                                     "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
         exhausted.add(identity)
@@ -1125,7 +1125,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
                     or item.get("billing") not in ("subscription", "free", "promotion")
                     or identity in exhausted):
                 continue
-            if not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity):
+            if not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
                 raise RouteUnknownError(pick_summary, route_summary,
                                         "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
     # An absent, malformed or unreadable route is not evidence of exhaustion.

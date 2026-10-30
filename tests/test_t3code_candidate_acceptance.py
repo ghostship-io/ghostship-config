@@ -163,6 +163,13 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 with self.assertRaises(acceptance.RouteUnknownError):
                     acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=snapshot)
         self.assertEqual(self.probe_calls(calls), [])
+        pick["available"] = False
+        calls.clear()
+        available = {**stale, "model_selection":unavailable["model_selection"]}
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy, snapshot=available)
+        self.assertEqual(self.probe_calls(calls), [])
         empty = Mock(returncode=0, stdout='{"data":{"selected":[], "pick":null}}')
         with patch.object(acceptance, "candidate_agent_command", return_value=empty), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnknownError):
