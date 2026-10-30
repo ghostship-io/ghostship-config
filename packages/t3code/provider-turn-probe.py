@@ -43,28 +43,68 @@ def has_tool_result(client, thread):
     return any(item.get("type") == "tool_result" and item.get("ok") is True for item in items)
 
 
-def prove_route(route, wait, client):
+def standard_options(client, instance, model):
+    """Use only supported non-fast options from the live native catalog."""
+    providers = client.capabilities(instance).get("providers", [])
+    matches = [(provider, item) for provider in providers if provider.get("providerInstanceId") == instance
+               for item in provider.get("models", []) if item.get("id") == model]
+    if len(matches) != 1 or matches[0][0].get("available") is not True:
+        raise ValueError("native route is not currently available")
+    descriptors = {item.get("id"): item for item in matches[0][1].get("options", []) if isinstance(item, dict)}
+    options = {}
+    tier = descriptors.get("serviceTier")
+    if instance == "codex" and not tier:
+        raise ValueError("standard Codex tier is not verifiable")
+    if tier:
+        values = tier.get("values")
+        if tier.get("type") == "boolean" or (values is not None and "standard" not in values):
+            raise ValueError("standard tier is not supported")
+        options["serviceTier"] = "standard"
+    fast = descriptors.get("fastMode")
+    if fast:
+        if fast.get("type") != "boolean":
+            raise ValueError("fast mode cannot be disabled")
+        options["fastMode"] = False
+    return options
+
+
+def native_is_admitted(policy, instance, model):
+    if not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2":
+        return False
+    providers, routes = policy.get("providers"), policy.get("routes")
+    if not isinstance(providers, dict) or not isinstance(routes, list):
+        return False
+    admitted = []
+    for row in routes:
+        if not isinstance(row, dict) or not isinstance(row.get("roles"), list):
+            continue
+        provider = row.get("provider")
+        provider_policy = providers.get(provider) if isinstance(provider, str) else None
+        if (row.get("admit") is True and "worker" in row["roles"]
+                and row.get("provider_instance") == instance and row.get("model") == model
+                and isinstance(provider_policy, dict) and provider_policy.get("admit") is True
+                and row.get("billing") in ("subscription", "free", "promotion")):
+            admitted.append(row)
+    return len(admitted) == 1
+
+
+def prove_route(route, wait, client, native_target=None):
     from ghostship_t3.bridge import T3Error
     from ghostship_t3.models import read_document, _selection
 
     provider, sep, model = route.partition("/")
     if not sep or not provider or not model:
         raise T3Error("route must be provider/model")
-    document = read_document()
-    selected = _selection(document, time.time())
-    target = None
-    for row in selected.get("worker") or []:
-        native = row.get("native") or {}
-        if row.get("provider") == provider and row.get("model") == model and native.get("instanceId") and native.get("model"):
-            target = (native["instanceId"], native["model"],
-                      {item["id"]: item["value"] for item in native.get("options") or []
-                       if isinstance(item, dict) and item.get("id")})
-            break
+    target = native_target
     if target is None:
-        for row in document.get("candidates") or []:
+        document = read_document()
+        selected = _selection(document, time.time())
+        for row in selected.get("worker") or []:
             native = row.get("native") or {}
-            if row.get("provider") == provider == "opencode-free" and (row.get("model") == model or native.get("model_id") == model):
-                target = ("opencode-free", native.get("model_id") or model, {})
+            if row.get("provider") == provider and row.get("model") == model and native.get("instanceId") and native.get("model"):
+                target = (native["instanceId"], native["model"],
+                          {item["id"]: item["value"] for item in native.get("options") or []
+                           if isinstance(item, dict) and item.get("id")})
                 break
     if target is None:
         raise T3Error("route has no live T3 target to prove")
@@ -124,6 +164,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("route")
     parser.add_argument("--wait", type=float, default=180)
+    parser.add_argument("--instance")
+    parser.add_argument("--native-model")
+    parser.add_argument("--options-json", default="{}")
     args = parser.parse_args()
 
     agent_tools = (os.environ.get("GHOSTSHIP_TOOLS_ROOT")
@@ -132,9 +175,36 @@ def main():
         parser.error("candidate agent tools path is unavailable")
     sys.path.insert(0, str(Path(agent_tools) / "tools/python"))
 
-    from ghostship_t3.bridge import Bridge
+    from ghostship_t3.bridge import Bridge, T3Error
 
-    result = prove_route(args.route, args.wait, Bridge())
+    native_target = None
+    if args.instance or args.native_model:
+        if not args.instance or not args.native_model:
+            parser.error("both native identity fields are required")
+        try:
+            policy = json.loads(Path("/etc/ghostship/route-policy.json").read_text())
+            options = json.loads(args.options_json)
+            if not native_is_admitted(policy, args.instance, args.native_model):
+                raise ValueError("native route is not admitted")
+            if not isinstance(options, dict) or any(k not in ("serviceTier", "fastMode") for k in options):
+                raise ValueError("invalid native options")
+            if options.get("serviceTier", "standard") != "standard" or options.get("fastMode", False) is not False:
+                raise ValueError("priority or fast mode is not permitted")
+            if args.instance == "codex" and options != {"serviceTier": "standard", "fastMode": False}:
+                raise ValueError("Codex requires standard tier and fast mode off")
+        except (OSError, ValueError, TypeError, AttributeError):
+            parser.error("native route admission or standard tier could not be verified")
+        native_target = (args.instance, args.native_model, options)
+    client = Bridge()
+    if native_target:
+        try:
+            safe_options = standard_options(client, native_target[0], native_target[1])
+            native_target = (native_target[0], native_target[1], safe_options)
+        except (ValueError, TypeError, KeyError, OSError, T3Error):
+            print(json.dumps({"outcome": "route_unavailable", "settled": True,
+                              "error": {"code": "route-unavailable"}}, sort_keys=True))
+            return 1
+    result = prove_route(args.route, args.wait, client, native_target)
     output = {
         "provider": result.get("provider"),
         "model": result.get("model"),

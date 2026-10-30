@@ -581,9 +581,20 @@ bind mount) across the immediate restart. Each container carries its deployment
 ID in the `io.ghostship.t3code.deployment` label. A successful run records the
 deployment as applied only after the new container is healthy and its runtime
 inputs match. Failed candidate acceptance raises the service failure incident
-once and blocks the same image and acceptance bundle; it is not retried or queued.
+once and blocks the same image and acceptance bundle only when a previously
+proven-working route demonstrates the candidate failure. The probe matches exact
+native provider/model identities to the worker-admitted route policy; picker
+free-model approval is not work admission. It uses admitted fallback-only routes
+only when current capacity evidence establishes no primary is usable. Codex
+uses standard tier and fast mode is never enabled. Exhausted or unavailable
+routes are recorded as `route_unavailable` without a candidate-failed marker;
+unresolved probe or unclassified acceptance outcomes are recorded as unknown
+and are not automatically replayed. Neither is an acceptance PASS.
 Changes to the acceptance script, its packaged probes or runtime capabilities,
-or the candidate/tooling identity cause the full acceptance to run again.
+the managed launcher chains or their immutable Nix store identities, or the
+candidate/tooling identity cause the full acceptance to run again. The deployer
+holds the managed tool and refresh locks across acceptance; missing locks or
+launcher chains without a proven immutable identity refuse the run.
 When an external condition has changed without changing those inputs, an
 operator with host root access can record a reason and clear the block with
 `ghostship-t3code-invalidate-failure 'reason'`. The command records the old

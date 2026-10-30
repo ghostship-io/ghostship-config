@@ -5,9 +5,21 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
+mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"
+mkdir -p "$tmp/home/.local/state/t3code-tool-update"
+: > "$tmp/home/.local/state/t3code-tool-update/tool-update.lock"
+: > "$tmp/home/.local/state/t3code-shared-agents/refresh.lock"
+for tool in agent ghostship ghostship-bladebro; do
+  printf '#!/bin/sh\nexec /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-agent/bin/%s "$@"\n' "$tool" > "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
+  chmod 0755 "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
+done
 printf 'fixture\n' > "$tmp/hardening-probe.py"
 printf 'fixture\n' > "$tmp/provider-turn-probe.py"
 printf '[]\n' > "$tmp/runtime-caps.json"
+printf '{"schema":"ghostship.route-policy/v2"}\n' > "$tmp/route-policy.json"
+printf '{"schema":"ghostship.approved-free-workers/v1"}\n' > "$tmp/approved-free.json"
+export ROUTE_POLICY_FILE="$tmp/route-policy.json" APPROVED_FREE_FILE="$tmp/approved-free.json"
+cp "$root/packages/t3code/acceptance-launcher-key.py" "$tmp/acceptance-launcher-key.py"
 export PATH="$tmp/bin:$PATH"
 
 printf '%s\n' '{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["fixture"]}}' > "$tmp/config.json"
@@ -24,18 +36,32 @@ printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")
 cat > "$tmp/bin/python" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $1 == */acceptance-launcher-key.py ]]; then exec python3 "$@"; fi
 exec "$@"
 SH
 cat > "$tmp/accept-candidate" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true || flock -n "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" true; then
+  echo 'candidate ran without managed locks' >&2
+  exit 3
+fi
+if [[ ${CANDIDATE_ROUTE_UNAVAILABLE:-0} == 1 ]]; then
+  jq '. + {outcome:"route_unavailable",provider_turn:{routes:"fixture-exhausted"}}' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" > "$STATE_DIR/attempts/route.tmp"
+  mv "$STATE_DIR/attempts/route.tmp" "$STATE_DIR/attempts/$DEPLOYMENT_ID.json"
+  exit 76
+fi
+if [[ ${CANDIDATE_UNKNOWN:-0} == 1 ]]; then exit 2; fi
+if [[ ${MUTATE_AGENT:-0} == 1 ]]; then
+  printf '#!/bin/sh\nexec /nix/store/cccccccccccccccccccccccccccccccc-agent/bin/agent "$@"\n' > "$HOME_DIR/.local/state/t3code-shared-agents/bin/agent"
+fi
 if [[ ${CANDIDATE_PRECONDITION:-0} == 1 ]]; then
   printf '%s\n' candidate-precondition >> "$EVENTS"
   exit 75
 fi
 if [[ ${CANDIDATE_FAIL:-0} == 1 ]]; then
   printf '%s\n' candidate-failed >> "$EVENTS"
-  exit 2
+  exit 78
 fi
 printf '%s\n' candidate-accepted >> "$EVENTS"
 if [[ -n ${SUPERSEDE_TO:-} ]]; then
@@ -232,7 +258,7 @@ bash "$root/packages/t3code/deploy-image.sh" > "$tmp/unrelated.log" 2>&1
 grep -q 'already failed .* image remains blocked' "$tmp/unrelated.log"
 saved_events=$EVENTS
 EVENTS="$tmp/probe-rerun-events"
-for input in provider-turn-probe.py hardening-probe.py runtime-caps.json; do
+for input in provider-turn-probe.py hardening-probe.py runtime-caps.json route-policy.json approved-free.json; do
   cp "$tmp/$input" "$tmp/input-original"
   printf '# acceptance input fix\n' >> "$tmp/$input"
   set +e
@@ -245,6 +271,53 @@ for input in provider-turn-probe.py hardening-probe.py runtime-caps.json; do
   cp "$tmp/input-original" "$tmp/$input"
   printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
 done
+cp "$tmp/home/.local/state/t3code-shared-agents/bin/agent" "$tmp/agent-original"
+printf '#!/bin/sh\nexec /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-agent/bin/agent "$@"\n' > "$tmp/home/.local/state/t3code-shared-agents/bin/agent"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/agent-rerun.log" 2>&1
+agent_status=$?
+set -e
+[[ $agent_status != 0 ]]
+grep -q 'Candidate acceptance FAILED' "$tmp/agent-rerun.log"
+cp "$tmp/agent-original" "$tmp/home/.local/state/t3code-shared-agents/bin/agent"
+printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+
+export DEPLOYMENT_ID=deployment-route-unavailable CANDIDATE_ROUTE_UNAVAILABLE=1 CANDIDATE_FAIL=0
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/route-unavailable.log" 2>&1
+route_status=$?
+set -e
+[[ $route_status == 76 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+jq -e '.outcome == "route_unavailable" and .provider_turn.routes == "fixture-exhausted"' "$tmp/state/attempts/$DEPLOYMENT_ID.json" >/dev/null
+unset CANDIDATE_ROUTE_UNAVAILABLE
+export DEPLOYMENT_ID=deployment-acceptance-unknown CANDIDATE_UNKNOWN=1
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/acceptance-unknown.log" 2>&1
+unknown_status=$?
+set -e
+[[ $unknown_status == 77 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+jq -e '.outcome == "acceptance_unknown"' "$tmp/state/attempts/$DEPLOYMENT_ID.json" >/dev/null
+unset CANDIDATE_UNKNOWN
+export DEPLOYMENT_ID=deployment-2 CANDIDATE_FAIL=1
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+# If a writer ignores the locks and changes a launcher during the candidate,
+# the observed failure is not attributed to either code identity.
+printf '# probe fix\n' >> "$tmp/provider-turn-probe.py"
+export MUTATE_AGENT=1 CANDIDATE_FAIL=0
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/changed-during.log" 2>&1
+changed_status=$?
+set -e
+unset MUTATE_AGENT
+[[ $changed_status == 75 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+[[ ! -e "$tmp/state/receipts/$DEPLOYMENT_ID.json" ]]
+grep -q 'Managed launcher changed during acceptance' "$tmp/changed-during.log"
+export CANDIDATE_FAIL=1
+cp "$tmp/agent-original" "$tmp/home/.local/state/t3code-shared-agents/bin/agent"
+printf 'fixture\n' > "$tmp/provider-turn-probe.py"
+rm -f "$tmp/state/precondition-attempts"
 cp "$tmp/image.tar" "$tmp/image-original.tar"
 cp "$tmp/config.json" "$tmp/config-original.json"
 printf '%s\n' '{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["different-candidate"]}}' > "$tmp/config.json"
@@ -363,6 +436,8 @@ absent_status=$?
 set -e
 [[ $absent_status != 0 ]]
 grep -q 'receipt did not approve this exact image' "$tmp/absent.log"
+[[ $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+jq -e '.outcome == "acceptance_unknown"' "$tmp/state/attempts/$DEPLOYMENT_ID.json" >/dev/null
 [[ $(wc -l < "$EVENTS") == 6 ]]
 
 # A mismatched receipt is also rejected before the accepted alias can move.
@@ -375,6 +450,7 @@ mismatch_status=$?
 set -e
 [[ $mismatch_status != 0 ]]
 grep -q 'receipt did not approve this exact image' "$tmp/mismatch.log"
+[[ $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
 [[ $(wc -l < "$EVENTS") == 7 ]]
 
 # A target changed while acceptance ran must not be restarted with the old

@@ -24,6 +24,7 @@ let
   t3codeDeploymentScripts = pkgs.runCommand "t3code-deployment-scripts" { } ''
     mkdir -p "$out"
     cp ${../../packages/t3code/candidate-acceptance.py} "$out/candidate-acceptance.py"
+    cp ${../../packages/t3code/acceptance-launcher-key.py} "$out/acceptance-launcher-key.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/provider-turn-probe.py} "$out/provider-turn-probe.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"

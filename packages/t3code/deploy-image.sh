@@ -52,6 +52,8 @@ fi
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
+ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
+APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -197,15 +199,36 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
+# Managed tool updates acquire the tool lock before the shared refresh lock.
+# Hold both while identifying and running the candidate, so a failed receipt is
+# bound to the launcher code it actually staged.
+tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
+refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
+[[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" ]] || {
+  echo 'Managed tool or refresh lock missing; candidate is not inspected' >&2; exit 1;
+}
+exec 8<>"$tool_lock"
+flock -x 8
+exec 7<>"$refresh_lock"
+flock -x 7
 # Hash only the executable acceptance bundle and the candidate/tooling identity.
-# The bundle is copied as four named files by t3codeDeploymentScripts; adding a
+# The bundle is copied as named files by t3codeDeploymentScripts; adding a
 # dependency requires updating that bundle and this manifest together. Paths
 # within the bundle do not affect identity, and unrelated files are excluded.
 acceptance_dir=$(dirname "$CANDIDATE_ACCEPTANCE")
+launcher_id=$("$PYTHON_BIN" "$acceptance_dir/acceptance-launcher-key.py" --home "$HOME_DIR" --container-home "$CANDIDATE_HOME_TARGET")
+[[ $launcher_id =~ ^[0-9a-f]{64}$ ]] || { echo 'Managed launcher identity unavailable' >&2; exit 1; }
+policy_identity() {
+  for file in "$ROUTE_POLICY_FILE" "$APPROVED_FREE_FILE"; do
+    [[ -f "$file" && -r "$file" ]] || { echo 'Acceptance policy input missing or unreadable' >&2; return 1; }
+    sha256sum < "$file" || return 1
+  done | sha256sum | cut -d ' ' -f 1
+}
+policy_id=$(policy_identity)
 acceptance_id=$(
   {
-    printf 'candidate-acceptance-v2\nimage=%s\nagent=%s\ntooling=%s\npython=%s\n' "$image_id" "$AGENT_REVISION" "$TOOLING_PATH" "$PYTHON_BIN"
-    for file in "$CANDIDATE_ACCEPTANCE" "$acceptance_dir/hardening-probe.py" "$acceptance_dir/provider-turn-probe.py" "$acceptance_dir/runtime-caps.json"; do
+    printf 'candidate-acceptance-v4\nimage=%s\nagent=%s\ntooling=%s\npython=%s\nlaunchers=%s\npolicy=%s\n' "$image_id" "$AGENT_REVISION" "$TOOLING_PATH" "$PYTHON_BIN" "$launcher_id" "$policy_id"
+    for file in "$CANDIDATE_ACCEPTANCE" "$acceptance_dir/acceptance-launcher-key.py" "$acceptance_dir/hardening-probe.py" "$acceptance_dir/provider-turn-probe.py" "$acceptance_dir/runtime-caps.json"; do
       [[ -f "$file" && -r "$file" ]] || { echo 'Acceptance input missing or unreadable' >&2; exit 1; }
       sha256sum < "$file" || exit 1
     done
@@ -245,12 +268,35 @@ candidate_args=(
   --candidate-home-target "$CANDIDATE_HOME_TARGET"
   --systemctl-bin "$SYSTEMCTL_BIN"
 )
-candidate_args+=(--volume /etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro)
-candidate_args+=(--volume /etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro)
+candidate_args+=(--volume "$ROUTE_POLICY_FILE:/etc/ghostship/route-policy.json:ro")
+candidate_args+=(--volume "$APPROVED_FREE_FILE:/etc/ghostship/approved-free-workers.json:ro")
 candidate_args+=(--volume /nix/store:/nix/store:O)
 
 acceptance_status=0
 "$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}" || acceptance_status=$?
+# Refuse to bind an uncertain result to a changed launcher even if a writer did
+# not honor the managed locks. This never treats a failed run as a PASS.
+if ! launcher_after=$("$PYTHON_BIN" "$acceptance_dir/acceptance-launcher-key.py" --home "$HOME_DIR" --container-home "$CANDIDATE_HOME_TARGET") || [[ "$launcher_after" != "$launcher_id" ]]; then
+  echo 'Managed launcher changed during acceptance; image stays retryable' >&2
+  rm -f "$receipt"
+  acceptance_status=75
+fi
+if ! policy_after=$(policy_identity) || [[ "$policy_after" != "$policy_id" ]]; then
+  echo 'Acceptance policy changed during acceptance; image stays retryable' >&2
+  rm -f "$receipt"
+  acceptance_status=75
+fi
+if [[ $acceptance_status == 76 || $acceptance_status == 77 ]]; then
+  rm -f "$precondition_file"
+  outcome=route_unavailable
+  [[ $acceptance_status != 77 ]] || outcome=route_unknown
+  if ! "$JQ_BIN" -e --arg outcome "$outcome" '.outcome == $outcome and (.provider_turn.routes | type == "string")' "$attempt_file" >/dev/null 2>&1; then
+    echo 'Candidate route outcome lacks recorded evidence; inspect before retry' >&2
+    exit 77
+  fi
+  echo "Candidate acceptance $outcome; image not marked failed" >&2
+  exit "$acceptance_status"
+fi
 # 75: a host precondition failed before the candidate ran; the image is not at
 # fault and the next run re-runs full acceptance.
 if [[ $acceptance_status == 75 ]]; then
@@ -273,26 +319,31 @@ if [[ $acceptance_status == 75 ]]; then
   exit 75
 fi
 rm -f "$precondition_file"
-if [[ $acceptance_status != 0 ]]; then
+if [[ $acceptance_status == 78 ]]; then
   mark_candidate_failed
   echo "Candidate acceptance FAILED for $DEPLOYMENT_ID; image will not be queued" >&2
   exit 1
 fi
+if [[ $acceptance_status != 0 ]]; then
+  # An unclassified failure has not been attributed to a proven-working route.
+  # Keep the candidate retry decision with the operator, not the failed marker.
+  "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"unclassified acceptance failure"}' "$attempt_file" > "$attempt_temporary"
+  chmod 0600 "$attempt_temporary"
+  mv -f "$attempt_temporary" "$attempt_file"
+  echo "Candidate acceptance outcome unknown for $DEPLOYMENT_ID; image not marked failed" >&2
+  exit 77
+fi
 
 if ! receipt_matches_image; then
-  mark_candidate_failed
+  "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"exact-image receipt missing or invalid"}' "$attempt_file" > "$attempt_temporary"
+  chmod 0600 "$attempt_temporary"
+  mv -f "$attempt_temporary" "$attempt_file"
   echo "Candidate acceptance receipt did not approve this exact image: $DEPLOYMENT_ID" >&2
-  exit 1
+  exit 77
 fi
 
 rm -f "$failed_file"
 echo "Candidate acceptance PASS deployment=$DEPLOYMENT_ID image=$image_id receipt=$receipt"
-
-tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
-if [[ -d "$(dirname "$tool_lock")" ]]; then
-  exec 8>"$tool_lock"
-  flock -x 8
-fi
 
 container_identity() {
   local fields
