@@ -164,6 +164,37 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
 
+    def test_incomplete_snapshot_failure_retains_safe_route_provenance(self):
+        policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
+                  "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
+        snapshot = {"schema":"ghostship.ai-usage.routing", "schema_version":1, "partial":True,
+                    "coverage":{"tiers":{"bulk":{"state":"ok"}}},
+                    "candidates":[{"available":True, "provider":"opencode-free", "model":"nvidia/minimaxai/minimax-m3.1-flash", "secret":"never-retain"}]}
+        source = self.root / "routing.json"
+        source.write_text(json.dumps(snapshot))
+        result = Mock(returncode=0, stdout=json.dumps({"data":{"selected":[], "pick":{}, "token":"never-retain"}}))
+        def check(*args, evidence=None, routing_snapshot=None, **kwargs):
+            return acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy,
+                                                  snapshot=routing_snapshot, evidence=evidence)
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=check), \
+             patch.object(acceptance, "candidate_agent_command", return_value=result), \
+             patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(acceptance.RouteUnknownError, "primary/flash:available"):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity, model_routing_file=source)
+        path = self.state / "attempts/generation-502.json"
+        record = json.loads(path.read_text())
+        self.assertEqual(record["outcome"], "route_unknown")
+        provenance = record["route_provenance"]
+        self.assertEqual(provenance["snapshot"]["partial"], True)
+        self.assertEqual(provenance["model_list"]["json"]["data"]["selected"], [])
+        self.assertEqual(provenance["candidate"]["image_id"], self.image_id)
+        self.assertIn("primary/flash:available", provenance["incomplete"])
+        self.assertNotIn("never-retain", path.read_text())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_generic_execution_error_on_proven_route_is_unknown(self):
         policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
                   "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
@@ -180,8 +211,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
         policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
                   "routes":[{"provider":"primary", "provider_instance":"primary", "model":"flash", "admit":True, "roles":["worker"], "billing":"subscription"}]}
         with patch.object(acceptance, "candidate_agent_command", return_value=Mock(returncode=1, stdout="", stderr="network error")), patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
-            with self.assertRaises(acceptance.RouteUnknownError):
+            with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertIn("primary/flash:available", str(failure.exception))
+            self.assertIn("agent-models-selected,agent-models-pick,model-routing.json", str(failure.exception))
+            self.assertIn("models_exit=1; pick_exit=1", str(failure.exception))
 
     def test_success_without_exact_settled_proof_is_unknown(self):
         policy = {"schema":"ghostship.route-policy/v2", "providers":{"primary":{"admit":True}},
