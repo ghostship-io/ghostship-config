@@ -43,5 +43,8 @@ if "${cmd[@]}" end-no-activation; then echo 'accepted changed state' >&2; exit 1
 printf 'old\n' > "$tmp/state/desired"
 "${cmd[@]}" end-no-activation
 "${cmd[@]}" start two
-"${cmd[@]}" end-no-activation
+"${cmd[@]}" switch -- true
+if "${cmd[@]}" end-no-activation; then echo 'accepted announced switch' >&2; exit 1; fi
+[[ -f "$tmp/evidence/two/complete.started" ]]
+compgen -G "$tmp/evidence/two/effect-intent.switch.*" >/dev/null
 echo 'Release window refusal and reopen fixture passed.'

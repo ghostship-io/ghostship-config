@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
+# shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
 : "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}"
 window_root
@@ -42,7 +43,7 @@ case ${1:-} in
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
   [[ -f $LOCK_CANDIDATE && -f $LOCK_HARDENING ]] || fail 'candidate lock missing'
-  flock -n -s "$LOCK_CANDIDATE" true && flock -n -s "$LOCK_HARDENING" true || fail 'candidate lock held'
+  if ! flock -n -s "$LOCK_CANDIDATE" true || ! flock -n -s "$LOCK_HARDENING" true; then fail 'candidate lock held'; fi
   baseline=$(snapshot) || fail 'baseline unknown'
   mkdir -m 0700 "$WINDOW_ROOT/$id"
   dir=$WINDOW_ROOT/$id
@@ -51,11 +52,30 @@ case ${1:-} in
   printf '%s\n' "$id" > "$WINDOW_ROOT/active-window.tmp"
   sync -f "$WINDOW_ROOT/active-window.tmp"
   mv "$WINDOW_ROOT/active-window.tmp" "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
+  # Arguments are expanded by the holder shell.
+  # shellcheck disable=SC2016
   "$SYSTEMD_RUN_BIN" --quiet --unit="$WINDOW_UNIT" --collect -p "RuntimeMaxSec=$WINDOW_SECONDS" -- bash -c 'exec 7<>"$1" 9<>"$2"; flock -n 7 && flock -n 9 && exec sleep infinity' _ "$LOCK_CANDIDATE" "$LOCK_HARDENING"
   [[ $(unit_state "$WINDOW_UNIT") == active ]] || fail 'window holder not active; inspect before recovery'
   install -d -m 0700 "$(dirname "$HOLD_FILE")"; : > "$HOLD_FILE"
   "$SYSTEMCTL_BIN" stop t3code-recovery.service
   [[ $(unit_state t3code-recovery) == inactive ]] || fail 'recovery did not stop'
+  ;;
+ switch)
+  shift
+  [[ ${1:-} == -- && $# -ge 2 ]] || fail 'usage: switch -- COMMAND [ARG...]'
+  shift
+  preflight
+  # Retain the shared lock through the switch and all its effects. Announcing
+  # before any effect is deliberately conservative if later checks fail.
+  announce_intent switch
+  read_active
+  [[ $(unit_state "$WINDOW_UNIT") == active && -f $HOLD_FILE ]] || fail 'window state unknown'
+  exec 9>"$dir/complete.lock"
+  flock -n -x 9 || fail 'switch already running'
+  [[ ! -e $dir/complete.started ]] || fail 'switch already started; outcome unknown'
+  printf '%s\n' "$(date -u +%FT%TZ)" > "$dir/complete.started"
+  sync -f "$dir/complete.started"; sync -f "$dir"
+  "$@"
   ;;
  end-no-activation)
   preflight
@@ -76,5 +96,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight|start WINDOW_ID|end-no-activation' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight|start WINDOW_ID|switch -- COMMAND [ARG...]|end-no-activation' >&2; exit 2 ;;
 esac
