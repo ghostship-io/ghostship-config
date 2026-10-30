@@ -98,7 +98,7 @@ let
   };
   t3codeReleaseWindow = pkgs.writeShellApplication {
     name = "ghostship-t3code-release-window";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman ];
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq ];
     text = ''
       export WINDOW_CONFIG=${t3codeWindowConfigFile}
       export WINDOW_BOOTSTRAP=${../../packages/t3code/window-bootstrap.sh}
@@ -107,6 +107,7 @@ let
       export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
       export PODMAN_BIN=${pkgs.podman}/bin/podman
+      export JQ_BIN=${pkgs.jq}/bin/jq
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };

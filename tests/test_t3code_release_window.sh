@@ -10,6 +10,7 @@ ln -s system-1-link "$tmp/profile"
 cat > "$tmp/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 if [[ $1 == show ]]; then
+  if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
   if [[ $2 == window.service && $3 == -p && $4 == MainPID ]]; then cat "$FIXTURE/holder-pid"; exit; fi
   case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; *) echo inactive ;; esac
 elif [[ $1 == stop && $2 == t3code-recovery.service ]]; then touch "$FIXTURE/recovery-inactive"
@@ -19,7 +20,14 @@ else exit 1; fi
 SH
 cat > "$tmp/bin/podman" <<'SH'
 #!/usr/bin/env bash
-printf 'healthy\n'
+case "$1 $3 ${4:-}" in
+  'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
+  'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
+  'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
+  'exec stat -Lc') stat -Lc '%i' "$PROVIDER_SECRETS_FILE" ;;
+  'exec systemctl is-active'|'exec curl -fsS') exit 0 ;;
+  *) exit 1 ;;
+esac
 SH
 cat > "$tmp/bin/systemd-run" <<'SH'
 #!/usr/bin/env bash
@@ -34,6 +42,10 @@ printf "%s\n" "$!" > "$FIXTURE/holder-pid"
 SH
 chmod +x "$tmp/bin/"*
 export WINDOW_BOOTSTRAP="$repo/packages/t3code/window-bootstrap.sh"
+EXPECTED_IMAGE=$(printf '%064d' 2); EXPECTED_DEPLOYMENT=$(printf '%064d' 3); JQ_BIN=$(command -v jq)
+export EXPECTED_IMAGE EXPECTED_DEPLOYMENT JQ_BIN
+export EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$tmp/tooling" PROVIDER_SECRETS_FILE="$tmp/secrets" CURRENT_SYSTEM="$tmp/current-system" EXPECTED_SYSTEM="$tmp/system" CANDIDATE_HOME_TARGET=/home/fixture
+mkdir -p "$tmp/system" "$tmp/tooling"; printf 'fixture\n' > "$PROVIDER_SECRETS_FILE"; ln -s "$tmp/system" "$CURRENT_SYSTEM"
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
 cmd=(bash "$repo/packages/t3code/release-window.sh")
 # Preflight reads the actual lock files and ignores unrelated fixture locks.
@@ -88,4 +100,17 @@ printf 'old\n' > "$tmp/state/desired"
 if "${cmd[@]}" end-no-activation; then echo 'accepted announced switch' >&2; exit 1; fi
 [[ -f "$tmp/evidence/two/complete.started" ]]
 compgen -G "$tmp/evidence/two/effect-intent.switch.*" >/dev/null
+# Post refuses an absent receipt and an unknown attempt, and only passes after
+# exact receipt, deployed state, live image, tooling and secret all agree.
+ln -sfn "$tmp/system" "$tmp/profile"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"
+if "${cmd[@]}" post; then echo 'accepted missing receipt' >&2; exit 1; fi
+inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
+jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:$a,agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown"}\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+if "${cmd[@]}" post; then echo 'accepted unknown attempt' >&2; exit 1; fi
+printf '{"deployment_id":"%s","exit_code":0}\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+"${cmd[@]}" post
 echo 'Release window refusal and reopen fixture passed.'

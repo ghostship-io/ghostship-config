@@ -65,6 +65,38 @@ snapshot() {
     printf 'failed=%s\n' "$(sha256sum "$STATE_DIR/failed-candidate" | cut -d' ' -f1)"
   else printf 'failed=absent\n'; fi
 }
+post_verify() {
+  : "${EXPECTED_DEPLOYMENT:?}" "${EXPECTED_IMAGE:?}" "${EXPECTED_AGENT_REVISION:?}" "${EXPECTED_TOOLING_PATH:?}" "${PROVIDER_SECRETS_FILE:?}" "${CURRENT_SYSTEM:?}" "${EXPECTED_SYSTEM:?}" "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
+  [[ $EXPECTED_DEPLOYMENT =~ ^[0-9a-f]{64}$ && $EXPECTED_IMAGE =~ ^[0-9a-f]{64}$ ]] || fail 'invalid expected identity'
+  [[ -f $dir/complete.started && -f $dir/complete.lock && ! -L $dir/complete.lock ]] || fail 'switch evidence missing'
+  exec 6<"$dir/complete.lock"; flock -n -x 6 || fail 'switch outcome unknown: writer active'
+  exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy outcome unknown: writer active'
+  [[ $(unit_state ghostship-t3code-deploy) == inactive ]] || fail 'deploy service not inactive'
+  [[ $("$SYSTEMCTL_BIN" show ghostship-t3code-deploy.service -p Result --value) == success ]] || fail 'deploy service result not success'
+  [[ ! -e $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed candidate exists'
+  [[ $(cat "$STATE_DIR/applied") == "$EXPECTED_DEPLOYMENT" && $(cat "$STATE_DIR/desired") == "$EXPECTED_DEPLOYMENT" ]] || fail 'deployment state not reconciled'
+  [[ $(readlink -f "$CURRENT_SYSTEM") == "$EXPECTED_SYSTEM" && $(readlink -f "$PROFILE") == "$EXPECTED_SYSTEM" ]] || fail 'system generation not reconciled'
+  local receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" inode image
+  [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
+  inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'provider secret identity unknown'
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '
+    .deployment_id == $d and (.image_id | sub("^sha256:"; "")) == $i and
+    (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
+    .live_before != null and .live_before == .live_after and .agent_revision == $a and
+    .agent_path == $p and .provider_secret_inode == $s and
+    ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null || fail 'exact-image receipt invalid'
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" '.deployment_id == $d and .exit_code == 0 and (.status == null) and (.outcome == null)' "$attempt" >/dev/null || fail 'deployment attempt failed or unknown'
+  image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'live image unknown'
+  [[ ${image#sha256:} == "$EXPECTED_IMAGE" ]] || fail 'live image differs from receipt'
+  [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') == healthy ]] || fail 'live container unhealthy'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'server inactive'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'server unresponsive'
+  [[ $("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") == "$EXPECTED_TOOLING_PATH" ]] || fail 'live tooling differs from receipt'
+  [[ $("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) == "$inode" ]] || fail 'live secret differs from receipt'
+  printf 'PASS post deployment=%s image=%s\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
+}
 case ${1:-} in
  preflight) preflight ;;
  start)
@@ -127,6 +159,13 @@ case ${1:-} in
   sync -f "$dir/complete.started"; sync -f "$dir"
   "$@"
   ;;
+ post)
+  [[ -f $WINDOW_ROOT/window.lock ]] || fail 'window lock missing'
+  exec 8<"$WINDOW_ROOT/window.lock"; flock -n -s 8 || fail 'window transition in progress'
+  read_active
+  if [[ ! -f $HOLD_FILE ]] || ! holder_ready; then fail 'window state unknown'; fi
+  post_verify
+  ;;
  end-no-activation)
   preflight_core
   lock_window
@@ -146,5 +185,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight|start WINDOW_ID|switch -- COMMAND [ARG...]|end-no-activation' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight|start WINDOW_ID|switch -- COMMAND [ARG...]|post|end-no-activation' >&2; exit 2 ;;
 esac
