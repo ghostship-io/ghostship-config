@@ -5,6 +5,9 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
+printf 'fixture\n' > "$tmp/hardening-probe.py"
+printf 'fixture\n' > "$tmp/provider-turn-probe.py"
+printf '[]\n' > "$tmp/runtime-caps.json"
 export PATH="$tmp/bin:$PATH"
 
 printf '%s\n' '{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["fixture"]}}' > "$tmp/config.json"
@@ -221,6 +224,68 @@ grep -q 'already failed .* image remains blocked' "$tmp/replay.log"
 [[ $(wc -l < "$EVENTS") == 5 ]]
 [[ $(wc -l < "$tmp/ledger.jsonl") == 2 ]]
 
+# An unrelated file cannot release a failed candidate, but a changed module
+# that acceptance runs must trigger a new acceptance for the same image.
+mark_failed_key=$(cat "$tmp/state/failed-candidate")
+printf 'unrelated\n' > "$tmp/unrelated.txt"
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/unrelated.log" 2>&1
+grep -q 'already failed .* image remains blocked' "$tmp/unrelated.log"
+saved_events=$EVENTS
+EVENTS="$tmp/probe-rerun-events"
+for input in provider-turn-probe.py hardening-probe.py runtime-caps.json; do
+  cp "$tmp/$input" "$tmp/input-original"
+  printf '# acceptance input fix\n' >> "$tmp/$input"
+  set +e
+  bash "$root/packages/t3code/deploy-image.sh" > "$tmp/probe-rerun.log" 2>&1
+  probe_status=$?
+  set -e
+  [[ $probe_status != 0 ]]
+  grep -q 'Candidate acceptance FAILED' "$tmp/probe-rerun.log"
+  if grep -q 'already failed' "$tmp/probe-rerun.log"; then echo 'changed acceptance input was blocked' >&2; exit 1; fi
+  cp "$tmp/input-original" "$tmp/$input"
+  printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+done
+cp "$tmp/image.tar" "$tmp/image-original.tar"
+cp "$tmp/config.json" "$tmp/config-original.json"
+printf '%s\n' '{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["different-candidate"]}}' > "$tmp/config.json"
+tar -cf "$tmp/image.tar" -C "$tmp" manifest.json config.json
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/new-image.log" 2>&1
+new_image_status=$?
+set -e
+[[ $new_image_status != 0 ]]
+grep -q 'Candidate acceptance FAILED' "$tmp/new-image.log"
+cp "$tmp/image-original.tar" "$tmp/image.tar"
+cp "$tmp/config-original.json" "$tmp/config.json"
+printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+mv "$tmp/hardening-probe.py" "$tmp/hardening-probe.saved"
+set +e
+bash "$root/packages/t3code/deploy-image.sh" > "$tmp/missing-input.log" 2>&1
+missing_status=$?
+set -e
+[[ $missing_status != 0 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+mv "$tmp/hardening-probe.saved" "$tmp/hardening-probe.py"
+EVENTS=$saved_events
+
+# Operators can explicitly invalidate only with a durable recorded reason;
+# this does not itself run acceptance or move the accepted image.
+set +e
+bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure '' > "$tmp/invalidate-empty.log" 2>&1
+empty_status=$?
+set -e
+[[ $empty_status != 0 && -e "$tmp/state/failed-candidate" ]]
+set +e
+JQ_BIN=/bin/false bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure 'audit unavailable' > "$tmp/invalidate-error.log" 2>&1
+audit_error=$?
+set -e
+[[ $audit_error != 0 && $(cat "$tmp/state/failed-candidate") == "$mark_failed_key" ]]
+before_events=$(wc -l < "$EVENTS")
+bash "$root/packages/t3code/deploy-image.sh" --invalidate-failure 'probe repaired' > "$tmp/invalidate.log"
+[[ ! -e "$tmp/state/failed-candidate" ]]
+[[ $(wc -l < "$EVENTS") == "$before_events" ]]
+jq -e --arg marker "$mark_failed_key" '.event == "invalidation_requested" and .reason == "probe repaired" and .failed_key == $marker and (.at | type == "string")' "$tmp/state/failure-invalidations.jsonl" > /dev/null
+printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
+
 # A changed acceptance check re-runs acceptance for the same image instead of
 # replaying the old failure; the new run still decides. Its events stay out of
 # the counts asserted below.
@@ -236,7 +301,6 @@ set -e
 grep -q 'Candidate acceptance FAILED' "$tmp/rerun.log"
 ! grep -q 'already failed' "$tmp/rerun.log"
 cp "$tmp/accept-candidate.orig" "$CANDIDATE_ACCEPTANCE"
-mark_failed_key="deployment-2 $(sha256sum "$CANDIDATE_ACCEPTANCE" | cut -d ' ' -f 1)"
 printf '%s\n' "$mark_failed_key" > "$tmp/state/failed-candidate"
 EVENTS=$saved_events
 

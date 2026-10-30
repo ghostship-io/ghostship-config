@@ -5,6 +5,32 @@ if [[ ${1:-} == --list-manifest ]]; then
   exec tar -xOf "$2" manifest.json
 fi
 
+if [[ ${1:-} == --invalidate-failure ]]; then
+  [[ $# == 2 && -n ${2//[[:space:]]/} && ${#2} -le 500 && $2 != *$'\n'* && $2 != *$'\r'* ]] || {
+    echo 'usage: ghostship-t3code-invalidate-failure REASON (one nonempty line)' >&2; exit 2;
+  }
+  : "${STATE_DIR:?}"
+  : "${JQ_BIN:?}"
+  umask 077
+  install -d -m 0700 "$STATE_DIR"
+  exec 9>"$STATE_DIR/deploy.lock"
+  flock -x 9
+  failed_file="$STATE_DIR/failed-candidate"
+  [[ -f "$failed_file" && ! -L "$failed_file" ]] || { echo 'No failed candidate marker to invalidate' >&2; exit 1; }
+  marker=$(cat "$failed_file")
+  [[ -n "$marker" ]] || { echo 'Failed candidate marker is empty; inspect it manually' >&2; exit 1; }
+  audit="$STATE_DIR/failure-invalidations.jsonl"
+  [[ ! -L "$audit" ]] || { echo 'Invalidation audit must not be a symlink' >&2; exit 1; }
+  touch "$audit"
+  chmod 0600 "$audit"
+  "$JQ_BIN" -cn --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg failed_key "$marker" --arg reason "$2" \
+    '{event:"invalidation_requested",at:$at,failed_key:$failed_key,reason:$reason}' >> "$audit"
+  sync -f "$audit"
+  rm "$failed_file"
+  echo 'Failed candidate marker invalidated; acceptance must run again.'
+  exit 0
+fi
+
 : "${STATE_DIR:?}"
 : "${IMAGE_ARCHIVE:?}"
 : "${DEPLOYMENT_ID:?}"
@@ -171,9 +197,20 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
-# A failure blocks only the image and acceptance code that produced it. A fixed
-# acceptance check re-runs acceptance; it never skips it.
-acceptance_id=$(sha256sum "$CANDIDATE_ACCEPTANCE" | cut -d ' ' -f 1)
+# Hash only the executable acceptance bundle and the candidate/tooling identity.
+# The bundle is copied as four named files by t3codeDeploymentScripts; adding a
+# dependency requires updating that bundle and this manifest together. Paths
+# within the bundle do not affect identity, and unrelated files are excluded.
+acceptance_dir=$(dirname "$CANDIDATE_ACCEPTANCE")
+acceptance_id=$(
+  {
+    printf 'candidate-acceptance-v2\nimage=%s\nagent=%s\ntooling=%s\npython=%s\n' "$image_id" "$AGENT_REVISION" "$TOOLING_PATH" "$PYTHON_BIN"
+    for file in "$CANDIDATE_ACCEPTANCE" "$acceptance_dir/hardening-probe.py" "$acceptance_dir/provider-turn-probe.py" "$acceptance_dir/runtime-caps.json"; do
+      [[ -f "$file" && -r "$file" ]] || { echo 'Acceptance input missing or unreadable' >&2; exit 1; }
+      sha256sum < "$file" || exit 1
+    done
+  } | sha256sum | cut -d ' ' -f 1
+)
 failed_key="$DEPLOYMENT_ID $acceptance_id"
 if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$failed_key" ]]; then
   echo "Candidate acceptance already failed for $DEPLOYMENT_ID; image remains blocked" >&2

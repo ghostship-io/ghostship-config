@@ -72,6 +72,14 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = builtins.readFile ../../packages/t3code/deploy-image.sh;
   };
+  t3codeInvalidateFailure = pkgs.writeShellApplication {
+    name = "ghostship-t3code-invalidate-failure";
+    text = ''
+      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
+      export JQ_BIN=${lib.getExe pkgs.jq}
+      exec ${lib.getExe t3codeImmediateDeploy} --invalidate-failure "$@"
+    '';
+  };
   t3codeActivateDeployment = pkgs.writeShellApplication {
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
@@ -111,6 +119,8 @@ let
 in
 {
   imports = [ ./t3code-recovery.nix ];
+
+  environment.systemPackages = [ t3codeInvalidateFailure ];
 
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {

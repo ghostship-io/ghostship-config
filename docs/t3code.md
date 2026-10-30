@@ -581,7 +581,18 @@ bind mount) across the immediate restart. Each container carries its deployment
 ID in the `io.ghostship.t3code.deployment` label. A successful run records the
 deployment as applied only after the new container is healthy and its runtime
 inputs match. Failed candidate acceptance raises the service failure incident
-once and marks that image blocked; it is not retried or queued. Backups include
+once and blocks the same image and acceptance bundle; it is not retried or queued.
+Changes to the acceptance script, its packaged probes or runtime capabilities,
+or the candidate/tooling identity cause the full acceptance to run again.
+When an external condition has changed without changing those inputs, an
+operator with host root access can record a reason and clear the block with
+`ghostship-t3code-invalidate-failure 'reason'`. The command records the old
+key and reason in the root-only deployment state's `failure-invalidations.jsonl`
+under the deployment lock before removing the marker; it does not run
+acceptance or restart T3. If audit recording fails, the marker remains. Treat a
+record as an invalidation request: a crash can leave the marker in place.
+Reasons must not contain secrets. The next deployment still runs all acceptance
+checks and requires the exact-image PASS receipt before any restart. Backups include
 the home and projects but exclude the development engine and Nix stores.
 
 ```sh
