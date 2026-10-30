@@ -1,17 +1,12 @@
 set -euo pipefail
 
-: "${WINDOW_CONFIG:?}"
-[[ -f $WINDOW_CONFIG && ! -L $WINDOW_CONFIG ]] || { echo "missing window configuration" >&2; exit 1; }
-WINDOW_DIR=$(cat "$WINDOW_CONFIG")
-[[ $WINDOW_DIR == /* && $WINDOW_DIR != *$'\n'* ]] || { echo "invalid window directory" >&2; exit 1; }
-export WINDOW_DIR
-source "${WINDOW_INTENT_HELPER:?}"
-announce_intent deploy
-
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
   exec tar -xOf "$2" manifest.json
 fi
+
+source "${WINDOW_INTENT_HELPER:?}"
+announce_intent deploy
 
 if [[ ${1:-} == --invalidate-failure ]]; then
   [[ $# == 2 && -n ${2//[[:space:]]/} && ${#2} -le 500 && $2 != *$'\n'* && $2 != *$'\r'* ]] || {

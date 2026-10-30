@@ -5,6 +5,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
+mkdir -p "$tmp/window"
+touch "$tmp/window/window.lock"
 export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
 mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"

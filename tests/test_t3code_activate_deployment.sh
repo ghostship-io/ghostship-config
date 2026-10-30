@@ -5,6 +5,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
+mkdir -p "$tmp/window"
+touch "$tmp/window/window.lock"
 export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
 mkdir -p "$tmp/bin" "$tmp/state"
 printf '%s\n' old-deployment > "$tmp/state/desired"

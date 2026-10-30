@@ -95,6 +95,19 @@ let
       ${builtins.readFile ../../packages/t3code/activate-deployment.sh}
     '';
   };
+  t3codeReleaseWindow = pkgs.writeShellApplication {
+    name = "ghostship-t3code-release-window";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman ];
+    text = ''
+      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
+      export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
+      export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+      export PODMAN_BIN=${pkgs.podman}/bin/podman
+      ${builtins.readFile ../../packages/t3code/release-window.sh}
+    '';
+  };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
@@ -130,7 +143,7 @@ in
 {
   imports = [ ./t3code-recovery.nix ];
 
-  environment.systemPackages = [ t3codeInvalidateFailure ];
+  environment.systemPackages = [ t3codeInvalidateFailure t3codeReleaseWindow ];
 
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {
@@ -295,6 +308,8 @@ in
     "d /srv/apps/t3code 0755 root root -"
     "d /var/lib/t3code-restarts 0700 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
+    "d ${t3codeDeploymentState}/release-window 0700 root root -"
+    "f ${t3codeDeploymentState}/release-window/window.lock 0600 root root -"
     "d ${t3codeTmp} 1777 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
