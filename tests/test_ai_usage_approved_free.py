@@ -191,6 +191,8 @@ class OwnerApprovalFileTests(unittest.TestCase):
                 ('nvidia', 'z-ai/glm-5.3'),
                 ('nvidia', 'minimaxai/minimax-m3.1-flash'),
                 ('nvidia', 'z-ai/glm-5.3-flash'),
+                ('nvidia', 'deepseek-ai/deepseek-v4.1-flash'),
+                ('opencode', 'deepseek-v4.1-flash-free'),
                 ('google', 'gemini-3.8-flash'),
                 ('openrouter', 'thinkingmachines/inkling-small:free')):
             self.assertIn(route, entries)
