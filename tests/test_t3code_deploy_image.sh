@@ -53,6 +53,14 @@ if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true ||
   echo 'candidate ran without managed locks' >&2
   exit 3
 fi
+# When an in-container T3 app tree exists, the candidate must hold its updater
+# lock too, so an app promotion cannot interleave with acceptance.
+if [[ -d "$HOME_DIR/.local/share/t3code-tools/t3" ]]; then
+  if flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
+    echo 'candidate ran without the T3 app update lock' >&2
+    exit 3
+  fi
+fi
 if [[ ${CANDIDATE_ROUTE_UNAVAILABLE:-0} == 1 ]]; then
   jq '. + {outcome:"route_unavailable",provider_turn:{routes:"fixture-exhausted"}}' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" > "$STATE_DIR/attempts/route.tmp"
   mv "$STATE_DIR/attempts/route.tmp" "$STATE_DIR/attempts/$DEPLOYMENT_ID.json"
@@ -191,6 +199,20 @@ jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/legacy.json"
+
+# An in-container T3 app tree means a competing updater can promote an app
+# under us. The candidate must refuse a symlinked lock, and must hold the real
+# lock through acceptance when the tree is a normal directory.
+mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
+ln -s "$tmp/t3-lock-target" "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+: > "$tmp/t3-lock-target"
+if bash "$fixture_writer" > "$tmp/t3-symlink-lock.log" 2>&1; then
+  echo 'symlinked T3 update lock unexpectedly allowed deployment' >&2; exit 1
+fi
+grep -q 'T3 update lock is not a regular file' "$tmp/t3-symlink-lock.log"
+[[ ! -s "$EVENTS" ]]
+rm "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+: > "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 
 bash "$fixture_writer" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
