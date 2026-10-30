@@ -329,8 +329,8 @@ in
     assert goCoordinatorSecrets.GHOSTSHIP_T3_PLAINTEXT_HOSTS.key == "GHOSTSHIP_T3_PLAINTEXT_HOSTS";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.unit == "hooks";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.key == "GITHUB_WEBHOOK_SECRET";
-    assert goCoordinator.environment.GOMEMLIMIT == "200MiB";
-    assert builtins.elem "--memory=256m" goCoordinator.extraOptions;
+    assert goCoordinator.environment.GOMEMLIMIT == "384MiB";
+    assert builtins.elem "--memory=512m" goCoordinator.extraOptions;
     assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
     assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES
       == "ghostship-io/ghostship-agent";
