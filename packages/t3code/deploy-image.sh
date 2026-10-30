@@ -1,6 +1,10 @@
 set -euo pipefail
 
-: "${WINDOW_DIR:=${STATE_DIR:?}/release-window}"
+: "${WINDOW_CONFIG:?}"
+[[ -f $WINDOW_CONFIG && ! -L $WINDOW_CONFIG ]] || { echo "missing window configuration" >&2; exit 1; }
+WINDOW_DIR=$(cat "$WINDOW_CONFIG")
+[[ $WINDOW_DIR == /* && $WINDOW_DIR != *$'\n'* ]] || { echo "invalid window directory" >&2; exit 1; }
+export WINDOW_DIR
 source "${WINDOW_INTENT_HELPER:?}"
 announce_intent deploy
 

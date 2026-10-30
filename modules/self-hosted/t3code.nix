@@ -9,6 +9,7 @@
 let
   t3codeHome = "/srv/apps/t3code/home";
   hardened = config.ghostship.t3code.hardening.enable;
+  t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
@@ -72,6 +73,7 @@ let
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = ''
+      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
       ${builtins.readFile ../../packages/t3code/deploy-image.sh}
     '';
@@ -88,6 +90,7 @@ let
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
     text = ''
+      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
       ${builtins.readFile ../../packages/t3code/activate-deployment.sh}
     '';
