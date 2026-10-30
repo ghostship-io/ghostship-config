@@ -2,6 +2,7 @@
   config,
   lib,
   osConfig,
+  inputs,
   ...
 }:
 
@@ -10,8 +11,8 @@ let
 
   # WSL2 workers are standalone Windows development boxes, not Ghostship
   # runtime hosts. They receive only the skills and instructions that live in
-  # this repository; the ghostship-agent catalog is intentionally not installed
-  # or cloned on them.
+  # this repository plus the explicitly pinned engineering skills. The agent
+  # server runtime and its full tool catalog are not installed on workers.
   repoSKills = [
     "ghostship-audit-worktree"
     "ghostship-merge-worktree"
@@ -23,6 +24,22 @@ let
     ".claude/skills/${name}".source = ../config/skills/${name};
     ".gemini/config/skills/${name}".source = ../config/skills/${name};
   };
+  engineeringSkills = [
+    "ghostship-engineering"
+    "ghostship-review"
+    "ghostship-planning"
+  ];
+  engineeringLink =
+    name:
+    lib.genAttrs
+      [
+        ".agents/skills/${name}"
+        ".claude/skills/${name}"
+        ".gemini/config/skills/${name}"
+      ]
+      (_: {
+        source = "${inputs.ghostship-engineering-skills}/skills/${name}";
+      });
 in
 {
   # The develop profile already links the repo-local skills under
@@ -36,6 +53,7 @@ in
         ".claude/CLAUDE.md".source = ../config/AGENTS.md;
       }
       (lib.mkMerge (map skillLink repoSKills))
+      (lib.mkMerge (map engineeringLink engineeringSkills))
     ]
   );
 

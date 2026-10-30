@@ -1,5 +1,11 @@
 # WSL2 T3 Code workers
 
+The prepared fleet configuration uses [Free-plan Cloudflare Mesh](cloudflare-mesh.md)
+for bidirectional private networking, automatic WSL startup, and recovery.
+Complete its account/credential preparation before activating it. The older
+direct-tunnel procedure below remains for existing connections during migration;
+do not create additional public routes for the Mesh setup.
+
 A NixOS-WSL2 desktop can join the existing T3 web interface as its own
 environment instead of running work through the Docker T3 Code server. Each
 worker owns its projects, threads, providers, files, and execution.
@@ -43,8 +49,9 @@ when the defaults do not fit:
 A worker is a Windows development box for its own repositories, not a Ghostship
 runtime host. Only this repository's tooling is installed:
 
-- No `ghostship-agent` checkout, installer, or tool package. Provider skills
-  are limited to the small set under `home/config/skills/`, linked into
+- No `ghostship-agent` checkout, installer, or runtime tool package. Provider skills
+  include the small set under `home/config/skills/` and pinned
+  `ghostship-engineering`, `ghostship-review`, and `ghostship-planning`, linked into
   `~/.agents/skills`, `~/.claude/skills`, and `~/.gemini/config/skills`.
 - No shared `agent`, `bw`, CloakBrowser, Google Workspace, or Printing Press
   tooling, and no Ghostship secrets projection.

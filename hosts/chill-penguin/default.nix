@@ -44,6 +44,9 @@ in
 
   # Network
   networking.hostName = "chill-penguin";
+  ghostship.mesh.enable = true;
+  ghostship.mesh.t3Upstream = "http://t3code:3773";
+  ghostship.mesh.resolver = [ "10.89.0.1" ];
   networking.networkmanager.enable = true;
   # The staged development engine may reach public IPv4 only through this NIC.
   ghostship.t3codePodman.egressInterface = "end0";

@@ -2,6 +2,10 @@
   description = "Unified NixOS Configuration Repository";
 
   inputs = {
+    ghostship-engineering-skills = {
+      url = "github:ghostship-io/ghostship-agent/a6e5540a88a589d6ec85d71cea889156dfd7d99f";
+      flake = false;
+    };
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
@@ -148,6 +152,7 @@
               bash
               coreutils
               actionlint
+              nixfmt
               apparmor-parser
               acl
               # The AppArmor profile check parses the policies the host
@@ -166,6 +171,8 @@
               ripgrep
               jq
               curl
+              dnsmasq
+              dnsutils
               nodejs_24
               util-linux
               iproute2

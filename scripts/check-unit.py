@@ -21,6 +21,7 @@ TESTS = (
     "test_apparmor_review.py",
     "test_cloudflare_access.py",
     "test_t3_worker_tunnel.py",
+    "test_mesh_health.py",
     "test_security_monitoring.py",
     "test_plex_ldconfig_fds.py",
     "test_model_evidence_path.py",

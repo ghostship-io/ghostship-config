@@ -18,9 +18,11 @@
   };
 
   wsl.defaultUser = "nixos";
+  ghostship.mesh.enable = true;
 
   # Automation
   myOptions.autoUpgrade.enable = true;
+  myOptions.autoUpgrade.githubCredentialFile = "/var/lib/ghostship-nix/github-nix.conf";
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.nixos = {
