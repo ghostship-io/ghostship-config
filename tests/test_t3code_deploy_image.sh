@@ -191,6 +191,22 @@ jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/legacy.json"
 
+t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
+mv "$t3_lock" "$t3_lock.saved"
+if bash "$root/packages/t3code/deploy-image.sh" > "$tmp/missing-t3-lock.log" 2>&1; then
+  echo 'missing T3 update lock unexpectedly allowed deployment' >&2; exit 1
+fi
+grep -q 'T3 update lock missing' "$tmp/missing-t3-lock.log"
+[[ ! -s "$EVENTS" ]]
+ln -s "$t3_lock.saved" "$t3_lock"
+if bash "$root/packages/t3code/deploy-image.sh" > "$tmp/symlink-t3-lock.log" 2>&1; then
+  echo 'symlink T3 update lock unexpectedly allowed deployment' >&2; exit 1
+fi
+grep -q 'T3 update lock missing' "$tmp/symlink-t3-lock.log"
+[[ ! -s "$EVENTS" ]]
+rm "$t3_lock"
+mv "$t3_lock.saved" "$t3_lock"
+
 bash "$root/packages/t3code/deploy-image.sh" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
 grep -q '^Restarting podman-t3code.service immediately after exact-image candidate acceptance$' "$tmp/success.log"
