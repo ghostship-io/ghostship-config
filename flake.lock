@@ -186,6 +186,23 @@
         "type": "github"
       }
     },
+    "ghostship-route-catalog": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793346945,
+        "narHash": "sha256-VFVh5fiITIdV2AOBBR2B6T4wCh3C9CP3qwq97rGgjXE=",
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
+        "rev": "ce72c96e87b9e6869c44f9279d3cebde25f3f160",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ghostship-io",
+        "repo": "ghostship-agent",
+        "rev": "ce72c96e87b9e6869c44f9279d3cebde25f3f160",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -354,6 +371,7 @@
         "ghostship-agent-policy": "ghostship-agent-policy",
         "ghostship-native-agent": "ghostship-native-agent",
         "ghostship-private-agent": "ghostship-private-agent",
+        "ghostship-route-catalog": "ghostship-route-catalog",
         "home-manager": "home-manager",
         "nix-index-database": "nix-index-database",
         "nixos-hardware": "nixos-hardware",

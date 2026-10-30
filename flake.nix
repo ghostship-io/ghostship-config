@@ -24,6 +24,14 @@
       flake = false;
     };
 
+    # The approved route catalog (#1548 §4.1): the exact file the controller
+    # parses, rendered verbatim to /etc/ghostship/route-policy.json. It has its
+    # own pin so an approval move does not move the runtime policy with it.
+    ghostship-route-catalog = {
+      url = "github:ghostship-io/ghostship-agent/ce72c96e87b9e6869c44f9279d3cebde25f3f160";
+      flake = false;
+    };
+
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     home-manager = {
@@ -104,6 +112,7 @@
           pkgs = pkgsFor system;
           inherit self;
           agentSource = inputs.ghostship-private-agent;
+          routeCatalogSource = inputs.ghostship-route-catalog;
         }
       );
 

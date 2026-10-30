@@ -2,6 +2,7 @@
   pkgs,
   self,
   agentSource,
+  routeCatalogSource,
 }:
 let
   securityPkgs = pkgs.extend (import ./packages/security-fixes).overlay;
@@ -124,9 +125,28 @@ let
   githubCoordinatorRuntime =
     t3codeConfig.ghostship.containerRuntimes.ghostship-github-coordinator.runtime;
   t3codeCandidatePodmanPath = t3codeConfig.systemd.services.t3code-podman-candidate.environment.PATH;
+  # The controller's approved catalog, read back from the rendered /etc file.
   routePolicy = builtins.fromJSON (
     builtins.readFile t3codeConfig.environment.etc."ghostship/route-policy.json".source
   );
+  # The reconciliation of 2026-10-30 (owner + orchestrator): only these exact
+  # routes are approved. Everything else in the catalog is admit:false, so a
+  # hand edit to the catalog that admits an unapproved model fails this check.
+  approvedRoutes = [
+    "opencode/ollama-cloud/deepseek-v4.1-flash"
+    "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
+    "opencode/opencode-go/deepseek-v4.1-flash"
+    "opencode/command-code/deepseek/deepseek-v4.1-flash"
+    "opencode/literouter/deepseek-v4.1-flash-1017:full-context"
+    "antigravity/gemini-3.8-flash-high"
+    "antigravity/gemini-3.8-flash-medium"
+    "antigravity/gemini-3.8-flash-low"
+    "claudeAgent/claude-sonnet-5-5"
+    "codex/gpt-6.1-terra"
+  ];
+  actualApprovedRoutes = map
+    (r: "${r.provider_instance}/${r.model}")
+    (builtins.filter (r: r.admit) routePolicy.routes);
   # The coordinator's per-repository ceiling must never undercut the route
   # policy's global worker cap: a hidden default of 3 refused fast-lane
   # launches while the policy still had room.
@@ -136,46 +156,6 @@ let
       !(managedRepositories.${name} ? max_active)
       || managedRepositories.${name}.max_active < routePolicy.worker_capacity.default)
     (builtins.attrNames managedRepositories);
-  routeKey = route: "${route.provider}/${route.model}";
-  expectedFreeRoutes =
-    map (entry: "opencode-free/${entry.provider}/${entry.model}")
-      (builtins.fromJSON (builtins.readFile ./modules/self-hosted/ai-usage/approved-free-workers.json))
-      .entries;
-  expectedWorkerRoutes = [
-    "codex/gpt-6-luna"
-    "claudeAgent/claude-sonnet-5-5"
-    "opencode/command-code/deepseek/deepseek-v4.1-flash"
-    "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
-    "opencode/ollama-cloud/deepseek-v4.1-flash"
-    "opencode/opencode-go/deepseek-v4.1-flash"
-    "grok/grok-4.7"
-    "antigravity/gemini-3.8-flash"
-    "antigravity/gemini-3.8-flash-high"
-    "antigravity/gemini-4-argon"
-  ]
-  ++ expectedFreeRoutes;
-  actualWorkerRoutes = map routeKey routePolicy.roles.worker.allow;
-  expectedOrchestratorRoutes = [ "claudeAgent/claude-opus-5-5" "codex/gpt-6.1-sol" ];
-  actualOrchestratorRoutes = map routeKey routePolicy.roles.orchestrator.allow;
-  fastBillingDenied = role: builtins.any
-    (entry: entry.provider == "*" && entry.model == "*"
-      && entry.billing_tier == "priority"
-      && builtins.all (tier: builtins.elem tier entry.tiers)
-        [ "fastMode=true" "serviceTier=fast" ])
-    routePolicy.roles.${role}.deny;
-  fableDenied =
-    role:
-    builtins.all
-      (
-        model:
-        builtins.any (
-          entry: entry.provider == "claudeAgent" && entry.model == model
-        ) routePolicy.roles.${role}.deny
-      )
-      [
-        "claude-fable-5"
-        "claude-fable-5-1"
-      ];
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
   ) hosts;
@@ -262,7 +242,6 @@ in
     assert builtins.elem "ghostship-failure@%n.service"
       self.nixosConfigurations.chill-penguin.config.systemd.services.ghostship-t3code-deploy.onFailure;
     assert builtins.head (pkgs.lib.splitString ":" t3codeCandidatePodmanPath) == "/run/wrappers/bin";
-    assert routePolicy.schema == "ghostship.route-policy/v1";
     assert
       builtins.isInt routePolicy.worker_capacity.default && routePolicy.worker_capacity.default > 0;
     assert
@@ -274,15 +253,29 @@ in
     assert managedRepositories != { };
     assert pkgs.lib.assertMsg (underCappedRepositories == [ ])
       "repository max_active is missing or below the route policy worker_capacity.default: ${builtins.concatStringsSep ", " underCappedRepositories}";
+    # The installed catalog is the approved v2 file, verbatim from its pin, and
+    # it admits exactly the owner-reconciled exact models.
+    assert routePolicy.schema == "ghostship.route-policy/v2";
+    assert t3codeConfig.environment.etc."ghostship/route-policy.json".source
+      == "${routeCatalogSource}/config/agents/route-policy.json";
     assert
-      builtins.sort builtins.lessThan actualWorkerRoutes
-      == builtins.sort builtins.lessThan expectedWorkerRoutes;
-    assert
-      builtins.sort builtins.lessThan actualOrchestratorRoutes
-      == builtins.sort builtins.lessThan expectedOrchestratorRoutes;
-    assert fableDenied "worker" && fableDenied "orchestrator" && fableDenied "reviewer";
-    assert fastBillingDenied "worker" && fastBillingDenied "orchestrator" && fastBillingDenied "reviewer";
-    assert routePolicy.authorizations == [ ];
+      builtins.sort builtins.lessThan actualApprovedRoutes
+      == builtins.sort builtins.lessThan approvedRoutes;
+    assert pkgs.lib.assertMsg
+      (builtins.any (r: r.provider_instance == "opencode"
+        && r.model == "ollama-cloud/deepseek-v4-pro") routePolicy.routes)
+      "the denied V4 Pro route must stay recorded in the catalog";
+    assert builtins.all
+      (r: r.admit == false)
+      (builtins.filter (r: r.model == "ollama-cloud/deepseek-v4-pro") routePolicy.routes);
+    assert builtins.all
+      (r: r.fallback_only or false)
+      (builtins.filter (r: r.provider_instance == "claudeAgent" || r.provider_instance == "codex")
+        routePolicy.routes);
+    assert builtins.elem "claudeAgent" routePolicy.deny.instances_for_subordinate_roles;
+    assert builtins.elem "codex" routePolicy.deny.instances_for_subordinate_roles;
+    assert routePolicy.deny.fast_mode == true;
+    assert builtins.elem "priority" routePolicy.deny.billing_tiers;
     # Fail host evaluation if the container loses its configured policy path,
     # the server unit stops passing that environment into provider sessions,
     # or the read-only policy mount drifts from the configured path.

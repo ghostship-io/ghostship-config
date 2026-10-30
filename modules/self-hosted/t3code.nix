@@ -34,138 +34,13 @@ let
   # the generated clients fail with a usage error when a required value is unset.
   retailStoreEnv = "/etc/ghostship/retail-store.env";
   approvedFreeWorkers = ./ai-usage/approved-free-workers.json;
-  approvedFreeWorkerRoutes = builtins.fromJSON (builtins.readFile approvedFreeWorkers);
-  fastBillingTierDeny = {
-    provider = "*";
-    model = "*";
-    billing_tier = "priority";
-    tiers = [ "fastMode=true" "serviceTier=fast" ];
-    rule = "fast billing options denied by owner policy";
-  };
-  ownerRoutePolicy = pkgs.writeText "ghostship-route-policy.json" (
-    builtins.toJSON {
-      schema = "ghostship.route-policy/v1";
-      worker_capacity = {
-        default = 8;
-        p0_override = 12;
-      };
-      roles = {
-        worker = {
-          allow = [
-            {
-              provider = "codex";
-              model = "gpt-6-luna";
-              rule = "owner-approved Codex worker route";
-            }
-            {
-              provider = "claudeAgent";
-              model = "claude-sonnet-5-5";
-              rule = "owner: any roadmap work while Claude stays above its weekly worker guard";
-            }
-            {
-              provider = "opencode";
-              model = "command-code/deepseek/deepseek-v4.1-flash";
-              rule = "owner-approved default paid worker route";
-            }
-            {
-              provider = "opencode";
-              model = "ollama-cloud/deepseek-v4.1-flash:1017";
-              rule = "owner-approved DeepSeek Flash subscription route";
-            }
-            {
-              provider = "opencode";
-              model = "ollama-cloud/deepseek-v4.1-flash";
-              rule = "owner-approved DeepSeek Flash subscription route";
-            }
-            {
-              provider = "opencode";
-              model = "opencode-go/deepseek-v4.1-flash";
-              rule = "owner-approved DeepSeek Flash subscription route";
-            }
-            {
-              provider = "grok";
-              model = "grok-4.7";
-              rule = "owner: expiring subscription, use until exhausted";
-            }
-            {
-              provider = "antigravity";
-              model = "gemini-3.8-flash";
-              rule = "owner-approved Antigravity worker route";
-            }
-            {
-              provider = "antigravity";
-              model = "gemini-3.8-flash-high";
-              rule = "owner-approved Antigravity worker route";
-            }
-            {
-              provider = "antigravity";
-              model = "gemini-4-argon";
-              rule = "owner-approved Antigravity worker route";
-            }
-          ]
-          ++ map (entry: {
-            provider = "opencode-free";
-            model = "${entry.provider}/${entry.model}";
-            rule = "listed in approved-free-workers.json";
-          }) approvedFreeWorkerRoutes.entries;
-          deny = [
-            {
-              provider = "claudeAgent";
-              model = "claude-fable-5";
-              rule = "Claude Fable denied by owner";
-            }
-            {
-              provider = "claudeAgent";
-              model = "claude-fable-5-1";
-              rule = "Claude Fable denied by owner";
-            }
-          ] ++ [ fastBillingTierDeny ];
-          allow_rule = "not in the owner-approved worker routes";
-        };
-        orchestrator = {
-          allow = [
-            {
-              provider = "claudeAgent";
-              model = "claude-opus-5-5";
-              rule = "owner: no Codex orchestrator handover trial";
-            }
-            {
-              provider = "codex";
-              model = "gpt-6.1-sol";
-              rule = "owner: Codex succeeds Claude when Claude inference runs out";
-            }
-          ];
-          deny = [
-            {
-              provider = "claudeAgent";
-              model = "claude-fable-5";
-              rule = "Claude Fable denied by owner";
-            }
-            {
-              provider = "claudeAgent";
-              model = "claude-fable-5-1";
-              rule = "Claude Fable denied by owner";
-            }
-          ] ++ [ fastBillingTierDeny ];
-          allow_rule = "not in the owner-approved orchestrator routes";
-        };
-        reviewer.deny = [
-          {
-            provider = "claudeAgent";
-            model = "claude-fable-5";
-            rule = "Claude Fable denied by owner";
-          }
-          {
-            provider = "claudeAgent";
-            model = "claude-fable-5-1";
-            rule = "Claude Fable denied by owner";
-          }
-          fastBillingTierDeny
-        ];
-      };
-      authorizations = [ ];
-    }
-  );
+  # The approved route catalog is one file: ghostship-io/ghostship-agent's
+  # config/agents/route-policy.json (ghostship.route-policy/v2), pinned by the
+  # ghostship-route-catalog input and rendered verbatim to /etc. The controller
+  # admits only exact routes in it (#1548 §4.1): approval is per exact model, so
+  # this config never restates or widens the approvals.
+  routeCatalog = inputs.ghostship-route-catalog;
+  routeCatalogFile = "${routeCatalog}/config/agents/route-policy.json";
   engineSlice = "user-${toString config.ghostship.t3codePodman.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   acceptedImageRef = "${imageName}:accepted";
@@ -405,7 +280,7 @@ in
     "d ${t3codeWorkspace} 0755 3000 3000 -"
   ];
 
-  environment.etc."ghostship/route-policy.json".source = ownerRoutePolicy;
+  environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
 
   systemd.services.podman-t3code = {
