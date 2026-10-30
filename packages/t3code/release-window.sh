@@ -65,6 +65,18 @@ snapshot() {
     printf 'failed=%s\n' "$(sha256sum "$STATE_DIR/failed-candidate" | cut -d' ' -f1)"
   else printf 'failed=absent\n'; fi
 }
+serving_identity() {
+  local before after cid image started pid entered
+  before=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}} {{.Image}} {{.State.StartedAt}}') || return 1
+  read -r cid image started <<< "$before"
+  [[ $cid =~ ^[0-9a-f]{64}$ && ${image#sha256:} =~ ^[0-9a-f]{64}$ && -n $started && $before == "$cid $image $started" ]] || return 1
+  pid=$("$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl show t3code-server.service -p MainPID --value) || return 1
+  entered=$("$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl show t3code-server.service -p ActiveEnterTimestampMonotonic --value) || return 1
+  [[ $pid =~ ^[1-9][0-9]*$ && $entered =~ ^[1-9][0-9]*$ ]] || return 1
+  after=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}} {{.Image}} {{.State.StartedAt}}') || return 1
+  [[ $before == "$after" ]] || return 1
+  printf '%s\n%s %s\n' "$before" "$pid" "$entered"
+}
 post_verify() {
   : "${EXPECTED_DEPLOYMENT:?}" "${EXPECTED_IMAGE:?}" "${EXPECTED_AGENT_REVISION:?}" "${EXPECTED_TOOLING_PATH:?}" "${PROVIDER_SECRETS_FILE:?}" "${CURRENT_SYSTEM:?}" "${EXPECTED_SYSTEM:?}" "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
   [[ $EXPECTED_DEPLOYMENT =~ ^[0-9a-f]{64}$ && $EXPECTED_IMAGE =~ ^[0-9a-f]{64}$ ]] || fail 'invalid expected identity'
@@ -121,8 +133,11 @@ case ${1:-} in
   flock -n -x 7 || fail 'hardening lock held'
   acquired_at=$(date -u +%FT%TZ)
   baseline=$(snapshot) || fail 'baseline unknown'
+  serving=$(serving_identity) || fail 'serving identity unknown'
   mkdir -m 0700 "$WINDOW_ROOT/$id"
   dir=$WINDOW_ROOT/$id
+  printf '%s\n' "$serving" > "$dir/serving.before"
+  sync -f "$dir/serving.before"
   { printf 'started=%s acquired_by=%s\n' "$acquired_at" "$$"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
   printf '%s\n' "$id" > "$WINDOW_ROOT/active-window.tmp"

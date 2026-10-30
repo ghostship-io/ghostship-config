@@ -20,7 +20,12 @@ else exit 1; fi
 SH
 cat > "$tmp/bin/podman" <<'SH'
 #!/usr/bin/env bash
+case "$*" in
+  'exec fixture systemctl show t3code-server.service -p MainPID --value') echo 1234; exit ;;
+  'exec fixture systemctl show t3code-server.service -p ActiveEnterTimestampMonotonic --value') echo 5678; exit ;;
+esac
 case "$1 $3 ${4:-}" in
+  'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
