@@ -4,10 +4,12 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 import tarfile
 import tempfile
+import types
 import unittest
 from unittest.mock import Mock, patch
 
@@ -784,6 +786,54 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 acceptance.check_provider_turn(["podman"], "candidate", provider_env,
                                                tooling_path="/nix/store/test-agent")
         self.assertEqual(len(self.probe_calls(calls)), acceptance.MAX_ACCEPTANCE_ROUTES)
+
+    def test_provider_probe_runs_without_retired_prove_module(self):
+        tools = self.root / "agent" / "tools" / "python" / "ghostship_t3"
+        tools.mkdir(parents=True)
+        (tools / "__init__.py").write_text("")
+        (tools / "bridge.py").write_text("""class T3Error(Exception): pass
+class Bridge:
+    def submit(self, prompt, **kwargs):
+        assert kwargs['workspace_root'] == '/workspace'
+        assert kwargs['instance_id'] == 'native' and kwargs['model'] == 'model'
+        return {'thread_id': 'probe'}
+    def status(self, thread_id, wait_s=0):
+        return {'state': 'completed', 'reply': 'PROBE_PASS', 'settled': wait_s == 10, 'active_turn': False}
+    def settle(self, thread_id): pass
+""")
+        (tools / "models.py").write_text("""def read_document(): return {}
+def _selection(document, now):
+    return {'worker': [{'provider': 'p', 'model': 'm', 'native': {'instanceId': 'native', 'model': 'model'}}]}
+""")
+        env = {**os.environ, 'GHOSTSHIP_TOOLS_ROOT': str(self.root / 'agent')}
+        proc = subprocess.run([sys.executable, str(ROOT / 'packages/t3code/provider-turn-probe.py'), 'p/m'],
+                              env=env, text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)['outcome'], 'passed')
+        self.assertTrue(json.loads(proc.stdout)['settled'])
+
+    def test_provider_probe_requires_settlement_and_cancels_active_turn(self):
+        bridge_module = types.ModuleType("ghostship_t3.bridge")
+        bridge_module.T3Error = type("T3Error", (Exception,), {})
+        models_module = types.ModuleType("ghostship_t3.models")
+        models_module.read_document = lambda: {}
+        models_module._selection = lambda document, now: {"worker": [{"provider": "p", "model": "m", "native": {"instanceId": "n", "model": "m"}}]}
+        client = Mock()
+        client.submit.return_value = {"thread_id": "probe"}
+        client.status.side_effect = [
+            {"state": "running", "active_turn": True},
+            {"active_turn": True},
+            {"active_turn": False},
+            {"settled": False},
+        ]
+        with patch.dict(sys.modules, {"ghostship_t3": types.ModuleType("ghostship_t3"),
+                                      "ghostship_t3.bridge": bridge_module,
+                                      "ghostship_t3.models": models_module}):
+            result = provider_probe.prove_route("p/m", 1, client)
+        self.assertEqual(result["outcome"], "timeout")
+        self.assertFalse(result["settled"])
+        client.cancel.assert_called_once_with("probe")
+        client.settle.assert_called_once_with("probe")
 
     def test_provider_probe_carries_safe_model_unavailable_category(self):
         result = {"outcome": "execution", "detail": "model unavailable: private provider response"}

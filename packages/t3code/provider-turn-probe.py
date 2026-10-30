@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 
 
 def safe_failure_code(result):
@@ -22,6 +23,89 @@ def safe_failure_code(result):
     return "proof-failed"
 
 
+PROBE_PROMPT = (
+    "This is a bounded T3 tool-loop proof. Use exactly one tool call to list the "
+    "top-level files of the current workspace, then reply with exactly "
+    "PROBE_PASS. Do not edit files, run commands, install anything or wait. "
+    "If you cannot execute a tool call, reply PROBE_FAIL: <short reason>."
+)
+
+
+def prove_route(route, wait, client):
+    from ghostship_t3.bridge import T3Error
+    from ghostship_t3.models import read_document, _selection
+
+    provider, sep, model = route.partition("/")
+    if not sep or not provider or not model:
+        raise T3Error("route must be provider/model")
+    document = read_document()
+    selected = _selection(document, time.time())
+    target = None
+    for row in selected.get("worker") or []:
+        native = row.get("native") or {}
+        if row.get("provider") == provider and row.get("model") == model and native.get("instanceId") and native.get("model"):
+            target = (native["instanceId"], native["model"],
+                      {item["id"]: item["value"] for item in native.get("options") or []
+                       if isinstance(item, dict) and item.get("id")})
+            break
+    if target is None:
+        for row in document.get("candidates") or []:
+            native = row.get("native") or {}
+            if row.get("provider") == provider == "opencode-free" and (row.get("model") == model or native.get("model_id") == model):
+                target = ("opencode-free", native.get("model_id") or model, {})
+                break
+    if target is None:
+        raise T3Error("route has no live T3 target to prove")
+
+    started = time.monotonic()
+    wait = min(600.0, max(1.0, wait))
+    thread = None
+    result = {"provider": provider, "model": model, "instance": target[0],
+              "outcome": "execution", "detail": "submit failed", "settled": False}
+    try:
+        submitted = client.submit(PROBE_PROMPT, title=f"Tool-loop probe: {route}",
+                                  instance_id=target[0], model=target[1], options=target[2] or None,
+                                  sensitivity="public", workspace_root="/workspace")
+        thread = submitted.get("thread_id")
+        if not thread:
+            raise T3Error("probe launch returned no thread")
+        state = client.status(thread, wait_s=wait)
+        status = str(state.get("state") or "").lower()
+        detail = " ".join(str(state.get(k) or "") for k in ("last_error", "reply")).lower()
+        if state.get("active_turn") and time.monotonic() - started >= wait:
+            outcome = "timeout"
+        elif status in ("completed", "done", "idle", "succeeded") and "PROBE_PASS" in str(state.get("reply") or ""):
+            outcome = "passed"
+        elif "schema" in detail:
+            outcome = "provider_schema"
+        elif "invalid_request" in detail or "invalid request" in detail:
+            outcome = "invalid_request"
+        elif "rate limit" in detail or "quota" in detail or "429" in detail:
+            outcome = "quota"
+        elif status in ("failed", "error", "cancelled", "interrupted"):
+            outcome = "execution"
+        elif status in ("completed", "done", "idle", "succeeded"):
+            outcome = "no_tool_call"
+        else:
+            outcome = "timeout"
+        result.update(outcome=outcome, detail=state.get("last_error") if outcome != "passed" else None)
+    except (T3Error, OSError, ValueError, TypeError, AttributeError) as exc:
+        result["detail"] = str(exc)[:256] or "execution"
+    finally:
+        if thread:
+            try:
+                state = client.status(thread, wait_s=0)
+                if state.get("active_turn"):
+                    client.cancel(thread)
+                    client.status(thread, wait_s=10)
+                client.settle(thread)
+                result["settled"] = bool(client.status(thread, wait_s=10).get("settled"))
+            except (T3Error, OSError, ValueError, TypeError, AttributeError):
+                result["settled"] = False
+        result["elapsed_s"] = round(time.monotonic() - started, 1)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("route")
@@ -35,14 +119,8 @@ def main():
     sys.path.insert(0, str(Path(agent_tools) / "tools/python"))
 
     from ghostship_t3.bridge import Bridge
-    from ghostship_t3.prove import prove
 
-    class CandidateBridge(Bridge):
-        def submit(self, prompt, **kwargs):
-            kwargs.setdefault("workspace_root", "/workspace")
-            return super().submit(prompt, **kwargs)
-
-    result = prove({"route": args.route, "wait": args.wait}, client=CandidateBridge())
+    result = prove_route(args.route, args.wait, Bridge())
     output = {
         "provider": result.get("provider"),
         "model": result.get("model"),
