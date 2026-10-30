@@ -1,7 +1,7 @@
 # Private fleet networking
 
-Refs #707. Repository preparation is authorized; activation, enrollment,
-Cloudflare writes and restarts still need owner approval. Use the existing
+Refs #707. The owner authorized rollout, enrollment and Cloudflare configuration.
+Preserve the existing Chill Penguin tunnel throughout. Use the existing
 **Free** Zero Trust plan. This configuration purchases nothing. Mesh is beta;
 NixOS packages the headless Linux client, but installed WSL/ARM64 compatibility
 and routing remain UNVERIFIED until tested on the actual hosts.
@@ -13,8 +13,35 @@ Mesh identity. Native system services start with the host, including every WSL
 distribution start. No Windows scheduled task or interactive login is needed
 for Linux networking. Starting Windows does not start a stopped WSL distro.
 
+DNS is split by domain through a loopback-only dnsmasq dispatcher. Only
+`mesh.ghostship.io` goes to WARP's local DNS proxy; a failed private lookup
+never falls back to normal upstreams. Ordinary Internet and LAN lookups keep
+using the existing resolver information: Windows' `/mnt/wsl/resolv.conf` on
+WSL, and resolvconf's existing network subscribers on the server.
+
+WARP gets a private resolver file inside its service mount namespace and
+cannot change host DNS through D-Bus. Its root-only registration state and
+umask remain unchanged. WSL resolver generation is disabled because the local
+dispatcher owns the host resolver. Verify a distribution restart, Windows DNS
+reachability and fresh DNS queries before accepting startup behavior.
+
+Gateway DNS overrides resolve the three known Mesh names. Block unknown names
+under the private zone so they are not forwarded to public DNS. Prove normal
+Internet/LAN resolution with WARP stopped, private resolution while connected,
+and no private-zone fallback during an outage before activating another host.
+Run the isolated DNS routing/outage check with
+`nix develop .#ci -c python3 tests/integration_mesh_dns.py`.
+
 WARP reconnects natively. The 30-second health timer requests connection and
 restarts only WARP after three failed checks, at most once per ten minutes.
+For roaming clients, keep captive-portal detection enabled, the client switch
+unlocked and automatic connection enabled in the managed device profile
+(current timeout: 180 seconds). Portal sign-in remains an owner action.
+Normal DNS and portal browsing remain independent of the Mesh connection;
+recovery preserves registration when the network becomes usable again. A VPN
+or network that blocks all Cloudflare transport cannot be repaired locally;
+recovery resumes when that restriction ends. Actual Wi-Fi changes, VPN
+coexistence and captive-portal recovery still require installed-host checks.
 It never deletes registration or restarts T3. RPC startup delays defer initial
 enrollment. An uncertain enrollment is reconciled, never repeated blindly.
 Consumer registrations are refused rather than replaced. Before retrying an
@@ -34,7 +61,7 @@ WSL adds no global incoming port. The server retains its existing SSH route
 during rollout: remove its global allowance only after another device verifies
 Mesh SSH, under separate approval. HTTPS has no global firewall allowance.
 
-## One-time provisioning — after approval
+## One-time provisioning
 
 Sign in to `ghostshipio` at <https://one.dash.cloudflare.com/>. Verify the plan
 is Free and stop if any operation requires a paid upgrade. Do not enable paid
@@ -102,7 +129,7 @@ For a manual root build, set
 `NIX_USER_CONF_FILES=/var/lib/ghostship-nix/github-nix.conf` for the rebuild
 command as well; user GitHub authentication is not root authentication.
 
-After separately approved activation, verify startup, stable identity, split
+After activation, verify startup, stable identity, split
 routes, DNS, valid TLS, authenticated T3 HTTP/WebSockets and a small provider
 task. Test SSH/HTTPS in both directions between every pair of nodes, and verify
 that LAN/public access to the new HTTPS endpoint is denied. Test daemon crash,

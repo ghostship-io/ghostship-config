@@ -21,6 +21,7 @@ python3 -m unittest discover -s tests -p test_apparmor_profile_paths.py
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
+python3 tests/integration_mesh_dns.py
 python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_container_stop.py
 python3 -m unittest discover -s tests -p test_inference_container_wait.py

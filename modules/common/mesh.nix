@@ -49,10 +49,48 @@ in
       package = pkgs.cloudflare-warp.override { headless = true; };
       openFirewall = false;
     };
+    # Domain-specific forwarding never falls back to ordinary upstream DNS.
+    # Keep the existing resolvconf subscribers for LAN/VPN DNS updates.
+    services.dnsmasq = {
+      enable = true;
+      alwaysKeepRunning = true;
+      settings = {
+        conf-file = [
+          "${./mesh-dns.conf}"
+          "/etc/dnsmasq-conf.conf"
+        ];
+        resolv-file = lib.mkIf (config.ghostship.host.roles.wsl or false) "/mnt/wsl/resolv.conf";
+      };
+    };
     systemd.services.cloudflare-warp.unitConfig.StartLimitIntervalSec = 0;
+    systemd.services.cloudflare-warp.after = [ "dnsmasq.service" ];
+    systemd.services.cloudflare-warp.wants = [ "dnsmasq.service" ];
+    systemd.services.cloudflare-warp.preStart = ''
+      # WARP replaces resolv.conf atomically, so isolating that file alone
+      # does not contain replacement of a host symlink. Project host /etc
+      # through read-only links, with a private writable resolver entry.
+      ${pkgs.coreutils}/bin/rm -rf /run/cloudflare-warp/etc
+      ${pkgs.coreutils}/bin/mkdir -m 0700 /run/cloudflare-warp/etc
+      ${pkgs.coreutils}/bin/cp -as /run/cloudflare-warp/host-etc/. /run/cloudflare-warp/etc/
+      ${pkgs.coreutils}/bin/rm -f /run/cloudflare-warp/etc/resolv.conf
+      ${pkgs.coreutils}/bin/install -m 0600 \
+        /run/cloudflare-warp/host-etc/resolv.conf /run/cloudflare-warp/etc/resolv.conf
+    '';
     systemd.services.cloudflare-warp.serviceConfig = {
       StateDirectoryMode = "0700";
       UMask = "0077";
+      # ExecStartPre creates the projection before ExecStart's namespace.
+      BindPaths = [ "-/run/cloudflare-warp/etc:/etc" ];
+      BindReadOnlyPaths = [
+        "/proc/1/root/etc:/run/cloudflare-warp/host-etc"
+      ];
+      ReadWritePaths = lib.mkForce [ "/var/lib/cloudflare-warp" ];
+      # Use this namespace's resolver, not the host nscd cache, and prevent
+      # alternate host DNS changes through resolved/NetworkManager.
+      InaccessiblePaths = [
+        "-/run/dbus/system_bus_socket"
+        "-/run/nscd"
+      ];
     };
     systemd.services.ghostship-mesh-health = {
       description = "Connect and recover the private Cloudflare Mesh node";

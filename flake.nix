@@ -171,6 +171,8 @@
               ripgrep
               jq
               curl
+              dnsmasq
+              dnsutils
               nodejs_24
               util-linux
               iproute2

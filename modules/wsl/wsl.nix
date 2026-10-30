@@ -100,6 +100,9 @@ in
       automount.enabled = true;
       interop.enabled = true;
       interop.appendWindowsPath = true;
+      # The local DNS dispatcher owns resolv.conf; WSL must not overwrite it
+      # when another Windows client enters the running distribution.
+      network.generateResolvConf = lib.mkIf config.ghostship.mesh.enable false;
     };
     docker-desktop.enable = true;
     extraBin = [
