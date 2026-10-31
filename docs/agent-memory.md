@@ -8,11 +8,12 @@ the native Go connector.
 
 ## Boundary
 
-- One private Podman network `agent_memory_net` (10.89.23.0/24, `--internal`,
-  no egress) with exactly two members: `t3code` and `agent-memory`.
+- One member of the existing `ghostship_net` service network, alongside
+  `t3code`. There is no per-service network and no DNS firewall rule.
 - No published port, Cloudflare route, public DNS or muximux entry. The
-  upstream MCP endpoint is unauthenticated by design; the network and the
-  authenticated connector are the only boundary.
+  upstream MCP endpoint is unauthenticated by design; the private service
+  network and the authenticated connector are the only boundary. Every
+  `ghostship_net` member can reach it, exactly like the other internal services.
 - One private volume `/srv/apps/agent-memory` (0700, uid/gid 3000) holding
   config, SQLite and Markdown. It is inside the existing `/srv` Btrfs snapshot
   and restic backup; that is ordinary task data, not a new access grant.
@@ -24,7 +25,7 @@ Build on the host (the image is never pulled at runtime). The build uses one
 pinned Python 3.13 base plus the pinned upstream source at commit
 `c9bd187b83baba549d5cd16bacc180f8023d51c8`, installs it non-editable without
 the dev group, applies the durability patch and pre-bakes the embedding model,
-so the service has no egress:
+so cold start needs no download:
 
 ```sh
 podman build -f modules/self-hosted/agent-memory.Containerfile \

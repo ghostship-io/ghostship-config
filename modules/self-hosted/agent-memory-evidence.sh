@@ -371,7 +371,11 @@ case_a() {
   case_start A
   if [ "$DRY_RUN" = 1 ]; then
     dry_commands <<CMDS
-git -C $REPO rev-parse HEAD
+podman rm -f $APP $RESTORE $DNS_CLIENT $DNS_SERVER
+rm -rf $BASE
+install -d -m0700 -o3000 -g3000 $BASE $BASE/data $BASE/restore
+touch $BASE/.agent-memory-evidence
+# ancestry checks only when case B is selected
 git -C $REPO merge-base --is-ancestor 4898056a HEAD
 git -C $REPO merge-base --is-ancestor 3cbd63b6 HEAD
 git -C $REPO merge-base --is-ancestor 8b9b9eef HEAD
@@ -382,24 +386,35 @@ grep -q agent-memory-fsync-test.py $REPO/modules/self-hosted/agent-memory.Contai
 podman info --format '{{.Store.GraphDriverName}}'
 iptables -S nixos-fw | grep -F -- '-s $SUBNET -d $GATEWAY'
 podman network inspect $NETWORK --format '{{json .}}'
-podman rm -f $APP $RESTORE $DNS_CLIENT $DNS_SERVER
-rm -rf $BASE
-install -d -m0700 -o3000 -g3000 $BASE $BASE/data $BASE/restore
-touch $BASE/.agent-memory-evidence
 CMDS
     case_dry_end
     return 0
   fi
 
+  # Scratch first: D and F must have their directories even if a source check
+  # fails, so the failure is reported against the check, not as a missing path.
+  podman rm -f "$APP" "$RESTORE" "$DNS_CLIENT" "$DNS_SERVER" >/dev/null 2>&1 || true
+  rm -rf "$BASE"
+  install -d -m0700 -o3000 -g3000 "$BASE" "$BASE/data" "$BASE/restore" ||
+    { fail_case "could not create $BASE"; return 1; }
+  : >"$BASE/.agent-memory-evidence"
+
+  # Ancestry is only required when this run builds the image. A targeted D,F
+  # run reuses an existing image, and its checkout may be older than the build
+  # commits; the content checks below remain authoritative either way.
   local rev
-  for rev in 4898056a 3cbd63b6 8b9b9eef; do
-    if ! git -C "$REPO" cat-file -e "$rev^{commit}" 2>/dev/null; then
-      log "ANCESTRY_UNVERIFIED $rev (object absent from this checkout)"
-      continue
-    fi
-    git -C "$REPO" merge-base --is-ancestor "$rev" HEAD 2>/dev/null ||
-      { fail_case "checkout $REPO does not contain required revision $rev"; return 1; }
-  done
+  if selected B; then
+    for rev in 4898056a 3cbd63b6 8b9b9eef; do
+      if ! git -C "$REPO" cat-file -e "$rev^{commit}" 2>/dev/null; then
+        log "ANCESTRY_UNVERIFIED $rev (object absent from this checkout)"
+        continue
+      fi
+      git -C "$REPO" merge-base --is-ancestor "$rev" HEAD 2>/dev/null ||
+        { fail_case "checkout $REPO does not contain required revision $rev"; return 1; }
+    done
+  else
+    log "ANCESTRY_NOT_REQUIRED (B is not selected; reusing $IMAGE)"
+  fi
 
   grep -q 'agent_memory_net' "$REPO/modules/self-hosted/agent-memory.nix" 2>/dev/null ||
     { fail_case "agent-memory.nix is missing the private network"; return 1; }
@@ -427,11 +442,6 @@ CMDS
     log "network $NETWORK absent (case G creates it)"
   fi
 
-  podman rm -f "$APP" "$RESTORE" "$DNS_CLIENT" "$DNS_SERVER" >/dev/null 2>&1 || true
-  rm -rf "$BASE"
-  install -d -m0700 -o3000 -g3000 "$BASE" "$BASE/data" "$BASE/restore" ||
-    { fail_case "could not create $BASE"; return 1; }
-  : >"$BASE/.agent-memory-evidence"
   pass_case "checkout, containerfile, network and scratch are ready"
 }
 
