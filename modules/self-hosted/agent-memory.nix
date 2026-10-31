@@ -98,6 +98,14 @@ in
       '';
     };
 
+    # The dashboard inventory requires every declared container to have an
+    # entry; Basic Memory is internal, so it has no hostname, port or route.
+    ghostship.apps.agent-memory = {
+      container = "agent-memory";
+      group = "Agent";
+      description = "Basic Memory MCP store shared with the orchestrator";
+    };
+
     virtualisation.oci-containers.containers."agent-memory" = {
       image = cfg.image;
       pull = "never";
