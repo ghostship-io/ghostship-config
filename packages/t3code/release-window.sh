@@ -208,7 +208,8 @@ receipt_for_image() {
       (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and
-      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills, .checks.desktop_cli] | all(. == true))' "$receipt" >/dev/null 2>&1; then
+      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills] | all(. == true))
+           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' "$receipt" >/dev/null 2>&1; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -326,7 +327,8 @@ known_good_receipt() {
       .provider_secret_inode == $s and
       ((.agent_revision == $a and .agent_path == $p) or
         ($adv == "1" and .agent_revision == $da and .agent_path == $dp)) and
-      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills, .checks.desktop_cli] | all(. == true))' "$receipt" >/dev/null 2>&1; then
+      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills] | all(. == true))
+           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' "$receipt" >/dev/null 2>&1; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -396,7 +398,8 @@ post_verify() {
     (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
     .live_before != null and .live_before == .live_after and .agent_revision == $a and
     .agent_path == $p and .provider_secret_inode == $s and
-    ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills, .checks.desktop_cli] | all(. == true))' "$receipt" >/dev/null || fail 'exact-image receipt invalid'
+    ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills] | all(. == true))
+           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' "$receipt" >/dev/null || fail 'exact-image receipt invalid'
   # shellcheck disable=SC2016
   "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --argjson min "$switch_ms" '.deployment_id == $d and .exit_code == 0 and (.status == null) and (.outcome == null) and (.started_at_ms | type == "number" and . >= $min)' "$attempt" >/dev/null || fail 'deployment attempt failed or unknown'
   image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'live image unknown'
