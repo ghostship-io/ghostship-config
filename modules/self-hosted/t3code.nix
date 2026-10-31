@@ -334,6 +334,8 @@ in
 
   environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
+  environment.etc."ghostship/t3code-acceptance-route.json".source =
+    ../../packages/t3code/acceptance-route.json;
 
   systemd.services.podman-t3code = {
     restartIfChanged = false;

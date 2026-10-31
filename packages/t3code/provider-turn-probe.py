@@ -33,6 +33,28 @@ PROBE_PROMPT = (
 )
 
 
+TOOL_ITEM_TYPES = frozenset({"dynamic_tool", "command_execution", "file_change",
+                             "web_search", "image_view"})
+
+
+def _completed_tool_item(item):
+    """A real completed tool item from the T3 v0.1.5 projection.
+
+    T3 emits dynamic_tool/command_execution/file_change/web_search/image_view
+    (session-logic-D8bgEKqg.js, baked app 0.1.5). ``command_execution`` also
+    carries the pre-run workspace preparation; that is not a model tool call.
+    """
+    kind = item.get("type")
+    if kind == "tool_result":
+        return item.get("ok") is True and item.get("status") in (None, "completed")
+    if kind not in TOOL_ITEM_TYPES or item.get("status") != "completed":
+        return False
+    if kind == "command_execution" and (
+            item.get("title") == "Workspace ready" or item.get("input") == "Preparing workspace"):
+        return False
+    return True
+
+
 def has_tool_result(client, thread):
     projection = (client._get(f"/api/orchestration/threads/{quote(thread, safe='')}") or {}).get("projection") or {}
     runs = projection.get("runs") or []
@@ -41,7 +63,7 @@ def has_tool_result(client, thread):
     run_id = runs[0]["id"]
     items = [item for item in projection.get("turnItems") or []
              if isinstance(item, dict) and item.get("runId") == run_id]
-    return any(item.get("type") == "tool_result" and item.get("ok") is True for item in items)
+    return any(_completed_tool_item(item) for item in items)
 
 
 def standard_options(client, instance, model, requested=None):
@@ -142,7 +164,13 @@ def route_unavailable_output(instance, model, kind):
                       "instance": instance, "model": model}}
 
 
-def native_is_admitted(policy, instance, model):
+def native_is_admitted(policy, instance, model, acceptance_route=None):
+    if (isinstance(acceptance_route, dict)
+            and acceptance_route.get("acceptance_only") is True
+            and acceptance_route.get("billing") == "free"
+            and acceptance_route.get("provider") == "opencode-free"
+            and (acceptance_route.get("provider_instance"), acceptance_route.get("model")) == (instance, model)):
+        return True
     if not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2":
         return False
     providers, routes = policy.get("providers"), policy.get("routes")
@@ -241,6 +269,7 @@ def main():
     parser.add_argument("--instance")
     parser.add_argument("--native-model")
     parser.add_argument("--options-json", default="{}")
+    parser.add_argument("--acceptance-route-json")
     args = parser.parse_args()
 
     agent_tools = (os.environ.get("GHOSTSHIP_TOOLS_ROOT")
@@ -258,7 +287,8 @@ def main():
         try:
             policy = json.loads(Path("/etc/ghostship/route-policy.json").read_text())
             options = json.loads(args.options_json)
-            if not native_is_admitted(policy, args.instance, args.native_model):
+            acceptance_route = json.loads(args.acceptance_route_json) if args.acceptance_route_json else None
+            if not native_is_admitted(policy, args.instance, args.native_model, acceptance_route):
                 raise ValueError("native route is not admitted")
             allowed = ("serviceTier", "fastMode", "variant")
             if (not isinstance(options, dict) or any(k not in allowed for k in options)
