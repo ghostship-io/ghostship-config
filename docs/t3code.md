@@ -588,10 +588,10 @@ owner-approved, acceptance-only anonymous OpenCode Zen route
 route's effort, and proves one real turn; worker admission is unchanged, picker
 ranking, quota windows and snapshot mapping do not decide which route is tested,
 and a fallback-only route is never probed. This proves the candidate's
-T3/provider/tool path, not OpenCode Go subscription auth wiring. The nominated
+T3/provider/tool path, not OpenCode Go subscription auth wiring. The acceptance
 route's provider instance and non-secret OpenCode config are staged into the
-candidate; a subscription credential is projected only after an explicit owner
-scope decision. The nominated route's own exhausted
+candidate; the candidate projects no provider credential of any kind and its
+env file is empty. The route's own exhausted
 or unavailable turn is recorded as `route_unavailable` without a candidate-
 failed marker; unresolved probe or unclassified acceptance outcomes are recorded
 as unknown and are not automatically replayed. Neither is an acceptance PASS.
@@ -610,6 +610,59 @@ record as an invalidation request: a crash can leave the marker in place.
 Reasons must not contain secrets. The next deployment still runs all acceptance
 checks and requires the exact-image PASS receipt before any restart. Backups include
 the home and projects but exclude the development engine and Nix stores.
+
+### Candidate rehearsal
+
+`candidate-acceptance.py --rehearsal` runs the same `accept()`/`_accept()` path
+against a built image and closure without a release window, switch, deploy
+receipt or failed-candidate marker. It never reads `/run/secrets/t3code.env`:
+the candidate env file is written empty (`env_file_bytes=0`), and the CLI
+refuses `--provider-secrets-file` in rehearsal mode. The only persistent host
+record is the selected report (0600); the candidate runtime directory is
+disposable scratch and the candidate manager/container are torn down:
+
+```sh
+python3 /nix/store/<t3code-deployment-scripts>/candidate-acceptance.py \
+  --rehearsal --state-dir /var/lib/t3code-podman-candidate/acceptance \
+  --rehearsal-report /var/lib/ghostship/t3code-deployment/rehearsal/<image>.json \
+  --closure-path /nix/store/<system-closure> \
+  --build-seconds <log value> --build-source <log path:line> \
+  --image-archive <image.tar> --podman-bin /run/current-system/sw/bin/podman \
+  --candidate-socket /run/t3code-podman-candidate/podman.sock \
+  --candidate-runtime-dir /var/lib/t3code-podman-candidate/acceptance \
+  --candidate-uid <podman-t3code uid + 1> --home-dir /srv/apps/t3code/home \
+  --candidate-home-target /home/t3code --tooling-path <t3code-tools> \
+  --agent-revision <rev> \
+  --acceptance-route-file /etc/ghostship/t3code-acceptance-route.json \
+  --volume /etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro \
+  --volume /etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro \
+  --volume /nix/store:/nix/store:O
+```
+
+Runtime acceptance reads only the explicit acceptance-route file
+(`/etc/ghostship/t3code-acceptance-route.json`); a missing or invalid file is a
+precondition failure, never a fallback to the retired nominated primary. The
+rehearsal report's `provider_turn.route` is copied from the candidate probe's
+own output (`provider_turn.source` names it), not recomputed by the host.
+
+The report uses `ghostship.t3code-rehearsal/v1`. A separate read-only observer
+(`rehearsal-isolation.py`) runs inside the candidate and returns only names and
+booleans: process environment names, auth-path existence, the mount list,
+provider-instance keys and OpenCode provider keys. A missing, unreadable or
+incomplete observer result is `UNKNOWN`; credential-like names, a non-empty env
+file or an unexpected mount makes isolation `violation`. Neither can be
+`PASS`. Before startup the rehearsal scans the closure and tooling paths (depth
+2) for `auth.json`, `t3code.env`, `credentials.json`, `secrets`, `*.key` and
+`*.pem`, and stops as `precondition_not_met` if one is present. That scan is the
+check for a secret-bearing path under `/nix/store`; the store itself is a
+content-addressed, world-readable build tree and is mounted read-only (`:O`).
+
+The report names every performance source: `image_size_bytes` from the image
+archive, `closure` and `tooling_closure` from `nix path-info -S`, and
+`build_seconds`/`build_source` copied from the release build log. Because
+release #5 measures a cached system-closure build, the field is labelled
+`build_kind: cached_system_closure_build`; it is not a clean image build. Missing
+build-log values stay `null`, never estimated.
 
 ```sh
 systemctl status podman-t3code.service --no-pager

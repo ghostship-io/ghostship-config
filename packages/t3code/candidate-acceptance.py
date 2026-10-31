@@ -32,6 +32,8 @@ T3_FREE_PROVIDER = "opencode-free"
 ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
 ACCEPTANCE_ROUTE = ("opencode-free", "opencode/glm-5.3-flash-free")
 ACCEPTANCE_ROUTE_FILE = "/etc/ghostship/t3code-acceptance-route.json"
+REHEARSAL_SCHEMA = "ghostship.t3code-rehearsal/v1"
+SECRET_FILE_NAMES = frozenset({"auth.json", "t3code.env", "credentials.json"})
 ACCEPTANCE_EFFORT = "high"
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
 ALLOWED_CANDIDATE_MOUNTS = {
@@ -72,19 +74,22 @@ def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env):
                 if not isinstance(providers, dict) or set(providers) != {"opencode"}:
                     raise PreconditionError("candidate OpenCode config names another provider")
     settings = Path(candidate_home) / ".t3/userdata/settings.json"
-    try:
-        document = json.loads(settings.read_text())
-    except (OSError, ValueError):
-        raise PreconditionError("candidate provider settings are unreadable") from None
-    instances = document.get("providerInstances") if isinstance(document, dict) else None
-    if not isinstance(instances, dict) or set(instances) != {T3_FREE_PROVIDER}:
-        raise PreconditionError("candidate provider instances are not the anonymous Zen instance")
-    environment = instances[T3_FREE_PROVIDER].get("environment")
-    if not isinstance(environment, list):
-        raise PreconditionError("candidate provider environment is invalid")
-    for item in environment:
-        if not isinstance(item, dict) or item.get("name") not in ANONYMOUS_SETTINGS_ENV_ALLOWLIST:
-            raise PreconditionError("candidate provider environment is not allowlisted")
+    # A tooling-free rehearsal stages no provider settings; there is then no
+    # instance projection to inspect, and the observer cannot report observed.
+    if settings.exists():
+        try:
+            document = json.loads(settings.read_text())
+        except (OSError, ValueError):
+            raise PreconditionError("candidate provider settings are unreadable") from None
+        instances = document.get("providerInstances") if isinstance(document, dict) else None
+        if not isinstance(instances, dict) or set(instances) != {T3_FREE_PROVIDER}:
+            raise PreconditionError("candidate provider instances are not the anonymous Zen instance")
+        environment = instances[T3_FREE_PROVIDER].get("environment")
+        if not isinstance(environment, list):
+            raise PreconditionError("candidate provider environment is invalid")
+        for item in environment:
+            if not isinstance(item, dict) or item.get("name") not in ANONYMOUS_SETTINGS_ENV_ALLOWLIST:
+                raise PreconditionError("candidate provider environment is not allowlisted")
     try:
         keys = {line.split("=", 1)[0].strip() for line in Path(provider_env).read_text().splitlines()
                 if "=" in line and line.strip() and not line.strip().startswith("#")}
@@ -140,6 +145,11 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
         staged_probe = candidate_inputs / probe.name
         shutil.copyfile(probe, staged_probe)
         staged_probe.chmod(0o444)
+    observer = Path(__file__).with_name("rehearsal-isolation.py")
+    if observer.is_file():
+        staged_observer = candidate_inputs / observer.name
+        shutil.copyfile(observer, staged_observer)
+        staged_observer.chmod(0o444)
     if stage_toolchain:
         staged_toolchain = stage_candidate_toolchain(
             source_home, candidate_home, candidate_uid, candidate_home_target
@@ -853,7 +863,10 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
                     route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None,
                     evidence=None, acceptance_route=None,
                     acceptance_route_file=None):
-    if acceptance_route is None and acceptance_route_file is not None:
+    if acceptance_route is None:
+        if acceptance_route_file is None:
+            # Never fall back to the superseded nominated primary route.
+            raise PreconditionError("the acceptance route is required")
         acceptance_route = read_acceptance_route(acceptance_route_file)
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
@@ -1075,10 +1088,37 @@ def probe_failure_detail(failure, result):
     return f"{failure}; {detail}" if detail else failure
 
 
+def record_candidate_turn(evidence, payload):
+    """Retain the route the candidate itself reported, never a computed one."""
+    if evidence is None or not isinstance(payload, dict):
+        return
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+    instance = payload.get("instance")
+    model = payload.get("model")
+    if not isinstance(instance, str):
+        instance = error.get("instance") if isinstance(error.get("instance"), str) else None
+    if not isinstance(model, str):
+        model = error.get("model") if isinstance(error.get("model"), str) else None
+    def bounded(value, limit=256):
+        return value[:limit] if isinstance(value, str) else None
+    evidence["candidate_provider_turn"] = {
+        "route": bounded(f"{instance}/{model}", 520) if instance and model else None,
+        "instance": bounded(instance),
+        "model": bounded(model),
+        "outcome": bounded(payload.get("outcome"), 64),
+        "settled": payload.get("settled") is True,
+        "source": "candidate provider-turn-probe output",
+    }
+
+
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
                         policy=None, snapshot=None, evidence=None, acceptance_route=None):
     """Prove one exact policy-admitted primary with a real turn on the candidate."""
     del provider_env_file
+    if acceptance_route is None:
+        # The explicit acceptance-route file is the only runtime admission
+        # input; the legacy nominated primary is not a fallback.
+        raise PreconditionError("the acceptance route is required")
     policy = read_route_policy() if policy is None else policy
     diagnostics = candidate_provider_diagnostics(engine, name)
     route_result = candidate_agent_command(engine, name, "agent", "models", "--json")
@@ -1119,6 +1159,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
             passed = json.loads(proof.stdout)
         except (ValueError, TypeError):
             passed = None
+        record_candidate_turn(evidence, passed)
         if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
                 or passed.get("settled") is not True or passed.get("instance") != identity[0]
                 or passed.get("model") != identity[1]):
@@ -1133,6 +1174,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         result = json.loads(proof.stdout or "{}")
     except (ValueError, TypeError):
         result = {}
+    record_candidate_turn(evidence, result)
     if not isinstance(result, dict) or result.get("settled") is not True:
         raise RouteUnknownError(route, route_summary,
                                 "provider_turn outcome unknown: probe settlement not proven",
@@ -1210,13 +1252,175 @@ def candidate_agent_path(engine, name, candidate_home_target):
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _sha256_file(path):
+    try:
+        return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _write_report(path, document):
+    path = Path(path)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(document, sort_keys=True) + "\n")
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
+
+
+def read_isolation(engine, name):
+    """Read the in-candidate observer; any failure is UNKNOWN."""
+    result = candidate_agent_command(
+        engine, name, "python3", "/run/t3code-candidate-inputs/rehearsal-isolation.py",
+        timeout=30,
+    )
+    if result.returncode:
+        return {"state": "unknown", "reason": "isolation observer failed"}
+    try:
+        data = json.loads(result.stdout)
+    except (ValueError, TypeError):
+        return {"state": "unknown", "reason": "isolation observer output is unreadable"}
+    if (not isinstance(data, dict) or data.get("state") != "observed"
+            or not data.get("env_names")):
+        return {"state": "unknown", "reason": "isolation was not observed"}
+    if data.get("secret_names"):
+        return {**data, "state": "violation", "reason": "credential-like names observed"}
+    if data.get("mount_violations"):
+        return {**data, "state": "violation", "reason": "unexpected candidate mount"}
+    if data.get("env_file_bytes") != 0:
+        return {**data, "state": "violation",
+                "reason": "the candidate env file is not empty"}
+    return data
+
+
+def store_secret_scan(paths):
+    """Bounded scan of the closure/tooling paths for secret-bearing names."""
+    findings = []
+    for root in paths:
+        if not root:
+            continue
+        root = Path(root)
+        if not root.exists() or root.is_symlink():
+            continue
+        for base, directories, files in os.walk(root, followlinks=False):
+            depth = len(Path(base).relative_to(root).parts)
+            if depth >= 2:
+                directories[:] = []
+            for name in list(directories) + list(files):
+                if (name in SECRET_FILE_NAMES or name == "secrets"
+                        or name.endswith((".key", ".pem"))):
+                    findings.append(str(Path(base) / name))
+    return sorted(set(findings))
+
+
+def _nix_path_info(path):
+    if not path:
+        return None
+    try:
+        result = subprocess.run(["nix", "path-info", "-S", str(path)],
+                                capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode:
+        return None
+    try:
+        return {"path": str(path), "size_bytes": int(result.stdout.split()[1])}
+    except (IndexError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def rehearsal_outcome_for(error):
+    """Classify a rehearsal exception without inventing a pass."""
+    if isinstance(error, PreconditionError):
+        return "precondition_not_met"
+    if isinstance(error, RouteUnavailableError):
+        return "route_unavailable"
+    if isinstance(error, RouteUnknownError):
+        return "unknown"
+    if isinstance(error, ProviderTurnError):
+        return "candidate_failed"
+    text = str(error)
+    if "teardown" in text or "production T3 identity changed" in text:
+        return "unknown"
+    return "failed"
+
+
+def rehearsal_error_text(error):
+    """Bounded, credential-safe reason for a failed rehearsal."""
+    if isinstance(error, (RouteUnknownError, RouteUnavailableError, ProviderTurnError)):
+        return str(error)[:2000]
+    return f"{type(error).__name__}: {str(error)[:500]}"
+
+
+def rehearsal_document(*, outcome, image_archive, image_id, name, tooling_path,
+                       agent_revision, candidate_toolchain, checks, isolation,
+                       store_scan, closure_path, build_seconds, build_source,
+                       started, candidate_turn=None,
+                       acceptance_route_file=ACCEPTANCE_ROUTE_FILE,
+                       before=None, after=None, error=None):
+    """One report shape for passed, unknown and failed rehearsals."""
+    try:
+        image_size = Path(image_archive).stat().st_size
+    except OSError:
+        image_size = None
+    document = {
+        "schema": REHEARSAL_SCHEMA,
+        "rehearsal": True,
+        "outcome": outcome,
+        "image_id": image_id,
+        "image_archive": str(image_archive),
+        "image_size_bytes": image_size,
+        "acceptance_script_sha256": _sha256_file(__file__),
+        "probe_sha256": _sha256_file(Path(__file__).with_name("provider-turn-probe.py")),
+        "acceptance_route_sha256": _sha256_file(acceptance_route_file),
+        "tooling_path": tooling_path,
+        "agent_revision": agent_revision,
+        "candidate_name": name,
+        "candidate_toolchain": candidate_toolchain,
+        # Keep the candidate-reported route in the single provider_turn block;
+        # the host-computed route string is diagnostic, not the report's quote.
+        "checks": ({key: value for key, value in checks.items()
+                    if key != "provider_turn_route"}
+                   if isinstance(checks, dict) else checks),
+        "provider_turn": {
+            "route": (candidate_turn or {}).get("route"),
+            "instance": (candidate_turn or {}).get("instance"),
+            "model": (candidate_turn or {}).get("model"),
+            "outcome": ((candidate_turn or {}).get("outcome")
+                        or ("passed" if isinstance(checks, dict)
+                            and checks.get("provider_turn") is True else "unknown")),
+            "settled": (candidate_turn or {}).get("settled"),
+            "source": (candidate_turn or {}).get("source"),
+        },
+        "isolation": isolation,
+        "env_file_bytes": (isolation or {}).get("env_file_bytes"),
+        "store_scan": store_scan,
+        "performance": {
+            "image_size_bytes": image_size,
+            "closure": _nix_path_info(closure_path),
+            "tooling_closure": _nix_path_info(tooling_path),
+            "build_s": build_seconds,
+            "build_kind": "cached_system_closure_build",
+            "build_source": build_source,
+            "phase_s": {"total": round(time.monotonic() - started, 3)},
+        },
+        "live_before": before,
+        "live_after": after,
+        "cleanup": "performed in finally",
+    }
+    if error is not None:
+        document["error"] = error
+    return document
+
+
 def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
            volumes=(), systemctl_bin="systemctl",
            command_fn=command, identity_fn=None, candidate_uid=None,
            candidate_runtime_dir=None, provider_secrets_file=None, tooling_path=None,
            expected_agent_revision=None, candidate_home_target="/candidate-home",
            deployment_id=None, model_routing_file=None, acceptance_route_file=ACCEPTANCE_ROUTE_FILE,
-           _evidence=None):
+           rehearsal=False, rehearsal_report=None, closure_path=None, build_seconds=None,
+           build_source=None, _evidence=None):
     """Boot, check, record and remove one candidate without changing production."""
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
@@ -1237,10 +1441,18 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     _evidence["candidate"]["image_id"] = image_id
     name = candidate_name(desired)
     receipts = state_dir / "receipts"
-    receipt_path = receipts / f"{desired}.json"
-    receipts.mkdir(mode=0o700, parents=True, exist_ok=True)
-    receipt_path.unlink(missing_ok=True)
+    receipt_path = None if rehearsal else receipts / f"{desired}.json"
+    if receipt_path is not None:
+        receipts.mkdir(mode=0o700, parents=True, exist_ok=True)
+        receipt_path.unlink(missing_ok=True)
+    started = time.monotonic()
     before = identity_fn()
+    store_findings = store_secret_scan([closure_path, tooling_path])
+    if rehearsal:
+        _evidence["store_scan"] = {"paths": [p for p in (closure_path, tooling_path) if p],
+                                   "findings": store_findings}
+        if store_findings:
+            raise PreconditionError("the store scan found a secret-bearing path")
     engine = [podman_bin, "--remote", "--url", f"unix://{candidate_socket}"]
     candidate_runtime_dir = Path(candidate_runtime_dir or tempfile.gettempdir())
     candidate_runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1259,9 +1471,9 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             candidate_home_target, stage_toolchain=bool(tooling_path),
             approved_free_workers_file=approved_workers_file,
         )
-        write_provider_env(provider_secrets_file, provider_env)
+        write_provider_env(None if rehearsal else provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
-        if tooling_path:
+        if rehearsal or tooling_path:
             assert_candidate_auth_free(home_copy, input_copy, provider_env)
         if model_routing_file:
             try:
@@ -1334,6 +1546,7 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path,
                                  route_policy_file=route_policy_file, routing_snapshot=routing_snapshot,
                                  evidence=evidence, acceptance_route_file=acceptance_route_file)
+        evidence["rehearsal_checks"] = checks
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
@@ -1345,6 +1558,24 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             raise RuntimeError(
                 f"candidate acceptance failed; failed_checks={failed or 'unknown'}"
             )
+        if rehearsal:
+            isolation = read_isolation(engine, name)
+            outcome = ("passed" if isolation.get("state") == "observed"
+                       else "unknown")
+            report = rehearsal_document(
+                outcome=outcome, image_archive=image_archive, image_id=image_id,
+                name=name, tooling_path=tooling_path,
+                agent_revision=expected_agent_revision,
+                candidate_toolchain=staged_toolchain, checks=checks,
+                isolation=isolation, store_scan=_evidence.get("store_scan"),
+                closure_path=closure_path, build_seconds=build_seconds,
+                build_source=build_source, started=started,
+                candidate_turn=_evidence.get("candidate_provider_turn"),
+                acceptance_route_file=acceptance_route_file,
+                before=before, after=after,
+            )
+            _write_report(rehearsal_report or (Path(state_dir) / "rehearsal.json"), report)
+            return report
         receipt = {
             "deployment_id": desired,
             "image_id": image_id,
@@ -1382,7 +1613,7 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         if candidate_tmp.exists():
             cleanup_error = "candidate acceptance workspace teardown failed"
         after = identity_fn()
-        if before != after or cleanup_error:
+        if receipt_path is not None and (before != after or cleanup_error):
             receipt_path.unlink(missing_ok=True)
         if cleanup_error:
             raise RuntimeError(cleanup_error)
@@ -1400,24 +1631,78 @@ def safe_unknown_evidence(error):
     return "provider_turn outcome unknown"
 
 
+def _write_failed_rehearsal(state, image_archive, kwargs, desired, evidence, started, error):
+    """Write the failed/UNKNOWN rehearsal report and re-raise the failure."""
+    report_path = Path(kwargs.get("rehearsal_report") or (state / "rehearsal.json"))
+    isolation = {"state": "unknown",
+                 "reason": "rehearsal failed before a successful isolation observation"}
+    try:
+        existing = json.loads(report_path.read_text())
+    except (OSError, ValueError):
+        existing = None
+    if isinstance(existing, dict) and isinstance(existing.get("isolation"), dict):
+        isolation = existing["isolation"]
+        if existing.get("outcome") == "passed":
+            isolation = {**isolation, "state": "unknown",
+                         "reason": "performed with a failed teardown"}
+    document = rehearsal_document(
+        outcome=rehearsal_outcome_for(error), image_archive=image_archive,
+        image_id=evidence.get("candidate", {}).get("image_id"),
+        name=desired, tooling_path=kwargs.get("tooling_path"),
+        agent_revision=kwargs.get("expected_agent_revision"),
+        candidate_toolchain=None, checks=evidence.get("rehearsal_checks") or {},
+        isolation=isolation, store_scan=evidence.get("store_scan"),
+        closure_path=kwargs.get("closure_path"),
+        build_seconds=kwargs.get("build_seconds"),
+        build_source=kwargs.get("build_source"), started=started,
+        candidate_turn=evidence.get("candidate_provider_turn"),
+        acceptance_route_file=kwargs.get("acceptance_route_file", ACCEPTANCE_ROUTE_FILE),
+        error=rehearsal_error_text(error),
+    )
+    try:
+        _write_report(report_path, document)
+    except OSError as report_error:
+        print(f"candidate rehearsal report could not be written: {report_error}",
+              file=sys.stderr)
+    raise
+
+
 def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir, *args, **kwargs):
     """Capture best-effort evidence for every failure, including setup and teardown."""
-    state = None
+    state = Path(state_dir)
+    rehearsal = kwargs.get("rehearsal") is True
+    started = time.monotonic()
     safe_desired = "unknown"
     evidence = {"candidate": {"deployment_id": safe_desired, "image_id": None}}
     try:
-        state = Path(state_dir)
         desired = kwargs.get("deployment_id")
+        if rehearsal and desired is None:
+            # A rehearsal names no deployment: bind the scratch candidate to
+            # the built archive under test instead of reading deploy state.
+            digest = _sha256_file(image_archive) or "unknown"
+            desired = "rehearsal-" + digest.split(":", 1)[-1][:12]
         if desired is None:
             try:
                 desired = (state / "desired").read_text().strip()
             except OSError:
                 desired = None
-        safe_desired = desired if isinstance(desired, str) and re.fullmatch(r"(?:[0-9a-f]{64}|generation-[0-9]+)", desired) else "unknown"
+        if rehearsal:
+            safe_desired = (desired if isinstance(desired, str)
+                            and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", desired)
+                            else "unknown")
+            if kwargs.get("deployment_id") is None:
+                kwargs["deployment_id"] = safe_desired
+        else:
+            safe_desired = desired if isinstance(desired, str) and re.fullmatch(r"(?:[0-9a-f]{64}|generation-[0-9]+)", desired) else "unknown"
         evidence["candidate"]["deployment_id"] = safe_desired
         return _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                        *args, _evidence=evidence, **kwargs)
     except Exception as error:
+        if rehearsal:
+            # No deploy state is written by a rehearsal: the report is the
+            # only record, and it must not claim a pass that was not observed.
+            return _write_failed_rehearsal(
+                state, image_archive, kwargs, safe_desired, evidence, started, error)
         try:
             attempts = Path(state_dir) / "attempts"
             attempts.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1485,7 +1770,27 @@ def main():
     parser.add_argument("--volume", action="append", default=[])
     parser.add_argument("--systemctl-bin", default="systemctl")
     parser.add_argument("--candidate-uid", type=int, required=True)
+    parser.add_argument("--rehearsal", action="store_true",
+                        help="boot, check and remove one candidate without a window, switch or receipt")
+    parser.add_argument("--rehearsal-report",
+                        help="report path (default <state-dir>/rehearsal.json)")
+    parser.add_argument("--closure-path",
+                        help="built system closure under test, for the store scan and size")
+    parser.add_argument("--build-seconds", type=float,
+                        help="duration measured by the release build log")
+    parser.add_argument("--build-source",
+                        help="log path, line or URL the build duration came from")
     args = parser.parse_args()
+    if args.rehearsal and args.provider_secrets_file:
+        print("candidate rehearsal never reads a provider secrets file", file=sys.stderr)
+        sys.exit(PRECONDITION_EXIT)
+    if args.rehearsal and not args.closure_path:
+        print("candidate rehearsal requires --closure-path for the store scan", file=sys.stderr)
+        sys.exit(PRECONDITION_EXIT)
+    if args.build_seconds is not None and (args.build_seconds < 0
+                                           or args.build_seconds != args.build_seconds):
+        print("--build-seconds must be a measured non-negative duration", file=sys.stderr)
+        sys.exit(PRECONDITION_EXIT)
     try:
         accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
                args.home_dir, args.volume, args.systemctl_bin,
@@ -1496,7 +1801,12 @@ def main():
                expected_agent_revision=args.agent_revision,
                candidate_home_target=args.candidate_home_target,
                model_routing_file=args.model_routing_file,
-               acceptance_route_file=args.acceptance_route_file)
+               acceptance_route_file=args.acceptance_route_file,
+               rehearsal=args.rehearsal,
+               rehearsal_report=args.rehearsal_report,
+               closure_path=args.closure_path,
+               build_seconds=args.build_seconds,
+               build_source=args.build_source)
     except PreconditionError as error:
         print(f"candidate acceptance precondition not met: {error}", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
