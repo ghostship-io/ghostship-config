@@ -20,11 +20,11 @@ the native Go connector.
 
 ## Build and enable
 
-Build on the host (the image is never pulled at runtime). The base is the
-official v1.0.0 OCI index for upstream commit
-`c9bd187b83baba549d5cd16bacc180f8023d51c8`; the derived image applies the
-durability patch and pre-bakes the embedding model so the service has no
-egress:
+Build on the host (the image is never pulled at runtime). The build uses one
+pinned Python 3.13 base plus the pinned upstream source at commit
+`c9bd187b83baba549d5cd16bacc180f8023d51c8`, installs it non-editable without
+the dev group, applies the durability patch and pre-bakes the embedding model,
+so the service has no egress:
 
 ```sh
 podman build -f modules/self-hosted/agent-memory.Containerfile \
