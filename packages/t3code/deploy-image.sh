@@ -242,7 +242,8 @@ publish_pass_attestation() {
   [[ ! -e "$STATE_DIR/failed-candidate" && ! -L "$STATE_DIR/failed-candidate" ]] || return 1
   receipt_matches_image || return 1
   fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}') || return 1
-  read -r container_id live_image started health <<< "$fields"
+  read -r container_id live_image rest <<< "$fields"
+  health=${rest##* }
   [[ $container_id =~ ^[0-9a-f]{64}$ && ${live_image#sha256:} == "$image_id" && $health == healthy ]] || return 1
   receipt_hash=$(sha256sum < "$receipt" | cut -d ' ' -f 1)
   publish_attestation "$("$JQ_BIN" -cn --arg image "$image_id" --arg container "$container_id" \
@@ -450,7 +451,10 @@ container_identity() {
     printf '{}\n'
     return
   fi
-  read -r container_id image started health <<< "$fields"
+  # .State.StartedAt contains spaces; the health status is the final field, so
+  # split it from the end and keep the whole timestamp.
+  read -r container_id image rest <<< "$fields"
+  started=${rest% *}; health=${rest##* }
   "$JQ_BIN" -cn --arg id "$container_id" --arg image "$image" --arg started_at "$started" \
     --arg health "$health" \
     '{id:$id,image:$image,started_at:$started_at,health:$health}'
