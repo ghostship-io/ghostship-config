@@ -68,24 +68,36 @@ fi
 # --- selection: monotonic max(baked, persisted) ------------------------------
 # A persisted release is served only when it is at least the baked one, so a
 # stale persisted tree can never displace the app the image shipped.
-if [ -n "$persisted_version" ]; then
-  newest=$(printf '%s\n%s\n' "$baked_version" "$persisted_version" | sort -V | tail -n 1)
-  if [ -n "$baked_version" ] && [ "$newest" = "$baked_version" ] && [ "$persisted_version" != "$baked_version" ]; then
-    printf '{"source":"baked","version":"%s","digest":"%s"}\n' "$baked_version" "$baked_digest"
-    exit 0
+choose() {
+  if [ -n "$persisted_version" ]; then
+    newest=$(printf '%s\n%s\n' "$baked_version" "$persisted_version" | sort -V | tail -n 1)
+    if [ -n "$baked_version" ] && [ "$newest" = "$baked_version" ] && [ "$persisted_version" != "$baked_version" ]; then
+      printf '%s\n%s\n%s\n' baked "$baked_version" "$baked_digest"; return 0
+    fi
+    printf '%s\n%s\n%s\n' persisted "$persisted_version" "${persisted_digest:-}"; return 0
   fi
-  if [ -n "$baked_version" ] && [ "$persisted_version" = "$baked_version" ]; then
-    # Same version: prefer the persisted one, which carries a verified digest.
-    :
+  if [ -n "$baked_version" ]; then
+    printf '%s\n%s\n%s\n' baked "$baked_version" "$baked_digest"; return 0
   fi
-  printf '{"source":"persisted","version":"%s","digest":"%s"}\n' "$persisted_version" "${persisted_digest:-}"
-  exit 0
-fi
+  return 1
+}
 
+if ! selected=$(choose); then
+  echo 'served-identity: no baked release and no persisted release' >&2
+  exit 1
+fi
+# Line-delimited so an empty digest cannot be swallowed by word splitting.
+source=$(printf '%s\n' "$selected" | sed -n '1p')
+version=$(printf '%s\n' "$selected" | sed -n '2p')
+digest=$(printf '%s\n' "$selected" | sed -n '3p')
+
+# The baked marker is reported unconditionally: a receipt must be able to name
+# the baked release even while a persisted one is served, and this script stays
+# the only reader of VERSION/DIGEST so the two can never disagree.
 if [ -n "$baked_version" ]; then
-  printf '{"source":"baked","version":"%s","digest":"%s"}\n' "$baked_version" "$baked_digest"
-  exit 0
+  baked_json="{\"version\":\"$baked_version\",\"digest\":\"$baked_digest\"}"
+else
+  baked_json=null
 fi
-
-echo 'served-identity: no baked release and no persisted release' >&2
-exit 1
+printf '{"served":{"source":"%s","version":"%s","digest":"%s"},"baked":%s}\n' \
+  "$source" "$version" "$digest" "$baked_json"
