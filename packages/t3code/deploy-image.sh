@@ -59,6 +59,7 @@ fi
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
+ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -315,6 +316,7 @@ candidate_args=(
   --provider-secrets-file "$PROVIDER_SECRETS_FILE"
   --tooling-path "$TOOLING_PATH"
   --agent-revision "$AGENT_REVISION"
+  --acceptance-route-file "$ACCEPTANCE_ROUTE_FILE"
   --candidate-home-target "$CANDIDATE_HOME_TARGET"
   --systemctl-bin "$SYSTEMCTL_BIN"
 )

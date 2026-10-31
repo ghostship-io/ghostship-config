@@ -89,6 +89,29 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(self.nominated_policy(nominated=False))
 
+    def test_packaged_acceptance_route_is_the_zen_route(self):
+        route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
+        self.assertEqual((route["provider_instance"], route["model"]),
+                         ("opencode-free", "opencode/glm-5.3-flash-free"))
+        self.assertEqual(route["effort"], "high")
+        self.assertTrue(route["acceptance_only"])
+
+    def test_acceptance_only_zen_route(self):
+        route = {
+            "schema": "ghostship.t3code-acceptance-route/v1",
+            "provider": "opencode-free", "provider_instance": "opencode-free",
+            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "effort": "high", "acceptance_only": True,
+        }
+        self.assertEqual(
+            acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route),
+            {"instance": "opencode-free", "model": "opencode/glm-5.3-flash-free",
+             "options": {"variant": "high"}},
+        )
+        route["acceptance_only"] = False
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route)
+
     def test_fallback_only_route_is_never_an_acceptance_route(self):
         fallback = self.fallback_route("codex", "codex", "gpt-6.1-terra")
         with self.assertRaises(acceptance.PreconditionError):
@@ -554,6 +577,14 @@ class CandidateAcceptanceTest(unittest.TestCase):
         filtered_catalog.write_text(json.dumps({"openrouter": {
             "name": "OpenRouter", "models": {"provider/model": {}}
         }}))
+        free_config = self.home / ".config/opencode-free/config/opencode/opencode.jsonc"
+        free_config.parent.mkdir(parents=True)
+        free_config.write_text(json.dumps({"provider": {"opencode": {"models": {}}}}))
+        free_catalog = self.home / ".config/opencode-free/cache/opencode/models.json"
+        free_catalog.parent.mkdir(parents=True)
+        free_catalog.write_text(json.dumps({"opencode": {
+            "name": "OpenCode", "models": {"glm-5.3-flash-free": {"cost": {"input": 0}}}
+        }}))
         self.archive = self.root / "image.tar"
         config = b'{"config":{"Entrypoint":["/nix/store/test/lib/systemd/systemd"]},"rootfs":{"diff_ids":["candidate"]}}'
         self.image_id = hashlib.sha256(config).hexdigest()
@@ -967,6 +998,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         )
         self.assertEqual(opencode_config["provider"], {"opencode-go": {"models": {}}})
         self.assertEqual(opencode_config["enabled_providers"], ["opencode-go"])
+        self.assertTrue((candidate_home / ".config/opencode-free/opencode-free").is_file())
+        self.assertTrue((candidate_home / ".config/opencode-free/config/opencode/opencode.jsonc").is_file())
+        self.assertTrue((candidate_home / ".config/opencode-free/cache/opencode/models.json").is_file())
         self.assertFalse((candidate_home / ".local/share/opencode/auth.json").exists())
         self.assertFalse((candidate_home / ".t3/userdata/state.sqlite").exists())
         self.assertEqual(
@@ -1042,6 +1076,13 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
             return self.command(engine, *args, **kwargs)
 
+        route = self.root / "acceptance-route.json"
+        route.write_text(json.dumps({
+            "schema": "ghostship.t3code-acceptance-route/v1",
+            "provider": "opencode-free", "provider_instance": "opencode-free",
+            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "effort": "high", "acceptance_only": True,
+        }))
         with patch.object(acceptance, "command", side_effect=no_route), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             with self.assertRaises(acceptance.RouteUnavailableError):
@@ -1049,6 +1090,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                     self.state, self.archive, "podman",
                     "/run/t3code-podman-candidate/podman.sock", self.home,
                     command_fn=no_route, identity_fn=lambda: self.identity,
+                    acceptance_route_file=route,
                 )
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
         self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
@@ -1183,6 +1225,37 @@ def _selection(document, now):
             result = provider_probe.prove_route("p/m", 1, client)
         self.assertEqual(result["outcome"], "no_tool_call")
         self.assertTrue(result["settled"])
+
+    def test_completed_dynamic_tool_is_a_real_tool_call(self):
+        client = Mock()
+        client._get.return_value = {"projection": {"runs": [{"id": "r"}], "turnItems": [
+            {"runId": "r", "type": "dynamic_tool", "toolName": "read",
+             "input": {"path": "/workspace"}, "status": "completed"}]}}
+        self.assertTrue(provider_probe.has_tool_result(client, "probe"))
+
+    def test_completed_command_execution_is_a_tool_call_but_workspace_prep_is_not(self):
+        client = Mock()
+        client._get.return_value = {"projection": {"runs": [{"id": "r"}], "turnItems": [
+            {"runId": "r", "type": "command_execution", "title": "Workspace ready",
+             "input": "Preparing workspace", "status": "completed", "exitCode": 0}]}}
+        self.assertFalse(provider_probe.has_tool_result(client, "probe"))
+        client._get.return_value = {"projection": {"runs": [{"id": "r"}], "turnItems": [
+            {"runId": "r", "type": "command_execution", "title": "List files",
+             "status": "completed", "exitCode": 0}]}}
+        self.assertTrue(provider_probe.has_tool_result(client, "probe"))
+
+    def test_failed_or_unsettled_tool_items_fail(self):
+        client = Mock()
+        for item in (
+            {"runId": "r", "type": "dynamic_tool", "toolName": "read", "status": "failed"},
+            {"runId": "r", "type": "dynamic_tool", "toolName": "read", "status": "running"},
+            {"runId": "r", "type": "dynamic_tool", "toolName": "read"},
+            {"runId": "r", "type": "tool_result", "ok": False, "status": "completed"},
+            {"runId": "r", "type": "tool_result", "ok": True, "status": "failed"},
+        ):
+            with self.subTest(item=item):
+                client._get.return_value = {"projection": {"runs": [{"id": "r"}], "turnItems": [item]}}
+                self.assertFalse(provider_probe.has_tool_result(client, "probe"))
 
     def test_tool_result_requires_same_single_run_and_explicit_success(self):
         client = Mock()
