@@ -310,8 +310,8 @@ preflight() {
     /srv|/srv/*) refuse "--base must not be inside $PRODUCTION_DIR" ;;
   esac
   case "$(basename "$BASE")" in
-    *-evidence) ;;
-    *) refuse "--base must be a dedicated directory ending in -evidence" ;;
+    *-evidence|*-evidence-r[0-9]*) ;;
+    *) refuse "--base must be a dedicated directory ending in -evidence or -evidence-r<N>" ;;
   esac
 
   if [ "$DRY_RUN" = 1 ]; then
