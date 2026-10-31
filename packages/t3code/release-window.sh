@@ -476,6 +476,24 @@ JQ
   rm "$record"; sync -f "$STATE_DIR"
   printf 'PASS recorded UNKNOWN superseded window=%s superseded_by=%s\n' "$old" "$new_id"
 }
+# One production turn in the serving T3's existing authenticated environment.
+# It is not candidate proof: it runs outside the candidate, after the switch,
+# and is recorded as its own claim. PRODUCTION_TURN_COMMAND is a test seam.
+production_turn() {
+  local out rc
+  if [[ -n ${PRODUCTION_TURN_COMMAND:-} ]]; then
+    out=$(bash -c "$PRODUCTION_TURN_COMMAND" 2>&1); rc=$?
+  else
+    out=$("$PODMAN_BIN" exec -u 3000 -e HOME="$CANDIDATE_HOME_TARGET" "$PODMAN_TARGET" \
+      "$CANDIDATE_HOME_TARGET/.local/share/t3code-tools/opencode/current/bin/opencode" \
+      run -m opencode-go/deepseek-v4.1-flash "Reply with exactly PROBE_PASS" 2>&1); rc=$?
+  fi
+  printf '%s' "$out" > "$dir/production-turn.out.tmp"
+  chmod 0600 "$dir/production-turn.out.tmp"
+  mv "$dir/production-turn.out.tmp" "$dir/production-turn.out"; sync -f "$dir"
+  [[ $rc == 0 && $out == *PROBE_PASS* ]]
+}
+
 case ${1:-} in
  preflight)
   [[ $# -le 2 ]] || fail 'usage: preflight [--adopt-inhibit]'
@@ -656,7 +674,20 @@ case ${1:-} in
     *) fail 'window holder state unknown' ;;
   esac
   post_verify
-  printf 'PASS post deployment=%s image=%s\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
+  if ! production_turn; then
+    # shellcheck disable=SC2016
+    "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+      '{deployment_id:$d,image_id:$i,claim:"production_turn",route:"opencode-go/deepseek-v4.1-flash",outcome:"failed",at:$at}' \
+      > "$dir/production-turn.json.tmp"
+    chmod 0600 "$dir/production-turn.json.tmp"; mv "$dir/production-turn.json.tmp" "$dir/production-turn.json"; sync -f "$dir"
+    fail 'production turn failed; window remains open for the receipted rollback path'
+  fi
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+    '{deployment_id:$d,image_id:$i,claim:"production_turn",route:"opencode-go/deepseek-v4.1-flash",outcome:"passed",at:$at}' \
+    > "$dir/production-turn.json.tmp"
+  chmod 0600 "$dir/production-turn.json.tmp"; mv "$dir/production-turn.json.tmp" "$dir/production-turn.json"; sync -f "$dir"
+  printf 'PASS post deployment=%s image=%s production_turn=passed\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
   ;;
  end-post)
   [[ $# -le 2 ]] || fail 'usage: end-post [WINDOW_ID]'
@@ -680,9 +711,16 @@ case ${1:-} in
     *) fail 'window holder state unknown' ;;
   esac
   post_verify
-  # Post evidence is not a receipt: it references the existing receipt only.
+  [[ -f $dir/production-turn.json && ! -L $dir/production-turn.json ]] || fail 'production turn evidence missing'
   # shellcheck disable=SC2016
-  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" '{deployment_id:$d,image_id:$i,verified_at:$at}' > "$dir/post.verified.tmp"
+  "$JQ_BIN" -e '.claim == "production_turn" and .outcome == "passed"' "$dir/production-turn.json" >/dev/null \
+    || fail 'production turn did not pass'
+  # Post evidence is not a receipt: it references the existing receipt and
+  # names both release claims separately.
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+    '{deployment_id:$d,image_id:$i,verified_at:$at,
+      claims:{candidate_fixture_turn:"receipt",production_turn:"passed"}}' > "$dir/post.verified.tmp"
   chmod 0600 "$dir/post.verified.tmp"; sync -f "$dir/post.verified.tmp"; mv "$dir/post.verified.tmp" "$dir/post.verified"; sync -f "$dir"
   "$SYSTEMCTL_BIN" start t3code-recovery.service
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery not active; inhibit retained'
