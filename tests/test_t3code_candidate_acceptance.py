@@ -62,12 +62,12 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
 
 
 class CandidateAcceptanceTest(unittest.TestCase):
-    ZEN_ROUTE_ID = "opencode-free/opencode/glm-5.3-flash-free"
+    ZEN_ROUTE_ID = "opencode-free/opencode/deepseek-v4.1-flash-free"
 
     def zen_route(self):
         return {"schema": "ghostship.t3code-acceptance-route/v1",
                 "provider": "opencode-free", "provider_instance": "opencode-free",
-                "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
                 "effort": "high", "acceptance_only": True}
 
     def nominated_policy(self, *extra, nominated=True):
@@ -138,7 +138,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                           "options": {"variant": "high"}})
         route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
         self.assertTrue(provider_probe.acceptance_route_allows(
-            route, "opencode-free", "opencode/glm-5.3-flash-free"))
+            route, "opencode-free", "opencode/deepseek-v4.1-flash-free"))
         self.assertFalse(provider_probe.acceptance_route_allows(
             route, "opencode", "opencode-go/deepseek-v4.1-flash"))
         with self.assertRaises(acceptance.PreconditionError):
@@ -147,7 +147,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
     def test_packaged_acceptance_route_is_the_zen_route(self):
         route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
         self.assertEqual((route["provider_instance"], route["model"]),
-                         ("opencode-free", "opencode/glm-5.3-flash-free"))
+                         ("opencode-free", "opencode/deepseek-v4.1-flash-free"))
         self.assertEqual(route["effort"], "high")
         self.assertTrue(route["acceptance_only"])
 
@@ -155,12 +155,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
         route = {
             "schema": "ghostship.t3code-acceptance-route/v1",
             "provider": "opencode-free", "provider_instance": "opencode-free",
-            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
             "effort": "high", "acceptance_only": True,
         }
         self.assertEqual(
             acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route),
-            {"instance": "opencode-free", "model": "opencode/glm-5.3-flash-free",
+            {"instance": "opencode-free", "model": "opencode/deepseek-v4.1-flash-free",
              "options": {"variant": "high"}},
         )
         route["acceptance_only"] = False
@@ -175,7 +175,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         route = {
             "schema": "ghostship.t3code-acceptance-route/v1",
             "provider": "opencode", "provider_instance": "opencode-free",
-            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
             "effort": "high", "acceptance_only": True,
         }
         with self.assertRaises(acceptance.PreconditionError):
@@ -184,9 +184,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         # admission is admitted_acceptance_route's job, so this route object
         # still names the requested target.
         self.assertTrue(provider_probe.acceptance_route_allows(
-            route, "opencode-free", "opencode/glm-5.3-flash-free"))
+            route, "opencode-free", "opencode/deepseek-v4.1-flash-free"))
         self.assertFalse(provider_probe.acceptance_route_allows(
-            route, "opencode", "opencode/glm-5.3-flash-free"))
+            route, "opencode", "opencode/deepseek-v4.1-flash-free"))
         path = self.root / "wrong-provider-route.json"
         path.write_text(json.dumps(route))
         with self.assertRaises(acceptance.PreconditionError):
@@ -268,7 +268,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 "outcome": "route_unavailable", "settled": True,
                 "error": {"code": "route-unavailable", "kind": "provider-instance-missing",
                           "instance": "opencode-free",
-                          "model": "opencode/glm-5.3-flash-free"},
+                          "model": "opencode/deepseek-v4.1-flash-free"},
             }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
@@ -361,10 +361,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_only_a_t3_proven_route_failure_can_be_attributed_to_candidate(self):
         policy = self.nominated_policy()
-        row = {"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
+        row = {"provider": "opencode", "model": "opencode/deepseek-v4.1-flash-free",
                "available": True, "execution": "t3",
                "target": {"providerInstanceId": "opencode-free",
-                          "model": "opencode/glm-5.3-flash-free"},
+                          "model": "opencode/deepseek-v4.1-flash-free"},
                "tool_loop": {"state": "proven"}}
         rows = [row]
 
@@ -374,7 +374,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             return Mock(returncode=1, stdout=json.dumps({
                 "settled": True, "error": {"code": "no-tool-call", "kind": "no-tool-call",
                                            "instance": "opencode-free",
-                                           "model": "opencode/glm-5.3-flash-free"},
+                                           "model": "opencode/deepseek-v4.1-flash-free"},
             }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
@@ -473,10 +473,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_generic_execution_error_on_proven_route_is_unknown(self):
         policy = self.nominated_policy()
-        row = {"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
+        row = {"provider": "opencode", "model": "opencode/deepseek-v4.1-flash-free",
                "available": True, "execution": "t3",
                "target": {"providerInstanceId": "opencode-free",
-                          "model": "opencode/glm-5.3-flash-free"},
+                          "model": "opencode/deepseek-v4.1-flash-free"},
                "tool_loop": {"state": "proven"}}
 
         def run(engine, name, *args, **kwargs):
@@ -1216,7 +1216,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         route.write_text(json.dumps({
             "schema": "ghostship.t3code-acceptance-route/v1",
             "provider": "opencode-free", "provider_instance": "opencode-free",
-            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
             "effort": "high", "acceptance_only": True,
         }))
         with patch.object(acceptance, "command", side_effect=no_route), \
@@ -1540,7 +1540,7 @@ def _selection(document, now):
              patch.object(acceptance, "check_candidate", return_value={
                 **{name: True for name in acceptance.CHECKS},
                 "desktop_transport": {"state": "not_applicable"},
-                "provider_turn_route": "opencode-free/opencode/glm-5.3-flash-free",
+                "provider_turn_route": "opencode-free/opencode/deepseek-v4.1-flash-free",
              }), \
              patch.object(acceptance, "candidate_agent_path",
                           return_value=self.agent_dir()), \
@@ -1634,7 +1634,7 @@ def _selection(document, now):
         invalid = self.root / "invalid-route.json"
         invalid.write_text(json.dumps({"schema": "ghostship.t3code-acceptance-route/v1",
                                        "provider": "opencode", "provider_instance": "opencode-free",
-                                       "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                                       "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
                                        "effort": "high", "acceptance_only": True}))
         with self.assertRaisesRegex(acceptance.PreconditionError,
                                     "acceptance route is invalid"):
@@ -1649,16 +1649,16 @@ def _selection(document, now):
     def test_provider_turn_records_the_route_the_candidate_reported(self):
         route = {"schema": "ghostship.t3code-acceptance-route/v1",
                  "provider": "opencode-free", "provider_instance": "opencode-free",
-                 "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                 "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
                  "effort": "high", "acceptance_only": True}
-        rows = [{"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
+        rows = [{"provider": "opencode", "model": "opencode/deepseek-v4.1-flash-free",
                  "execution": "t3", "available": True,
                  "native": {"providerInstanceId": "opencode-free",
-                            "model": "opencode/glm-5.3-flash-free"},
+                            "model": "opencode/deepseek-v4.1-flash-free"},
                  "tool_loop": {"state": "proven"}}]
         reported = {"outcome": "passed", "settled": True,
                     "instance": "opencode-free",
-                    "model": "opencode/glm-5.3-flash-free"}
+                    "model": "opencode/deepseek-v4.1-flash-free"}
         evidence = {}
         with patch.object(acceptance, "candidate_provider_diagnostics",
                           return_value="fixture"), \
@@ -1670,21 +1670,21 @@ def _selection(document, now):
                 ["podman"], "t3code-candidate-x", self.root / "provider.env",
                 tooling_path="/nix/store/tools", evidence=evidence,
                 acceptance_route=route)
-        self.assertEqual(observed, "opencode-free/opencode/glm-5.3-flash-free")
+        self.assertEqual(observed, "opencode-free/opencode/deepseek-v4.1-flash-free")
         self.assertEqual(evidence["candidate_provider_turn"]["route"],
-                         "opencode-free/opencode/glm-5.3-flash-free")
+                         "opencode-free/opencode/deepseek-v4.1-flash-free")
         self.assertEqual(evidence["candidate_provider_turn"]["source"],
                          "candidate provider-turn-probe output")
         self.assertTrue(evidence["candidate_provider_turn"]["settled"])
 
     def test_rehearsal_report_quotes_the_candidate_route_not_the_computed_one(self):
         path = self.root / "rehearsal-route.json"
-        reported = "opencode-free/opencode/glm-5.3-flash-free"
+        reported = "opencode-free/opencode/deepseek-v4.1-flash-free"
 
         def checked(engine, name, provider_env_file, **kwargs):
             kwargs["evidence"]["candidate_provider_turn"] = {
                 "route": reported, "instance": "opencode-free",
-                "model": "opencode/glm-5.3-flash-free", "outcome": "passed",
+                "model": "opencode/deepseek-v4.1-flash-free", "outcome": "passed",
                 "settled": True,
                 "source": "candidate provider-turn-probe output",
             }
@@ -2056,12 +2056,12 @@ def _selection(document, now):
 
     def test_probe_admits_only_the_handed_over_instance_and_model(self):
         route = {"provider": "opencode-free", "provider_instance": "opencode-free",
-                 "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                 "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
                  "acceptance_only": True, "effort": "high"}
         self.assertTrue(provider_probe.acceptance_route_allows(
-            route, "opencode-free", "opencode/glm-5.3-flash-free"))
+            route, "opencode-free", "opencode/deepseek-v4.1-flash-free"))
         for instance, model in (
-            ("opencode", "opencode/glm-5.3-flash-free"),
+            ("opencode", "opencode/deepseek-v4.1-flash-free"),
             ("opencode-free", "opencode/glm-5.2-flash-free"),
             ("opencode-free", ""),
         ):

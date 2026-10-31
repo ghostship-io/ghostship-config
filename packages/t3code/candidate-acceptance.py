@@ -32,7 +32,10 @@ T3_FREE_PROVIDER = "opencode-free"
 # quota windows and snapshot mapping may report availability; they must not
 # decide whether the candidate image can run a turn.
 ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
-ACCEPTANCE_ROUTE = ("opencode-free", "opencode/glm-5.3-flash-free")
+# The route-policy's one admitted free worker route. The previous model
+# (opencode/glm-5.3-flash-free) began returning api-error-execution-execution
+# at acceptance time; this is the admitted free route the policy already names.
+ACCEPTANCE_ROUTE = ("opencode-free", "opencode/deepseek-v4.1-flash-free")
 ACCEPTANCE_ROUTE_FILE = "/etc/ghostship/t3code-acceptance-route.json"
 REHEARSAL_SCHEMA = "ghostship.t3code-rehearsal/v1"
 SECRET_FILE_NAMES = frozenset({"auth.json", "t3code.env", "credentials.json"})
