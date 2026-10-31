@@ -1079,7 +1079,11 @@ case ${1:-} in
   esac
   [[ -f $dir/complete.started && ! -L $dir/complete.started ]] || fail 'switch evidence missing'
   [[ -f $dir/switch.result && ! -L $dir/switch.result ]] || fail 'switch result unknown'
-  [[ $(cat "$dir/switch.result") == exit_code=0 ]] || fail 'switch did not succeed'
+  switch_result=$(cat "$dir/switch.result")
+  case $switch_result in
+    exit_code=0|exit_code=4) ;;
+    *) fail 'switch did not succeed' ;;
+  esac
   [[ -f $STATE_DIR/deploy.lock && ! -L $STATE_DIR/deploy.lock ]] || fail 'deploy lock missing'
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
   complete_locks_free
@@ -1099,6 +1103,7 @@ case ${1:-} in
   status=0; known=$(known_good_receipt "$image") || status=$?
   [[ $status == 1 ]] || fail 'an exact accepted receipt describes the serving identity; use post or resolve-unknown'
   : "$known"
+  host_inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'host secret identity unknown'
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   attempt="$STATE_DIR/attempts/$expected.json"
@@ -1122,16 +1127,57 @@ case ${1:-} in
       deployment_id, agent_revision, agent_path, provider_secret_inode,
       receipt_file: ($file | split("/") | last)}' "$not_reused_path") || fail 'unreceipted carrying receipt unreadable'
   fi
+  # Classify every failed unit by its FIRST failure in this boot. A unit that
+  # first failed inside the activation window and is not the expected deploy is
+  # switch-caused and refuses; anything unreadable stays unclassified.
+  activation_start=$(date -d "$switch_at" +%s) || fail 'activation start unknown'
+  activation_end=$(stat -c %Y "$dir/switch.result") || fail 'activation end unknown'
+  [[ $activation_start =~ ^[0-9]+$ && $activation_end =~ ^[0-9]+$ ]] || fail 'activation timing unknown'
+  failed_now=$("$SYSTEMCTL_BIN" --failed --no-legend --plain 2>/dev/null | awk 'NF {print $1}' | sort -u)
+  # shellcheck disable=SC2016
+  activation_failures=$("${JOURNALCTL_BIN:-journalctl}" -b --since "@$activation_start" --until "@$activation_end" -o json --no-pager 2>/dev/null \
+    | "$JQ_BIN" -r 'select((.MESSAGE? // "") | startswith("Failed to start")) | (.UNIT? // empty)' 2>/dev/null | sort -u) || activation_failures=
+  units=$( { printf '%s\n' "$failed_now"; printf '%s\n' "$activation_failures"; } | awk 'NF' | sort -u )
+  failed_units_json='[]'
+  for unit in $units; do
+    first=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep -m1 'Failed with result' | cut -d' ' -f1) || first=
+    last=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep 'Failed with result' | tail -1 | cut -d' ' -f1) || last=
+    first_epoch=
+    [[ -z $first ]] || first_epoch=$(date -d "$first" +%s 2>/dev/null) || first_epoch=
+    class=unclassified
+    if [[ -n $first_epoch ]]; then
+      if [[ $unit == ghostship-t3code-deploy.service ]]; then class=expected_deploy
+      elif (( first_epoch < activation_start )); then class=pre_existing
+      elif (( first_epoch > activation_end )); then class=later
+      fi
+    fi
+    case $class in
+      pre_existing|later|expected_deploy) ;;
+      *) fail "unclassified failed unit: $unit" ;;
+    esac
+    # shellcheck disable=SC2016
+    failed_units_json=$(printf '%s' "$failed_units_json" \
+      | "$JQ_BIN" -c --arg u "$unit" --arg f "$first" --arg l "$last" --arg c "$class" \
+        '. + [{unit:$u, first:$f, last:$l, class:$c}]') || fail 'failed-unit record unreadable'
+  done
+  inode_match=false
+  [[ $inode == "$host_inode" ]] && inode_match=true
   # shellcheck disable=SC2016
   "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg a "$applied" \
     --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg inode "$inode" \
+    --arg host_inode "$host_inode" --argjson inode_match "$inode_match" \
+    --arg switch_result "$switch_result" --arg la "$activation_start" --arg lb "$activation_end" \
     --arg at "$(date -u +%FT%TZ)" --arg failed "$failed_hash" \
-    --argjson attempt "$attempt_json" --argjson not_reused "$not_reused" '
+    --argjson attempt "$attempt_json" --argjson not_reused "$not_reused" \
+    --argjson failed_units "$failed_units_json" '
     {state:"closed_unaccepted", window:$id, deployment_id:$d, applied:$a,
      attempt:$attempt, serving:{image:$image, agent_revision:$rev,
        tooling_path:$tool, provider_secret_inode:$inode},
+     provider_secret_inode_host:$host_inode, provider_secret_inode_match:$inode_match,
      serving_receipt:"absent", receipt_not_reused:$not_reused,
-     failed_marker_sha256:$failed, switch_result:"exit_code=0",
+     failed_marker_sha256:$failed, switch_result:$switch_result,
+     activation:{start:($la|tonumber), end:($lb|tonumber)},
+     failed_units:$failed_units,
      closed_at:$at, operator:"release worker"}' > "$dir/closed-unaccepted.json.tmp"
   chmod 0600 "$dir/closed-unaccepted.json.tmp"; sync -f "$dir/closed-unaccepted.json.tmp"
   mv "$dir/closed-unaccepted.json.tmp" "$dir/closed-unaccepted.json"; sync -f "$dir"
