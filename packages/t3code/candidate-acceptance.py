@@ -130,7 +130,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
 
 def stage_candidate_provider_settings(source_home, candidate_home,
                                       candidate_home_target="/home/t3code"):
-    """Project only the non-secret opencode-free instance from production settings."""
+    """Project the non-secret opencode-free and opencode instances."""
     source = Path(source_home) / ".t3/userdata/settings.json"
     if source.is_symlink() or not source.is_file():
         raise RuntimeError("production T3 provider settings are unavailable")
@@ -1042,6 +1042,12 @@ def probe_error_detail(result):
     return " ".join(fields) or None
 
 
+def probe_failure_detail(failure, result):
+    """Pair the computed route failure with the probe's bounded fields."""
+    detail = probe_error_detail(result)
+    return f"{failure}; {detail}" if detail else failure
+
+
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
                         policy=None, snapshot=None, evidence=None):
     """Prove one exact policy-admitted primary with a real turn on the candidate."""
@@ -1088,7 +1094,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
                 or passed.get("settled") is not True or passed.get("instance") != identity[0]
                 or passed.get("model") != identity[1]):
-            raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: exact settled proof is missing")
+            raise RouteUnknownError(route, route_summary,
+                                    "provider_turn outcome unknown: exact settled proof is missing",
+                                    detail=probe_error_detail(passed))
         return route
     category = candidate_error_category(proof)
     summary = candidate_error_summary(proof)
@@ -1098,7 +1106,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     except (ValueError, TypeError):
         result = {}
     if not isinstance(result, dict) or result.get("settled") is not True:
-        raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: probe settlement not proven")
+        raise RouteUnknownError(route, route_summary,
+                                "provider_turn outcome unknown: probe settlement not proven",
+                                detail=probe_failure_detail(failure, result))
     code = str((result.get("error") or {}).get("code") or "") if isinstance(result.get("error"), dict) else ""
     capacity = code in ("quota", "model-unavailable", "route-unavailable", "rate_limit", "unavailable") or category == "route-unavailable"
     if capacity:
@@ -1106,11 +1116,14 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         # probe's structured kind so a missing instance/auth is not hidden.
         raise RouteUnavailableError(route, route_summary,
                                     f"provider_turn route_unavailable: {failure}",
-                                    detail=probe_error_detail(result))
+                                    detail=probe_failure_detail(failure, result))
     if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
-        raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
+        raise RouteUnknownError(route, route_summary,
+                                "provider_turn outcome unknown: route failure is not attributable to the candidate",
+                                detail=probe_failure_detail(failure, result))
     raise ProviderTurnError(route, route_summary,
-                            f"provider_turn candidate_failed: {failure}; candidate_state={diagnostics}; route={route}")
+                            f"provider_turn candidate_failed: {failure}; candidate_state={diagnostics}; route={route}",
+                            detail=probe_failure_detail(failure, result))
 
 
 def summarize_t3_rows(rows):
@@ -1398,6 +1411,8 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir, *ar
                         evidence_text += ": quota"
                 else:
                     evidence_text = "provider route failure"
+                    if error.detail:
+                        evidence_text += ": " + error.detail
                 record["provider_turn"] = {"pick": evidence_hash(error.pick),
                                            "routes": evidence_hash(error.routes),
                                            "evidence": evidence_text}

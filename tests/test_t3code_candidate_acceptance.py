@@ -226,6 +226,36 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn("instance=opencode", record["provider_turn"]["evidence"])
         self.assertNotIn("route_unavailable: quota", record["provider_turn"]["evidence"])
 
+    def test_route_unknown_detail_is_retained_in_attempt(self):
+        failure = acceptance.RouteUnknownError(
+            "route", "route", "provider_turn outcome unknown: route failure is not attributable to the candidate",
+            detail="kind=no-tool-call instance=opencode model=opencode-go/deepseek-v4.1-flash",
+        )
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["outcome"], "route_unknown")
+        self.assertIn("kind=no-tool-call", record["provider_turn"]["evidence"])
+        self.assertIn("kind=no-tool-call", record["route_provenance"]["incomplete"])
+
+    def test_candidate_failed_detail_is_retained_in_attempt(self):
+        failure = acceptance.ProviderTurnError(
+            "route", "route", "provider_turn candidate_failed: route failure",
+            detail="kind=no-tool-call instance=opencode model=opencode-go/deepseek-v4.1-flash",
+        )
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.ProviderTurnError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertIn("kind=no-tool-call", record["provider_turn"]["evidence"])
+
     def test_only_a_t3_proven_route_failure_can_be_attributed_to_candidate(self):
         policy = self.nominated_policy()
         row = {"provider": "opencode-go", "model": "opencode-go/deepseek-v4.1-flash",
@@ -237,21 +267,28 @@ class CandidateAcceptanceTest(unittest.TestCase):
         def run(engine, name, *args, **kwargs):
             if "models" in args and "--json" in args:
                 return self.models_result(rows)
-            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"no-tool-call"}}', stderr="")
+            return Mock(returncode=1, stdout=json.dumps({
+                "settled": True, "error": {"code": "no-tool-call", "kind": "no-tool-call",
+                                           "instance": "opencode",
+                                           "model": "opencode-go/deepseek-v4.1-flash"},
+            }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.ProviderTurnError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
             self.assertNotIsInstance(failure.exception, (acceptance.RouteUnavailableError, acceptance.RouteUnknownError))
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A native-execution proof for the same identity is not T3 proof.
             rows[:] = [{**row, "execution": "native"}]
-            with self.assertRaises(acceptance.RouteUnknownError):
+            with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A T3 row without a proven tool loop is also not attribution.
             rows[:] = [{**row, "tool_loop": {"state": "unknown"}}]
-            with self.assertRaises(acceptance.RouteUnknownError):
+            with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
 
     def test_incomplete_snapshot_failure_retains_safe_route_provenance(self):
         policy = self.nominated_policy()
