@@ -216,7 +216,7 @@ receipt_for_image() {
   return 1
 }
 wait_and_verify_serving() {
-  local expected_image=${1#sha256:} allow=${2:-} cur_img
+  local expected_image=${1#sha256:} allow=${2:-} mode=${3:-} cur_img
   for _ in {1..100}; do
     if [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}' 2>/dev/null) == healthy ]] &&
        "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service 2>/dev/null &&
@@ -230,7 +230,7 @@ wait_and_verify_serving() {
   "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'recovered server unresponsive'
   cur_img=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'recovered container image unknown'
   [[ ${cur_img#sha256:} == "$expected_image" ]] || fail 'recovered container running unexpected image'
-  matched_receipt=$(known_good_receipt "$expected_image") || fail 'recovered container inputs do not match receipt'
+  matched_receipt=$(known_good_receipt "$expected_image" "" "$mode") || fail 'recovered container inputs do not match receipt'
   lock_managed_tools
   no_pending_restart "$allow"
 }
@@ -244,27 +244,88 @@ serving_matches_start() {
   lock_managed_tools
   no_pending_restart "${1:-}"
 }
+# The release's declared target identity. A failed release advances the home
+# tools before acceptance, so the previous receipt no longer describes the live
+# identity. Callers may accept the receipt's identity or this declared target,
+# never an inferred one.
+declared_target_from_unit() {
+  local system unit revision tooling
+  # The generation the window recorded when it opened is the only source; a
+  # caller cannot redirect it through PROFILE or CURRENT_SYSTEM.
+  system=$(sed -n '1p' "$dir/window.start" | sed -n 's/.* generation=\([^ ]*\).*/\1/p')
+  [[ -n $system && -d $system ]] || return 1
+  unit=$system/etc/systemd/system/ghostship-t3code-deploy.service
+  # A generation's unit is itself a symlink into the units directory; -f follows
+  # it and still rejects a disabled or missing unit.
+  [[ -f $unit ]] || return 1
+  revision=$(sed -n 's/.*AGENT_REVISION=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
+  tooling=$(sed -n 's/.*TOOLING_PATH=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
+  [[ -n $revision && -n $tooling ]] || return 1
+  printf '%s %s\n' "$revision" "$tooling"
+}
+record_declared_target() {
+  local target
+  target=$(declared_target_from_unit) || return 1
+  printf '%s\n' "$target" > "$dir/declared-target.tmp" || return 1
+  chmod 0600 "$dir/declared-target.tmp"
+  sync -f "$dir/declared-target.tmp"
+  mv "$dir/declared-target.tmp" "$dir/declared-target"; sync -f "$dir"
+}
+declared_target() {
+  local revision tooling
+  [[ -f $dir/declared-target && ! -L $dir/declared-target ]] || fail 'declared release target not recorded for this window; refusing to infer it'
+  read -r revision tooling < "$dir/declared-target" || fail 'declared release target unreadable; refusing to infer it'
+  [[ $revision =~ ^[0-9a-zA-Z][0-9a-zA-Z._-]{0,127}$ ]] || fail 'declared release target (agent revision) invalid; refusing to infer it'
+  [[ $tooling == /* && $tooling != *$'\n'* ]] || fail 'declared release target (tooling path) invalid; refusing to infer it'
+  printf '%s %s\n' "$revision" "$tooling"
+}
+# Which identity a matched receipt describes: the live one, or the release's
+# declared target that superseded it.
+receipt_identity_of() {
+  local receipt=$1 revision tooling bound_revision bound_tooling
+  revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 1
+  tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 1
+  local identity_program
+  identity_program=$(cat <<'JQ'
+.agent_revision == $a and .agent_path == $p
+JQ
+)
+  read -r bound_revision bound_tooling <<< "$(declared_target)" || return 1
+  if "$JQ_BIN" -e --arg a "$revision" --arg p "$tooling" "$identity_program" "$receipt" >/dev/null 2>&1; then
+    printf 'live\n'
+  elif "$JQ_BIN" -e --arg a "$bound_revision" --arg p "$bound_tooling" "$identity_program" "$receipt" >/dev/null 2>&1; then
+    printf 'declared\n'
+  else
+    printf 'unknown\n'
+  fi
+}
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started revision tooling inode receipt wanted="${2:-}"
+  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling=""
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
   revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 2
   inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || return 2
   [[ -n $tooling && $inode =~ ^[0-9]+$ ]] || return 2
+  if [[ $mode == advanced ]]; then
+    read -r declared_revision declared_tooling < <(declared_target) || return 2
+  fi
   [[ ! -L $STATE_DIR/receipts ]] || return 2
   [[ ! -e $STATE_DIR/receipts || -d $STATE_DIR/receipts ]] || return 2
   shopt -s nullglob
   for receipt in "$STATE_DIR"/receipts/*.json; do
     [[ -f $receipt && ! -L $receipt && -r $receipt ]] || return 2
     # shellcheck disable=SC2016
-    if "$JQ_BIN" -e --arg i "$image" --arg a "$revision" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" '
+    if "$JQ_BIN" -e --arg i "$image" --arg a "$revision" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
+      --arg da "$declared_revision" --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
       (.image_id | sub("^sha256:"; "")) == $i and
       (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
-      .live_before != null and .live_before == .live_after and .agent_revision == $a and
-      .agent_path == $p and .provider_secret_inode == $s and
+      .live_before != null and .live_before == .live_after and
+      .provider_secret_inode == $s and
+      ((.agent_revision == $a and .agent_path == $p) or
+        ($adv == "1" and .agent_revision == $da and .agent_path == $dp)) and
       ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null 2>&1; then
       printf '%s\n' "$receipt"
       return 0
@@ -297,10 +358,10 @@ restore_alias_to_image() {
   [[ ${alias#sha256:} == "$image" ]] || fail 'UNKNOWN: alias restore did not reconcile'
 }
 require_matching_receipt_and_alias() {
-  local status=0 cid image started
+  local mode=${1:-} status=0 cid image started
   read -r cid image started < "$dir/serving.before"
   image=${validated_serving_image:-${image#sha256:}}
-  matched_receipt=$(known_good_receipt "$image") || status=$?
+  matched_receipt=$(known_good_receipt "$image" "" "$mode") || status=$?
   [[ $status == 0 ]] || fail 'no exact known-good receipt or receipt state unknown'
   restore_alias_to_image "$image"
 }
@@ -461,6 +522,11 @@ case ${1:-} in
   acquired_ms=$(date +%s%3N)
   baseline=$(snapshot) || fail 'baseline unknown'
   serving=$(serving_identity) || fail 'serving identity unknown'
+  # Pin the generation this window belongs to. /run/current-system is the fixed
+  # system path; the resolved profile is the test/dev fallback when it is absent.
+  generation_source=/run/current-system
+  [[ -d $generation_source ]] || generation_source=$(readlink -f "$PROFILE") || fail 'generation path unknown'
+  [[ -n $generation_source && -d $generation_source ]] || fail 'generation path unknown'
   mkdir -m 0700 "$WINDOW_ROOT/$id"
   dir=$WINDOW_ROOT/$id
   if (( adopt )); then
@@ -474,7 +540,7 @@ case ${1:-} in
   fi
   printf '%s\n' "$serving" > "$dir/serving.before"
   sync -f "$dir/serving.before"
-  { printf 'started=%s start_ms=%s acquired_by=%s\n' "$acquired_at" "$acquired_ms" "$$"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
+  { printf 'started=%s start_ms=%s acquired_by=%s generation=%s\n' "$acquired_at" "$acquired_ms" "$$" "$generation_source"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
   printf '%s\n' "$id" > "$WINDOW_ROOT/active-window.tmp"
   sync -f "$WINDOW_ROOT/active-window.tmp"
@@ -491,7 +557,7 @@ case ${1:-} in
   for _ in {1..100}; do [[ -f $dir/holder.ready ]] && break; sleep 0.05; done
   holder_ready || fail 'window holder has not acquired both locks'
   read -r holder_pid < "$dir/holder.ready"
-  { printf 'started=%s start_ms=%s acquired_by=%s\n' "$acquired_at" "$acquired_ms" "$$"; printf 'holder_pid=%s held_at=%s\n' "$holder_pid" "$(date -u +%FT%TZ)"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
+  { printf 'started=%s start_ms=%s acquired_by=%s generation=%s\n' "$acquired_at" "$acquired_ms" "$$" "$generation_source"; printf 'holder_pid=%s held_at=%s\n' "$holder_pid" "$(date -u +%FT%TZ)"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
   if (( ! adopt )); then install -d -m 0700 "$(dirname "$HOLD_FILE")"; : > "$HOLD_FILE"; fi
   holder_ready || fail 'window holder lost its locks; recovery not stopped'
@@ -558,6 +624,12 @@ case ${1:-} in
   sync -f "$dir/complete.started"; sync -f "$dir"
   switch_rc=0
   "$@" || switch_rc=$?
+  # The active generation now carries the deploy unit this switch installed.
+  # Bind its identity to the window so recovery cannot be told one by a caller.
+  if ! record_declared_target; then
+    printf 'at=%s reason=deploy unit identity unreadable\n' "$(date -u +%FT%TZ)" > "$dir/declared-target.absent"
+    sync -f "$dir/declared-target.absent"
+  fi
   printf 'exit_code=%s\n' "$switch_rc" > "$dir/switch.result.tmp"
   sync -f "$dir/switch.result.tmp"; mv "$dir/switch.result.tmp" "$dir/switch.result"; sync -f "$dir"
   exit "$switch_rc"
@@ -648,7 +720,7 @@ case ${1:-} in
   if (( already_released )); then
     is_container_running || fail 'container is stopped after release'
     serving_matches_start allow-deferred
-    require_matching_receipt_and_alias
+    require_matching_receipt_and_alias advanced
     printf '%s\n' 'PASS known-good serving identity and existing receipt; window already released.'
     exit 0
   fi
@@ -662,7 +734,9 @@ case ${1:-} in
     restore_alias_to_image "$baseline_image"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$baseline_image"
+    recovery_mode=
+    [[ ! -f $dir/declared-target ]] || recovery_mode=advanced
+    wait_and_verify_serving "$baseline_image" "" "$recovery_mode"
   else
     serving_matches_start allow-deferred
     require_matching_receipt_and_alias
@@ -719,8 +793,38 @@ case ${1:-} in
     restore_alias_to_image "$target_img"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$target_img" allow-deferred
+    recovery_mode=
+    if [[ $reason == acceptance_unknown || $reason == switch_unknown ]]; then
+      [[ -f $dir/declared-target && ! -L $dir/declared-target ]] || fail 'switch did not start; refusing to infer the release target'
+      recovery_mode=advanced
+    fi
+    wait_and_verify_serving "$target_img" allow-deferred "$recovery_mode"
     validated_serving_image=$target_img
+    if [[ $recovery_mode == advanced ]]; then
+      advanced_identity_record=$(serving_identity) || fail 'serving identity unknown'
+      receipt_identity=$(receipt_identity_of "$matched_receipt") || fail 'receipt identity unknown'
+    fi
+  elif [[ $reason == acceptance_unknown || $reason == switch_unknown ]]; then
+    # The switch may have advanced the home tools before acceptance failed.
+    # Verify the served image in the record and accept a receipt whose identity
+    # is either the live one or the release's declared target.
+    [[ -f $dir/complete.started && ! -L $dir/complete.started ]] || fail 'switch did not start; refusing to infer the release target'
+    declared_target >/dev/null
+    recorded_serving=$("$JQ_BIN" -er '.serving | select(type == "string" and length > 0)' "$STATE_DIR/recovery-unknown.json") || fail 'recorded serving identity missing'
+    current=$(serving_identity) || fail 'serving identity unknown'
+    read -r _ recorded_image _ <<< "$recorded_serving"
+    read -r _ current_image _ <<< "$current"
+    [[ ${recorded_image#sha256:} =~ ^[0-9a-f]{64}$ && $recorded_image == "$current_image" ]] || fail 'serving image differs from the recorded UNKNOWN end'
+    [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') == healthy ]] || fail 'serving container unhealthy'
+    "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'serving server inactive'
+    "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'serving server unresponsive'
+    lock_managed_tools
+    no_pending_restart allow-deferred
+    read -r _ validated_serving_image _ <<< "$current"
+    validated_serving_image=${validated_serving_image#sha256:}
+    require_matching_receipt_and_alias advanced
+    advanced_identity_record=$current
+    receipt_identity=$(receipt_identity_of "$matched_receipt") || fail 'receipt identity unknown'
   elif [[ $reason == receipted_runtime_failure ]]; then
     current=$(serving_identity) || fail 'serving identity unknown'
     recorded_serving=$("$JQ_BIN" -er '.serving' "$STATE_DIR/recovery-unknown.json") || fail 'recorded serving identity missing'
@@ -739,6 +843,16 @@ case ${1:-} in
     require_matching_receipt_and_alias
   fi
   record_known_good "$dir/unknown-resolved.json"
+  if [[ -n ${advanced_identity_record:-} ]]; then
+    read -r bound_revision bound_tooling <<< "$(declared_target)" || fail 'declared release target unreadable'
+    # shellcheck disable=SC2016
+    "$JQ_BIN" --arg serving "$advanced_identity_record" --arg identity "${receipt_identity:-live}" \
+      --arg revision "$bound_revision" --arg tooling "$bound_tooling" \
+      '. + {serving_at_resolve:$serving,receipt_identity:$identity,declared_agent_revision:$revision,declared_tooling_path:$tooling}' \
+      "$dir/unknown-resolved.json" > "$dir/unknown-resolved.json.tmp"
+    chmod 0600 "$dir/unknown-resolved.json.tmp"; sync -f "$dir/unknown-resolved.json.tmp"
+    mv "$dir/unknown-resolved.json.tmp" "$dir/unknown-resolved.json"; sync -f "$dir"
+  fi
   if [[ $reason == receipted_runtime_failure && $container_was_stopped == 0 ]]; then
     # shellcheck disable=SC2016
     "$JQ_BIN" --arg before "$recorded_serving" --arg after "$current" '. + {serving_before:$before,serving_after:$after}' "$dir/unknown-resolved.json" > "$dir/unknown-resolved.json.tmp"
