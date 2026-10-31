@@ -47,25 +47,48 @@ esac
 # flake is not an assigned worktree and is left alone.
 [[ -f $root/.git ]] || return 0
 [[ -f $root/flake.nix ]] || return 0
-# The flake must be repository content at this worktree's HEAD, not a file
-# dropped into a worktree the agent made. A worker-created worktree with a
-# hand-written flake stays inert.
-git -C "$root" ls-files --error-unmatch flake.nix >/dev/null 2>&1 || return 0
+# The flake must be committed content at this worktree's HEAD and unmodified:
+# a dropped-in file, a staged one, or an edited one is not repository content.
+git -C "$root" cat-file -e HEAD:flake.nix 2>/dev/null || return 0
+git -C "$root" diff --quiet HEAD -- flake.nix 2>/dev/null || return 0
+if [[ -e $root/flake.lock ]]; then
+  git -C "$root" cat-file -e HEAD:flake.lock 2>/dev/null || return 0
+  git -C "$root" diff --quiet HEAD -- flake.lock 2>/dev/null || return 0
+fi
 # Only the allowed repository origins: an external clone placed under the root
-# is not evaluated.
+# is not evaluated. The origin is parsed, not prefix-matched, so traversal,
+# encoded separators, query/fragment and userinfo forms are all rejected.
 origins_file=$(dirname "$self")/worker-dev-env.origins
 [[ -f $origins_file && ! -L $origins_file ]] || return 0
 [[ $(stat -c %u "$origins_file" 2>/dev/null) == "$(stat -c %u "$self" 2>/dev/null)" ]] || return 0
+parse_origin() {
+  local origin=$1 host org repo
+  case $origin in
+    https://*|http://*|ssh://*) origin=${origin#*://} ;;
+    git@*) origin=${origin#git@} ;;
+    *) return 1 ;;
+  esac
+  origin=${origin#git@}
+  [[ $origin != *@* ]] || return 1
+  if [[ $origin =~ ^([A-Za-z0-9.-]+)(:[0-9]+)?/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    host=${BASH_REMATCH[1]}; org=${BASH_REMATCH[3]}; repo=${BASH_REMATCH[4]}
+  elif [[ $origin =~ ^([A-Za-z0-9.-]+):([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    host=${BASH_REMATCH[1]}; org=${BASH_REMATCH[2]}; repo=${BASH_REMATCH[3]}
+  else
+    return 1
+  fi
+  repo=${repo%.git}
+  [[ $host == github.com ]] || return 1
+  [[ $org != . && $org != .. && $repo != . && $repo != .. ]] || return 1
+  [[ $org != *..* && $repo != *..* ]] || return 1
+  printf '%s/%s\n' "$host" "$org"
+}
 origin=$(git -C "$root" remote get-url origin 2>/dev/null) || return 0
-origin=${origin,,}
-origin=${origin#https://}; origin=${origin#http://}; origin=${origin#ssh://}
-origin=${origin#git@}; origin=${origin/:/\/}
-origin=${origin%.git}
-[[ -n $origin ]] || return 0
+parsed=$(parse_origin "$origin") || return 0
 allowed=0
-while IFS= read -r prefix; do
-  [[ -n $prefix ]] || continue
-  case $origin in "$prefix"*) allowed=1; break ;; esac
+while IFS= read -r entry; do
+  [[ -n $entry ]] || continue
+  [[ $parsed == "$entry" ]] && { allowed=1; break; }
 done < "$origins_file"
 (( allowed )) || return 0
 

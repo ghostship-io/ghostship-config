@@ -54,8 +54,9 @@ out=$(run "$wt" bash -c 'markertool')
 [[ $out == *marker-tool* ]] || { echo "B: cached load failed: $out" >&2; exit 1; }
 [[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "B: cached shell re-evaluated" >&2; exit 1; }
 
-# 3. Changing the flake invalidates the cache.
+# 3. A committed flake change invalidates the cache.
 printf '{}\n# changed\n' > "$wt/flake.nix"
+git -C "$wt" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qam change
 out=$(run "$wt" bash -c 'markertool')
 [[ $out == *marker-tool* ]] || { echo "C: change did not reload: $out" >&2; exit 1; }
 [[ $(wc -l < "$FAKE_COUNT") == 2 ]] || { echo "C: change did not re-evaluate" >&2; exit 1; }
@@ -70,12 +71,36 @@ git -C "$tmp/origin" worktree add -q "$outside/wt" -b outside
 out=$(run "$outside/wt" bash -c 'command -v markertool || echo absent')
 [[ $out != *marker-tool* ]] || { echo "E: evaluated outside the fixed root" >&2; exit 1; }
 
-# 6a. A linked worktree whose flake is not committed content is ignored.
-evil=$tmp/evil
-git -C "$tmp/origin" worktree add -q "$evil" -b evil
-printf '{}\n' > "$evil/flake.nix"   # untracked drop-in
-out=$(run "$evil" bash -c 'command -v markertool || echo absent')
+# 6a. A linked worktree whose flake is only a drop-in is ignored.
+mkdir -p "$tmp/noflake"
+git -C "$tmp/noflake" init -q
+git -C "$tmp/noflake" remote add origin https://github.com/ghostship-io/ghostship-config.git
+printf 'x\n' > "$tmp/noflake/README"
+git -C "$tmp/noflake" add README
+git -C "$tmp/noflake" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qm init
+git -C "$tmp/noflake" worktree add -q "$tmp/evil" -b evil
+printf '{}\n' > "$tmp/evil/flake.nix"   # untracked drop-in
+out=$(run "$tmp/evil" bash -c 'command -v markertool || echo absent')
 [[ $out != *marker-tool* ]] || { echo "F2: evaluated an untracked flake" >&2; exit 1; }
+
+# 6a2. A modified (uncommitted) flake is not committed content.
+printf '{}\n# dirty\n' > "$wt/flake.nix"
+out=$(run "$wt" bash -c 'command -v markertool || echo absent')
+[[ $out != *marker-tool* ]] || { echo "F2c: evaluated a modified flake" >&2; exit 1; }
+git -C "$wt" checkout -q -- flake.nix
+
+# 6b0. Traversal and encoded origins are rejected; scp and ssh forms accepted.
+for bad in 'https://github.com/ghostship-io/../evil' 'https://github.com/ghostship-io/%2e%2e/repo' 'https://github.com/ghostship-io/repo?x=1'; do
+  git -C "$tmp/origin" remote set-url origin "$bad"
+  out=$(run "$wt" bash -c 'command -v markertool || echo absent')
+  [[ $out != *marker-tool* ]] || { echo "F2d: accepted $bad" >&2; exit 1; }
+done
+for good in 'git@github.com:ghostship-io/ghostship-config.git' 'ssh://git@github.com/ghostship-io/ghostship-config'; do
+  git -C "$tmp/origin" remote set-url origin "$good"
+  out=$(run "$wt" bash -c 'markertool || echo absent')
+  [[ $out == *marker-tool* ]] || { echo "F2e: rejected $good" >&2; exit 1; }
+done
+git -C "$tmp/origin" remote set-url origin https://github.com/ghostship-io/ghostship-config.git
 
 # 6b. A linked worktree of a foreign repository is ignored.
 foreign=$(mktemp -d); trap 'rm -rf "$tmp" "$outside" "$foreign"' EXIT
@@ -96,6 +121,7 @@ out=$(run "$plain" bash -c 'command -v markertool || echo absent')
 # 7. An unavailable environment fails the command explicitly; no host fallback.
 # A fresh fingerprint forces evaluation instead of reusing the cache.
 printf '{}\n# fail\n' > "$wt/flake.nix"
+git -C "$wt" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qam fail
 if run "$wt" FAKE_NIX_FAIL=1 bash -c 'markertool' >"$tmp/fail.out" 2>"$tmp/fail.err"; then
   echo "G: fell back to host tools" >&2; exit 1
 fi
