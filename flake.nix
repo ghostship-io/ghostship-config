@@ -5,13 +5,13 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/a2044afb5593d76cd583f51003bd1d83df7b3333";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/17abf6d7a650f34f08257093fcd206c7686e7de1";
     # Independently reviewed native connector increment; unrelated service
     # runtimes keep their existing release pin. This input drives only the
     # native private-integration runtime (lib/native-mcp.nix + connector/), so
     # it moves without the service clients and Python packages above.
     ghostship-native-agent = {
-      url = "github:ghostship-io/ghostship-agent/a2044afb5593d76cd583f51003bd1d83df7b3333";
+      url = "github:ghostship-io/ghostship-agent/17abf6d7a650f34f08257093fcd206c7686e7de1";
       flake = false;
     };
 
