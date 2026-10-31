@@ -36,7 +36,17 @@ jobs:
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: nix develop .#ci --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"
+        run: |
+          set -euo pipefail
+          overrides="$RUNNER_TEMP/ghostship-private-overrides.txt"
+          [ -s "$overrides" ] || { echo 'private inputs were not imported; refusing to evaluate anonymously' >&2; exit 1; }
+          args=()
+          while read -r name url; do
+            [ -n "$name" ] || continue
+            case "$url" in file://*) ;; *) echo "private input not substituted: $name" >&2; exit 1 ;; esac
+            args+=(--override-input "$name" "$url")
+          done < "$overrides"
+          nix develop .#ci "${args[@]}" --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"
   integration:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     environment: private-source-main
