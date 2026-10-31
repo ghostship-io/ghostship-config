@@ -231,7 +231,7 @@ def prove_route(route, wait, client, native_target=None):
         else:
             outcome = "timeout"
         last_error = str(state.get("last_error") or "")
-        status_match = re.search(r"\b(4\d\d|5\d\d)\b", last_error)
+        status_match = re.search(r"(?:http(?:\s+status)?|status)[\"']?\s*[=:]?\s*([45]\d\d)\b", last_error, re.IGNORECASE)
         result.update(outcome=outcome, detail=last_error if outcome != "passed" else None,
                       error_status=int(status_match.group(1)) if status_match else None,
                       error_type=("FreeUsageLimitError" if "FreeUsageLimitError" in last_error else ""),

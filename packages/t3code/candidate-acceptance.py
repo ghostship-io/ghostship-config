@@ -930,22 +930,55 @@ def capture_json_result(result):
 FREE_LIMIT_HINTS = ("freeusagelimiterror", "free usage limit", "usage limit reached")
 
 
-def free_tier_limit(probe):
+# A bare three-digit number in free text is not an HTTP status. Only a
+# structured status or an explicit HTTP/status token counts.
+STATUS_TOKEN = re.compile(r"(?:http(?:\s+status)?|status)[\"']?\s*[=:]?\s*([45]\d\d)\b", re.IGNORECASE)
+OPENCODE_LOG_TAIL = 8192
+
+
+def free_tier_limit(probe, extra_text=""):
     """Return a short reason when a provider turn was refused by a free-tier 429.
 
-    The upstream body is not always in the probe's bounded failure kind, so the
-    status and the provider's own error type/message decide. This is a
-    classification, not a retry.
+    The probe's bounded failure kind is often just "api-error-execution", so the
+    provider's own opencode log is inspected too. A number in free text is not
+    an HTTP status; only a structured status or an explicit HTTP/status token
+    is. This is a classification, not a retry.
     """
     if not isinstance(probe, dict):
-        return ""
+        probe = {}
     status = probe.get("error_status")
     blob = " ".join(str(probe.get(key) or "") for key in
-                    ("error_type", "error_message", "detail", "failure")).lower()
-    limited_status = status == 429 or str(status or "").startswith("429")
-    if limited_status or any(hint in blob for hint in FREE_LIMIT_HINTS):
-        return f"provider free-tier limit: status={status or 'unknown'}"
+                    ("error_type", "error_message", "detail", "failure"))
+    combined = (blob + "\n" + str(extra_text or "")).lower()
+    match = STATUS_TOKEN.search(blob) or STATUS_TOKEN.search(str(extra_text or ""))
+    structured_status = status if str(status or "").startswith(("4", "5")) and len(str(status)) == 3 else None
+    if structured_status is None and match is not None:
+        structured_status = match.group(1)
+    limited = (structured_status == "429" or any(hint in combined for hint in FREE_LIMIT_HINTS))
+    if limited:
+        return f"provider free-tier limit: status={structured_status or 'unknown'}"
     return ""
+
+
+def capture_opencode_log(engine, name, evidence):
+    """Keep the tail of opencode's own log from the candidate before teardown.
+
+    The provider's HTTP status and body live there when T3 only exposes a
+    bounded execution kind. Bounded read; never fatal.
+    """
+    if evidence is None:
+        return
+    script = (
+        "d=/home/t3code/.local/share/opencode/log; "
+        "f=$(ls -t \"$d\"/*.log 2>/dev/null | head -n1); "
+        "if [ -n \"$f\" ]; then tail -c " + str(OPENCODE_LOG_TAIL) + " \"$f\"; fi"
+    )
+    try:
+        logs = command(engine, "exec", name, "sh", "-c", script, timeout=20)
+        text = (logs.stdout or "") + "\n" + (logs.stderr or "")
+        evidence["opencode_log_tail"] = text[-OPENCODE_LOG_TAIL:]
+    except Exception:  # diagnostics must never decide the release
+        evidence.setdefault("opencode_log_tail", "")
 
 
 def capture_candidate_log(engine, name, evidence):
@@ -1218,6 +1251,8 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
                         policy=None, snapshot=None, evidence=None, acceptance_route=None):
     """Prove one exact policy-admitted primary with a real turn on the candidate."""
     del provider_env_file
+    if evidence is None:
+        evidence = {}
     if acceptance_route is None:
         # The explicit acceptance-route file is the only runtime admission
         # input; the legacy nominated primary is not a fallback.
@@ -1266,8 +1301,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
                 or passed.get("settled") is not True or passed.get("instance") != identity[0]
                 or passed.get("model") != identity[1]):
-            limit = free_tier_limit(passed)
             capture_candidate_log(engine, name, evidence)
+            capture_opencode_log(engine, name, evidence)
+            limit = free_tier_limit(passed, (evidence or {}).get("opencode_log_tail", ""))
             if limit:
                 raise RouteUnavailableError(route, route_summary,
                                             f"provider_turn route_unavailable: {limit}",
@@ -1284,8 +1320,9 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     except (ValueError, TypeError):
         result = {}
     record_candidate_turn(evidence, result)
-    limit = free_tier_limit(result)
     capture_candidate_log(engine, name, evidence)
+    capture_opencode_log(engine, name, evidence)
+    limit = free_tier_limit(result, (evidence or {}).get("opencode_log_tail", ""))
     if limit:
         raise RouteUnavailableError(route, route_summary,
                                     f"provider_turn route_unavailable: {limit}",
