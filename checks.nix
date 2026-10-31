@@ -246,6 +246,7 @@ in
         bash tests/test_t3code_unknown_ending.sh
         bash tests/test_t3code_worker_dev_env.sh
         bash tests/test_t3code_window_lock.sh
+        bash tests/test_t3code_served_identity.sh
         bash tests/test_t3code_window_lock_slow.sh
         bash tests/test_t3code_checks_wiring.sh
         bash tests/test_t3code_activate_deployment.sh

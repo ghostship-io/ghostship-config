@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -89,6 +90,46 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def models_result(self, rows):
         return Mock(returncode=0, stdout=json.dumps({"data": {"selected": rows}}))
+
+    def test_candidate_stages_verified_standalone_release_and_rejects_tampering(self):
+        self.add_installed_toolchain()
+        t3 = self.home / ".local/share/t3code-tools/t3"
+        source = self.root / "t3-0.1.2-linux-arm64"
+        for directory in ("client", "node_modules", "resource-monitor"):
+            (source / directory).mkdir(parents=True)
+        (source / "client/index.html").write_text("client")
+        (source / "node_modules/runtime").write_text("runtime")
+        (source / "resource-monitor/monitor").write_text("monitor")
+        (source / "t3").write_text("#!/bin/sh\nexit 0\n")
+        (source / "t3").chmod(0o755)
+        archive = self.root / "source.tar.gz"
+        with tarfile.open(archive, "w:gz") as payload:
+            payload.add(source, arcname=source.name)
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        release = t3 / "releases" / ("0.1.2-" + digest)
+        shutil.copytree(source, release)
+        (release / "bin").mkdir()
+        (release / "bin/t3").symlink_to("../t3")
+        shutil.copy2(archive, release / ".source.tar.gz")
+        (release / ".install-complete").write_text("0.1.2\n")
+        (t3 / "current").unlink()
+        (t3 / "current").symlink_to("releases/" + release.name)
+        candidate = self.root / "standalone-candidate"
+        candidate.mkdir()
+        result = acceptance.stage_candidate_toolchain(self.home, candidate, os.getuid())
+        self.assertEqual(result["t3"], release.name)
+        self.assertEqual((candidate / ".local/share/t3code-tools/t3/current/t3").read_bytes(), (release / "t3").read_bytes())
+        (release / "client/index.html").write_text("tampered")
+        another = self.root / "tampered-candidate"
+        another.mkdir()
+        with self.assertRaisesRegex(RuntimeError, "standalone.*mismatch"):
+            acceptance.stage_candidate_toolchain(self.home, another, os.getuid())
+        (release / "client/index.html").write_text("client")
+        (release / ".source.tar.gz").write_bytes(b"tampered")
+        third = self.root / "archive-tampered-candidate"
+        third.mkdir()
+        with self.assertRaisesRegex(RuntimeError, "archive checksum mismatch"):
+            acceptance.stage_candidate_toolchain(self.home, third, os.getuid())
 
     def test_nominated_route_must_be_an_admitted_worker_primary(self):
         policy = self.nominated_policy()
