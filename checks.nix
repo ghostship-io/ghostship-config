@@ -169,6 +169,15 @@ in
   # live releases discovered and no source-level test could.
   window-holder = let
     holder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
+    # The generated wrappers the host actually installs. Building them forces
+    # their own text through shellcheck, so a quoting failure is a config check
+    # failure instead of a release-build surprise.
+    hostWrappers = builtins.filter
+      (p: builtins.elem (p.name or "") [
+        "ghostship-t3code-release-window"
+        "ghostship-t3code-invalidate-failure"
+      ])
+      t3codeConfig.environment.systemPackages;
     # Building the generated release-window wrapper also proves it parses and
     # passes its own checks; the source text alone never did.
     window = pkgs.writeShellApplication {
@@ -199,6 +208,9 @@ in
       exit 1
     fi
     test -x ${window}/bin/ghostship-t3code-release-window
+    # The host packages, not a copy: the release builds exactly these.
+    [ ${toString (builtins.length hostWrappers)} -eq 2 ] || { echo 'host wrapper packages missing from systemPackages' >&2; exit 1; }
+    ${pkgs.lib.concatMapStringsSep "\n    " (p: "test -x ${p}/bin/${p.name}") hostWrappers}
     touch "$out"
   '';
 

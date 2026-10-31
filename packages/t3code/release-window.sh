@@ -361,7 +361,7 @@ post_verify() {
 # guarded is still held.
 supersede_unknown() {
   : "${JQ_BIN:?}"
-  local check= expected_old=
+  local check="" expected_old=""
   if [[ ${1:-} == --check ]]; then check=1; shift; fi
   local reason=${1:-} new_id=${2:-} expected_old=${3:-} record="$STATE_DIR/recovery-unknown.json" old archive digest at now
   [[ -n $reason && ${#reason} -le 500 && $reason != *[[:cntrl:]]* ]] || fail 'supersede reason invalid'
@@ -387,8 +387,13 @@ supersede_unknown() {
   sync -f "$archive/recovery-unknown.json.tmp"
   [[ $(sha256sum < "$archive/recovery-unknown.json.tmp") == "$digest "* ]] || fail 'archived record differs from the live record'
   mv "$archive/recovery-unknown.json.tmp" "$archive/recovery-unknown.json"; sync -f "$archive"
+  local audit_program
+  audit_program=$(cat <<'JQ'
+{state:"SUPERSEDED",window:$w,reason:$r,record_sha256:$h,superseded_by:$n,at:$at}
+JQ
+)
   "$JQ_BIN" -cn --arg w "$old" --arg r "$reason" --arg h "$digest" --arg n "$new_id" --arg at "$now" \
-    '{state:"SUPERSEDED",window:$w,reason:$r,record_sha256:$h,superseded_by:$n,at:$at}' > "$archive/supersede.json.tmp" || fail 'supersede audit write failed'
+    "$audit_program" > "$archive/supersede.json.tmp" || fail 'supersede audit write failed'
   chmod 0600 "$archive/supersede.json.tmp"
   sync -f "$archive/supersede.json.tmp"
   mv "$archive/supersede.json.tmp" "$archive/supersede.json"; sync -f "$archive"
