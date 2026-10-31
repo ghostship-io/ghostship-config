@@ -2306,4 +2306,3 @@ class FreeTierLimitClassificationTest(unittest.TestCase):
         self.assertEqual(acceptance.free_tier_limit({"outcome": "execution"}, text), "")
         explicit = "HTTP 429 from upstream"
         self.assertIn("429", acceptance.free_tier_limit({"outcome": "execution"}, explicit))
-
