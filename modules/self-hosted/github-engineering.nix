@@ -427,7 +427,7 @@ in
       cmd = [ "--state-dir" "/state" "--listen" "0.0.0.0:18765" ];
       environment = {
         # Leave headroom below the container limit for non-Go memory.
-        GOMEMLIMIT = "200MiB";
+        GOMEMLIMIT = "384MiB";
         T3_SERVER_URL = "http://t3code:3773";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES = "ghostship-io/ghostship-agent";
         GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORY = "ghostship-io/ghostship-agent";
@@ -448,7 +448,7 @@ in
         "${modelRouting.host}:${modelRouting.mount}:ro,noexec,nosuid,nodev"
         "${modelOutcomes.host}:${modelOutcomes.mount}:ro,noexec,nosuid,nodev"
       ];
-      extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=256m" "--cpus=0.5" ];
+      extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=48" "--memory=512m" "--cpus=0.5" ];
     };
     systemd.services.podman-ghostship-go-coordinator = {
       after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
