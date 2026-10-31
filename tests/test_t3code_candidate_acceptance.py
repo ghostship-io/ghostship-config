@@ -1477,6 +1477,11 @@ def _selection(document, now):
             "provider_instances": ["opencode-free"],
         }
 
+    def agent_dir(self):
+        path = self.root / "agent"
+        path.mkdir(exist_ok=True)
+        return str(path)
+
     def run_rehearsal(self, **overrides):
         report_path = self.root / "rehearsal.json"
         closure = Path(overrides.get("closure_path") or (self.root / "rehearsal-closure"))
@@ -1490,16 +1495,14 @@ def _selection(document, now):
         )
         options.update(overrides)
         isolation = options.pop("isolation", self.observed_isolation())
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
-             patch.object(acceptance, "read_isolation", return_value=isolation), \
+        with patch.object(acceptance, "read_isolation", return_value=isolation), \
              patch.object(acceptance, "check_candidate", return_value={
                 **{name: True for name in acceptance.CHECKS},
                 "desktop_transport": {"state": "not_applicable"},
                 "provider_turn_route": "opencode-free/opencode/glm-5.3-flash-free",
              }), \
              patch.object(acceptance, "candidate_agent_path",
-                          return_value="/nix/store/agent"), \
+                          return_value=self.agent_dir()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             report = acceptance.accept(
                 self.state, self.archive, "podman",
@@ -1550,12 +1553,10 @@ def _selection(document, now):
         path = self.root / "rehearsal-failed.json"
         closure = self.root / "closure-failed"
         closure.mkdir()
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
-             patch.object(acceptance, "command", side_effect=self.command), \
+        with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value=failing), \
              patch.object(acceptance, "candidate_agent_path",
-                          return_value="/nix/store/agent"), \
+                          return_value=self.agent_dir()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             with self.assertRaisesRegex(RuntimeError, "acceptance failed"):
                 acceptance.accept(
@@ -1652,12 +1653,10 @@ def _selection(document, now):
 
         closure = self.root / "closure-route"
         closure.mkdir()
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
-             patch.object(acceptance, "command", side_effect=self.command), \
+        with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", side_effect=checked), \
              patch.object(acceptance, "candidate_agent_path",
-                          return_value="/nix/store/agent"), \
+                          return_value=self.agent_dir()), \
              patch.object(acceptance, "read_isolation",
                           return_value=self.observed_isolation()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
@@ -1748,21 +1747,6 @@ def _selection(document, now):
         self.assertIn(".codex/credentials", rendered)
         self.assertNotIn("ordinary.txt", rendered)
 
-    def test_store_scan_walks_closure_requisites_beyond_depth_two(self):
-        top = self.root / "closure-top"
-        top.mkdir()
-        deep = self.root / "store" / "abc-agent-tools"
-        (deep / "share" / "nested" / "deeper").mkdir(parents=True)
-        (deep / "share" / "nested" / "deeper" / "auth.json").write_text("{}\n")
-        (top / "README").write_text("build output\n")
-        requisites = [str(top), str(deep)]
-        with patch.object(acceptance.subprocess, "run",
-                          return_value=Mock(returncode=0, stdout="\n".join(requisites) + "\n")):
-            scan = acceptance.store_secret_scan([str(top)])
-        self.assertEqual(scan["paths_scanned"], 2)
-        self.assertEqual(scan["findings"], [str(deep / "share/nested/deeper/auth.json")])
-        self.assertFalse(scan["truncated"])
-
     def test_rehearsal_report_is_written_after_teardown_with_cleanup_result(self):
         report, path = self.run_rehearsal(isolation=self.observed_isolation())
         self.assertIsInstance(report["cleanup"], dict)
@@ -1780,14 +1764,12 @@ def _selection(document, now):
         path = self.root / "rehearsal-identity.json"
         closure = self.root / "closure-identity"
         closure.mkdir()
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
-             patch.object(acceptance, "command", side_effect=self.command), \
+        with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
                  **{name: True for name in acceptance.CHECKS},
                  "desktop_transport": {"state": "not_applicable"},
              }), \
-             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "candidate_agent_path", return_value=self.agent_dir()), \
              patch.object(acceptance, "read_isolation",
                           return_value=self.observed_isolation()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
@@ -1816,14 +1798,12 @@ def _selection(document, now):
         path = self.root / "rehearsal-teardown.json"
         closure = self.root / "closure-teardown"
         closure.mkdir()
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
-             patch.object(acceptance, "command", side_effect=self.command), \
+        with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
                  **{name: True for name in acceptance.CHECKS},
                  "desktop_transport": {"state": "not_applicable"},
              }), \
-             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "candidate_agent_path", return_value=self.agent_dir()), \
              patch.object(acceptance, "read_isolation",
                           return_value=self.observed_isolation()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
@@ -1856,6 +1836,50 @@ def _selection(document, now):
         self.assertEqual(observed["state"], "violation")
         self.assertIn("absent", observed["reason"])
         self.assertNotIn("not empty", observed["reason"])
+
+    def test_owned_input_scan_flags_secret_files(self):
+        root = self.root / "owned-tooling"
+        (root / "bin").mkdir(parents=True)
+        (root / "bin" / "agent").write_text("#!/bin/sh\n")
+        (root / "auth.json").write_text("{}\n")
+        (root / "share").mkdir()
+        (root / "share" / "ca.key").write_text("private-key\n")
+        scan = acceptance.owned_input_scan([str(root)])
+        self.assertEqual(scan["roots"], [str(root)])
+        self.assertEqual(scan["paths_scanned"], 1)
+        self.assertEqual(scan["findings"], [
+            str(root / "auth.json"), str(root / "share" / "ca.key"),
+        ])
+        self.assertEqual(scan["errors"], [])
+        self.assertFalse(scan["truncated"])
+
+    def test_owned_input_scan_rejects_missing_and_dangling_roots(self):
+        missing = self.root / "missing-owned-root"
+        dangling = self.root / "dangling-owned-root"
+        dangling.symlink_to(self.root / "does-not-exist")
+        scan = acceptance.owned_input_scan([str(missing), str(dangling)])
+        self.assertEqual(scan["paths_scanned"], 0)
+        self.assertEqual(len(scan["errors"]), 2)
+        self.assertIn("missing", scan["errors"][0])
+        self.assertIn("dangling", scan["errors"][1])
+
+    def test_owned_input_scan_does_not_scan_non_owned_public_fixtures(self):
+        owned = self.root / "owned-source"
+        public = self.root / "public-store-path"
+        owned.mkdir()
+        (public / "nixos/tests/ente").mkdir(parents=True)
+        (public / "nixos/tests/ente/ca.key.pem").write_text("public test key\n")
+        scan = acceptance.owned_input_scan([str(owned)])
+        self.assertEqual(scan["findings"], [])
+        self.assertEqual(scan["errors"], [])
+        self.assertEqual(scan["paths_scanned"], 1)
+
+    def test_owned_credentials_file_is_always_a_finding(self):
+        root = self.root / "owned-agent-source"
+        (root / "config").mkdir(parents=True)
+        (root / "config" / "credentials.json").write_text('{"services": {}}\n')
+        scan = acceptance.owned_input_scan([str(root)])
+        self.assertEqual(scan["findings"], [str(root / "config" / "credentials.json")])
 
     def test_rehearsal_cli_refuses_secrets_and_requires_a_closure(self):
         base = [
@@ -1944,20 +1968,44 @@ def _selection(document, now):
             acceptance.admitted_acceptance_route(
                 self.nominated_policy(), acceptance_route=invalid)
 
-    def test_store_scan_finds_secret_bearing_paths_and_stops_the_rehearsal(self):
-        closure = self.root / "closure"
-        (closure / "lib").mkdir(parents=True)
-        (closure / "lib/README").write_text("build output\n")
-        (closure / "auth.json").write_text("{}\n")
-        (closure / "lib/t3code.env").write_text("TOKEN=x\n")
-        scan = acceptance.store_secret_scan([], requisites=[str(closure)])
-        self.assertEqual(scan["findings"], [
-            str(closure / "auth.json"), str(closure / "lib/t3code.env"),
-        ])
-        self.assertEqual(scan["paths_scanned"], 1)
-        path = self.root / "rehearsal-store.json"
-        with patch.object(acceptance, "closure_requisites",
-                          return_value=([str(closure)], [])), \
+    def test_empty_agent_path_is_a_missing_owned_root(self):
+        path = self.root / "rehearsal-empty-agent.json"
+        closure = self.root / "closure-empty-agent"
+        closure.mkdir()
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value={
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
+             }), \
+             patch.object(acceptance, "candidate_agent_path", return_value=""), \
+             patch.object(acceptance.subprocess, "run",
+                          return_value=Mock(returncode=0)), \
+             patch.object(acceptance, "read_isolation") as observer:
+            with self.assertRaisesRegex(acceptance.PreconditionError,
+                                        "resolved agent path is missing"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure), deployment_id="rehearsal-empty-agent",
+                )
+        observer.assert_not_called()
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "precondition_not_met")
+        self.assertIn("resolved agent path is missing", report["store_scan"]["errors"])
+        self.assertEqual(report["store_scan"]["paths_scanned"], 1)
+
+    def test_owned_scan_finding_stops_the_rehearsal_before_the_candidate(self):
+        path = self.root / "rehearsal-owned.json"
+        closure = self.root / "closure-owned"
+        closure.mkdir()
+        finding = str(self.root / "owned-tooling" / "auth.json")
+        scan = {"mode": "owned_inputs", "roots": [str(self.root / "owned-tooling")],
+                "paths_scanned": 1, "entries_scanned": 1, "depth": 3,
+                "truncated": False, "errors": [], "findings": [finding]}
+        with patch.object(acceptance, "owned_input_scan", return_value=scan), \
              patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "read_isolation") as observer:
             with self.assertRaises(acceptance.PreconditionError):
@@ -1967,14 +2015,12 @@ def _selection(document, now):
                     command_fn=self.command, identity_fn=lambda: self.identity,
                     candidate_uid=os.getuid(), model_routing_file=None,
                     rehearsal=True, rehearsal_report=str(path),
-                    closure_path=str(closure), deployment_id="rehearsal-store",
+                    closure_path=str(closure), deployment_id="rehearsal-owned",
                 )
         observer.assert_not_called()
         report = json.loads(path.read_text())
         self.assertEqual(report["outcome"], "precondition_not_met")
-        self.assertEqual(report["store_scan"]["findings"], [
-            str(closure / "auth.json"), str(closure / "lib/t3code.env"),
-        ])
+        self.assertEqual(report["store_scan"]["findings"], [finding])
         self.assertIn("secret-bearing path", report["error"])
 
     def test_real_t3_v015_projection_fixture_is_a_tool_call(self):
