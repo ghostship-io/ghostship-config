@@ -125,6 +125,11 @@ lock_managed_tools() {
   local tool="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
   local refresh="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
   local t3="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
+  # Commands acquire these early, before any mutation, and the verification
+  # helpers acquire them again. Re-opening an fd that already holds the lock
+  # would drop it and let another writer in between close and flock, so the
+  # second acquisition must be a no-op.
+  if (( ${managed_tools_locked:-0} )); then return 0; fi
   [[ -f $tool && ! -L $tool && -f $refresh && ! -L $refresh ]] || fail 'managed writer locks missing'
   exec 4<"$tool"; flock -n -x 4 || fail 'tool maintenance writer active'
   exec 5<"$refresh"; flock -n -x 5 || fail 'agent refresh writer active'
@@ -145,6 +150,7 @@ lock_managed_tools() {
   fi
   [[ -f $t3 && ! -L $t3 ]] || fail 'T3 update lock missing or indirect'
   exec 7<"$t3"; flock -n -x 7 || fail 'T3 update writer active'
+  managed_tools_locked=1
 }
 no_pending_restart() {
   : "${HOME_DIR:?}"
@@ -506,6 +512,11 @@ case ${1:-} in
   : "${JQ_BIN:?}"
   [[ $# -le 2 ]] || fail 'usage: rollback [WINDOW_ID]'
   lock_window
+  # Serialize with the managed app and tool writers before any mutation. The
+  # verification helpers also acquire these locks, but they run after the alias
+  # restore and the container start, so an activation could otherwise interleave
+  # between restoring the accepted alias and proving what is being served.
+  lock_managed_tools
   already_released=0
   if [[ ! -e $WINDOW_ROOT/active-window && ! -L $WINDOW_ROOT/active-window ]]; then
     [[ $# == 2 ]] || fail 'missing active window; provide the recorded window ID'
