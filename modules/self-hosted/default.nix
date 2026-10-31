@@ -55,6 +55,7 @@
     # Apps and utilities
     ./agent-desktop.nix
     ./agent-desktop-update.nix
+    ./agent-memory.nix
     ./private-integrations.nix
     ./github-engineering.nix
     ./github-ci.nix
