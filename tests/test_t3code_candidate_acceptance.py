@@ -25,6 +25,11 @@ probe_spec = importlib.util.spec_from_file_location(
 )
 provider_probe = importlib.util.module_from_spec(probe_spec)
 probe_spec.loader.exec_module(provider_probe)
+observer_spec = importlib.util.spec_from_file_location(
+    "t3code_rehearsal_isolation", ROOT / "packages/t3code/rehearsal-isolation.py"
+)
+rehearsal_observer = importlib.util.module_from_spec(observer_spec)
+observer_spec.loader.exec_module(rehearsal_observer)
 
 
 class CandidateDeploymentPackagingTest(unittest.TestCase):
@@ -33,7 +38,7 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         self.assertIn('t3codeDeploymentScripts = pkgs.runCommand', module)
         for name in (
             "candidate-acceptance.py", "acceptance-launcher-key.py", "hardening-probe.py",
-            "provider-turn-probe.py", "runtime-caps.json",
+            "provider-turn-probe.py", "rehearsal-isolation.py", "runtime-caps.json",
         ):
             with self.subTest(name=name):
                 self.assertIn(f"$out/{name}", module)
@@ -56,7 +61,13 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
 
 
 class CandidateAcceptanceTest(unittest.TestCase):
-    NOMINATED_ROUTE = "opencode/opencode-go/deepseek-v4.1-flash"
+    ZEN_ROUTE_ID = "opencode-free/opencode/glm-5.3-flash-free"
+
+    def zen_route(self):
+        return {"schema": "ghostship.t3code-acceptance-route/v1",
+                "provider": "opencode-free", "provider_instance": "opencode-free",
+                "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                "effort": "high", "acceptance_only": True}
 
     def nominated_policy(self, *extra, nominated=True):
         providers = {"opencode-go": {"admit": True}, "codex": {"admit": True},
@@ -128,8 +139,13 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(policy, acceptance_route=route)
-        self.assertFalse(provider_probe.acceptance_route_allows(
+        # D1: the probe only checks the handed-over instance and model. Policy
+        # admission is admitted_acceptance_route's job, so this route object
+        # still names the requested target.
+        self.assertTrue(provider_probe.acceptance_route_allows(
             route, "opencode-free", "opencode/glm-5.3-flash-free"))
+        self.assertFalse(provider_probe.acceptance_route_allows(
+            route, "opencode", "opencode/glm-5.3-flash-free"))
         path = self.root / "wrong-provider-route.json"
         path.write_text(json.dumps(route))
         with self.assertRaises(acceptance.PreconditionError):
@@ -141,7 +157,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             acceptance.admitted_acceptance_route(self.nominated_policy(fallback, nominated=False))
         self.assertEqual(acceptance.admitted_acceptance_route(self.nominated_policy(fallback))["instance"], "opencode")
 
-    def test_nominated_primary_proves_a_real_turn_without_picker_or_fallback(self):
+    def test_acceptance_route_proves_a_real_turn_without_picker_or_fallback(self):
         policy = self.nominated_policy(self.fallback_route("codex", "codex", "gpt-6.1-terra"))
         calls = []
 
@@ -161,16 +177,16 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             self.assertEqual(
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy),
-                self.NOMINATED_ROUTE,
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy),
+                self.ZEN_ROUTE_ID,
             )
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
-        self.assertIn(self.NOMINATED_ROUTE, probes[0])
+        self.assertIn(self.ZEN_ROUTE_ID, probes[0])
         options = json.loads(probes[0][probes[0].index("--options-json") + 1])
         self.assertEqual(options, {"variant": "high"})
 
-    def test_unavailable_fallback_capacity_does_not_block_a_nominated_turn(self):
+    def test_unavailable_fallback_capacity_does_not_block_the_acceptance_route(self):
         policy = self.nominated_policy(
             self.fallback_route("codex", "codex", "gpt-6.1-terra"),
             self.fallback_route("claudeAgent", "claudeAgent", "claude-sonnet-5-5"),
@@ -192,12 +208,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             self.assertEqual(
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent",
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(),
                                                policy=policy, snapshot=snapshot),
-                self.NOMINATED_ROUTE,
+                self.ZEN_ROUTE_ID,
             )
 
-    def test_nominated_route_capacity_error_is_route_unavailable_without_fallback(self):
+    def test_acceptance_route_capacity_error_is_route_unavailable_without_fallback(self):
         policy = self.nominated_policy(self.fallback_route("codex", "codex", "gpt-6.1-terra"))
         calls = []
 
@@ -210,22 +226,22 @@ class CandidateAcceptanceTest(unittest.TestCase):
             return Mock(returncode=1, stdout=json.dumps({
                 "outcome": "route_unavailable", "settled": True,
                 "error": {"code": "route-unavailable", "kind": "provider-instance-missing",
-                          "instance": "opencode",
-                          "model": "opencode-go/deepseek-v4.1-flash"},
+                          "instance": "opencode-free",
+                          "model": "opencode/glm-5.3-flash-free"},
             }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnavailableError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
         self.assertIn("kind=provider-instance-missing", failure.exception.detail)
-        self.assertIn("instance=opencode", failure.exception.detail)
+        self.assertIn("instance=opencode-free", failure.exception.detail)
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
-        self.assertIn(self.NOMINATED_ROUTE, probes[0])
+        self.assertIn(self.ZEN_ROUTE_ID, probes[0])
         self.assertNotIn("codex", " ".join(str(part) for part in probes[0]))
 
-    def test_nominated_route_missing_from_selected_rows_still_probes(self):
+    def test_acceptance_route_missing_from_selected_rows_still_probes(self):
         policy = self.nominated_policy()
 
         def run(engine, name, *args, **kwargs):
@@ -238,8 +254,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             self.assertEqual(
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy),
-                self.NOMINATED_ROUTE,
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy),
+                self.ZEN_ROUTE_ID,
             )
 
     def test_route_unavailable_records_evidence_and_no_receipt(self):
@@ -304,9 +320,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_only_a_t3_proven_route_failure_can_be_attributed_to_candidate(self):
         policy = self.nominated_policy()
-        row = {"provider": "opencode-go", "model": "opencode-go/deepseek-v4.1-flash",
+        row = {"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
                "available": True, "execution": "t3",
-               "target": {"providerInstanceId": "opencode", "model": "opencode-go/deepseek-v4.1-flash"},
+               "target": {"providerInstanceId": "opencode-free",
+                          "model": "opencode/glm-5.3-flash-free"},
                "tool_loop": {"state": "proven"}}
         rows = [row]
 
@@ -315,25 +332,25 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 return self.models_result(rows)
             return Mock(returncode=1, stdout=json.dumps({
                 "settled": True, "error": {"code": "no-tool-call", "kind": "no-tool-call",
-                                           "instance": "opencode",
-                                           "model": "opencode-go/deepseek-v4.1-flash"},
+                                           "instance": "opencode-free",
+                                           "model": "opencode/glm-5.3-flash-free"},
             }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.ProviderTurnError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
             self.assertNotIsInstance(failure.exception, (acceptance.RouteUnavailableError, acceptance.RouteUnknownError))
             self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A native-execution proof for the same identity is not T3 proof.
             rows[:] = [{**row, "execution": "native"}]
             with self.assertRaises(acceptance.RouteUnknownError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
             self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A T3 row without a proven tool loop is also not attribution.
             rows[:] = [{**row, "tool_loop": {"state": "unknown"}}]
             with self.assertRaises(acceptance.RouteUnknownError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
             self.assertIn("kind=no-tool-call", failure.exception.detail)
 
     def test_incomplete_snapshot_failure_retains_safe_route_provenance(self):
@@ -347,7 +364,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         result = Mock(returncode=0, stdout=json.dumps({"data": {"selected": [], "token": "never-retain"}}))
 
         def check(*args, evidence=None, routing_snapshot=None, **kwargs):
-            return acceptance.check_provider_turn([], "candidate", None, tooling_path="agent",
+            return acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(),
                                                   policy=policy, snapshot=routing_snapshot, evidence=evidence)
 
         with patch.object(acceptance, "command", side_effect=self.command), \
@@ -415,9 +432,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
     def test_generic_execution_error_on_proven_route_is_unknown(self):
         policy = self.nominated_policy()
-        row = {"provider": "opencode-go", "model": "opencode-go/deepseek-v4.1-flash",
+        row = {"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
                "available": True, "execution": "t3",
-               "target": {"providerInstanceId": "opencode", "model": "opencode-go/deepseek-v4.1-flash"},
+               "target": {"providerInstanceId": "opencode-free",
+                          "model": "opencode/glm-5.3-flash-free"},
                "tool_loop": {"state": "proven"}}
 
         def run(engine, name, *args, **kwargs):
@@ -428,7 +446,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnknownError):
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
 
     def test_unreadable_route_evidence_is_unknown(self):
         policy = self.nominated_policy()
@@ -436,7 +454,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                           return_value=Mock(returncode=1, stdout="", stderr="network error")), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnknownError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
             self.assertIn("probe settlement not proven", str(failure.exception))
 
     def test_success_without_exact_settled_proof_is_unknown(self):
@@ -450,7 +468,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.RouteUnknownError) as failure:
-                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
             self.assertIn("exact settled proof is missing", str(failure.exception))
 
     def test_native_codex_options_require_supported_standard_and_never_fast(self):
@@ -988,7 +1006,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
         with patch.object(acceptance, "command", side_effect=command):
             with self.assertRaisesRegex(RuntimeError, r"exited before app readiness \(exit code 255\)"):
-                acceptance.check_candidate(["podman"], "candidate", "provider.env")
+                acceptance.check_candidate(["podman"], "candidate", "provider.env",
+                                           acceptance_route=self.zen_route())
 
     def test_candidate_readiness_starts_the_frontend_proxy_unit(self):
         calls = []
@@ -1010,7 +1029,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command), \
              patch.object(acceptance, "check_provider_turn", return_value=True):
             checks = acceptance.check_candidate(
-                ["podman"], "candidate", "provider.env", tooling_path="/nix/store/test-agent"
+                ["podman"], "candidate", "provider.env",
+                tooling_path="/nix/store/test-agent",
+                acceptance_route=self.zen_route(),
             )
         self.assertTrue(all(checks.values()))
         self.assertIn(("exec", "candidate", "systemctl", "start",
@@ -1111,12 +1132,13 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command):
             self.assertEqual(
                 acceptance.check_provider_turn(["podman"], "candidate", provider_env,
-                                               tooling_path="/nix/store/test-agent"),
-                self.NOMINATED_ROUTE,
+                                               tooling_path="/nix/store/test-agent",
+                                               acceptance_route=self.zen_route()),
+                self.ZEN_ROUTE_ID,
             )
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
-        self.assertIn(self.NOMINATED_ROUTE, probes[0])
+        self.assertIn(self.ZEN_ROUTE_ID, probes[0])
         self.assertFalse(any("minimax" in str(part) for part in probes[0]))
 
     def test_candidate_error_classification_does_not_include_command_output(self):
@@ -1169,7 +1191,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
                       self.commands)
 
-    def test_provider_turn_uses_the_nominated_primary_without_reading_the_picker(self):
+    def test_provider_turn_uses_the_acceptance_route_without_reading_the_picker(self):
         provider_env = self.root / "provider.env"
         provider_env.write_text("")
         calls = []
@@ -1186,10 +1208,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command):
             self.assertEqual(acceptance.check_provider_turn(
                 ["podman"], "candidate", provider_env, tooling_path="/nix/store/test-agent",
-            ), self.NOMINATED_ROUTE)
+                acceptance_route=self.zen_route(),
+            ), self.ZEN_ROUTE_ID)
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
-        self.assertIn(self.NOMINATED_ROUTE, probes[0])
+        self.assertIn(self.ZEN_ROUTE_ID, probes[0])
         self.assertFalse(any("pick" in call for call in calls))
 
     def test_provider_turn_never_probes_fallback_or_protected_routes(self):
@@ -1213,13 +1236,14 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with patch.object(acceptance, "command", side_effect=command):
             self.assertEqual(acceptance.check_provider_turn(
                 ["podman"], "candidate", provider_env, tooling_path="/nix/store/test-agent",
-            ), self.NOMINATED_ROUTE)
+                acceptance_route=self.zen_route(),
+            ), self.ZEN_ROUTE_ID)
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
         rendered = " ".join(str(part) for part in probes[0])
+        self.assertIn(self.ZEN_ROUTE_ID, rendered)
         self.assertNotIn("codex", rendered)
         self.assertNotIn("claude", rendered)
-        self.assertNotIn("opencode-free", rendered)
 
     def test_provider_failure_persists_summary_in_attempt(self):
         failure = acceptance.ProviderTurnError("opencode/opencode-go/deepseek-v4.1-flash",
@@ -1434,6 +1458,537 @@ def _selection(document, now):
         self.assertEqual(receipt["agent_path"], pinned_tooling)
         self.assertEqual(receipt["provider_secret_inode"], str(secrets.stat().st_ino))
         self.assertIn(("cp", staged, f"{receipt['candidate_name']}:/nix/store/"), self.commands)
+
+    def observed_isolation(self):
+        return {
+            "state": "observed",
+            "env_file": {"present": True, "bytes": 0, "state": "empty"},
+            "env_file_bytes": 0,
+            "env_names": {"1": ["PATH"]},
+            "processes": {"1": "t3code-server"},
+            "env_allowlisted": ["PATH"],
+            "env_secret_names": [],
+            "env_unrecognized_names": [],
+            "env_violations": [],
+            "auth_artifacts": [],
+            "auth_scan": {"truncated": False, "visited": 1, "max_depth": 5},
+            "mount_violations": [],
+            "secret_names": [],
+            "provider_instances": ["opencode-free"],
+        }
+
+    def run_rehearsal(self, **overrides):
+        report_path = self.root / "rehearsal.json"
+        closure = Path(overrides.get("closure_path") or (self.root / "rehearsal-closure"))
+        closure.mkdir(parents=True, exist_ok=True)
+        (closure / "README").write_text("build output\n")
+        options = dict(
+            command_fn=self.command, identity_fn=lambda: self.identity,
+            candidate_uid=os.getuid(), model_routing_file=None,
+            rehearsal=True, rehearsal_report=str(report_path),
+            deployment_id="rehearsal-fixture", closure_path=str(closure),
+        )
+        options.update(overrides)
+        isolation = options.pop("isolation", self.observed_isolation())
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "read_isolation", return_value=isolation), \
+             patch.object(acceptance, "check_candidate", return_value={
+                **{name: True for name in acceptance.CHECKS},
+                "desktop_transport": {"state": "not_applicable"},
+                "provider_turn_route": "opencode-free/opencode/glm-5.3-flash-free",
+             }), \
+             patch.object(acceptance, "candidate_agent_path",
+                          return_value="/nix/store/agent"), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            report = acceptance.accept(
+                self.state, self.archive, "podman",
+                "/run/t3code-podman-candidate/podman.sock", self.home,
+                **options,
+            )
+        return report, report_path
+
+    def test_rehearsal_stages_an_empty_env_file_and_writes_no_deploy_state(self):
+        secrets = self.root / "t3code.env"
+        secrets.write_text("OPENROUTER_API_KEY=must-not-be-read\n")
+        real = acceptance.write_provider_env
+        captured = {}
+
+        def write_provider_env(source, target):
+            result = real(source, target)
+            captured["source"] = source
+            captured["bytes"] = Path(target).read_bytes()
+            return result
+
+        isolation = self.observed_isolation()
+        closure = self.root / "closure-ok"
+        closure.mkdir()
+        (closure / "README").write_text("build output\n")
+        with patch.object(acceptance, "write_provider_env", side_effect=write_provider_env):
+            report, path = self.run_rehearsal(
+                provider_secrets_file=str(secrets), closure_path=str(closure),
+                isolation=isolation, build_seconds=26.0,
+                build_source="release-5-build.log:4")
+        self.assertIsNone(captured["source"])
+        self.assertEqual(captured["bytes"], b"")
+        self.assertEqual(report["env_file_bytes"], 0)
+        self.assertEqual(report["outcome"], "passed")
+        self.assertEqual(report["store_scan"]["findings"], [])
+        self.assertEqual(report["performance"]["build_s"], 26.0)
+        self.assertEqual(report["performance"]["build_kind"],
+                         "cached_system_closure_build")
+        self.assertEqual(report["performance"]["build_source"],
+                         "release-5-build.log:4")
+        self.assertEqual(json.loads(path.read_text())["schema"], acceptance.REHEARSAL_SCHEMA)
+        self.assertFalse((self.state / "receipts").exists())
+        self.assertFalse((self.state / "attempts").exists())
+        self.assertFalse((self.state / "rehearsal.json").exists())
+
+    def test_failed_rehearsal_records_the_failure_and_no_deploy_state(self):
+        failing = {name: True for name in acceptance.CHECKS}
+        failing["provider_turn"] = False
+        path = self.root / "rehearsal-failed.json"
+        closure = self.root / "closure-failed"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value=failing), \
+             patch.object(acceptance, "candidate_agent_path",
+                          return_value="/nix/store/agent"), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "acceptance failed"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure),
+                    deployment_id="rehearsal-fail",
+                )
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "failed")
+        self.assertIn("candidate acceptance failed", report["error"])
+        self.assertFalse(report["checks"]["provider_turn"])
+        self.assertFalse((self.state / "receipts").exists())
+        self.assertFalse((self.state / "attempts").exists())
+        self.assertEqual(
+            acceptance.rehearsal_outcome_for(
+                RuntimeError("candidate acceptance workspace teardown failed")),
+            "unknown")
+
+    def test_runtime_acceptance_route_is_required_and_fails_closed(self):
+        env = self.root / "provider.env"
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "acceptance route is required"):
+            acceptance.check_candidate(["podman"], "t3code-candidate-x", env,
+                                       acceptance_route_file=None)
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "acceptance route is unavailable"):
+            acceptance.check_candidate(
+                ["podman"], "t3code-candidate-x", env,
+                acceptance_route_file=str(self.root / "missing-route.json"))
+        invalid = self.root / "invalid-route.json"
+        invalid.write_text(json.dumps({"schema": "ghostship.t3code-acceptance-route/v1",
+                                       "provider": "opencode", "provider_instance": "opencode-free",
+                                       "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                                       "effort": "high", "acceptance_only": True}))
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "acceptance route is invalid"):
+            acceptance.check_candidate(["podman"], "t3code-candidate-x", env,
+                                       acceptance_route_file=str(invalid))
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "acceptance route is required"):
+            acceptance.check_provider_turn(
+                ["podman"], "t3code-candidate-x", env,
+                tooling_path="/nix/store/tools", acceptance_route=None)
+
+    def test_provider_turn_records_the_route_the_candidate_reported(self):
+        route = {"schema": "ghostship.t3code-acceptance-route/v1",
+                 "provider": "opencode-free", "provider_instance": "opencode-free",
+                 "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                 "effort": "high", "acceptance_only": True}
+        rows = [{"provider": "opencode", "model": "opencode/glm-5.3-flash-free",
+                 "execution": "t3", "available": True,
+                 "native": {"providerInstanceId": "opencode-free",
+                            "model": "opencode/glm-5.3-flash-free"},
+                 "tool_loop": {"state": "proven"}}]
+        reported = {"outcome": "passed", "settled": True,
+                    "instance": "opencode-free",
+                    "model": "opencode/glm-5.3-flash-free"}
+        evidence = {}
+        with patch.object(acceptance, "candidate_provider_diagnostics",
+                          return_value="fixture"), \
+             patch.object(acceptance, "candidate_agent_command", side_effect=[
+                 Mock(returncode=0, stdout=json.dumps({"data": {"selected": rows}})),
+                 Mock(returncode=0, stdout=json.dumps(reported)),
+             ]):
+            observed = acceptance.check_provider_turn(
+                ["podman"], "t3code-candidate-x", self.root / "provider.env",
+                tooling_path="/nix/store/tools", evidence=evidence,
+                acceptance_route=route)
+        self.assertEqual(observed, "opencode-free/opencode/glm-5.3-flash-free")
+        self.assertEqual(evidence["candidate_provider_turn"]["route"],
+                         "opencode-free/opencode/glm-5.3-flash-free")
+        self.assertEqual(evidence["candidate_provider_turn"]["source"],
+                         "candidate provider-turn-probe output")
+        self.assertTrue(evidence["candidate_provider_turn"]["settled"])
+
+    def test_rehearsal_report_quotes_the_candidate_route_not_the_computed_one(self):
+        path = self.root / "rehearsal-route.json"
+        reported = "opencode-free/opencode/glm-5.3-flash-free"
+
+        def checked(engine, name, provider_env_file, **kwargs):
+            kwargs["evidence"]["candidate_provider_turn"] = {
+                "route": reported, "instance": "opencode-free",
+                "model": "opencode/glm-5.3-flash-free", "outcome": "passed",
+                "settled": True,
+                "source": "candidate provider-turn-probe output",
+            }
+            return {**{name: True for name in acceptance.CHECKS},
+                    "provider_turn_route": "computed/route-must-not-be-quoted",
+                    "desktop_transport": {"state": "not_applicable"}}
+
+        closure = self.root / "closure-route"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=checked), \
+             patch.object(acceptance, "candidate_agent_path",
+                          return_value="/nix/store/agent"), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            report = acceptance.accept(
+                self.state, self.archive, "podman",
+                "/run/t3code-podman-candidate/podman.sock", self.home,
+                command_fn=self.command, identity_fn=lambda: self.identity,
+                candidate_uid=os.getuid(), model_routing_file=None,
+                rehearsal=True, rehearsal_report=str(path),
+                closure_path=str(closure),
+                deployment_id="rehearsal-route",
+            )
+        self.assertEqual(report["provider_turn"]["route"], reported)
+        self.assertEqual(report["provider_turn"]["source"],
+                         "candidate provider-turn-probe output")
+        self.assertNotEqual(report["provider_turn"]["route"],
+                            "computed/route-must-not-be-quoted")
+        self.assertNotIn("computed/route-must-not-be-quoted", json.dumps(report))
+        self.assertEqual(json.loads(path.read_text())["provider_turn"]["route"], reported)
+
+    def test_non_rehearsal_missing_provider_settings_still_fails_closed(self):
+        candidate_home = self.root / "no-settings-home"
+        candidate_inputs = self.root / "no-settings-inputs"
+        candidate_home.mkdir()
+        candidate_inputs.mkdir()
+        provider_env = self.root / "no-settings.env"
+        provider_env.write_text("")
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "settings are unreadable"):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        # Only the explicit rehearsal-without-tooling call may allow absence.
+        acceptance.assert_candidate_auth_free(
+            candidate_home, candidate_inputs, provider_env, allow_missing_settings=True)
+        def empty_staging(home, candidate_home, candidate_inputs, uid, *args, **kwargs):
+            Path(candidate_home).mkdir(mode=0o700)
+            Path(candidate_inputs).mkdir(mode=0o700)
+            return None
+
+        with patch.object(acceptance, "stage_candidate_inputs",
+                          side_effect=empty_staging):
+            with self.assertRaisesRegex(acceptance.PreconditionError,
+                                        "settings are unreadable"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    tooling_path="/nix/store/tooling-without-projected-settings",
+                )
+
+    def test_each_release5_secret_env_name_is_a_violation(self):
+        names = (
+            "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN",
+            "COHERE_API_KEY", "COMMAND_CODE_API_KEY", "AI_GATEWAY_API_KEY",
+            "OLLAMA_API_KEY", "OPENROUTER_API_KEY", "KILO_API_KEY",
+            "REQUESTY_API_KEY", "ORCAROUTER_API_KEY", "INCEPTION_API_KEY",
+            "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY",
+            "POOLSIDE_API_KEY", "AGENT_DESKTOP_API_TOKEN",
+        )
+        self.assertEqual(len(set(names)), 17)
+        for name in names:
+            with self.subTest(name=name):
+                verdict = rehearsal_observer.classify_env_names([name])
+                self.assertIn(name, verdict["violations"])
+        allowed = rehearsal_observer.classify_env_names(["PATH", "HOME", "LANG"])
+        self.assertEqual(allowed["violations"], [])
+        unknown = rehearsal_observer.classify_env_names(["SOMETHING_UNLISTED"])
+        self.assertIn("SOMETHING_UNLISTED", unknown["violations"])
+
+    def test_auth_artifacts_are_found_deep_under_home(self):
+        home = self.root / "auth-walk-home"
+        for relative in (
+            ".local/share/opencode/auth.json",
+            ".config/gh/credentials.json",
+            ".config/some/deep/path/hosts.yml",
+            ".codex/credentials",
+            "ordinary.txt",
+        ):
+            path = home / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("not read")
+        found, scan = rehearsal_observer.find_auth_artifacts(home)
+        self.assertEqual(scan["truncated"], False)
+        rendered = "\n".join(found)
+        self.assertIn(".local/share/opencode/auth.json", rendered)
+        self.assertIn(".config/gh/credentials.json", rendered)
+        self.assertIn(".config/some/deep/path/hosts.yml", rendered)
+        self.assertIn(".codex/credentials", rendered)
+        self.assertNotIn("ordinary.txt", rendered)
+
+    def test_store_scan_walks_closure_requisites_beyond_depth_two(self):
+        top = self.root / "closure-top"
+        top.mkdir()
+        deep = self.root / "store" / "abc-agent-tools"
+        (deep / "share" / "nested" / "deeper").mkdir(parents=True)
+        (deep / "share" / "nested" / "deeper" / "auth.json").write_text("{}\n")
+        (top / "README").write_text("build output\n")
+        requisites = [str(top), str(deep)]
+        with patch.object(acceptance.subprocess, "run",
+                          return_value=Mock(returncode=0, stdout="\n".join(requisites) + "\n")):
+            scan = acceptance.store_secret_scan([str(top)])
+        self.assertEqual(scan["paths_scanned"], 2)
+        self.assertEqual(scan["findings"], [str(deep / "share/nested/deeper/auth.json")])
+        self.assertFalse(scan["truncated"])
+
+    def test_rehearsal_report_is_written_after_teardown_with_cleanup_result(self):
+        report, path = self.run_rehearsal(isolation=self.observed_isolation())
+        self.assertIsInstance(report["cleanup"], dict)
+        self.assertTrue(report["cleanup"]["container_removed"])
+        self.assertTrue(report["cleanup"]["manager_stopped"])
+        self.assertTrue(report["cleanup"]["workspace_removed"])
+        self.assertEqual(report["live_after"], report["live_before"])
+        self.assertTrue(report["identity_unchanged"])
+        self.assertEqual(json.loads(path.read_text())["cleanup"], report["cleanup"])
+
+    def test_rehearsal_identity_change_after_teardown_is_unknown(self):
+        changed = list(self.identity)
+        changed[2] = 99
+        observations = iter([self.identity, self.identity, changed])
+        path = self.root / "rehearsal-identity.json"
+        closure = self.root / "closure-identity"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value={
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
+             }), \
+             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: next(observations),
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure),
+                    deployment_id="rehearsal-identity",
+                )
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "unknown")
+        self.assertFalse(report["identity_unchanged"])
+        self.assertEqual(report["live_after"], changed)
+        self.assertIsInstance(report["cleanup"], dict)
+
+    def test_rehearsal_teardown_failure_turns_the_report_unknown(self):
+        def failing_remove(engine, *args, **kwargs):
+            if args[:2] == ("rm", "--force"):
+                return Mock(returncode=1, stdout="", stderr="")
+            return self.command(engine, *args, **kwargs)
+
+        path = self.root / "rehearsal-teardown.json"
+        closure = self.root / "closure-teardown"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value={
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
+             }), \
+             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "teardown failed"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=failing_remove, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure),
+                    deployment_id="rehearsal-teardown",
+                )
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "unknown")
+        self.assertFalse(report["cleanup"]["container_removed"])
+        self.assertIn("teardown", report["cleanup"]["error"])
+        self.assertEqual(report["live_after"], report["live_before"])
+        self.assertTrue(report["identity_unchanged"])
+
+    def test_absent_env_file_is_reported_as_absent_not_not_empty(self):
+        document = {"state": "observed", "env_names": {"1": ["PATH"]},
+                    "env_secret_names": [], "env_unrecognized_names": [],
+                    "auth_artifacts": [], "mount_violations": [],
+                    "env_file": {"present": False, "bytes": None, "state": "absent"},
+                    "env_file_present": False, "env_file_bytes": None}
+        with patch.object(acceptance, "candidate_agent_command",
+                          return_value=Mock(returncode=0, stdout=json.dumps(document))):
+            observed = acceptance.read_isolation(["podman"], "t3code-candidate-x")
+        self.assertEqual(observed["state"], "violation")
+        self.assertIn("absent", observed["reason"])
+        self.assertNotIn("not empty", observed["reason"])
+
+    def test_rehearsal_cli_refuses_secrets_and_requires_a_closure(self):
+        base = [
+            sys.executable, str(ROOT / "packages/t3code/candidate-acceptance.py"),
+            "--state-dir", str(self.state), "--image-archive", str(self.archive),
+            "--home-dir", str(self.home), "--candidate-runtime-dir", str(self.root / "runtime"),
+            "--candidate-uid", str(os.getuid()), "--candidate-home-target", "/home/t3code",
+        ]
+        secrets = self.root / "cli-secrets.env"
+        secrets.write_text("OPENROUTER_API_KEY=must-not-be-read\n")
+        refused = subprocess.run(
+            [*base, "--rehearsal", "--provider-secrets-file", str(secrets),
+             "--closure-path", str(self.root)],
+            text=True, capture_output=True)
+        self.assertEqual(refused.returncode, acceptance.PRECONDITION_EXIT)
+        self.assertIn("never reads a provider secrets file", refused.stderr)
+        missing = subprocess.run([*base, "--rehearsal"], text=True, capture_output=True)
+        self.assertEqual(missing.returncode, acceptance.PRECONDITION_EXIT)
+        self.assertIn("--closure-path", missing.stderr)
+        self.assertFalse((self.state / "receipts").exists())
+
+    def test_rehearsal_observer_failure_is_unknown_not_pass(self):
+        for observed in (
+            {"state": "unknown", "reason": "isolation observer failed"},
+            {"state": "violation", "reason": "credential-like names observed",
+             "secret_names": ["OPENROUTER_API_KEY"], "env_file_bytes": 0},
+        ):
+            with self.subTest(observed=observed):
+                report, path = self.run_rehearsal(isolation=observed)
+            self.assertEqual(report["outcome"], "unknown")
+            self.assertEqual(json.loads(path.read_text())["outcome"], "unknown")
+
+    def test_isolation_observer_fails_closed(self):
+        for result in (
+            Mock(returncode=1, stdout=""),
+            Mock(returncode=0, stdout="not-json"),
+            Mock(returncode=0, stdout='{"state": "unknown"}'),
+            Mock(returncode=0, stdout='{"state": "observed", "env_names": {}, "secret_names": []}'),
+        ):
+            with self.subTest(result=result.stdout), \
+                 patch.object(acceptance, "candidate_agent_command", return_value=result):
+                observed = acceptance.read_isolation(["podman"], "t3code-candidate-x")
+            self.assertEqual(observed["state"], "unknown")
+        empty_file = {"present": True, "bytes": 0, "state": "empty"}
+        for document in (
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "secret_names": ["OPENROUTER_API_KEY"], "env_file": empty_file},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "env_unrecognized_names": ["SOMETHING_UNLISTED"],
+             "env_file": empty_file},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "auth_artifacts": [".local/share/opencode/auth.json"],
+             "env_file": empty_file},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "secret_names": [], "env_file": {"present": True, "bytes": 1,
+                                             "state": "not_empty"}},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "secret_names": [], "env_file": empty_file,
+             "mount_violations": ["production home is mounted at /candidate-home"]},
+        ):
+            with self.subTest(document=document), patch.object(
+                    acceptance, "candidate_agent_command",
+                    return_value=Mock(returncode=0, stdout=json.dumps(document))):
+                observed = acceptance.read_isolation(["podman"], "t3code-candidate-x")
+            self.assertEqual(observed["state"], "violation")
+
+    def test_probe_admits_only_the_handed_over_instance_and_model(self):
+        route = {"provider": "opencode-free", "provider_instance": "opencode-free",
+                 "model": "opencode/glm-5.3-flash-free", "billing": "free",
+                 "acceptance_only": True, "effort": "high"}
+        self.assertTrue(provider_probe.acceptance_route_allows(
+            route, "opencode-free", "opencode/glm-5.3-flash-free"))
+        for instance, model in (
+            ("opencode", "opencode/glm-5.3-flash-free"),
+            ("opencode-free", "opencode/glm-5.2-flash-free"),
+            ("opencode-free", ""),
+        ):
+            with self.subTest(instance=instance, model=model):
+                self.assertFalse(provider_probe.acceptance_route_allows(
+                    route, instance, model))
+        # Policy fields are not the probe's admission: the single authority
+        # for them is admitted_acceptance_route.
+        invalid = {**route, "provider": "opencode", "billing": "subscription",
+                   "acceptance_only": False}
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.admitted_acceptance_route(
+                self.nominated_policy(), acceptance_route=invalid)
+
+    def test_store_scan_finds_secret_bearing_paths_and_stops_the_rehearsal(self):
+        closure = self.root / "closure"
+        (closure / "lib").mkdir(parents=True)
+        (closure / "lib/README").write_text("build output\n")
+        (closure / "auth.json").write_text("{}\n")
+        (closure / "lib/t3code.env").write_text("TOKEN=x\n")
+        scan = acceptance.store_secret_scan([], requisites=[str(closure)])
+        self.assertEqual(scan["findings"], [
+            str(closure / "auth.json"), str(closure / "lib/t3code.env"),
+        ])
+        self.assertEqual(scan["paths_scanned"], 1)
+        path = self.root / "rehearsal-store.json"
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "read_isolation") as observer:
+            with self.assertRaises(acceptance.PreconditionError):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure), deployment_id="rehearsal-store",
+                )
+        observer.assert_not_called()
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "precondition_not_met")
+        self.assertEqual(report["store_scan"]["findings"], [
+            str(closure / "auth.json"), str(closure / "lib/t3code.env"),
+        ])
+        self.assertIn("secret-bearing path", report["error"])
+
+    def test_real_t3_v015_projection_fixture_is_a_tool_call(self):
+        fixture = json.loads(
+            (ROOT / "tests/fixtures/t3-v0.1.5-projection.json").read_text())
+        client = Mock()
+        client._get.return_value = fixture
+        self.assertTrue(provider_probe.has_tool_result(client, "probe"))
+        # The workspace-preparation command alone is not the probe's tool call.
+        client._get.return_value = {"projection": {
+            "runs": fixture["projection"]["runs"], "turnItems": [
+                item for item in fixture["projection"]["turnItems"]
+                if item["type"] == "command_execution"]}}
+        self.assertFalse(provider_probe.has_tool_result(client, "probe"))
 
     def test_a_failed_acceptance_never_leaves_an_approving_receipt(self):
         failing = {name: True for name in acceptance.CHECKS}

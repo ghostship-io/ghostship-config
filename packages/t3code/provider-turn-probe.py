@@ -165,15 +165,14 @@ def route_unavailable_output(instance, model, kind):
 
 
 def acceptance_route_allows(route, instance, model):
-    """The acceptance route is the single admission authority.
+    """Check only that the handed-over route names the requested target.
 
-    Candidate acceptance has already admitted this exact route; the probe only
-    checks that the route object it was handed names the requested target.
+    Policy admission lives in candidate-acceptance.admitted_acceptance_route;
+    the probe never re-implements provider, billing or acceptance-only policy.
     """
+    # Policy admission lives in candidate-acceptance.admitted_acceptance_route.
+    # The probe only checks that the handed-over route names this target.
     return (isinstance(route, dict)
-            and route.get("acceptance_only") is True
-            and route.get("billing") == "free"
-            and route.get("provider") == "opencode-free"
             and (route.get("provider_instance"), route.get("model")) == (instance, model))
 
 
