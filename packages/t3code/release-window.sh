@@ -1251,6 +1251,114 @@ case ${1:-} in
   printf 'CLOSED unaccepted window=%s deployment=%s serving_image=%s attempt=%s\n' \
     "$id" "$expected" "$image" "$(printf '%s' "$attempt_json" | "$JQ_BIN" -r '.outcome')"
   ;;
+ closed-unattested)
+  [[ $# == 1 ]] || fail 'usage: closed-unattested'
+  lock_window
+  read_active
+  [[ ! -e $dir/closed-unattested.json && ! -L $dir/closed-unattested.json ]] || fail 'window already closed unattested'
+  [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN remains; supersede it before this window can close'
+  [[ -f $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery inhibit missing'
+  case $(unit_state "$WINDOW_UNIT") in
+    active) holder_ready || fail 'window holder state unknown' ;;
+    inactive) expired_holder_locks ;;
+    *) fail 'window holder state unknown' ;;
+  esac
+  [[ -f $dir/complete.started && ! -L $dir/complete.started ]] || fail 'switch evidence missing'
+  [[ -f $dir/switch.result && ! -L $dir/switch.result ]] || fail 'switch result unknown'
+  switch_result=$(cat "$dir/switch.result")
+  case $switch_result in
+    exit_code=0|exit_code=4) ;;
+    *) fail 'switch did not succeed' ;;
+  esac
+  [[ -f $STATE_DIR/deploy.lock && ! -L $STATE_DIR/deploy.lock ]] || fail 'deploy lock missing'
+  exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
+  complete_locks_free
+  case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
+  case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
+  [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
+  applied=$(cat "$STATE_DIR/applied"); expected=$(cat "$STATE_DIR/desired")
+  [[ $applied =~ ^[0-9a-f]{64}$ && $expected =~ ^[0-9a-f]{64}$ ]] || fail 'deployment identity unknown'
+  [[ $applied == "$expected" ]] || fail 'deployment is not applied'
+  expected_receipt_path="$STATE_DIR/receipts/$expected.json"
+  [[ -f $expected_receipt_path && ! -L $expected_receipt_path ]] || fail 'expected receipt missing'
+  receipt_checks_ok "$expected_receipt_path" || fail 'exact-image receipt invalid'
+  expected_sha=$(sha256sum < "$expected_receipt_path" | cut -d' ' -f1) || fail 'expected receipt unreadable'
+  expected_image=$("$JQ_BIN" -er '.image_id' "$expected_receipt_path") || fail 'expected receipt identity unreadable'
+  expected_image=${expected_image#sha256:}
+  container=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}}') || fail 'serving container unknown'
+  image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'serving image unknown'
+  health=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') || fail 'serving health unknown'
+  [[ ${image#sha256:} == "$expected_image" ]] || fail 'serving image is not the receipted image'
+  [[ $health == healthy ]] || fail 'serving container unhealthy'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'serving server inactive'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'serving server unresponsive'
+  tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || fail 'live tooling unknown'
+  [[ $tooling == "$EXPECTED_TOOLING_PATH" ]] || fail 'live tooling differs from the accepted tooling'
+  [[ $("$SYSTEMCTL_BIN" show ghostship-t3code-deploy.service -p Result --value) != success ]] || fail 'deploy succeeded; use post'
+  attempt="$STATE_DIR/attempts/$expected.json"
+  [[ -f $attempt && ! -L $attempt ]] || fail 'attempt missing'
+  # shellcheck disable=SC2016
+  attempt_json=$("$JQ_BIN" -ce --arg d "$expected" '
+    select(.deployment_id == $d
+      and (.exit_code | type == "number" and . != 0)
+      and .status == null)
+    | {exit_code, outcome, started_at_ms}' "$attempt") || fail 'attempt is not a terminal failed deployment'
+  read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
+  activation_start=$(date -d "$switch_at" +%s) || fail 'activation start unknown'
+  activation_end=$(stat -c %Y "$dir/switch.result") || fail 'activation end unknown'
+  failed_now=$("$SYSTEMCTL_BIN" --failed --no-legend --plain 2>/dev/null | awk 'NF {print $1}' | sort -u)
+  # shellcheck disable=SC2016
+  activation_failures=$("${JOURNALCTL_BIN:-journalctl}" -b --since "@$activation_start" --until "@$activation_end" -o json --no-pager 2>/dev/null \
+    | "$JQ_BIN" -r 'select((.MESSAGE? // "") | startswith("Failed to start")) | (.UNIT? // empty)' 2>/dev/null | sort -u) || activation_failures=
+  units=$( { printf '%s\n' "$failed_now"; printf '%s\n' "$activation_failures"; } | awk 'NF' | sort -u )
+  failed_units_json='[]'
+  for unit in $units; do
+    first=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep -m1 'Failed with result' | cut -d' ' -f1) || first=
+    last=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep 'Failed with result' | tail -1 | cut -d' ' -f1) || last=
+    first_epoch=
+    [[ -z $first ]] || first_epoch=$(date -d "$first" +%s 2>/dev/null) || first_epoch=
+    class=unclassified
+    if [[ -n $first_epoch ]]; then
+      if [[ $unit == ghostship-t3code-deploy.service ]]; then class=expected_deploy
+      elif (( first_epoch < activation_start )); then class=pre_existing
+      elif (( first_epoch > activation_end )); then class=later
+      fi
+    fi
+    case $class in pre_existing|later|expected_deploy) ;; *) fail "unclassified failed unit: $unit" ;; esac
+    # shellcheck disable=SC2016
+    failed_units_json=$(printf '%s' "$failed_units_json" \
+      | "$JQ_BIN" -c --arg u "$unit" --arg f "$first" --arg l "$last" --arg c "$class" \
+        '. + [{unit:$u, first:$f, last:$l, class:$c}]') || fail 'failed-unit record unreadable'
+  done
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg image "$expected_image" \
+    --arg sha "$expected_sha" --arg container "$container" --arg tooling "$tooling" \
+    --arg rev "$EXPECTED_AGENT_REVISION" --arg switch_result "$switch_result" \
+    --arg at "$(date -u +%FT%TZ)" --argjson attempt "$attempt_json" \
+    --argjson failed_units "$failed_units_json" '
+    {state:"closed_unattested", window:$id, deployment_id:$d, applied:true,
+     receipt:{deployment_id:$d, image_id:$image, sha256:$sha},
+     serving:{image:$image, container:$container, health:"healthy",
+       tooling_path:$tooling, agent_revision:$rev},
+     attempt:$attempt, attestation:"failed", production_turn:"not_run",
+     switch_result:$switch_result, failed_units:$failed_units,
+     closed_at:$at, operator:"release worker"}' > "$dir/closed-unattested.json.tmp"
+  chmod 0600 "$dir/closed-unattested.json.tmp"; sync -f "$dir/closed-unattested.json.tmp"
+  mv "$dir/closed-unattested.json.tmp" "$dir/closed-unattested.json"; sync -f "$dir"
+  "$SYSTEMCTL_BIN" start t3code-recovery.service
+  [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery not active; inhibit retained'
+  if [[ $(unit_state "$WINDOW_UNIT") == active ]]; then
+    holder_ready || fail 'holder lost before release; inhibit retained'
+    "$SYSTEMCTL_BIN" stop "$WINDOW_UNIT.service"
+  fi
+  [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'holder stop outcome unknown'
+  lock_candidate_pair
+  [[ ! -L $HOLD_FILE ]] || fail 'recovery hold is a symlink'
+  [[ ! -e $HOLD_FILE ]] || rm "$HOLD_FILE"
+  rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
+  printf 'CLOSED unattested window=%s deployment=%s image=%s attempt=%s\n' \
+    "$id" "$expected" "$expected_image" "$(printf '%s' "$attempt_json" | "$JQ_BIN" -r '.exit_code')"
+  ;;
  end-no-activation)
   [[ $(unit_state ghostship-t3code-deploy) == inactive && $(unit_state t3code-podman-candidate) == inactive ]] || fail 'failed service requires post or recovery'
   preflight_core
@@ -1274,5 +1382,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation|closed-unaccepted' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation|closed-unaccepted|closed-unattested' >&2; exit 2 ;;
 esac
