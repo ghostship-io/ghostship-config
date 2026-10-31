@@ -64,7 +64,7 @@ if [[ $1 == exec && $3 == sh && ${4:-} == -c && ${6:-} == _ ]]; then
 fi
 case "$1 $3 ${4:-}" in
   'inspect --format {{.State.Running}}') echo true ;;
-  'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
+  'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') [[ ${FIXTURE_SERVING_BROKEN:-0} != 1 ]] || { printf 'broken\n'; exit 0; }; printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
@@ -611,6 +611,15 @@ grep -q 'window lock held' "$tmp/sup-locked.log" || { echo 'I: unexpected refusa
 [[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'I: superseded without the window lock' >&2; exit 1; }
 [[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'I: audit written without the window lock' >&2; exit 1; }
 [[ ! -e $tmp/evidence/$old_unknown/archive ]] || { echo 'I: record archived without the window lock' >&2; exit 1; }
+# A start that fails after the guard checks leaves the record in place: the
+# mutation sits after the candidate locks, snapshot, serving identity and window
+# creation, so no failure there can retire the only recovery evidence.
+export FIXTURE_SERVING_BROKEN=1
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-broken 2>"$tmp/sup-late.log"; then echo 'started without a serving identity' >&2; exit 1; fi
+unset FIXTURE_SERVING_BROKEN
+grep -q 'serving identity unknown' "$tmp/sup-late.log" || { echo 'J: unexpected refusal:' >&2; cat "$tmp/sup-late.log" >&2; exit 1; }
+[[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'J: superseded before the window was formed' >&2; exit 1; }
+[[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'J: audit written before the window was formed' >&2; exit 1; }
 
 # The recorded shape: acceptance_unknown, released, inhibit retained.
 record_digest=$(sha256sum < "$STATE_DIR/recovery-unknown.json" | cut -d' ' -f1)
