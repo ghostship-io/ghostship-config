@@ -132,7 +132,7 @@ receipt_matches_image() {
      and (.agent_path == $tooling)
      and (.provider_secret_inode == $secret_inode)
      and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills, .checks.desktop_transport] | all(. == true))' \
+           .checks.skills, .checks.desktop_cli] | all(. == true))' \
     "$receipt" >/dev/null 2>&1
 }
 
@@ -146,7 +146,7 @@ any_receipt_matches_image() {
        and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
        and (.live_before != null and .live_before == .live_after)
        and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-             .checks.skills, .checks.desktop_transport] | all(. == true))' \
+             .checks.skills, .checks.desktop_cli] | all(. == true))' \
       "$candidate" >/dev/null 2>&1; then
       return 0
     fi

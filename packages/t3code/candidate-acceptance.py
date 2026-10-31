@@ -23,15 +23,8 @@ _probe_spec = importlib.util.spec_from_file_location(
 _probe = importlib.util.module_from_spec(_probe_spec)
 _probe_spec.loader.exec_module(_probe)
 
-CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")
+CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_cli")
 HOME_DIRS = (".agents/skills",)
-PROVIDER_ENV = (
-    "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN", "COHERE_API_KEY",
-    "COMMAND_CODE_API_KEY", "AI_GATEWAY_API_KEY", "OLLAMA_API_KEY", "OPENROUTER_API_KEY",
-    "KILO_API_KEY", "REQUESTY_API_KEY", "ORCAROUTER_API_KEY", "INCEPTION_API_KEY",
-    "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY", "POOLSIDE_API_KEY",
-    "AGENT_DESKTOP_API_TOKEN",
-)
 T3_FREE_PROVIDER = "opencode-free"
 # Acceptance names one exact owner-approved worker primary. Dispatch's picker,
 # quota windows and snapshot mapping may report availability; they must not
@@ -589,7 +582,7 @@ ANONYMOUS_SETTINGS_ENV_ALLOWLIST = frozenset({
 
 
 def write_provider_env(source_file, target_file):
-    """Copy only the desktop token; anonymous acceptance gets no provider key."""
+    """Write an empty candidate env; anonymous acceptance gets no credential."""
     values = {}
     if source_file and Path(source_file).is_file():
         for raw_line in Path(source_file).read_text().splitlines():
@@ -926,9 +919,15 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     checks["skills"] = candidate_agent_command(
         engine, name, "agent", "skills", "doctor", "--json"
     ).returncode == 0
-    checks["desktop_transport"] = candidate_agent_command(
+    # This only proves the local desktop CLI is present. It is not a live
+    # transport proof: the anonymous candidate carries no desktop credential.
+    checks["desktop_cli"] = candidate_agent_command(
         engine, name, "agent", "tools", "doctor", "--json", "--only", "ghostship-bladebro"
     ).returncode == 0
+    checks["desktop_transport"] = {
+        "state": "not_applicable",
+        "reason": "anonymous candidate carries no desktop credential; live transport is verified after the switch by the production smoke check",
+    }
     return checks
 
 

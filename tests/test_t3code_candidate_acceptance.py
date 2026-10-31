@@ -647,7 +647,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
     def run_acceptance(self):
         with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
-                 name: True for name in acceptance.CHECKS
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
              }), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             return acceptance.accept(
@@ -930,8 +931,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(receipt["image_id"], self.image_id)
         self.assertEqual(receipt["candidate_name"], "t3code-candidate-generation-502")
         self.assertEqual(receipt["live_before"], receipt["live_after"])
-        self.assertEqual(set(receipt["checks"]), set(acceptance.CHECKS))
-        self.assertTrue(all(receipt["checks"].values()))
+        self.assertTrue(set(acceptance.CHECKS).issubset(receipt["checks"]))
+        self.assertTrue(all(receipt["checks"][key] is True for key in acceptance.CHECKS))
+        self.assertEqual(receipt["checks"]["desktop_transport"]["state"], "not_applicable")
         self.assertIn(("rm", "--force", "--time", "10", receipt["candidate_name"]), self.commands)
         self.assertTrue(any("/run/secrets/t3code.env:ro" in str(command)
                             for command in self.commands))

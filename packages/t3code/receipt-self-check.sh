@@ -15,7 +15,7 @@ for receipt in "$STATE_DIR"/receipts/*.json; do
      and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
      and (.live_before != null and .live_before == .live_after)
      and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills, .checks.desktop_transport] | all(. == true))' \
+           .checks.skills, .checks.desktop_cli] | all(. == true))' \
     "$receipt" >/dev/null 2>&1; then
     exit 0
   fi
