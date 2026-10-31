@@ -37,7 +37,8 @@ if [[ ${1:-} == --invalidate-failure ]]; then
 fi
 
 : "${STATE_DIR:?}"
-: "${IMAGE_ARCHIVE:?}"
+# Either an archive or a streamed image is required; a stream is preferred.
+if [[ -z ${IMAGE_STREAM:-} ]]; then : "${IMAGE_ARCHIVE:?}"; fi
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -111,8 +112,17 @@ write_attempt_result() {
 chmod 0600 "$attempt_temporary"
 mv -f "$attempt_temporary" "$attempt_file"
 trap write_attempt_result EXIT
-image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
-image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
+# The image id is the sha256 of the image's config blob, which is known before
+# the image is loaded either way: from the archive, or by reading the streamed
+# docker-archive. Keeping it pre-load preserves the receipt ordering, so the
+# accepted alias cannot move before the id is established.
+if [[ -n ${IMAGE_STREAM:-} ]]; then
+  image_config=$("$IMAGE_STREAM" | tar -xOf - manifest.json | "$JQ_BIN" -er '.[0].Config')
+  image_id=$("$IMAGE_STREAM" | tar -xOf - "$image_config" | sha256sum | cut -d ' ' -f 1)
+else
+  image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
+  image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
+fi
 secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 
@@ -163,8 +173,26 @@ promote_image_id() {
   fi
 }
 
+load_image() {
+  if [[ -z ${IMAGE_STREAM:-} ]]; then
+    "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+    return 0
+  fi
+  "$IMAGE_STREAM" | "$PODMAN_BIN" load
+  # The pre-load id must be the id podman computed. A mismatch is UNKNOWN: no
+  # alias promotion and no receipt, rather than silently trusting either value.
+  local loaded
+  loaded=$("$PODMAN_BIN" image inspect "sha256:$image_id" --format '{{.Id}}' 2>/dev/null || true)
+  [[ $loaded == "sha256:$image_id" ]] || {
+    echo "Loaded image id does not match the pre-load id: expected sha256:$image_id, got ${loaded:-absent}" >&2
+    "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"loaded image id differs from the streamed config digest"}' "$attempt_file" > "$attempt_temporary"
+    chmod 0600 "$attempt_temporary"; mv -f "$attempt_temporary" "$attempt_file"
+    exit 77
+  }
+}
+
 promote_accepted_alias() {
-  "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+  load_image
   promote_image_id "sha256:$image_id"
 }
 
