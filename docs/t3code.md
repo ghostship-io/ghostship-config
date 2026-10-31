@@ -583,12 +583,13 @@ deployment as applied only after the new container is healthy and its runtime
 inputs match. Failed candidate acceptance raises the service failure incident
 once and blocks the same image and acceptance bundle only when a previously
 proven-working route demonstrates the candidate failure. The probe names one
-exact worker-admitted primary route by identity and proves one real turn; picker
-ranking, quota windows and snapshot mapping do not decide whether the candidate
-is testable, and a fallback-only route is never probed. Exhausted or unavailable
-routes are recorded as `route_unavailable` without a candidate-failed marker;
-unresolved probe or unclassified acceptance outcomes are recorded as unknown
-and are not automatically replayed. Neither is an acceptance PASS.
+exact worker-admitted primary route by identity, pins that route's approved
+effort, and proves one real turn; picker ranking, quota windows and snapshot
+mapping do not decide which route is tested, and a fallback-only route is never
+probed. The nominated route's own exhausted or unavailable turn is recorded as
+`route_unavailable` without a candidate-failed marker; unresolved probe or
+unclassified acceptance outcomes are recorded as unknown and are not
+automatically replayed. Neither is an acceptance PASS.
 Changes to the acceptance script, its packaged probes or runtime capabilities,
 the managed launcher chains or their immutable Nix store identities, or the
 candidate/tooling identity cause the full acceptance to run again. The deployer

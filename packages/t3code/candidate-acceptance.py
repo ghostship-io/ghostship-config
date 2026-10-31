@@ -37,6 +37,7 @@ T3_FREE_PROVIDER = "opencode-free"
 # quota windows and snapshot mapping may report availability; they must not
 # decide whether the candidate image can run a turn.
 ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
+ACCEPTANCE_EFFORT = "high"
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
 ALLOWED_CANDIDATE_MOUNTS = {
     "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
@@ -950,7 +951,11 @@ def admitted_acceptance_route(policy, route=ACCEPTANCE_PRIMARY_ROUTE):
         raise PreconditionError(
             "the nominated acceptance route is not exactly one admitted worker primary"
         )
-    return {"instance": instance, "model": model, "options": {}}
+    item = matches[0]
+    efforts = item.get("efforts")
+    options = ({"variant": ACCEPTANCE_EFFORT}
+               if isinstance(efforts, list) and ACCEPTANCE_EFFORT in efforts else {})
+    return {"instance": instance, "model": model, "options": options}
 
 
 def _target_identity(row):
@@ -991,6 +996,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     # same route is currently proven working. Missing evidence stays unknown.
     target["proven"] = any(
         _target_identity(row) == identity
+        and row.get("execution") in (None, "t3")
         and isinstance(row.get("tool_loop"), dict) and row["tool_loop"].get("state") == "proven"
         for row in rows
     )

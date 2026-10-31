@@ -65,7 +65,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
         if nominated:
             routes.append({"provider": "opencode-go", "provider_instance": "opencode",
                            "model": "opencode-go/deepseek-v4.1-flash", "admit": True,
-                           "roles": ["worker"], "billing": "subscription"})
+                           "roles": ["worker"], "billing": "subscription",
+                           "efforts": ["low", "high"]})
         routes.extend(extra)
         return {"schema": "ghostship.route-policy/v2", "providers": providers, "routes": routes}
 
@@ -81,7 +82,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
     def test_nominated_route_must_be_an_admitted_worker_primary(self):
         policy = self.nominated_policy()
         self.assertEqual(acceptance.admitted_acceptance_route(policy),
-                         {"instance": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "options": {}})
+                         {"instance": "opencode", "model": "opencode-go/deepseek-v4.1-flash",
+                          "options": {"variant": "high"}})
         self.assertTrue(provider_probe.native_is_admitted(
             policy, "opencode", "opencode-go/deepseek-v4.1-flash"))
         with self.assertRaises(acceptance.PreconditionError):
@@ -119,6 +121,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
         self.assertIn(self.NOMINATED_ROUTE, probes[0])
+        options = json.loads(probes[0][probes[0].index("--options-json") + 1])
+        self.assertEqual(options, {"variant": "high"})
 
     def test_unavailable_fallback_capacity_does_not_block_a_nominated_turn(self):
         policy = self.nominated_policy(
@@ -198,16 +202,17 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn("quota", record["provider_turn"]["evidence"])
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
 
-    def test_only_a_proven_route_failure_can_be_attributed_to_candidate(self):
+    def test_only_a_t3_proven_route_failure_can_be_attributed_to_candidate(self):
         policy = self.nominated_policy()
         row = {"provider": "opencode-go", "model": "opencode-go/deepseek-v4.1-flash",
                "available": True, "execution": "t3",
                "target": {"providerInstanceId": "opencode", "model": "opencode-go/deepseek-v4.1-flash"},
                "tool_loop": {"state": "proven"}}
+        rows = [row]
 
         def run(engine, name, *args, **kwargs):
             if "models" in args and "--json" in args:
-                return self.models_result([row])
+                return self.models_result(rows)
             return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"no-tool-call"}}', stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
@@ -215,7 +220,12 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.ProviderTurnError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
             self.assertNotIsInstance(failure.exception, (acceptance.RouteUnavailableError, acceptance.RouteUnknownError))
-            row["tool_loop"]["state"] = "unknown"
+            # A native-execution proof for the same identity is not T3 proof.
+            rows[:] = [{**row, "execution": "native"}]
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            # A T3 row without a proven tool loop is also not attribution.
+            rows[:] = [{**row, "tool_loop": {"state": "unknown"}}]
             with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
 
