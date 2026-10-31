@@ -1423,6 +1423,21 @@ def rehearsal_outcome_for(error):
     return "failed"
 
 
+REHEARSAL_EXIT_CODES = {
+    "passed": 0,
+    "precondition_not_met": PRECONDITION_EXIT,
+    "route_unavailable": 76,
+    "unknown": 77,
+    "candidate_failed": 78,
+    "failed": 1,
+}
+
+
+def rehearsal_exit_code(outcome):
+    """The one exit mapping for a rehearsal report outcome."""
+    return REHEARSAL_EXIT_CODES.get(outcome, 1)
+
+
 def rehearsal_error_text(error):
     """Bounded, credential-safe reason for a failed rehearsal."""
     if isinstance(error, (RouteUnknownError, RouteUnavailableError, ProviderTurnError)):
@@ -1972,7 +1987,7 @@ def main():
         print("--build-seconds must be a measured non-negative duration", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
     try:
-        accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
+        result = accept(args.state_dir, args.image_archive, args.podman_bin, args.candidate_socket,
                args.home_dir, args.volume, args.systemctl_bin,
                candidate_uid=args.candidate_uid,
                candidate_runtime_dir=args.candidate_runtime_dir,
@@ -1999,6 +2014,8 @@ def main():
     except ProviderTurnError as error:
         print(f"candidate acceptance candidate_failed: {error}", file=sys.stderr)
         sys.exit(78)
+    if isinstance(result, dict) and result.get("rehearsal") is True:
+        raise SystemExit(rehearsal_exit_code(result.get("outcome")))
 
 
 if __name__ == "__main__":

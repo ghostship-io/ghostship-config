@@ -656,9 +656,21 @@ allowlist; anything else is a violation, and names matching
 the allowlist names them with a reason. Credential-shaped files (`auth.json`,
 `credentials*`, `hosts.yml`) are found by a bounded HOME walk without reading
 them. A missing, unreadable or truncated observation is `UNKNOWN`; an
-unexpected name, file or mount is `violation`. The env file is reported as
+unexpected name, file or mount is `violation`. The allowlist is closed; every
+entry carries its class (`b` runtime/service or `c` T3-generated per-process)
+and reason in `rehearsal-isolation.py`. `OPENCODE_PASSWORD` and
+`OPENCODE_CONFIG_CONTENT` are class (c): T3 generates the password per local
+opencode process and the config content is candidate-local, constrained by the
+anonymous settings gate. Production credential names (`GITHUB_TOKEN`, `*_API_KEY`,
+`AGENT_DESKTOP_API_TOKEN`) are never allowlisted. The env file is reported as
 present-empty, present-not-empty, or absent; absence is a violation and is not
 reported as "not empty". None of these can be `PASS`.
+
+The CLI exit is taken from the same report outcome: `passed` is 0,
+`precondition_not_met` 75, `route_unavailable` 76, `unknown` 77,
+`candidate_failed` 78 and `failed` 1. A rehearsal cannot exit 0 with an
+`unknown` or isolation `violation` report. Non-rehearsal acceptance keeps its
+existing exit behavior.
 
 Before startup the rehearsal scans only the inputs this command stages or
 mounts from us: `tooling_path`, the resolved agent path, and the staged

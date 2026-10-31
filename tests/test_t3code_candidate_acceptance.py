@@ -1881,6 +1881,65 @@ def _selection(document, now):
         scan = acceptance.owned_input_scan([str(root)])
         self.assertEqual(scan["findings"], [str(root / "config" / "credentials.json")])
 
+    def test_rehearsal_env_allowlist_matches_the_exact_pid_names(self):
+        fixture = json.loads(
+            (ROOT / "tests/fixtures/rehearsal-2-env-names.json").read_text())
+        self.assertEqual(fixture["processes"]["220"], "opencode")
+        for pid, names in fixture["env_names"].items():
+            with self.subTest(pid=pid):
+                verdict = rehearsal_observer.classify_env_names(names)
+                self.assertEqual(verdict["violations"], [], pid)
+        for name, entry in (
+            ("OPENCODE_PASSWORD", "c"),
+            ("OPENCODE_CONFIG_CONTENT", "c"),
+            ("NoDefaultCurrentDirectoryInExePath", "c"),
+            ("T3CODE_HOME", "b"),
+            ("LD_LIBRARY_PATH", "b"),
+        ):
+            self.assertEqual(rehearsal_observer.ENV_ALLOWLIST[name]["class"], entry)
+            self.assertTrue(rehearsal_observer.ENV_ALLOWLIST[name]["reason"])
+
+    def test_production_credentials_and_unknown_names_are_violations(self):
+        for name in ("GITHUB_TOKEN", "OPENROUTER_API_KEY",
+                     "AGENT_DESKTOP_API_TOKEN", "SOMETHING_UNLISTED"):
+            with self.subTest(name=name):
+                verdict = rehearsal_observer.classify_env_names([name])
+                self.assertIn(name, verdict["violations"])
+
+    def test_isolation_violation_exits_nonzero_and_agrees_with_outcome(self):
+        isolation = self.observed_isolation()
+        isolation.update(state="violation", env_violations=["GITHUB_TOKEN"],
+                         reason="environment names are not allowlisted: GITHUB_TOKEN")
+        report, _path = self.run_rehearsal(isolation=isolation)
+        self.assertEqual(report["outcome"], "unknown")
+        self.assertNotEqual(acceptance.rehearsal_exit_code(report["outcome"]), 0)
+        self.assertEqual(acceptance.rehearsal_exit_code("passed"), 0)
+        self.assertEqual(acceptance.rehearsal_exit_code("precondition_not_met"), 75)
+        self.assertEqual(acceptance.rehearsal_exit_code("failed"), 1)
+
+    def test_main_uses_rehearsal_outcome_for_exit_and_keeps_non_rehearsal(self):
+        base = [
+            "candidate-acceptance.py",
+            "--state-dir", str(self.state),
+            "--image-archive", str(self.archive),
+            "--home-dir", str(self.home),
+            "--candidate-runtime-dir", str(self.root / "runtime"),
+            "--candidate-home-target", "/home/t3code",
+            "--candidate-uid", str(os.getuid()),
+        ]
+        rehearsal_args = [*base, "--rehearsal",
+                          "--closure-path", str(self.root / "closure")]
+        with patch.object(acceptance, "accept",
+                          return_value={"rehearsal": True, "outcome": "unknown"}), \
+             patch.object(sys, "argv", rehearsal_args):
+            with self.assertRaises(SystemExit) as exit_status:
+                acceptance.main()
+        self.assertEqual(exit_status.exception.code, 77)
+        with patch.object(acceptance, "accept",
+                          return_value={"deployment_id": "generation-1"}):
+            with patch.object(sys, "argv", base):
+                self.assertIsNone(acceptance.main())
+
     def test_rehearsal_cli_refuses_secrets_and_requires_a_closure(self):
         base = [
             sys.executable, str(ROOT / "packages/t3code/candidate-acceptance.py"),
