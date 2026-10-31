@@ -1,11 +1,11 @@
 {
   "schema": "ghostship.t3code-acceptance-route/v1",
-  "provider": "opencode-free",
-  "provider_instance": "opencode-free",
-  "model": "opencode/deepseek-v4.1-flash-free",
-  "billing": "free",
+  "provider": "opencode-go",
+  "provider_instance": "opencode",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "billing": "subscription",
   "effort": "high",
   "acceptance_only": true,
-  "owner": "owner 2026-10-31 anonymous OpenCode Zen candidate proof",
-  "source": "https://github.com/ghostship-io/ghostship-agent/issues/1105#issuecomment-6540685895"
+  "owner": "owner 2026-10-31T18:27:13Z paid-use authorization: all paid accounts except ChatGPT/OpenAI and Anthropic",
+  "source": "owner directive in the release thread, 2026-10-31T18:27:13Z"
 }

@@ -138,16 +138,18 @@ class CandidateAcceptanceTest(unittest.TestCase):
                           "options": {"variant": "high"}})
         route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
         self.assertTrue(provider_probe.acceptance_route_allows(
-            route, "opencode-free", "opencode/deepseek-v4.1-flash-free"))
-        self.assertFalse(provider_probe.acceptance_route_allows(
             route, "opencode", "opencode-go/deepseek-v4.1-flash"))
+        self.assertFalse(provider_probe.acceptance_route_allows(
+            route, "opencode-free", "opencode/deepseek-v4.1-flash-free"))
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(self.nominated_policy(nominated=False))
 
-    def test_packaged_acceptance_route_is_the_zen_route(self):
+    def test_packaged_acceptance_route_is_the_paid_worker_route(self):
         route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
         self.assertEqual((route["provider_instance"], route["model"]),
-                         ("opencode-free", "opencode/deepseek-v4.1-flash-free"))
+                         ("opencode", "opencode-go/deepseek-v4.1-flash"))
+        self.assertEqual(route["billing"], "subscription")
+        self.assertEqual(route["provider"], "opencode-go")
         self.assertEqual(route["effort"], "high")
         self.assertTrue(route["acceptance_only"])
 
@@ -2271,6 +2273,148 @@ class RuntimeLayoutTest(unittest.TestCase):
         self.assertFalse(
             acceptance.valid_runtime_layout(self.home, release, self.home / "absent")
         )
+
+
+class AcceptanceRouteAdmissionTest(unittest.TestCase):
+    """Exactly two acceptance routes are enumerated; nothing else is admitted."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def route(self, **overrides):
+        route = {
+            "schema": "ghostship.t3code-acceptance-route/v1",
+            "acceptance_only": True,
+            "billing": "subscription",
+            "provider": "opencode-go",
+            "provider_instance": "opencode",
+            "model": "opencode-go/deepseek-v4.1-flash",
+            "effort": "high",
+        }
+        route.update(overrides)
+        return route
+
+    def write(self, document):
+        path = self.tmp / "route.json"
+        path.write_text(json.dumps(document))
+        return path
+
+    def test_exactly_two_routes_are_enumerated(self):
+        self.assertEqual(len(acceptance.ACCEPTANCE_ROUTES), 2)
+        self.assertEqual(acceptance.acceptance_route_spec(self.route())["billing"], "subscription")
+        self.assertEqual(acceptance.acceptance_route_spec(self.route(
+            billing="free", provider="opencode-free", provider_instance="opencode-free",
+            model="opencode/deepseek-v4.1-flash-free"))["billing"], "free")
+
+    def test_unknown_pair_or_billing_is_not_admitted(self):
+        self.assertIsNone(acceptance.acceptance_route_spec(self.route(billing="free")))
+        self.assertIsNone(acceptance.acceptance_route_spec(self.route(provider="openrouter")))
+        self.assertIsNone(acceptance.acceptance_route_spec(self.route(model="opencode/glm-5-free")))
+        self.assertIsNone(acceptance.acceptance_route_spec(self.route(provider_instance="opencode-free")))
+
+    def test_paid_route_file_is_admitted(self):
+        data = acceptance.read_acceptance_route(self.write(self.route()))
+        self.assertEqual((data["provider_instance"], data["model"]),
+                         ("opencode", "opencode-go/deepseek-v4.1-flash"))
+
+    def test_paid_pair_with_free_billing_is_refused(self):
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_route(self.write(self.route(billing="free")))
+
+    def test_credential_must_match_the_route(self):
+        acceptance.assert_acceptance_route_credential(self.route(), True)
+        acceptance.assert_acceptance_route_credential(
+            self.route(billing="free", provider="opencode-free",
+                       provider_instance="opencode-free",
+                       model="opencode/deepseek-v4.1-flash-free"), False)
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_acceptance_route_credential(self.route(), False)
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_acceptance_route_credential(
+                self.route(billing="free", provider="opencode-free",
+                           provider_instance="opencode-free",
+                           model="opencode/deepseek-v4.1-flash-free"), True)
+
+
+class AcceptanceCredentialProjectionTest(unittest.TestCase):
+    """Only the one opencode-go api entry, 0400, is accepted."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.uid = os.getuid()
+
+    def write(self, document, mode=0o400, owner=None):
+        path = self.tmp / "auth.json"
+        path.write_text(json.dumps(document))
+        path.chmod(mode)
+        if owner is not None:
+            os.chown(path, owner, owner)
+        return path
+
+    def test_exact_entry_is_accepted(self):
+        document = acceptance.read_acceptance_auth_file(
+            self.write({"opencode-go": {"type": "api", "key": "fixture"}}), self.uid)
+        self.assertEqual(set(document), {"opencode-go"})
+
+    def test_extra_key_is_refused(self):
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_auth_file(
+                self.write({"opencode-go": {"type": "api", "key": "fixture",
+                                            "refresh": "x"}}), self.uid)
+
+    def test_extra_entry_is_refused(self):
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_auth_file(
+                self.write({"opencode-go": {"type": "api", "key": "fixture"},
+                            "openai": {"type": "oauth", "access": "x"}}), self.uid)
+
+    def test_wrong_type_is_refused(self):
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_auth_file(
+                self.write({"opencode-go": {"type": "oauth", "key": "fixture"}}), self.uid)
+
+    def test_wrong_mode_or_owner_is_refused(self):
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_auth_file(
+                self.write({"opencode-go": {"type": "api", "key": "fixture"}}, mode=0o644), self.uid)
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_auth_file(
+                self.write({"opencode-go": {"type": "api", "key": "fixture"}}), self.uid + 1)
+
+
+class PaidRouteSettingsProjectionTest(unittest.TestCase):
+    """The selected instance is projected; the paid route never carries its env secret."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_paid_instance_is_projected_without_its_environment_secret(self):
+        source = self.tmp / "source"
+        (source / ".t3/userdata").mkdir(parents=True)
+        (source / ".t3/userdata/settings.json").write_text(json.dumps({
+            "providerInstances": {
+                "opencode": {
+                    "driver": "opencode", "enabled": True,
+                    "config": {"binaryPath": "/home/t3code/.local/bin/opencode"},
+                    "environment": [
+                        {"name": "OPENCODE_AUTH_CONTENT", "value": "not-projected"},
+                        {"name": "XDG_DATA_HOME", "value": "/home/t3code/.local/share"},
+                    ],
+                },
+            },
+        }))
+        candidate = self.tmp / "candidate"
+        acceptance.stage_candidate_provider_settings(
+            source, candidate, "/home/t3code", instance_id="opencode",
+            models_path="/home/t3code/.local/state/t3code-opencode/models.json")
+        document = json.loads((candidate / ".t3/userdata/settings.json").read_text())
+        self.assertEqual(set(document["providerInstances"]), {"opencode"})
+        names = [item["name"] for item in document["providerInstances"]["opencode"]["environment"]]
+        self.assertNotIn("OPENCODE_AUTH_CONTENT", names)
+        self.assertIn("OPENCODE_MODELS_PATH", names)
 
 
 class FreeTierLimitClassificationTest(unittest.TestCase):

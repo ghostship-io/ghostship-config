@@ -36,6 +36,67 @@ ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
 # (opencode/glm-5.3-flash-free) began returning api-error-execution-execution
 # at acceptance time; this is the admitted free route the policy already names.
 ACCEPTANCE_ROUTE = ("opencode-free", "opencode/deepseek-v4.1-flash-free")
+# Exactly two owner-approved acceptance routes. The paid route uses the same
+# opencode instance and model string the workers use; anything else is refused.
+T3_GO_PROVIDER = "opencode-go"
+ACCEPTANCE_GO_ROUTE = ACCEPTANCE_PRIMARY_ROUTE
+ACCEPTANCE_AUTH_ENTRY = "opencode-go"
+ACCEPTANCE_AUTH_FILE = "/run/t3code-acceptance/opencode-go-auth.json"
+ACCEPTANCE_ROUTES = (
+    {"billing": "free", "provider": T3_FREE_PROVIDER,
+     "pair": ACCEPTANCE_ROUTE, "instance": T3_FREE_PROVIDER, "credential": False},
+    {"billing": "subscription", "provider": T3_GO_PROVIDER,
+     "pair": ACCEPTANCE_GO_ROUTE, "instance": "opencode", "credential": True},
+)
+
+
+def acceptance_route_spec(route):
+    """Return the enumerated spec for this exact route, or None."""
+    if not isinstance(route, dict):
+        return None
+    for spec in ACCEPTANCE_ROUTES:
+        if (route.get("billing") == spec["billing"]
+                and route.get("provider") == spec["provider"]
+                and (route.get("provider_instance"), route.get("model")) == spec["pair"]):
+            return spec
+    return None
+
+
+def assert_acceptance_route_credential(acceptance_route, credential_present):
+    """Refuse a paid route without, or a free route with, a projected credential."""
+    spec = acceptance_route_spec(acceptance_route)
+    if spec is None:
+        raise PreconditionError("the acceptance route is invalid")
+    if bool(spec["credential"]) != bool(credential_present):
+        raise PreconditionError("the acceptance credential does not match the selected route")
+    return spec
+
+
+def read_acceptance_auth_file(path, candidate_uid):
+    """Validate the one projected opencode-go entry; values are never returned."""
+    auth = Path(path)
+    if auth.is_symlink() or not auth.is_file():
+        raise PreconditionError("the projected acceptance credential is unavailable")
+    stat = auth.stat()
+    if stat.st_uid != candidate_uid or (stat.st_mode & 0o777) != 0o400:
+        raise PreconditionError("the projected acceptance credential has the wrong owner or mode")
+    if stat.st_size > 4096:
+        raise PreconditionError("the projected acceptance credential is too large")
+    try:
+        document = json.loads(auth.read_text())
+    except (OSError, ValueError):
+        raise PreconditionError("the projected acceptance credential is unreadable") from None
+    if not isinstance(document, dict) or set(document) != {ACCEPTANCE_AUTH_ENTRY}:
+        raise PreconditionError("the projected acceptance credential carries another entry")
+    entry = document[ACCEPTANCE_AUTH_ENTRY]
+    if (not isinstance(entry, dict) or set(entry) != {"type", "key"}
+            or entry.get("type") != "api"
+            or not isinstance(entry.get("key"), str) or not entry["key"]
+            or any(char in entry["key"] for char in "\n\r\x00")):
+        raise PreconditionError("the projected acceptance credential is not an api key entry")
+    return document
+
+
 ACCEPTANCE_ROUTE_FILE = "/etc/ghostship/t3code-acceptance-route.json"
 REHEARSAL_SCHEMA = "ghostship.t3code-rehearsal/v1"
 SECRET_FILE_NAMES = frozenset({"auth.json", "t3code.env", "credentials.json"})
@@ -65,7 +126,8 @@ def valid_runtime_layout(source_home, t3_release, runtime_version):
 
 
 def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env,
-                               allow_missing_settings=False):
+                               allow_missing_settings=False,
+                               instance_id=T3_FREE_PROVIDER):
     """Refuse to start a candidate carrying any provider credential artifact.
 
     A missing provider settings file is a failure unless the caller explicitly
@@ -93,9 +155,9 @@ def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env,
         except (OSError, ValueError):
             raise PreconditionError("candidate provider settings are unreadable") from None
         instances = document.get("providerInstances") if isinstance(document, dict) else None
-        if not isinstance(instances, dict) or set(instances) != {T3_FREE_PROVIDER}:
-            raise PreconditionError("candidate provider instances are not the anonymous Zen instance")
-        environment = instances[T3_FREE_PROVIDER].get("environment")
+        if not isinstance(instances, dict) or set(instances) != {instance_id}:
+            raise PreconditionError("candidate provider instances are not the selected acceptance instance")
+        environment = instances[instance_id].get("environment")
         if not isinstance(environment, list):
             raise PreconditionError("candidate provider environment is invalid")
         for item in environment:
@@ -112,7 +174,8 @@ def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env,
 
 def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candidate_uid,
                            tooling_path=None, candidate_home_target="/home/t3code",
-                           stage_toolchain=False, approved_free_workers_file=None):
+                           stage_toolchain=False, approved_free_workers_file=None,
+                           provider_instance=T3_FREE_PROVIDER, models_path=None):
     """Stage a fresh HOME plus a read-only tree with only provider/agent inputs."""
     source_home = Path(source_home)
     candidate_home = Path(candidate_home)
@@ -121,9 +184,12 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
     candidate_home.mkdir(mode=0o700)
     candidate_inputs.mkdir(mode=0o700)
     if tooling_path:
-        stage_candidate_provider_settings(source_home, candidate_home, candidate_home_target)
+        stage_candidate_provider_settings(
+            source_home, candidate_home, candidate_home_target,
+            instance_id=provider_instance, models_path=models_path)
         stage_candidate_opencode_catalog(source_home, candidate_home)
-        stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target)
+        if provider_instance == T3_FREE_PROVIDER:
+            stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target)
     for relative in HOME_DIRS:
         source = source_home / relative
         if not source.is_dir() or source.is_symlink():
@@ -178,8 +244,10 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
 
 
 def stage_candidate_provider_settings(source_home, candidate_home,
-                                      candidate_home_target="/home/t3code"):
-    """Project only the non-secret opencode-free instance."""
+                                      candidate_home_target="/home/t3code",
+                                      instance_id=T3_FREE_PROVIDER,
+                                      models_path=None):
+    """Project only the selected non-secret provider instance."""
     source = Path(source_home) / ".t3/userdata/settings.json"
     if source.is_symlink() or not source.is_file():
         raise RuntimeError("production T3 provider settings are unavailable")
@@ -188,10 +256,10 @@ def stage_candidate_provider_settings(source_home, candidate_home,
     except (OSError, ValueError):
         raise RuntimeError("production T3 provider settings are unreadable") from None
     instances = document.get("providerInstances") if isinstance(document, dict) else None
-    instance = instances.get(T3_FREE_PROVIDER) if isinstance(instances, dict) else None
+    instance = instances.get(instance_id) if isinstance(instances, dict) else None
     if (not isinstance(instance, dict) or instance.get("driver") != "opencode"
             or instance.get("enabled") is not True):
-        raise RuntimeError("production opencode-free T3 provider is not enabled")
+        raise RuntimeError("production acceptance T3 provider instance is not enabled")
     source_config = instance.get("config")
     binary = source_config.get("binaryPath") if isinstance(source_config, dict) else None
     if not isinstance(binary, str) or not binary or "\n" in binary:
@@ -220,10 +288,13 @@ def stage_candidate_provider_settings(source_home, candidate_home,
         environment.append({"name": name, "value": value})
     names = {item["name"] for item in environment}
     if "OPENCODE_MODELS_PATH" not in names:
-        raise RuntimeError("production opencode-free models path is missing")
+        if models_path:
+            environment.append({"name": "OPENCODE_MODELS_PATH", "value": models_path})
+        else:
+            raise RuntimeError("production acceptance models path is missing")
     projected = {
         "providerInstances": {
-            T3_FREE_PROVIDER: {
+            instance_id: {
                 "driver": "opencode",
                 "enabled": True,
                 "config": {"binaryPath": binary},
@@ -1130,9 +1201,7 @@ def read_acceptance_route(path=ACCEPTANCE_ROUTE_FILE):
     if (not isinstance(data, dict)
             or data.get("schema") != "ghostship.t3code-acceptance-route/v1"
             or data.get("acceptance_only") is not True
-            or data.get("billing") != "free"
-            or data.get("provider") != T3_FREE_PROVIDER
-            or (data.get("provider_instance"), data.get("model")) != ACCEPTANCE_ROUTE):
+            or acceptance_route_spec(data) is None):
         raise PreconditionError("the acceptance route is invalid")
     return data
 
@@ -1145,17 +1214,16 @@ def admitted_acceptance_route(policy, acceptance_route=None, route=ACCEPTANCE_PR
     """
     if acceptance_route is not None:
         if (not isinstance(acceptance_route, dict)
-                or acceptance_route.get("acceptance_only") is not True
-                or acceptance_route.get("billing") != "free"
-                or acceptance_route.get("provider") != T3_FREE_PROVIDER
-                or (acceptance_route.get("provider_instance"),
-                    acceptance_route.get("model")) != ACCEPTANCE_ROUTE):
+                or acceptance_route.get("acceptance_only") is not True):
+            raise PreconditionError("the acceptance route is invalid")
+        spec = acceptance_route_spec(acceptance_route)
+        if spec is None:
             raise PreconditionError("the acceptance route is invalid")
         effort = acceptance_route.get("effort")
         options = {"variant": effort} if isinstance(effort, str) and effort else {}
         if options and options["variant"] != ACCEPTANCE_EFFORT:
             raise PreconditionError("the acceptance route effort is invalid")
-        return {"instance": ACCEPTANCE_ROUTE[0], "model": ACCEPTANCE_ROUTE[1],
+        return {"instance": spec["pair"][0], "model": spec["pair"][1],
                 "options": options}
     if (not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2"
             or not isinstance(policy.get("providers"), dict) or not isinstance(policy.get("routes"), list)):
@@ -1274,6 +1342,8 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     if not tooling_path:
         raise RouteUnavailableError(route_summary, route_summary, "provider_turn route_unavailable: managed tools unavailable")
     target = admitted_acceptance_route(policy, acceptance_route=acceptance_route)
+    assert_acceptance_route_credential(
+        acceptance_route, bool(os.environ.get("ACCEPTANCE_AUTH_FILE")))
     identity = (target["instance"], target["model"])
     route = f"{identity[0]}/{identity[1]}"
     # A non-capacity failure is attributable to the candidate only when the
@@ -1716,6 +1786,11 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     home_copy = candidate_tmp / "home"
     input_copy = candidate_tmp / "inputs"
     provider_env = candidate_tmp / "provider.env"
+    auth_setting = os.environ.get("ACCEPTANCE_AUTH_FILE", "")
+    paid_route = bool(auth_setting)
+    auth_source = Path(auth_setting) if paid_route else None
+    if paid_route:
+        read_acceptance_auth_file(auth_source, candidate_uid)
     created = False
     manager_started = False
     checks = {}
@@ -1727,13 +1802,17 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             home_dir, home_copy, input_copy, candidate_uid, tooling_path,
             candidate_home_target, stage_toolchain=bool(tooling_path),
             approved_free_workers_file=approved_workers_file,
+            provider_instance="opencode" if paid_route else T3_FREE_PROVIDER,
+            models_path=("/home/t3code/.local/state/t3code-opencode/models.json"
+                         if paid_route else None),
         )
         write_provider_env(None if rehearsal else provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
         if rehearsal or tooling_path:
             assert_candidate_auth_free(
                 home_copy, input_copy, provider_env,
-                allow_missing_settings=bool(rehearsal and not tooling_path))
+                allow_missing_settings=bool(rehearsal and not tooling_path),
+                instance_id="opencode" if paid_route else T3_FREE_PROVIDER)
         if model_routing_file:
             try:
                 source = Path(model_routing_file)
@@ -1773,6 +1852,8 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             f"{candidate_workspace}:/workspace:rw",
             f"{input_copy}:/run/t3code-candidate-inputs:ro",
             f"{provider_env}:/run/secrets/t3code.env:ro",
+            *([f"{auth_source}:/home/t3code/.local/share/opencode/auth.json:ro"]
+              if paid_route else []),
             *([f"{routing_copy}:{MODEL_ROUTING_TARGET}:ro"] if routing_copy else []),
             f"{server_overrides}:/etc/systemd/system/t3code-server.service.d:ro",
             f"{bootstrap_overrides}:/etc/systemd/system/t3code-bootstrap.service.d:ro",
@@ -1877,6 +1958,14 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                 outcome=outcome, after=None, cleanup=None,
                 identity_unchanged=None, **report_args)
         else:
+            credential_removed = None
+            if paid_route:
+                # The projected credential is removed and its absence asserted
+                # before any receipt exists.
+                auth_source.unlink(missing_ok=False)
+                if auth_source.exists() or auth_source.is_symlink():
+                    raise PreconditionError("the projected acceptance credential was not removed")
+                credential_removed = True
             receipt = {
                 "deployment_id": desired,
                 "image_id": image_id,
@@ -1889,6 +1978,7 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                 "live_before": before,
                 "live_after": after,
                 "checks": checks,
+                "credential_removed": credential_removed,
             }
             temporary = receipt_path.with_suffix(".json.tmp")
             temporary.write_text(json.dumps(receipt, sort_keys=True) + "\n")
@@ -1896,6 +1986,12 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             os.replace(temporary, receipt_path)
             return receipt
     finally:
+        # A failed run must not leave the projected credential behind either.
+        if paid_route and auth_source is not None and auth_source.exists():
+            try:
+                auth_source.unlink()
+            except OSError:
+                pass
         cleanup_error = None
         cleanup_record = {
             "container_created": created,

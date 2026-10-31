@@ -466,6 +466,9 @@ in
       HEALTH_WAIT_BUDGET_SECONDS = toString t3codeHealthWaitBudgetSeconds;
       HOME_DIR = t3codeHome;
       CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py";
+      # The one projected opencode-go entry for the paid acceptance route. It
+      # is created for one window on tmpfs, mounted read-only, and removed.
+      ACCEPTANCE_AUTH_FILE = "/run/t3code-acceptance/opencode-go-auth.json";
       PODMAN_BIN = "${pkgs.podman}/bin/podman";
       SYSTEMCTL_BIN = "${pkgs.systemd}/bin/systemctl";
       CANDIDATE_SOCKET = "/run/t3code-podman-candidate/podman.sock";
