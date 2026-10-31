@@ -638,7 +638,14 @@ in {
     # the plugin id committed in config/skills/chatgpt-plugin.json.
     systemd.services.ghostship-skills-reconcile = {
       description = "Publish the MCP plugin and verify the real ChatGPT consumer";
-      wantedBy = [ "multi-user.target" ];
+      # Release #8.2 hold: keep the activation-time reconcile from starting a
+      # ChatGPT upload while the publisher cannot yet be told to skip it. The
+      # durable switch is #9 plan: `ghostship-rollout activate --skip-publish`
+      # gated on /var/lib/ghostship-skills/publish-requested. Restore by
+      # reverting this commit once that lands. Host skill installs are already
+      # current at this agent pin, so nothing is missing while this holds.
+      wantedBy = lib.mkForce [ ];
+      restartIfChanged = false;
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
