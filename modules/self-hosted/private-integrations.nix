@@ -638,14 +638,11 @@ in {
     # the plugin id committed in config/skills/chatgpt-plugin.json.
     systemd.services.ghostship-skills-reconcile = {
       description = "Publish the MCP plugin and verify the real ChatGPT consumer";
-      # Release #8.2 hold: keep the activation-time reconcile from starting a
-      # ChatGPT upload while the publisher cannot yet be told to skip it. The
-      # durable switch is #9 plan: `ghostship-rollout activate --skip-publish`
-      # gated on /var/lib/ghostship-skills/publish-requested. Restore by
-      # reverting this commit once that lands. Host skill installs are already
-      # current at this agent pin, so nothing is missing while this holds.
-      wantedBy = lib.mkForce [ ];
-      restartIfChanged = false;
+      # Publication gate (#9): activation installs the T3 skill files always;
+      # the ChatGPT publish (and its consumer verify) runs only when the
+      # operator marker /var/lib/ghostship-skills/publish-requested exists.
+      # This replaces the release #8.2 wantedBy hold.
+      wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
       after = [ "network-online.target" "podman-ghostship-private-integrations.service"
                 "ghostship-desktop-bridge.service" ];
@@ -663,7 +660,9 @@ in {
         UMask = "0077";
         ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run/lock" "/run/containers" "/run/libpod" ];
         ExecStartPre = activatePrepare;
-        ExecStartPost = activateVerify;
+        ExecStartPost = lib.escapeShellArgs [
+          "${pkgs.bash}/bin/bash" "${../../packages/t3code/skills-publish-gate.sh}" "verify" activateVerify
+        ];
         Environment = [
           "HOME=/var/lib/ghostship-skills"
           "XDG_STATE_HOME=/var/lib/ghostship-skills"
@@ -676,13 +675,14 @@ in {
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
         ExecStart = lib.escapeShellArgs [
-          "${agent.packages.${system}.native-mcp}/bin/ghostship-rollout" "activate"
-          "--skills-cli" skillsOwner
-          "--repo" (toString inputs.ghostship-private-agent)
-          "--source-sha" inputs.ghostship-private-agent.rev
-          "--app-id" ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
-          "--state" "/var/lib/ghostship-skills"
-          "--bridge" "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"
+          "${pkgs.bash}/bin/bash" "${../../packages/t3code/skills-publish-gate.sh}" "install"
+          "${agent.packages.${system}.native-mcp}/bin/ghostship-rollout"
+          skillsOwner
+          (toString inputs.ghostship-private-agent)
+          inputs.ghostship-private-agent.rev
+          ((builtins.fromJSON (builtins.readFile (inputs.ghostship-private-agent + "/config/skills/chatgpt-plugin.json"))).app_binding.id)
+          "/var/lib/ghostship-skills"
+          "podman exec -i ghostship-private-integrations /bin/ghostship-mcp ghostship"
         ];
         TimeoutStartSec = "30min";
         NoNewPrivileges = true;
