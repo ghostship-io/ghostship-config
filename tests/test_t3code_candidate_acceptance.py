@@ -1981,7 +1981,7 @@ def _selection(document, now):
              patch.object(acceptance.subprocess, "run",
                           return_value=Mock(returncode=0)), \
              patch.object(acceptance, "read_isolation") as observer:
-            with self.assertRaisesRegex(acceptance.PreconditionError,
+            with self.assertRaisesRegex(RuntimeError,
                                         "resolved agent path is missing"):
                 acceptance.accept(
                     self.state, self.archive, "podman",
@@ -1993,9 +1993,12 @@ def _selection(document, now):
                 )
         observer.assert_not_called()
         report = json.loads(path.read_text())
-        self.assertEqual(report["outcome"], "precondition_not_met")
+        self.assertEqual(report["outcome"], "failed")
         self.assertIn("resolved agent path is missing", report["store_scan"]["errors"])
         self.assertEqual(report["store_scan"]["paths_scanned"], 1)
+        self.assertIsInstance(report["cleanup"], dict)
+        self.assertTrue(report["cleanup"]["container_removed"])
+        self.assertTrue(report["cleanup"]["manager_stopped"])
 
     def test_owned_scan_finding_stops_the_rehearsal_before_the_candidate(self):
         path = self.root / "rehearsal-owned.json"

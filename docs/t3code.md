@@ -664,9 +664,11 @@ Before startup the rehearsal scans only the inputs this command stages or
 mounts from us: `tooling_path`, the resolved agent path, and the staged
 acceptance source directory. It walks each owned root to a bounded depth for
 `auth.json`, `credentials*`, `hosts.yml`, `t3code.env`, `secrets`, `*.key` and
-`*.pem`. A finding, a missing/dangling/invalid owned root, or a truncated walk
-stops as `precondition_not_met`; a valid symlink root is resolved, never called
-missing. The command must name host-visible paths (use the `test -f` precheck
+`*.pem`. A pre-start owned-root finding, a missing/dangling/invalid owned root,
+or a truncated walk stops as `precondition_not_met`; a valid symlink root is
+resolved, never called missing. The agent root is resolved only after the
+candidate starts, so an agent-root failure is reported as `failed` with the
+owned-root reason, never as a retryable pre-effect precondition. The command must name host-visible paths (use the `test -f` precheck
 above); a container-only path such as `/workspace/nixos-config/...` is a handover
 defect.
 

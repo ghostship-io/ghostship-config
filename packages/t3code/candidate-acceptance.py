@@ -1648,7 +1648,9 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             if not agent_path:
                 store_scan["errors"].append("resolved agent path is missing")
                 _evidence["store_scan"] = store_scan
-                raise PreconditionError("the resolved agent path is missing")
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "resolved agent path is missing")
             resolved_agent = Path(agent_path).resolve()
             resolved_tooling = (Path(tooling_path).resolve()
                                 if tooling_path else None)
@@ -1674,9 +1676,13 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                                            or agent_scan["truncated"])
             _evidence["store_scan"] = store_scan
             if store_scan["findings"]:
-                raise PreconditionError("the owned input scan found a secret-bearing path")
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "an owned root carries a secret-bearing path")
             if store_scan["errors"] or store_scan["truncated"]:
-                raise PreconditionError("the owned input scan could not cover its roots")
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "an owned root is missing, dangling or truncated")
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
         after = identity_fn()
