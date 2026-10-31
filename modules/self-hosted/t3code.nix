@@ -106,6 +106,7 @@ let
       export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
       export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+      export WINDOW_HOLDER_BIN=${lib.getExe t3codeWindowHolder}
       export PODMAN_BIN=${pkgs.podman}/bin/podman
       export JQ_BIN=${pkgs.jq}/bin/jq
       export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
@@ -117,6 +118,11 @@ let
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
+  # The window holder writes its own PID, so it must be its own program. Inlined
+  # into the release-window unit, systemd's ExecStart expansion turned `$$` into
+  # `$`, so holder.ready recorded "$" instead of a PID. One shared definition, so
+  # the check below builds the same artifact the module installs.
+  t3codeWindowHolder = import ../../packages/t3code/window-holder.nix { inherit pkgs; };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
