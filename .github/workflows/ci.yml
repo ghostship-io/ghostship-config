@@ -43,7 +43,7 @@ jobs:
           args=()
           while read -r name url; do
             [ -n "$name" ] || continue
-            case "$url" in file://*) ;; *) echo "private input not substituted: $name" >&2; exit 1 ;; esac
+            case "$url" in git+file://*) ;; *) echo "private input not substituted: $name" >&2; exit 1 ;; esac
             args+=(--override-input "$name" "$url")
           done < "$overrides"
           nix develop .#ci "${args[@]}" --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"

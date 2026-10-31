@@ -88,7 +88,7 @@ def main():
                 raise SystemExit('Pinned private source hash mismatch: ' + name)
             # CI-only local Git locks avoid private GitHub archive/API credentials.
             substituted = {
-                'type': 'git', 'url': checkout.as_uri(), 'rev': locked['rev'],
+                'type': 'git', 'url': 'git+' + checkout.as_uri(), 'rev': locked['rev'],
                 'narHash': locked['narHash'], 'lastModified': locked['lastModified']}
             if spec['dir']:
                 substituted['dir'] = spec['dir']
@@ -104,7 +104,7 @@ def main():
         for name in SOURCES:
             locked = nodes[name]['locked']
             url = locked.get('url', '')
-            if not url.startswith('file://'):
+            if not url.startswith('git+file://'):
                 raise SystemExit('Private input was not substituted: ' + name)
             entries.append(name + ' ' + url)
         private = {spec['repo'] for spec in SOURCES.values()}
