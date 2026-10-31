@@ -13,13 +13,23 @@ RUN apt-get update && \
 COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /bin/
 WORKDIR /app
 RUN curl -fsSL 'https://github.com/basicmachines-co/basic-memory/archive/c9bd187b83baba549d5cd16bacc180f8023d51c8.tar.gz' -o /tmp/basic-memory.tar.gz && \
-    tar -xzf /tmp/basic-memory.tar.gz -C /app --strip-components=1 && \
+    mkdir -p /src && tar -xzf /tmp/basic-memory.tar.gz -C /src --strip-components=1 && \
     rm /tmp/basic-memory.tar.gz
+
+# Dependency-only layer: it depends only on the locked project metadata and is
+# reusable across source/project changes. The uv cache mount keeps repeat builds
+# warm; a clean builder still downloads the locked set once.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    cp /src/pyproject.toml /src/uv.lock /app/ && \
+    uv sync --frozen --no-dev --no-install-project --python /usr/local/bin/python
+
+# Source and project layer.
+RUN cp -a /src/. /app/
 
 COPY agent-memory-fsync-patch.py /tmp/agent-memory-fsync-patch.py
 COPY agent-memory-fsync-test.py /tmp/agent-memory-fsync-test.py
 RUN AGENT_MEMORY_FILE_UTILS=/app/src/basic_memory/file_utils.py python /tmp/agent-memory-fsync-patch.py
-RUN uv sync --no-dev --frozen --no-editable --python /usr/local/bin/python && \
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-editable --python /usr/local/bin/python && \
     /app/.venv/bin/python /tmp/agent-memory-fsync-test.py && \
     rm -f /tmp/agent-memory-fsync-patch.py /tmp/agent-memory-fsync-test.py
 
