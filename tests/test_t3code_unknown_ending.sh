@@ -120,12 +120,12 @@ attempt() {
 # A receipt matching what the stubs report for agent revision, tooling path and
 # secret inode, so known_good_receipt can succeed without inventing one.
 write_receipt() {
-  local root=$1 desired=$2 image inode
+  local root=$1 desired=$2 revision=${3:-fixture} tooling=${4:-$1/tooling} image inode
   image=$(printf '%064d' 2)
   inode=$(stat -Lc %i "$root/secrets")
   mkdir -p "$root/state/receipts"
-  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"fixture","agent_path":"%s","provider_secret_inode":"%s","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
-    "$desired" "$image" "$root/tooling" "$inode" > "$root/state/receipts/$desired.json"
+  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"%s","agent_path":"%s","provider_secret_inode":"%s","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
+    "$desired" "$image" "$revision" "$tooling" "$inode" > "$root/state/receipts/$desired.json"
 }
 
 scenario_a() {
@@ -350,8 +350,95 @@ grep -q 'window released' "$h/out.log"
 rm -rf "$h"
 }
 
+scenario_i() {
+# I: the release advanced the home identity before acceptance failed. The
+# receipt describes the declared target, not the live tools, and resolution
+# accepts it while recording both identities.
+i=$(mktemp -d); trap 'rm -rf "$i"' EXIT
+desired=$(printf '%064d' 21)
+setup "$i" "$desired"
+attempt "$i" "$desired" acceptance_unknown "$(date +%s%3N)"
+: > "$i/run/t3code-tool-update/update-deferred.pending"
+: > "$i/home/.local/state/t3code-tool-update/update-deferred.pending"
+set +e
+run_cmd "$i" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$i/end.log" 2>&1
+i_end_rc=$?
+set -e
+[[ $i_end_rc == 77 ]] || { echo "I: end rc=$i_end_rc" >&2; cat "$i/end.log" >&2; exit 1; }
+write_receipt "$i" "$desired" declared-rev "$i/packages-declared"
+run_cmd "$i" EXPECTED_AGENT_REVISION=declared-rev EXPECTED_TOOLING_PATH="$i/packages-declared" \
+  bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$i/out.log" 2>&1 \
+  || { echo 'I: advanced-home resolve refused:' >&2; cat "$i/out.log" >&2; exit 1; }
+[[ ! -e "$i/hold" && ! -e "$i/state/recovery-unknown.json" ]] || { echo 'I: inhibit not cleared' >&2; exit 1; }
+"$JQ" -e '.receipt_identity == "declared" and (.serving_at_resolve | length) > 0 and .declared_agent_revision == "declared-rev"' \
+  "$i/evidence/win/unknown-resolved.json" >/dev/null || { echo 'I: resolution did not record both identities' >&2; cat "$i/evidence/win/unknown-resolved.json" >&2; exit 1; }
+rm -rf "$i"
+}
+
+scenario_j() {
+# J: with no declared target the advanced identity cannot be verified, and the
+# tool refuses instead of inferring one.
+j=$(mktemp -d); trap 'rm -rf "$j"' EXIT
+desired=$(printf '%064d' 22)
+setup "$j" "$desired"
+attempt "$j" "$desired" acceptance_unknown "$(date +%s%3N)"
+set +e
+run_cmd "$j" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$j/end.log" 2>&1
+j_end_rc=$?
+set -e
+[[ $j_end_rc == 77 ]] || { echo "J: end rc=$j_end_rc" >&2; cat "$j/end.log" >&2; exit 1; }
+write_receipt "$j" "$desired" declared-rev "$j/packages-declared"
+if run_cmd "$j" EXPECTED_AGENT_REVISION= EXPECTED_TOOLING_PATH= \
+     bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$j/out.log" 2>&1; then
+  echo 'J: resolved without a declared target' >&2; exit 1
+fi
+grep -q 'declared release target .* missing; refusing to infer it' "$j/out.log" \
+  || { echo 'J: unexpected refusal:' >&2; cat "$j/out.log" >&2; exit 1; }
+[[ -e "$j/hold" && -e "$j/state/recovery-unknown.json" ]] || { echo 'J: refusal changed state' >&2; exit 1; }
+rm -rf "$j"
+}
+
+scenario_k() {
+# K: an interrupted switch leaves no switch evidence, so the release cannot say
+# which identity it installed. Refuse; do not infer.
+k=$(mktemp -d); trap 'rm -rf "$k"' EXIT
+desired=$(printf '%064d' 23)
+setup "$k" "$desired"
+attempt "$k" "$desired" acceptance_unknown "$(date +%s%3N)"
+set +e
+run_cmd "$k" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$k/end.log" 2>&1
+k_end_rc=$?
+set -e
+[[ $k_end_rc == 77 ]] || { echo "K: end rc=$k_end_rc" >&2; cat "$k/end.log" >&2; exit 1; }
+rm -f "$k/evidence/win/complete.started"
+write_receipt "$k" "$desired"
+if run_cmd "$k" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$k/out.log" 2>&1; then
+  echo 'K: resolved an interrupted switch' >&2; exit 1
+fi
+grep -q 'switch did not start; refusing to infer the release target' "$k/out.log" \
+  || { echo 'K: unexpected refusal:' >&2; cat "$k/out.log" >&2; exit 1; }
+rm -rf "$k"
+}
+
+scenario_l() {
+# L: rollback shares the rule; its released retry accepts the declared identity.
+l=$(mktemp -d); trap 'rm -rf "$l"' EXIT
+desired=$(printf '%064d' 24)
+setup "$l" "$desired"
+rm -f "$l/evidence/active-window" "$l/hold"
+printf '{}\n' > "$l/evidence/win/known-good.json"
+write_receipt "$l" "$desired" declared-rev "$l/packages-declared"
+: > "$l/run/t3code-tool-update/update-deferred.pending"
+: > "$l/home/.local/state/t3code-tool-update/update-deferred.pending"
+run_cmd "$l" EXPECTED_AGENT_REVISION=declared-rev EXPECTED_TOOLING_PATH="$l/packages-declared" \
+  bash "$repo/packages/t3code/release-window.sh" rollback win > "$l/out.log" 2>&1 \
+  || { echo 'L: released rollback refused the declared identity:' >&2; cat "$l/out.log" >&2; exit 1; }
+grep -q 'window already released' "$l/out.log"
+rm -rf "$l"
+}
+
 only=${1:-all}
-for key in A B C D E F G H; do
+for key in A B C D E F G H I J K L; do
   if [[ $only == all || $only == "$key" ]]; then
     "scenario_$(printf '%s' "$key" | tr 'A-Z' 'a-z')"
   fi
