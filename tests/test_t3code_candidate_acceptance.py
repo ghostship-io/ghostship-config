@@ -84,8 +84,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(acceptance.admitted_acceptance_route(policy),
                          {"instance": "opencode", "model": "opencode-go/deepseek-v4.1-flash",
                           "options": {"variant": "high"}})
-        self.assertTrue(provider_probe.native_is_admitted(
-            policy, "opencode", "opencode-go/deepseek-v4.1-flash"))
+        route = acceptance.read_acceptance_route(ROOT / "packages/t3code/acceptance-route.json")
+        self.assertTrue(provider_probe.acceptance_route_allows(
+            route, "opencode-free", "opencode/glm-5.3-flash-free"))
+        self.assertFalse(provider_probe.acceptance_route_allows(
+            route, "opencode", "opencode-go/deepseek-v4.1-flash"))
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(self.nominated_policy(nominated=False))
 
@@ -125,8 +128,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(policy, acceptance_route=route)
-        self.assertFalse(provider_probe.native_is_admitted(
-            policy, "opencode-free", "opencode/glm-5.3-flash-free", route))
+        self.assertFalse(provider_probe.acceptance_route_allows(
+            route, "opencode-free", "opencode/glm-5.3-flash-free"))
         path = self.root / "wrong-provider-route.json"
         path.write_text(json.dumps(route))
         with self.assertRaises(acceptance.PreconditionError):

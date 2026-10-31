@@ -164,30 +164,17 @@ def route_unavailable_output(instance, model, kind):
                       "instance": instance, "model": model}}
 
 
-def native_is_admitted(policy, instance, model, acceptance_route=None):
-    if (isinstance(acceptance_route, dict)
-            and acceptance_route.get("acceptance_only") is True
-            and acceptance_route.get("billing") == "free"
-            and acceptance_route.get("provider") == "opencode-free"
-            and (acceptance_route.get("provider_instance"), acceptance_route.get("model")) == (instance, model)):
-        return True
-    if not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2":
-        return False
-    providers, routes = policy.get("providers"), policy.get("routes")
-    if not isinstance(providers, dict) or not isinstance(routes, list):
-        return False
-    admitted = []
-    for row in routes:
-        if not isinstance(row, dict) or not isinstance(row.get("roles"), list):
-            continue
-        provider = row.get("provider")
-        provider_policy = providers.get(provider) if isinstance(provider, str) else None
-        if (row.get("admit") is True and "worker" in row["roles"]
-                and row.get("provider_instance") == instance and row.get("model") == model
-                and isinstance(provider_policy, dict) and provider_policy.get("admit") is True
-                and row.get("billing") in ("subscription", "free", "promotion")):
-            admitted.append(row)
-    return len(admitted) == 1
+def acceptance_route_allows(route, instance, model):
+    """The acceptance route is the single admission authority.
+
+    Candidate acceptance has already admitted this exact route; the probe only
+    checks that the route object it was handed names the requested target.
+    """
+    return (isinstance(route, dict)
+            and route.get("acceptance_only") is True
+            and route.get("billing") == "free"
+            and route.get("provider") == "opencode-free"
+            and (route.get("provider_instance"), route.get("model")) == (instance, model))
 
 
 def prove_route(route, wait, client, native_target=None):
@@ -285,11 +272,10 @@ def main():
         if not args.instance or not args.native_model:
             parser.error("both native identity fields are required")
         try:
-            policy = json.loads(Path("/etc/ghostship/route-policy.json").read_text())
             options = json.loads(args.options_json)
             acceptance_route = json.loads(args.acceptance_route_json) if args.acceptance_route_json else None
-            if not native_is_admitted(policy, args.instance, args.native_model, acceptance_route):
-                raise ValueError("native route is not admitted")
+            if not acceptance_route_allows(acceptance_route, args.instance, args.native_model):
+                raise ValueError("acceptance route does not admit the native target")
             allowed = ("serviceTier", "fastMode", "variant")
             if (not isinstance(options, dict) or any(k not in allowed for k in options)
                     or ("variant" in options and not isinstance(options["variant"], str))):
