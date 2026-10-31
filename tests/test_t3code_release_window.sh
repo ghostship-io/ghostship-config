@@ -77,7 +77,9 @@ shift
 if [[ ${FIXTURE_NO_HANDSHAKE:-0} == 1 ]]; then
   sleep 8 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
 else
-  "$@" 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
+  # Reproduce the systemd manager's environment: no inherited PATH. A command
+  # that relies on PATH lookup fails here exactly as it did on the host.
+  /usr/bin/env -i PATH=/nonexistent "$@" 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
 fi
 printf "%s\n" "$!" > "$FIXTURE/holder-pid"
 SH
@@ -87,6 +89,7 @@ export WINDOW_BOOTSTRAP="$repo/packages/t3code/window-bootstrap.sh"
 EXPECTED_IMAGE=$(printf '%064d' 2); EXPECTED_DEPLOYMENT=$(printf '%064d' 3); JQ_BIN=$(command -v jq)
 export EXPECTED_IMAGE EXPECTED_DEPLOYMENT JQ_BIN
 export HOME_DIR="$tmp/home" ACCEPTED_IMAGE_REF=fixture:accepted
+export COREUTILS_BIN="$(dirname "$(command -v mv)")" UTIL_LINUX_BIN="$(dirname "$(command -v flock)")" BASH_BIN="$(command -v bash)"
 export EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$tmp/tooling" PROVIDER_SECRETS_FILE="$tmp/secrets" CURRENT_SYSTEM="$tmp/current-system" EXPECTED_SYSTEM="$tmp/system" CANDIDATE_HOME_TARGET=/home/fixture
 mkdir -p "$HOME_DIR/.local/state/t3code-tool-update" "$HOME_DIR/.local/state/t3code-shared-agents" "$HOME_DIR/.local/share/t3code-tools/t3"
 touch "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
@@ -116,8 +119,18 @@ if "${cmd[@]}" start failed-holder; then echo 'accepted holder without handshake
 [[ ! -e $tmp/recovery-inactive && ! -e $tmp/hold ]]
 kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid"
 unset FIXTURE_NO_HANDSHAKE
+# Holding a window makes the container defer tool updates, so this marker is
+# present in exactly the state cancel-start has to close. A real pending restart
+# still refuses; the expected deferral must not deadlock the only exit.
+deferred="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
+: > "$deferred"
+: > "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
+if "${cmd[@]}" cancel-start; then echo 'cancel-start accepted a queued restart' >&2; exit 1; fi
+[[ -e $tmp/evidence/active-window ]]
+rm -f "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
 "${cmd[@]}" cancel-start
 [[ ! -e $tmp/evidence/active-window && ! -e $tmp/hold ]]
+rm -f "$deferred"
 # A candidate closure can preflight before first installation without touching
 # the missing evidence root. Start creates it only after the checks pass.
 mv "$tmp/evidence" "$tmp/old-evidence"
