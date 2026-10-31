@@ -48,7 +48,7 @@ materializer is asynchronous:
 
 1. `accept_write` commits the accepted row (`pending`) before the tool returns.
 2. The materializer writes a temp file, fsyncs it, renames it, and fsyncs the
-   parent and grandparent directories (the `agent-memory-fsync.patch` change),
+   parent and grandparent directories (the `agent-memory-fsync-patch.py` change),
    then publishes `file_write_status="synced"` in a FULL transaction. The
    grandparent matters for the first note in a newly created `active/` or
    `archive/` directory.
