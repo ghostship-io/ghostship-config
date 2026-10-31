@@ -97,7 +97,7 @@ in
           --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
           -e HOME=/tmp \
           -e BASIC_MEMORY_CONFIG_DIR=/data/config \
-          -e BASIC_MEMORY_HOME= \
+          -e BASIC_MEMORY_HOME=/data/projects/.main \
           -e BASIC_MEMORY_PROJECT_ROOT=/data/projects \
           -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache \
           -v ${cfg.dataDir}:/data:rw \
@@ -108,7 +108,7 @@ in
           --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
           -e HOME=/tmp \
           -e BASIC_MEMORY_CONFIG_DIR=/data/config \
-          -e BASIC_MEMORY_HOME= \
+          -e BASIC_MEMORY_HOME=/data/projects/.main \
           -e BASIC_MEMORY_PROJECT_ROOT=/data/projects \
           -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache \
           -v ${cfg.dataDir}:/data:rw \
@@ -136,9 +136,10 @@ in
       environment = {
         HOME = "/tmp";
         BASIC_MEMORY_CONFIG_DIR = "/data/config";
-        # Empty means no implicit default project; the two named projects are
-        # created explicitly above and every connector call names one.
-        BASIC_MEMORY_HOME = "";
+        # Basic Memory seeds a `main` project when none exists. Keep it in an
+        # empty sibling so it never indexes the image or a named project; the
+        # connector allow-list refuses it and every caller names a real project.
+        BASIC_MEMORY_HOME = "/data/projects/.main";
         BASIC_MEMORY_PROJECT_ROOT = "/data/projects";
         FASTEMBED_CACHE_PATH = "/opt/agent-memory/fastembed_cache";
         # Accepted DB transactions survive an OS or power failure. The

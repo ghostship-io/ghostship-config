@@ -34,7 +34,9 @@ podman build -f modules/self-hosted/agent-memory.Containerfile \
 Then enable `ghostship.agentMemory.enable = true` in the reviewed host
 configuration. The `agent-memory-projects` oneshot creates `agent-memory` and
 `agent-memory-test` with `--network=none` before the server starts; a repeat is
-idempotent. The production workspace starts empty.
+idempotent. The production workspace starts empty. Basic Memory also seeds a
+`main` project at `/data/projects/.main`; it is empty, never used by the
+connector allow-list and never indexes a named project.
 
 ## Durability contract
 
