@@ -286,12 +286,32 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-ready.service <<'EOF'
+      [Unit]
+      Description=T3 Code is serving requests
+      DefaultDependencies=no
+      After=t3code-server.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      # Running is not ready: the unit must be active AND answer a real request.
+      ExecStart=/bin/sh -c 'i=0; while [ $i -lt 450 ]; do if systemctl is-active --quiet t3code-server.service && curl -fsS --max-time 2 http://127.0.0.1:3773/ >/dev/null 2>&1; then exit 0; fi; i=$((i+1)); sleep 0.2; done; exit 1'
+      TimeoutStartSec=120
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-server.service <<'EOF'
       [Unit]
       Description=T3 Code server and web UI
       DefaultDependencies=no
       After=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
-      Requires=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
+      # container-setup is ordered before the server but not required: a slow
+      # or failed maintenance step must not keep T3 from serving.
+      Requires=user@3000.service t3code-engine-ready.service t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -376,7 +396,7 @@ let
       [Unit]
       Description=Periodic T3 Code agent tool updates
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -409,7 +429,7 @@ let
       [Unit]
       Description=Check for provider releases T3 Code would advise
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -442,7 +462,7 @@ let
       [Unit]
       Description=Periodic Ghostship agent tooling sync
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -476,7 +496,7 @@ let
       [Unit]
       Description=Apply queued T3 Code maintenance when idle
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -580,7 +600,7 @@ let
       [Unit]
       Description=Daily T3 Code retention
       DefaultDependencies=no
-      After=t3code-server.service
+      After=t3code-ready.service t3code-server.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -622,7 +642,7 @@ let
       [Unit]
       Description=Reconcile the one-off free-worker T3 provider instance
       DefaultDependencies=no
-      After=t3code-container-setup.service
+      After=t3code-ready.service t3code-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -638,7 +658,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer t3code-free-instance.timer
+      Wants=t3code-container-setup.service t3code-ready.service nix-daemon.socket nix-daemon.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer t3code-free-instance.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service t3code-engine-ready.service
       AllowIsolate=yes
       EOF
