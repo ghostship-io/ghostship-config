@@ -7,8 +7,9 @@
   PR names with `Refs #N`. Prove the exact head (`mvp check-proof` from a
   ghostship-agent checkout for a change without Go source) and submit it with
   `gsc review --repo ghostship-io/ghostship-config ISSUE PR HEAD PACKET SHA THREAD`.
-  The controller's independent reviewer approves it or returns a FIX to you,
-  and the controller lands the approved exact head.
+  Review is the [review gate](https://github.com/ghostship-io/ghostship-agent/blob/epic/1105-mvp/docs/review-gate.md):
+  the orchestrator is the primary reviewer and decides readiness, a specialist
+  reviewer only when warranted, and the reviewed exact head is what lands.
 - Keep `VERSION` and `CHANGELOG.md` out of PRs.
 - Cloudflare Access bypasses, direct Internet listeners and public IPv6 rules
   require explicit user approval recorded in the service configuration. Every
