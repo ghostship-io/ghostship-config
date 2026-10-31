@@ -395,12 +395,14 @@ post_verify() {
   [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
   inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'provider secret identity unknown'
   # shellcheck disable=SC2016
-  "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '
+  if ! "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '
     .deployment_id == $d and (.image_id | sub("^sha256:"; "")) == $i and
     (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
     .live_before != null and .live_before == .live_after and .agent_revision == $a and
-    .agent_path == $p and .provider_secret_inode == $s' "$receipt" >/dev/null \
-    && receipt_checks_ok "$receipt" || fail 'exact-image receipt invalid'
+    .agent_path == $p and .provider_secret_inode == $s' "$receipt" >/dev/null; then
+    fail 'exact-image receipt invalid'
+  fi
+  receipt_checks_ok "$receipt" || fail 'exact-image receipt invalid'
   # shellcheck disable=SC2016
   "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --argjson min "$switch_ms" '.deployment_id == $d and .exit_code == 0 and (.status == null) and (.outcome == null) and (.started_at_ms | type == "number" and . >= $min)' "$attempt" >/dev/null || fail 'deployment attempt failed or unknown'
   image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'live image unknown'
