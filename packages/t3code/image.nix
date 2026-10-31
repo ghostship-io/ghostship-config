@@ -11,6 +11,9 @@ let
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
+    # The readiness probe must not rely on a tool the container fetches later;
+    # a fresh image would fail readiness while tools are still installing.
+    pkgs.curl
   ];
 
   imageArgs = {
@@ -298,7 +301,9 @@ let
       Type=oneshot
       RemainAfterExit=yes
       # Running is not ready: the unit must be active AND answer a real request.
-      ExecStart=/bin/sh -c 'i=0; while [ $i -lt 450 ]; do if systemctl is-active --quiet t3code-server.service && curl -fsS --max-time 2 http://127.0.0.1:3773/ >/dev/null 2>&1; then exit 0; fi; i=$((i+1)); sleep 0.2; done; exit 1'
+      # 3774 is the T3 app itself; 3773 is the access proxy, which must not be
+      # able to make readiness depend on itself.
+      ExecStart=/bin/sh -c 'i=0; while [ $i -lt 450 ]; do if systemctl is-active --quiet t3code-server.service && ${pkgs.curl}/bin/curl -fsS --max-time 2 http://127.0.0.1:3774/ >/dev/null 2>&1; then exit 0; fi; i=$((i+1)); sleep 0.2; done; exit 1'
       TimeoutStartSec=120
 
       [Install]
