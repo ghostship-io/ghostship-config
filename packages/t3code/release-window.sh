@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
-: "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}" "${COREUTILS_BIN:?}" "${UTIL_LINUX_BIN:?}" "${BASH_BIN:?}"
+: "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}" "${WINDOW_HOLDER_BIN:?}"
 window_root
 validated_serving_image=
 fail() { echo "STOP: $*" >&2; exit 1; }
@@ -401,11 +401,11 @@ case ${1:-} in
   # Arguments are expanded by the holder shell.
   # shellcheck disable=SC2016
   # The systemd manager starts this with its own minimal PATH, so `bash`, `mv`,
-  # `flock` and `sleep` must all be absolute; a bare `mv` failed with 127 and the
-  # holder never signalled readiness.
+  # The holder is its own packaged program: it takes both locks and writes its
+  # own PID. Inlined here, `$$` reached the built generator as a bare `$` and
+  # holder.ready recorded "$", leaving the window permanently un-ready.
   "$SYSTEMD_RUN_BIN" --quiet --unit="$WINDOW_UNIT" --collect -p "RuntimeMaxSec=$WINDOW_SECONDS" -- \
-    "$BASH_BIN" -c 'set -e; exec 7<>"$1" 9<>"$2"; "$4" -w 10 7; "$4" -w 10 9; printf "%s\n" "$$" > "$3/holder.ready.tmp"; "$5" "$3/holder.ready.tmp" "$3/holder.ready"; exec "$6" infinity' \
-    _ "$LOCK_CANDIDATE" "$LOCK_HARDENING" "$dir" "$UTIL_LINUX_BIN/flock" "$COREUTILS_BIN/mv" "$COREUTILS_BIN/sleep"
+    "$WINDOW_HOLDER_BIN" "$LOCK_CANDIDATE" "$LOCK_HARDENING" "$dir"
   exec 6<&- 7<&-
   for _ in {1..100}; do [[ -f $dir/holder.ready ]] && break; sleep 0.05; done
   holder_ready || fail 'window holder has not acquired both locks'
@@ -445,7 +445,14 @@ case ${1:-} in
   serving_matches_start
   case $(unit_state "$WINDOW_UNIT") in
     active)
-      holder_ready || fail 'starting holder ownership unknown'
+      if ! holder_ready; then
+        # Ownership is still provable without a usable PID record: this window's
+        # unit is active and active-window names this window, so the process
+        # holding it is ours. Refusing here left a half-open window that nothing
+        # could close until RuntimeMaxSec expired.
+        printf 'warning: holder PID record unusable; identifying the holder by unit %s and window %s\n' \
+          "$WINDOW_UNIT" "$id" >&2
+      fi
       "$SYSTEMCTL_BIN" stop "$WINDOW_UNIT.service"
       [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'holder stop outcome unknown'
       lock_candidate_pair ;;

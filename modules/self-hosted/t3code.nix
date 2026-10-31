@@ -106,6 +106,7 @@ let
       export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
       export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+      export WINDOW_HOLDER_BIN=${lib.getExe t3codeWindowHolder}
       export PODMAN_BIN=${pkgs.podman}/bin/podman
       export JQ_BIN=${pkgs.jq}/bin/jq
       export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
@@ -116,6 +117,14 @@ let
       export BASH_BIN=${pkgs.bash}/bin/bash
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
+  };
+  # The window holder writes its own PID, so it must be its own program: the
+  # same text inlined into the release-window generator lost `$$` and recorded
+  # "$" instead of a PID.
+  t3codeWindowHolder = pkgs.writeShellApplication {
+    name = "ghostship-t3code-window-holder";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
+    text = builtins.readFile ../../packages/t3code/window-holder.sh;
   };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";

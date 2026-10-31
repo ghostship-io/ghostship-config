@@ -100,6 +100,16 @@ EXPECTED_IMAGE=$(printf '%064d' 2); EXPECTED_DEPLOYMENT=$(printf '%064d' 3); JQ_
 export EXPECTED_IMAGE EXPECTED_DEPLOYMENT JQ_BIN
 export HOME_DIR="$tmp/home" ACCEPTED_IMAGE_REF=fixture:accepted
 export COREUTILS_BIN="$(dirname "$(command -v mv)")" UTIL_LINUX_BIN="$(dirname "$(command -v flock)")" BASH_BIN="$(command -v bash)"
+# Drive the real holder body the way the packaged wrapper does: absolute
+# interpreter plus the PATH its runtimeInputs supply. Neither a `/usr/bin/env`
+# shebang nor a bare `flock` survives the no-PATH environment it runs in.
+cat > "$tmp/window-holder.sh" <<HOLDER
+#!$BASH_BIN
+export PATH="$COREUTILS_BIN:$UTIL_LINUX_BIN"
+exec "$BASH_BIN" "$repo/packages/t3code/window-holder.sh" "\$@"
+HOLDER
+chmod +x "$tmp/window-holder.sh"
+export WINDOW_HOLDER_BIN="$tmp/window-holder.sh"
 export EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$tmp/tooling" PROVIDER_SECRETS_FILE="$tmp/secrets" CURRENT_SYSTEM="$tmp/current-system" EXPECTED_SYSTEM="$tmp/system" CANDIDATE_HOME_TARGET=/home/fixture
 mkdir -p "$HOME_DIR/.local/state/t3code-tool-update" "$HOME_DIR/.local/state/t3code-shared-agents" "$HOME_DIR/.local/share/t3code-tools/t3"
 touch "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
@@ -150,6 +160,17 @@ rm -f "$tmp/container-run/restart.pending"
 rm -rf "$tmp/container-run"
 [[ ! -e $tmp/evidence/active-window && ! -e $tmp/hold ]]
 rm -f "$deferred"
+# A holder that recorded a bare '$' instead of a PID, exactly as the generator
+# did, still belongs to this window's unit: cancel-start must close it rather
+# than wait for RuntimeMaxSec.
+rm -f "$tmp/hold"
+export FIXTURE_NO_HANDSHAKE=1
+if "${cmd[@]}" start malformed-holder; then echo 'accepted holder without handshake' >&2; exit 1; fi
+unset FIXTURE_NO_HANDSHAKE
+printf '%s\n' '$' > "$tmp/evidence/malformed-holder/holder.ready"
+"${cmd[@]}" cancel-start
+[[ ! -e $tmp/evidence/active-window ]]
+rm -f "$tmp/hold"
 # A candidate closure can preflight before first installation without touching
 # the missing evidence root. Start creates it only after the checks pass.
 mv "$tmp/evidence" "$tmp/old-evidence"
