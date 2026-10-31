@@ -30,10 +30,13 @@ let
       chmod 0644 etc/ghostship/approved-free-workers.json
       # systemd does not inherit the image's PATH for its services. Managed
       # helpers need these commands before their own environment setup runs.
+      install -m 0644 ${./worker-dev-env.sh} etc/ghostship/worker-dev-env.sh
+      # Workers get their repository's flake devShell from the shell itself, so
+      # no per-command PATH prefixing, wrapping or hand-set markers are needed.
       for manager in system user; do
         cat > etc/systemd/$manager.conf <<'EOF'
       [Manager]
-      DefaultEnvironment=PATH=${t3codePath}:/bin:/usr/bin
+      DefaultEnvironment=PATH=${t3codePath}:/bin:/usr/bin BASH_ENV=/etc/ghostship/worker-dev-env.sh
       EOF
       done
       # Existing provider settings use this path; the payload stays managed in home.
