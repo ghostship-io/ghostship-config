@@ -10,9 +10,15 @@ let
   managedBin = "/home/t3code/.local/state/ghostship-t3-tools/current/bin";
   # Hash-pinned upstream release, extracted at build time. The version is part of
   # the directory name so a promotion record and the receipt can name it.
+  # The artifact is architecture-specific even though this derivation is not:
+  # pick the matching asset and hash so an x86_64 build does not bake an arm64
+  # binary that cannot execute.
+  t3codeBakedArch = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
   t3codeBakedSource = pkgs.fetchurl {
-    url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-arm64.tar.gz";
-    sha256 = "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE=";
+    url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-${t3codeBakedArch}.tar.gz";
+    sha256 = if pkgs.stdenv.hostPlatform.isAarch64
+      then "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE="
+      else "sha256-IdUNzJxjQiGxG1jWqUNQ0sbuNpBXN7BUsR+k66KVqYs=";
   };
   t3codeBakedApp = pkgs.runCommand "t3code-baked-app" { } ''
     mkdir -p $out
@@ -331,6 +337,10 @@ let
       Description=T3 Code is serving requests
       DefaultDependencies=no
       After=t3code-server.service
+      # The app can be restarted by an in-image update; readiness must be
+      # re-proved against the new process rather than staying green from the
+      # original start.
+      PartOf=t3code-server.service
       Conflicts=shutdown.target
       Before=shutdown.target
 

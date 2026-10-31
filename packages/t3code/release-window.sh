@@ -594,6 +594,8 @@ case ${1:-} in
   baseline=$(snapshot) || fail 'state unknown'
   [[ $(tail -n +2 "$dir/window.start") == "$baseline" ]] || fail 'state changed during start'
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
+  # Holding a window makes the container defer tool updates; the active-window
+  # predicate tolerates that marker, so this path is not deadlocked.
   serving_matches_start
   case $(unit_state "$WINDOW_UNIT") in
     active)
