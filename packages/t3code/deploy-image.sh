@@ -32,6 +32,15 @@ fi
 
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
+# Every non-zero exit must say so; a silent exit 1 hid the failed step. The
+# attempt writer below replaces this trap, so it calls the same function.
+log_exit_rc() {
+  local rc=${1:-0}
+  if [ "$rc" -ne 0 ]; then
+    echo "deploy: exiting rc=$rc (see the last deploy step above)" >&2
+  fi
+}
+trap 'rc=$?; log_exit_rc "$rc"' EXIT
 announce_intent deploy
 [[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
@@ -132,6 +141,7 @@ write_attempt_result() {
     chmod 0600 "$attempt_temporary"
     mv -f "$attempt_temporary" "$attempt_file"
   fi
+  log_exit_rc "$exit_code"
   return "$exit_code"
 }
 "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
@@ -145,16 +155,12 @@ image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f
 secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 
-
 receipt_matches_image() {
-  local app_release
-  app_release=$(served_app_release) || return 1
   "$JQ_BIN" -e \
     --arg deployment "$DEPLOYMENT_ID" \
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
-    --arg app "$app_release" \
     --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
@@ -162,7 +168,6 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
-     and (.app_release == $app)
      and (.provider_secret_inode == $secret_inode)' \
     "$receipt" >/dev/null 2>&1 \
     && receipt_checks_ok "$receipt"

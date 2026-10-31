@@ -90,12 +90,11 @@ config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
 if [[ ${RECEIPT_MISSING:-0} == 1 ]]; then exit 0; fi
 if [[ ${RECEIPT_IMAGE_MISMATCH:-0} == 1 ]]; then image=unreceipted-image; fi
-if [[ ${RECEIPT_APP_MISMATCH:-0} == 1 ]]; then app="0.0.0"; else app="9.9.9"; fi
 jq -cn \
   --arg deployment "$DEPLOYMENT_ID" --arg image "$image" --arg agent "$AGENT_REVISION" \
-  --arg tooling "$TOOLING_PATH" --arg app "$app" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
+  --arg tooling "$TOOLING_PATH" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-fixture",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,app_release:$app,
+    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
@@ -103,10 +102,6 @@ SH
 cat > "$tmp/bin/podman" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ $1 == exec && ${3:-} == /usr/share/t3code/served-identity.sh ]]; then
-  printf '{"served":{"source":"baked","version":"9.9.9","digest":""},"baked":{"version":"9.9.9","digest":""}}\n'
-  exit 0
-fi
 if [[ $1 == inspect && $2 == t3code ]]; then
   case "$4" in
     '{{.State.Health.Status}}')
@@ -487,6 +482,29 @@ grep -q 'receipt did not approve this exact image' "$tmp/absent.log"
 jq -e '.outcome == "acceptance_unknown"' "$tmp/state/attempts/$DEPLOYMENT_ID.json" >/dev/null
 [[ $(wc -l < "$EVENTS") == 6 ]]
 
+# A closed-unaccepted window record is not a receipt: with the deployment
+# marked applied and identical inputs it must not take the already-applied
+# fast path, and the run must still fail on the receipt gate.
+export DEPLOYMENT_ID=deployment-closed RECEIPT_MISSING=1 RECEIPT_IMAGE_MISMATCH=0
+saved_closed_events=$EVENTS; EVENTS="$tmp/closed-events"; : > "$EVENTS"
+saved_applied=$(cat "$tmp/state/applied"); saved_applied_inputs=$(cat "$tmp/state/applied-inputs")
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/applied"
+cp "$tmp/state/desired-inputs" "$tmp/state/applied-inputs"
+printf '{"state":"closed_unaccepted","deployment_id":"%s"}\n' "$DEPLOYMENT_ID" > "$tmp/state/closed-unaccepted.json"
+set +e
+bash "$fixture_writer" > "$tmp/closed-fast.log" 2>&1
+closed_status=$?
+set -e
+[[ $closed_status != 0 ]]
+! grep -q 'already applied' "$tmp/closed-fast.log" || { echo 'closed-unaccepted took the already-applied fast path' >&2; cat "$tmp/closed-fast.log" >&2; exit 1; }
+grep -q 'receipt did not approve this exact image' "$tmp/closed-fast.log"
+rm -f "$tmp/state/closed-unaccepted.json"
+printf '%s\n' "$saved_applied" > "$tmp/state/applied"
+printf '%s\n' "$saved_applied_inputs" > "$tmp/state/applied-inputs"
+EVENTS=$saved_closed_events
+
 # A mismatched receipt is also rejected before the accepted alias can move.
 export DEPLOYMENT_ID=deployment-mismatch RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=1
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
@@ -530,7 +548,7 @@ jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
   --arg agent "$AGENT_REVISION" --arg tooling "$TOOLING_PATH" \
   --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,app_release:"9.9.9",
+    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
@@ -650,17 +668,18 @@ rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap run failed:' >&2; cat "$tmp/t3-bootstrap-lock.log" >&2; exit 1; }
 [[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]] || { echo 'T3 update lock was not bootstrapped' >&2; exit 1; }
 [[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]] || { echo 'bootstrapped T3 update lock has the wrong owner' >&2; exit 1; }
-# A receipt that names another app release does not describe what serves, so the
-# already-applied fast path must not accept it.
-export DEPLOYMENT_ID=deployment-app-mismatch CANDIDATE_FAIL=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0 RECEIPT_APP_MISMATCH=1
-printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
-set +e
-bash "$fixture_writer" > "$tmp/app-mismatch.log" 2>&1
-app_mismatch_status=$?
-set -e
-if grep -q 'already applied' "$tmp/app-mismatch.log"; then
-  echo 'receipt for another app release approved the image' >&2; exit 1
-fi
-[[ $app_mismatch_status != 0 || -s "$tmp/app-mismatch.log" ]]
+# A step that fails after the attempt-result EXIT trap is installed must still
+# say why it exited; the trap replaces the earlier logger, so the writer itself
+# must emit the rc line.
+export DEPLOYMENT_ID=deployment-post-trap
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$STATE_DIR/desired-inputs"
+rm -f "$tmp/missing-provider.env"
+post_trap_status=0
+PROVIDER_SECRETS_FILE="$tmp/missing-provider.env" bash "$fixture_writer" > "$tmp/post-trap.log" 2>&1 || post_trap_status=$?
+[[ $post_trap_status -ne 0 ]] || { echo 'missing provider secret did not fail the deploy' >&2; exit 1; }
+grep -q 'deploy: exiting rc=1' "$tmp/post-trap.log" || { echo 'post-trap failure exited silently' >&2; cat "$tmp/post-trap.log" >&2; exit 1; }
+jq -e '.exit_code == 1' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >/dev/null || { echo 'post-trap attempt did not record rc=1' >&2; cat "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >&2; exit 1; }
+echo 'Post-trap failure proof: a step after the attempt trap records and logs deploy: exiting rc=1.'
+
 echo 'Deploy-image fixture passed.'

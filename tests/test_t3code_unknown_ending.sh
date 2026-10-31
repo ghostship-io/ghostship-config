@@ -129,7 +129,7 @@ write_receipt() {
   image=$(printf '%064d' 2)
   inode=$(stat -Lc %i "$root/secrets")
   mkdir -p "$root/state/receipts"
-  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"%s","agent_path":"%s","provider_secret_inode":"%s","app_release":"1.0.0","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
+  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"%s","agent_path":"%s","provider_secret_inode":"%s","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
     "$desired" "$image" "$revision" "$tooling" "$inode" > "$root/state/receipts/$desired.json"
 }
 
