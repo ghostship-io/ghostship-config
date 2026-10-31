@@ -1,9 +1,31 @@
 # Only this definition and its base packages determine container identity.
-# Agent releases, host state and tooling are deliberately outside this interface.
+# Agent releases, host state and tooling are deliberately outside this interface,
+# with one deliberate exception: the T3 app itself is baked here, so a fresh
+# container serves immediately instead of downloading ~110 MiB. Image identity
+# therefore pins the baked app release, and only later persisted promotions live
+# outside the image (owner, 2026-10-31).
 { pkgs }:
 let
   inherit (pkgs) lib;
   managedBin = "/home/t3code/.local/state/ghostship-t3-tools/current/bin";
+  # Hash-pinned upstream release, extracted at build time. The version is part of
+  # the directory name so a promotion record and the receipt can name it.
+  t3codeBakedSource = pkgs.fetchurl {
+    url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-arm64.tar.gz";
+    sha256 = "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE=";
+  };
+  t3codeBakedApp = pkgs.runCommand "t3code-baked-app" { } ''
+    mkdir -p $out
+    tar -xzf ${t3codeBakedSource} -C $out --strip-components=1
+    mkdir -p $out/bin
+    ln -sfn ../t3 $out/bin/t3
+    # VERSION and DIGEST are the baked identity: the served-identity selector
+    # reads them so a receipt can name the baked release without decoding the
+    # image, and so a persisted promotion can be compared against it.
+    printf '0.1.5\n' > $out/VERSION
+    sha256sum ${t3codeBakedSource} | cut -d' ' -f1 > $out/DIGEST
+    chmod 0444 $out/VERSION $out/DIGEST
+  '';
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
@@ -11,6 +33,9 @@ let
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
+    # The readiness probe must not rely on a tool the container fetches later;
+    # a fresh image would fail readiness while tools are still installing.
+    pkgs.curl
   ];
 
   imageArgs = {
@@ -43,6 +68,13 @@ let
       done
       # Existing provider settings use this path; the payload stays managed in home.
       ln -s ${managedBin}/agy_acp_server.par bin/agy_acp_server.par
+      # Stable path so the launcher can prefer the baked app without knowing a
+      # store hash, and without depending on the tooling repo.
+      install -d usr/share
+      ln -s ${t3codeBakedApp} usr/share/t3code-app
+      # One shared answer to "which app does this container serve". Readers run
+      # this inside the container instead of each deriving it differently.
+      install -Dm 0755 ${./served-identity.sh} usr/share/t3code/served-identity.sh
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
@@ -208,7 +240,10 @@ let
       Documentation=man:user@.service(5)
       DefaultDependencies=no
       After=t3code-container-setup.service nix-daemon.socket
-      Requires=t3code-container-setup.service nix-daemon.socket
+      # Ordered after setup, but not required by it: a slow or failed
+      # maintenance step must not block the user manager and therefore the
+      # server that requires it.
+      Requires=nix-daemon.socket
       Conflicts=shutdown.target
       Before=t3code-bootstrap.service t3code-server.service shutdown.target
       IgnoreOnIsolate=yes
@@ -291,12 +326,34 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-ready.service <<'EOF'
+      [Unit]
+      Description=T3 Code is serving requests
+      DefaultDependencies=no
+      After=t3code-server.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      # Running is not ready: the unit must be active AND answer a real request.
+      # 3774 is the T3 app itself; 3773 is the access proxy, which must not be
+      # able to make readiness depend on itself.
+      ExecStart=/bin/sh -c 'i=0; while [ $i -lt 450 ]; do if systemctl is-active --quiet t3code-server.service && ${pkgs.curl}/bin/curl -fsS --max-time 2 http://127.0.0.1:3774/ >/dev/null 2>&1; then exit 0; fi; i=$((i+1)); sleep 0.2; done; exit 1'
+      TimeoutStartSec=120
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-server.service <<'EOF'
       [Unit]
       Description=T3 Code server and web UI
       DefaultDependencies=no
       After=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
-      Requires=t3code-container-setup.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service
+      # container-setup is ordered before the server but not required: a slow
+      # or failed maintenance step must not keep T3 from serving.
+      Requires=user@3000.service t3code-engine-ready.service t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -347,7 +404,6 @@ let
       Description=T3 Code access through the Cloudflare-authenticated site
       DefaultDependencies=no
       After=t3code-server.service
-      Requires=t3code-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -385,7 +441,7 @@ let
       [Unit]
       Description=Periodic T3 Code agent tool updates
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -418,7 +474,7 @@ let
       [Unit]
       Description=Check for provider releases T3 Code would advise
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -451,7 +507,7 @@ let
       [Unit]
       Description=Periodic Ghostship agent tooling sync
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -485,7 +541,7 @@ let
       [Unit]
       Description=Apply queued T3 Code maintenance when idle
       DefaultDependencies=no
-      After=t3code-bootstrap.service
+      After=t3code-bootstrap.service t3code-ready.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -589,7 +645,7 @@ let
       [Unit]
       Description=Daily T3 Code retention
       DefaultDependencies=no
-      After=t3code-server.service
+      After=t3code-ready.service t3code-server.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -631,7 +687,7 @@ let
       [Unit]
       Description=Reconcile the one-off free-worker T3 provider instance
       DefaultDependencies=no
-      After=t3code-container-setup.service
+      After=t3code-ready.service t3code-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -647,7 +703,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer t3code-free-instance.timer
+      Wants=t3code-container-setup.service t3code-ready.service nix-daemon.socket nix-daemon.service user@3000.service t3code-engine-ready.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer t3code-free-instance.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service t3code-engine-ready.service
       AllowIsolate=yes
       EOF
