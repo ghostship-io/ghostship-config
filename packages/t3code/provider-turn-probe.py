@@ -186,7 +186,9 @@ def main():
             options = json.loads(args.options_json)
             if not native_is_admitted(policy, args.instance, args.native_model):
                 raise ValueError("native route is not admitted")
-            if not isinstance(options, dict) or any(k not in ("serviceTier", "fastMode") for k in options):
+            allowed = ("serviceTier", "fastMode", "variant")
+            if (not isinstance(options, dict) or any(k not in allowed for k in options)
+                    or ("variant" in options and not isinstance(options["variant"], str))):
                 raise ValueError("invalid native options")
             if options.get("serviceTier", "standard") != "standard" or options.get("fastMode", False) is not False:
                 raise ValueError("priority or fast mode is not permitted")

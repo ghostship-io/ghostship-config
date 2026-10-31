@@ -440,6 +440,12 @@ supersede_unknown() {
   archive=$WINDOW_ROOT/$old/archive
   [[ -d $WINDOW_ROOT/$old && ! -L $WINDOW_ROOT/$old ]] || fail 'recorded window evidence missing'
   (( check )) && return 0
+  # The record may only move while this process holds the window lock. A second
+  # exclusive attempt from a subshell must fail; if it succeeds, the call was
+  # reached without the lock and nothing may be archived or removed.
+  if flock -n -x "$WINDOW_ROOT/window.lock" true 2>/dev/null; then
+    fail 'window lock not held; refusing to move the recorded UNKNOWN'
+  fi
   digest=$(sha256sum < "$record") || fail 'recorded UNKNOWN digest unknown'
   digest=${digest%% *}
   install -d -m 0700 "$archive"
