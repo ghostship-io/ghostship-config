@@ -179,11 +179,16 @@ in
     )
   );
 
-  # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
+  # The Antigravity ACP archive is unfree, and three of the CLIs baked into the
+  # T3 image are too. Keep the exception scoped to exactly those packages.
   nixpkgs.config.allowUnfreePredicate =
     pkg:
     builtins.elem (lib.getName pkg) [
       "antigravity-acp"
+      "claude-code"
+      "cursor-cli"
+      "antigravity"
+      "antigravity-ide"
     ];
 
   ghostship.agentHost.enable = true;
