@@ -107,21 +107,66 @@ key=$(
 )
 [[ -n $key ]] || die "cannot fingerprint the flake in $root"
 env_file=$cache/$key.env
+repo_file=$cache/$key.repo
+lock_file=$cache/$key.lock
+lock_hash=$(sha256sum "$root/flake.lock" 2>/dev/null | cut -d' ' -f1)
+lock_hash=${lock_hash:-none}
 if [[ ! -f $env_file ]]; then
   [[ -n ${HOME:-} ]] || die 'HOME is unset; cannot locate the dev environment cache'
   mkdir -p "$cache" || die "cannot create $cache"
   chmod 0700 "$cache" 2>/dev/null || true
-  err_file=$(mktemp "$cache/.err.XXXXXX") || die "cannot create an error file in $cache"
-  # --profile keeps the devShell closure as a GC root, so the store paths the
-  # cached environment exports cannot be collected underneath us.
-  if ! nix print-dev-env --profile "$cache/$key.profile" "$root" > "$env_file.tmp.$$" 2>"$err_file"; then
-    reason=$(head -n1 "$err_file" 2>/dev/null)
-    rm -f "$env_file.tmp.$$" "$err_file"
-    die "cannot evaluate the devShell for $root${reason:+: $reason}"
+  # A cache miss must not build or evaluate. Entering this repository's devShell
+  # builds the coordinator from source and runs its Go test suite: minutes per
+  # new key, and a hard failure on a test that needs git, so every worktree with
+  # a new key lost its shell. Reuse only an environment resolved for this
+  # repository under the same locked inputs (same flake.lock digest): that is
+  # the same toolchain, unlike the newest unrelated entry. With no such entry
+  # the command runs on the image's locked toolchain; `nix develop` builds this
+  # worktree's exact environment on request, and WORKER_DEV_ENV_RESOLVE=1
+  # resolves and records it once.
+  resolved=
+  while IFS= read -r candidate; do
+    [[ -n $candidate && -f $candidate && ! -L $candidate ]] || continue
+    [[ ${candidate##*/} != "$key.env" ]] || continue
+    [[ $(cat "${candidate%.env}.repo" 2>/dev/null) == "$parsed" ]] || continue
+    [[ $(cat "${candidate%.env}.lock" 2>/dev/null) == "$lock_hash" ]] || continue
+    resolved=$candidate
+    break
+  done < <(ls -1t "$cache"/*.env 2>/dev/null)
+  if [[ -n $resolved ]]; then
+    cp -- "$resolved" "$env_file.tmp.$$" || die "cannot store the reused devShell for $root"
+    chmod 0600 "$env_file.tmp.$$" 2>/dev/null || true
+    mv "$env_file.tmp.$$" "$env_file" || die "cannot store the reused devShell for $root"
+    printf '%s\n' "${resolved##*/}" > "$cache/$key.reused" 2>/dev/null || true
+    printf '%s\n' "$parsed" > "$repo_file" 2>/dev/null || true
+    printf '%s\n' "$lock_hash" > "$lock_file" 2>/dev/null || true
+    printf 'worker-dev-env: reusing the resolved devShell %s for %s; run nix develop for this worktree\n' \
+      "${resolved##*/}" "$root" >&2
+  elif [[ ${WORKER_DEV_ENV_RESOLVE:-} == 1 ]]; then
+    err_file=$(mktemp "$cache/.err.XXXXXX") || die "cannot create an error file in $cache"
+    # --profile keeps the devShell closure as a GC root, so the store paths the
+    # cached environment exports cannot be collected underneath us.
+    if ! nix print-dev-env --profile "$cache/$key.profile" "$root" > "$env_file.tmp.$$" 2>"$err_file"; then
+      reason=$(head -n1 "$err_file" 2>/dev/null)
+      rm -f "$env_file.tmp.$$" "$err_file"
+      die "cannot evaluate the devShell for $root${reason:+: $reason}"
+    fi
+    rm -f "$err_file"
+    chmod 0600 "$env_file.tmp.$$" 2>/dev/null || true
+    mv "$env_file.tmp.$$" "$env_file" || die "cannot store the devShell for $root"
+    printf '%s\n' "$parsed" > "$repo_file" 2>/dev/null || true
+    printf '%s\n' "$lock_hash" > "$lock_file" 2>/dev/null || true
+  else
+    # No resolved entry for these locked inputs: never build or evaluate on an
+    # ordinary command. The image's toolchain is the one this release ships.
+    # Say so once per key; repeats stay quiet and fast.
+    if [[ ! -f $cache/$key.miss ]]; then
+      printf '%s\n' "$parsed" > "$cache/$key.miss" 2>/dev/null || true
+      printf 'worker-dev-env: no resolved devShell for lock %s in %s; using the image toolchain (nix develop for this worktree)\n' \
+        "$lock_hash" "$root" >&2
+    fi
+    return 0
   fi
-  rm -f "$err_file"
-  chmod 0600 "$env_file.tmp.$$" 2>/dev/null || true
-  mv "$env_file.tmp.$$" "$env_file" || die "cannot store the devShell for $root"
 fi
 env_script=$(cat "$env_file") || die "cannot read the stored devShell for $root"
 eval "$env_script" || die "cannot apply the devShell environment for $root"
