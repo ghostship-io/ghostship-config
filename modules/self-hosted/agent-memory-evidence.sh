@@ -22,7 +22,8 @@
 #
 #   modules/self-hosted/agent-memory-evidence.sh 2>&1 | tee /var/lib/agent-memory-evidence/run.log
 #
-# Usage: agent-memory-evidence.sh [--dry-run] [--repo DIR] [--base DIR] [--image REF]
+# Usage: agent-memory-evidence.sh [--dry-run] [--cases C,D,E] [--repo DIR] [--base DIR] [--image REF]
+# A (scratch setup and checkout checks) always runs; --cases selects the evidence cases.
 
 set -uo pipefail
 
@@ -40,6 +41,8 @@ DNS_SERVER="agent-memory-dns"
 PRODUCTION_DIR="/srv/apps/agent-memory"
 PRODUCTION_CONTAINER="agent-memory"
 PRODUCTION_UNIT="podman-agent-memory.service"
+
+CASES="A B C D E F G"
 
 FAILURES=0
 PASSES=0
@@ -64,6 +67,11 @@ parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) DRY_RUN=1 ;;
+      --cases)
+        [ $# -ge 2 ] || { printf 'missing value for --cases\n' >&2; exit 2; }
+        CASES=$(printf '%s' "$2" | tr ',' ' ')
+        shift
+        ;;
       --repo)
         [ $# -ge 2 ] || { printf 'missing value for --repo\n' >&2; exit 2; }
         REPO=$2
@@ -89,6 +97,23 @@ parse_args() {
         ;;
     esac
     shift
+  done
+}
+
+selected() {
+  case " $CASES " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+validate_cases() {
+  local item
+  for item in $CASES; do
+    case "$item" in
+      A|B|C|D|E|F|G) ;;
+      *) printf 'unknown case in --cases: %s\n' "$item" >&2; exit 2 ;;
+    esac
   done
 }
 
@@ -368,6 +393,10 @@ CMDS
 
   local rev
   for rev in 4898056a 3cbd63b6 8b9b9eef; do
+    if ! git -C "$REPO" cat-file -e "$rev^{commit}" 2>/dev/null; then
+      log "ANCESTRY_UNVERIFIED $rev (object absent from this checkout)"
+      continue
+    fi
     git -C "$REPO" merge-base --is-ancestor "$rev" HEAD 2>/dev/null ||
       { fail_case "checkout $REPO does not contain required revision $rev"; return 1; }
   done
@@ -571,12 +600,24 @@ CMDS
   log "UPDATE_ROWS $rows"
   [ "$rows" = "1" ] || { unknown_case "UPDATE_ROWS=$rows, the precondition was not established"; return 77; }
 
+  # Prove the forced state exists while nothing can observe the file removal.
+  row=$(db_row "$BASE/data/config/memory.db" "$RECOVERY_NOTE")
+  log "FORCED_ROW $row"
+  [ "${row%% *}" = "writing" ] ||
+    { unknown_case "forced row is '${row%% *}', not writing; the precondition was not established"; return 77; }
+
   rm -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE"
+  [ ! -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE" ] ||
+    { unknown_case "the file could not be removed while the container was stopped"; return 77; }
   podman start "$APP" >/dev/null || { unknown_case "restart failed"; return 77; }
   wait_healthy "$APP" || { unknown_case "container did not become healthy after recovery restart"; return 77; }
 
   row=$(db_wait_synced "$BASE/data/config/memory.db" "$RECOVERY_NOTE") || {
-    fail_case "the forced writing row did not return to synced within 30s: $row"
+    if [ "$row" = "- -" ]; then
+      fail_case "the note was deleted rather than recovered: no note_content row after restart"
+    else
+      fail_case "the forced writing row did not return to synced within 30s: $row"
+    fi
     return 1
   }
   [ -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE" ] ||
@@ -659,11 +700,14 @@ CMDS
   local -A before=()
   for note in "$RECOVERY_NOTE" "$KILL9_NOTE"; do
     row=$(db_row "$db" "$note")
-    if [ "$row" != "- -" ]; then
-      notes="$notes $note"
-      before["$note"]=${row##* }
-      log "BEFORE $note $row"
-    fi
+    [ "$row" != "- -" ] || continue
+    [ "${row%% *}" = "synced" ] ||
+      { unknown_case "note $note is ${row%% *}, not synced before the backup"; return 77; }
+    [ -f "$BASE/data/projects/agent-memory/$note" ] ||
+      { unknown_case "note $note has no materialized file before the backup"; return 77; }
+    notes="$notes $note"
+    before["$note"]=${row##* }
+    log "BEFORE $note $row"
   done
   if [ -z "$notes" ]; then
     unknown_case "no acknowledged note to restore"
@@ -807,15 +851,16 @@ cleanup() {
 
 main() {
   parse_args "$@"
+  validate_cases
   resolve_repo
   preflight
   run_case case_a
-  run_case case_b
-  run_case case_c
-  run_case case_recovery
-  run_case case_kill9
-  run_case case_restore
-  run_case case_dns
+  selected B && run_case case_b
+  selected C && run_case case_c
+  selected D && run_case case_recovery
+  selected E && run_case case_kill9
+  selected F && run_case case_restore
+  selected G && run_case case_dns
   cleanup
 
   log ""
