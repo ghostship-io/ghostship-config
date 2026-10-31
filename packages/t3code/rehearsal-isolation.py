@@ -78,6 +78,7 @@ ENV_ALLOWLIST = {
     "SSL_CERT_FILE": {"class": "b", "reason": "image/nix CA bundle path"},
     "T3CODE_HOME": {"class": "b", "reason": "image/T3 data directory"},
     "T3CODE_HOST": {"class": "b", "reason": "image/T3 local bind address"},
+    "BASH_ENV": {"class": "b", "reason": "worker-lane worker-dev-env.sh devShell hook set by the image, packages/t3code/image.nix:316 (#753); a script path, never a value"},
     "T3CODE_NO_BROWSER": {"class": "b", "reason": "image/T3 headless flag"},
     "T3CODE_PORT": {"class": "b", "reason": "image/T3 local port"},
     "OPENCODE_PASSWORD": {"class": "c", "reason": "T3 generates a fresh random password for its local opencode server; not host-derived"},

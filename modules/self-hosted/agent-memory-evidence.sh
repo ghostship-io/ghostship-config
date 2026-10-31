@@ -22,7 +22,8 @@
 #
 #   modules/self-hosted/agent-memory-evidence.sh 2>&1 | tee /var/lib/agent-memory-evidence/run.log
 #
-# Usage: agent-memory-evidence.sh [--dry-run] [--repo DIR] [--base DIR] [--image REF]
+# Usage: agent-memory-evidence.sh [--dry-run] [--cases C,D,E] [--repo DIR] [--base DIR] [--image REF]
+# A (scratch setup and checkout checks) always runs; --cases selects the evidence cases.
 
 set -uo pipefail
 
@@ -40,6 +41,8 @@ DNS_SERVER="agent-memory-dns"
 PRODUCTION_DIR="/srv/apps/agent-memory"
 PRODUCTION_CONTAINER="agent-memory"
 PRODUCTION_UNIT="podman-agent-memory.service"
+
+CASES="A B C D E F G"
 
 FAILURES=0
 PASSES=0
@@ -64,6 +67,11 @@ parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) DRY_RUN=1 ;;
+      --cases)
+        [ $# -ge 2 ] || { printf 'missing value for --cases\n' >&2; exit 2; }
+        CASES=$(printf '%s' "$2" | tr ',' ' ')
+        shift
+        ;;
       --repo)
         [ $# -ge 2 ] || { printf 'missing value for --repo\n' >&2; exit 2; }
         REPO=$2
@@ -89,6 +97,23 @@ parse_args() {
         ;;
     esac
     shift
+  done
+}
+
+selected() {
+  case " $CASES " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+validate_cases() {
+  local item
+  for item in $CASES; do
+    case "$item" in
+      A|B|C|D|E|F|G) ;;
+      *) printf 'unknown case in --cases: %s\n' "$item" >&2; exit 2 ;;
+    esac
   done
 }
 
@@ -285,8 +310,8 @@ preflight() {
     /srv|/srv/*) refuse "--base must not be inside $PRODUCTION_DIR" ;;
   esac
   case "$(basename "$BASE")" in
-    *-evidence) ;;
-    *) refuse "--base must be a dedicated directory ending in -evidence" ;;
+    *-evidence|*-evidence-r[0-9]*) ;;
+    *) refuse "--base must be a dedicated directory ending in -evidence or -evidence-r<N>" ;;
   esac
 
   if [ "$DRY_RUN" = 1 ]; then
@@ -346,7 +371,11 @@ case_a() {
   case_start A
   if [ "$DRY_RUN" = 1 ]; then
     dry_commands <<CMDS
-git -C $REPO rev-parse HEAD
+podman rm -f $APP $RESTORE $DNS_CLIENT $DNS_SERVER
+rm -rf $BASE
+install -d -m0700 -o3000 -g3000 $BASE $BASE/data $BASE/restore
+touch $BASE/.agent-memory-evidence
+# ancestry checks only when case B is selected
 git -C $REPO merge-base --is-ancestor 4898056a HEAD
 git -C $REPO merge-base --is-ancestor 3cbd63b6 HEAD
 git -C $REPO merge-base --is-ancestor 8b9b9eef HEAD
@@ -357,20 +386,35 @@ grep -q agent-memory-fsync-test.py $REPO/modules/self-hosted/agent-memory.Contai
 podman info --format '{{.Store.GraphDriverName}}'
 iptables -S nixos-fw | grep -F -- '-s $SUBNET -d $GATEWAY'
 podman network inspect $NETWORK --format '{{json .}}'
-podman rm -f $APP $RESTORE $DNS_CLIENT $DNS_SERVER
-rm -rf $BASE
-install -d -m0700 -o3000 -g3000 $BASE $BASE/data $BASE/restore
-touch $BASE/.agent-memory-evidence
 CMDS
     case_dry_end
     return 0
   fi
 
+  # Scratch first: D and F must have their directories even if a source check
+  # fails, so the failure is reported against the check, not as a missing path.
+  podman rm -f "$APP" "$RESTORE" "$DNS_CLIENT" "$DNS_SERVER" >/dev/null 2>&1 || true
+  rm -rf "$BASE"
+  install -d -m0700 -o3000 -g3000 "$BASE" "$BASE/data" "$BASE/restore" ||
+    { fail_case "could not create $BASE"; return 1; }
+  : >"$BASE/.agent-memory-evidence"
+
+  # Ancestry is only required when this run builds the image. A targeted D,F
+  # run reuses an existing image, and its checkout may be older than the build
+  # commits; the content checks below remain authoritative either way.
   local rev
-  for rev in 4898056a 3cbd63b6 8b9b9eef; do
-    git -C "$REPO" merge-base --is-ancestor "$rev" HEAD 2>/dev/null ||
-      { fail_case "checkout $REPO does not contain required revision $rev"; return 1; }
-  done
+  if selected B; then
+    for rev in 4898056a 3cbd63b6 8b9b9eef; do
+      if ! git -C "$REPO" cat-file -e "$rev^{commit}" 2>/dev/null; then
+        log "ANCESTRY_UNVERIFIED $rev (object absent from this checkout)"
+        continue
+      fi
+      git -C "$REPO" merge-base --is-ancestor "$rev" HEAD 2>/dev/null ||
+        { fail_case "checkout $REPO does not contain required revision $rev"; return 1; }
+    done
+  else
+    log "ANCESTRY_NOT_REQUIRED (B is not selected; reusing $IMAGE)"
+  fi
 
   grep -q 'agent_memory_net' "$REPO/modules/self-hosted/agent-memory.nix" 2>/dev/null ||
     { fail_case "agent-memory.nix is missing the private network"; return 1; }
@@ -398,11 +442,6 @@ CMDS
     log "network $NETWORK absent (case G creates it)"
   fi
 
-  podman rm -f "$APP" "$RESTORE" "$DNS_CLIENT" "$DNS_SERVER" >/dev/null 2>&1 || true
-  rm -rf "$BASE"
-  install -d -m0700 -o3000 -g3000 "$BASE" "$BASE/data" "$BASE/restore" ||
-    { fail_case "could not create $BASE"; return 1; }
-  : >"$BASE/.agent-memory-evidence"
   pass_case "checkout, containerfile, network and scratch are ready"
 }
 
@@ -525,6 +564,9 @@ case_recovery() {
   case_start D
   if [ "$DRY_RUN" = 1 ]; then
     dry_commands <<CMDS
+podman run --rm --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -v $BASE/data:/data:rw $IMAGE basic-memory project add agent-memory /data/projects/agent-memory
+podman run --rm --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -v $BASE/data:/data:rw $IMAGE basic-memory project add agent-memory-test /data/projects/agent-memory-test
+podman run -d --name $APP --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -e BASIC_MEMORY_SQLITE_SYNCHRONOUS=FULL -e BASIC_MEMORY_DEFAULT_SEARCH_TYPE=text -v $BASE/data:/data:rw --health-cmd "$HEALTH_CMD" --health-interval=1s --health-start-period=1s --health-timeout=5s --health-retries=180 $IMAGE basic-memory mcp --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
 podman start $APP
 podman wait --condition=healthy $APP
 podman exec $APP basic-memory tool write --project agent-memory --identifier $RECOVERY_NOTE --content "$RECOVERY_BODY" --json
@@ -541,8 +583,12 @@ CMDS
     return 0
   fi
 
-  podman container exists "$APP" 2>/dev/null ||
-    { unknown_case "case C did not create the evidence container"; return 77; }
+  # A targeted --cases D,F run has no case C; create the same prerequisites.
+  if ! podman container exists "$APP" 2>/dev/null; then
+    project_add agent-memory || { fail_case "project add agent-memory failed"; return 1; }
+    project_add agent-memory-test || { fail_case "project add agent-memory-test failed"; return 1; }
+    start_app >/dev/null || { fail_case "could not start the evidence container"; return 1; }
+  fi
   podman start "$APP" >/dev/null 2>&1 || true
   wait_healthy "$APP" || { unknown_case "container is not healthy before recovery"; return 77; }
 
@@ -571,12 +617,24 @@ CMDS
   log "UPDATE_ROWS $rows"
   [ "$rows" = "1" ] || { unknown_case "UPDATE_ROWS=$rows, the precondition was not established"; return 77; }
 
+  # Prove the forced state exists while nothing can observe the file removal.
+  row=$(db_row "$BASE/data/config/memory.db" "$RECOVERY_NOTE")
+  log "FORCED_ROW $row"
+  [ "${row%% *}" = "writing" ] ||
+    { unknown_case "forced row is '${row%% *}', not writing; the precondition was not established"; return 77; }
+
   rm -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE"
+  [ ! -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE" ] ||
+    { unknown_case "the file could not be removed while the container was stopped"; return 77; }
   podman start "$APP" >/dev/null || { unknown_case "restart failed"; return 77; }
   wait_healthy "$APP" || { unknown_case "container did not become healthy after recovery restart"; return 77; }
 
   row=$(db_wait_synced "$BASE/data/config/memory.db" "$RECOVERY_NOTE") || {
-    fail_case "the forced writing row did not return to synced within 30s: $row"
+    if [ "$row" = "- -" ]; then
+      fail_case "the note was deleted rather than recovered: no note_content row after restart"
+    else
+      fail_case "the forced writing row did not return to synced within 30s: $row"
+    fi
     return 1
   }
   [ -f "$BASE/data/projects/agent-memory/$RECOVERY_NOTE" ] ||
@@ -659,11 +717,14 @@ CMDS
   local -A before=()
   for note in "$RECOVERY_NOTE" "$KILL9_NOTE"; do
     row=$(db_row "$db" "$note")
-    if [ "$row" != "- -" ]; then
-      notes="$notes $note"
-      before["$note"]=${row##* }
-      log "BEFORE $note $row"
-    fi
+    [ "$row" != "- -" ] || continue
+    [ "${row%% *}" = "synced" ] ||
+      { unknown_case "note $note is ${row%% *}, not synced before the backup"; return 77; }
+    [ -f "$BASE/data/projects/agent-memory/$note" ] ||
+      { unknown_case "note $note has no materialized file before the backup"; return 77; }
+    notes="$notes $note"
+    before["$note"]=${row##* }
+    log "BEFORE $note $row"
   done
   if [ -z "$notes" ]; then
     unknown_case "no acknowledged note to restore"
@@ -807,15 +868,16 @@ cleanup() {
 
 main() {
   parse_args "$@"
+  validate_cases
   resolve_repo
   preflight
   run_case case_a
-  run_case case_b
-  run_case case_c
-  run_case case_recovery
-  run_case case_kill9
-  run_case case_restore
-  run_case case_dns
+  selected B && run_case case_b
+  selected C && run_case case_c
+  selected D && run_case case_recovery
+  selected E && run_case case_kill9
+  selected F && run_case case_restore
+  selected G && run_case case_dns
   cleanup
 
   log ""
