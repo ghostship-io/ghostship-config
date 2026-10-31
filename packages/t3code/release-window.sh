@@ -234,7 +234,12 @@ wait_and_verify_serving() {
   "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'recovered server unresponsive'
   cur_img=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'recovered container image unknown'
   [[ ${cur_img#sha256:} == "$expected_image" ]] || fail 'recovered container running unexpected image'
-  matched_receipt=$(known_good_receipt "$expected_image" "" "$mode") || fail 'recovered container inputs do not match receipt'
+  local status=0
+  matched_receipt=$(known_good_receipt "$expected_image" "" "$mode") || status=$?
+  if [[ $status == 3 ]]; then
+    fail "a receipt for sha256:$expected_image predates the app release identity; re-accept that image"
+  fi
+  [[ $status == 0 ]] || fail 'recovered container inputs do not match receipt'
   lock_managed_tools
   no_pending_restart "$allow"
 }
@@ -305,7 +310,7 @@ JQ
 }
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling="" app_release
+  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling="" app_release legacy_seen=0
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
@@ -348,9 +353,10 @@ known_good_receipt() {
       .provider_secret_inode == $s and .app_release == null and
       ((.agent_revision == $a and .agent_path == $p) or
         ($adv == "1" and .agent_revision == $da and .agent_path == $dp))' "$receipt" >/dev/null 2>&1; then
-      fail "receipt $receipt predates the app release identity; re-accept image sha256:$image before rollback"
+      legacy_seen=1
     fi
   done
+  (( legacy_seen )) && return 3
   return 1
 }
 restore_alias_to_image() {
@@ -382,6 +388,9 @@ require_matching_receipt_and_alias() {
   read -r cid image started < "$dir/serving.before"
   image=${validated_serving_image:-${image#sha256:}}
   matched_receipt=$(known_good_receipt "$image" "" "$mode") || status=$?
+  if [[ $status == 3 ]]; then
+    fail "a receipt for sha256:$image predates the app release identity; re-accept that image before rollback"
+  fi
   [[ $status == 0 ]] || fail 'no exact known-good receipt or receipt state unknown'
   restore_alias_to_image "$image"
 }
@@ -959,6 +968,9 @@ case ${1:-} in
     current=$(serving_identity allow-stopped-server) || fail 'current container or server identity unknown'
     read -r _ current_image _ <<< "$current"; current_image=${current_image#sha256:}
     status=0; matched_receipt=$(known_good_receipt "$current_image" "$desired") || status=$?
+    if [[ $status == 3 ]]; then
+      fail "a receipt for sha256:$current_image predates the app release identity; re-accept that image"
+    fi
     [[ $status == 0 ]] || fail 'no exact receipt for the running candidate'
     hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
     [[ $(serving_identity allow-stopped-server) == "$current" ]] || fail 'serving T3 changed during verification'

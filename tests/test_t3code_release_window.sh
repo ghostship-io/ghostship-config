@@ -315,7 +315,7 @@ set +e
 pre_app_status=$?
 set -e
 [[ $pre_app_status != 0 ]]
-grep -q 'predates the app release identity; re-accept image' "$tmp/pre-app.log" \
+grep -q 'predates the app release identity' "$tmp/pre-app.log" \
   || { echo 'old receipt was not refused with the re-accept reason:' >&2; cat "$tmp/pre-app.log" >&2; exit 1; }
 [[ -f $tmp/hold && -f $tmp/evidence/active-window ]]
 cp "$tmp/receipt.app" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
@@ -325,8 +325,13 @@ jq '.app_release="0.0.0"' "$tmp/receipt.app" > "$STATE_DIR/receipts/$EXPECTED_DE
 if "${cmd[@]}" rollback three; then echo 'receipt for another app release released the window' >&2; exit 1; fi
 [[ -f $tmp/hold && -f $tmp/evidence/active-window ]]
 cp "$tmp/receipt.app" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+# A legacy receipt must not shadow a valid one for the same image: the scan keeps
+# looking and only reports the transition remedy when nothing valid matches.
+jq 'del(.app_release)' "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" > "$STATE_DIR/receipts/000-legacy.json"
+cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$STATE_DIR/receipts/zzz-valid.json"
 "${cmd[@]}" rollback three
 "${cmd[@]}" rollback three
+rm -f "$STATE_DIR/receipts/000-legacy.json" "$STATE_DIR/receipts/zzz-valid.json"
 [[ $(wc -l < "$tmp/podman.events") == 2 ]]
 [[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
 jq -e --arg d "$new_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/three/known-good.json" >/dev/null
