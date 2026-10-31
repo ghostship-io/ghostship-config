@@ -249,9 +249,11 @@ serving_matches_start() {
 # identity. Callers may accept the receipt's identity or this declared target,
 # never an inferred one.
 declared_target_from_unit() {
-  local system=/run/current-system unit revision tooling
-  [[ -d $system ]] || system=$(readlink -f "$PROFILE") || return 1
-  [[ -d $system ]] || return 1
+  local system unit revision tooling
+  # The generation the window recorded when it opened is the only source; a
+  # caller cannot redirect it through PROFILE or CURRENT_SYSTEM.
+  system=$(sed -n '1p' "$dir/window.start" | sed -n 's/.* generation=\([^ ]*\).*/\1/p')
+  [[ -n $system && -d $system ]] || return 1
   unit=$system/etc/systemd/system/ghostship-t3code-deploy.service
   # A generation's unit is itself a symlink into the units directory; -f follows
   # it and still rejects a disabled or missing unit.
@@ -514,6 +516,11 @@ case ${1:-} in
   acquired_ms=$(date +%s%3N)
   baseline=$(snapshot) || fail 'baseline unknown'
   serving=$(serving_identity) || fail 'serving identity unknown'
+  # Pin the generation this window belongs to. /run/current-system is the fixed
+  # system path; the resolved profile is the test/dev fallback when it is absent.
+  generation_source=/run/current-system
+  [[ -d $generation_source ]] || generation_source=$(readlink -f "$PROFILE") || fail 'generation path unknown'
+  [[ -n $generation_source && -d $generation_source ]] || fail 'generation path unknown'
   mkdir -m 0700 "$WINDOW_ROOT/$id"
   dir=$WINDOW_ROOT/$id
   if (( adopt )); then
@@ -527,7 +534,7 @@ case ${1:-} in
   fi
   printf '%s\n' "$serving" > "$dir/serving.before"
   sync -f "$dir/serving.before"
-  { printf 'started=%s start_ms=%s acquired_by=%s\n' "$acquired_at" "$acquired_ms" "$$"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
+  { printf 'started=%s start_ms=%s acquired_by=%s generation=%s\n' "$acquired_at" "$acquired_ms" "$$" "$generation_source"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
   printf '%s\n' "$id" > "$WINDOW_ROOT/active-window.tmp"
   sync -f "$WINDOW_ROOT/active-window.tmp"
@@ -544,7 +551,7 @@ case ${1:-} in
   for _ in {1..100}; do [[ -f $dir/holder.ready ]] && break; sleep 0.05; done
   holder_ready || fail 'window holder has not acquired both locks'
   read -r holder_pid < "$dir/holder.ready"
-  { printf 'started=%s start_ms=%s acquired_by=%s\n' "$acquired_at" "$acquired_ms" "$$"; printf 'holder_pid=%s held_at=%s\n' "$holder_pid" "$(date -u +%FT%TZ)"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
+  { printf 'started=%s start_ms=%s acquired_by=%s generation=%s\n' "$acquired_at" "$acquired_ms" "$$" "$generation_source"; printf 'holder_pid=%s held_at=%s\n' "$holder_pid" "$(date -u +%FT%TZ)"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
   if (( ! adopt )); then install -d -m 0700 "$(dirname "$HOLD_FILE")"; : > "$HOLD_FILE"; fi
   holder_ready || fail 'window holder lost its locks; recovery not stopped'
