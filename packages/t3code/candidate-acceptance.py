@@ -23,15 +23,8 @@ _probe_spec = importlib.util.spec_from_file_location(
 _probe = importlib.util.module_from_spec(_probe_spec)
 _probe_spec.loader.exec_module(_probe)
 
-CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_transport")
+CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_cli")
 HOME_DIRS = (".agents/skills",)
-PROVIDER_ENV = (
-    "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN", "COHERE_API_KEY",
-    "COMMAND_CODE_API_KEY", "AI_GATEWAY_API_KEY", "OLLAMA_API_KEY", "OPENROUTER_API_KEY",
-    "KILO_API_KEY", "REQUESTY_API_KEY", "ORCAROUTER_API_KEY", "INCEPTION_API_KEY",
-    "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY", "POOLSIDE_API_KEY",
-    "AGENT_DESKTOP_API_TOKEN",
-)
 T3_FREE_PROVIDER = "opencode-free"
 # Acceptance names one exact owner-approved worker primary. Dispatch's picker,
 # quota windows and snapshot mapping may report availability; they must not
@@ -64,6 +57,43 @@ def valid_runtime_layout(source_home, t3_release, runtime_version):
     return runtime_version.parent == runtime_root
 
 
+def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env):
+    """Refuse to start a candidate carrying any provider credential artifact."""
+    for root in (Path(candidate_home), Path(candidate_inputs)):
+        for path in root.rglob("*"):
+            if path.is_file() and path.name == "auth.json":
+                raise PreconditionError("candidate carries an auth.json")
+            if path.is_file() and path.name == "opencode.jsonc":
+                try:
+                    config = json.loads(path.read_text())
+                except (OSError, ValueError):
+                    raise PreconditionError("candidate OpenCode config is unreadable") from None
+                providers = config.get("provider") if isinstance(config, dict) else None
+                if not isinstance(providers, dict) or set(providers) != {"opencode"}:
+                    raise PreconditionError("candidate OpenCode config names another provider")
+    settings = Path(candidate_home) / ".t3/userdata/settings.json"
+    try:
+        document = json.loads(settings.read_text())
+    except (OSError, ValueError):
+        raise PreconditionError("candidate provider settings are unreadable") from None
+    instances = document.get("providerInstances") if isinstance(document, dict) else None
+    if not isinstance(instances, dict) or set(instances) != {T3_FREE_PROVIDER}:
+        raise PreconditionError("candidate provider instances are not the anonymous Zen instance")
+    environment = instances[T3_FREE_PROVIDER].get("environment")
+    if not isinstance(environment, list):
+        raise PreconditionError("candidate provider environment is invalid")
+    for item in environment:
+        if not isinstance(item, dict) or item.get("name") not in ANONYMOUS_SETTINGS_ENV_ALLOWLIST:
+            raise PreconditionError("candidate provider environment is not allowlisted")
+    try:
+        keys = {line.split("=", 1)[0].strip() for line in Path(provider_env).read_text().splitlines()
+                if "=" in line and line.strip() and not line.strip().startswith("#")}
+    except OSError:
+        keys = set()
+    if keys - ANONYMOUS_ENV_ALLOWLIST:
+        raise PreconditionError("candidate provider env file carries a non-allowlisted value")
+
+
 def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candidate_uid,
                            tooling_path=None, candidate_home_target="/home/t3code",
                            stage_toolchain=False, approved_free_workers_file=None):
@@ -78,10 +108,6 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
         stage_candidate_provider_settings(source_home, candidate_home, candidate_home_target)
         stage_candidate_opencode_catalog(source_home, candidate_home)
         stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target)
-        if approved_free_workers_file:
-            stage_candidate_provider_auth(
-                source_home, candidate_home, approved_free_workers_file
-            )
     for relative in HOME_DIRS:
         source = source_home / relative
         if not source.is_dir() or source.is_symlink():
@@ -238,30 +264,6 @@ def stage_candidate_opencode_free(source_home, candidate_home, candidate_home_ta
     )
     wrapper.chmod(0o755)
 
-
-def stage_candidate_provider_auth(source_home, candidate_home, approved_file):
-    """Copy only auth entries for owner-approved free providers into the candidate HOME."""
-    auth_source = Path(source_home) / ".local/share/opencode/auth.json"
-    if auth_source.is_symlink() or not auth_source.is_file():
-        return False
-    try:
-        auth = json.loads(auth_source.read_text())
-        approvals = json.loads(Path(approved_file).read_text())
-    except (OSError, ValueError):
-        raise RuntimeError("production provider auth projection is unreadable") from None
-    entries = approvals.get("entries") if isinstance(approvals, dict) else None
-    if not isinstance(auth, dict) or not isinstance(entries, list):
-        raise RuntimeError("production provider auth projection is malformed")
-    providers = {entry.get("provider") for entry in entries
-                 if isinstance(entry, dict) and isinstance(entry.get("provider"), str)}
-    projected = {provider: auth[provider] for provider in providers if provider in auth}
-    if not projected:
-        return False
-    target = Path(candidate_home) / ".local/share/opencode/auth.json"
-    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target.write_text(json.dumps(projected, sort_keys=True) + "\n")
-    target.chmod(0o600)
-    return True
 
 
 # Exit status for a host precondition that failed before the candidate ran.
@@ -572,8 +574,15 @@ def stage_candidate_agent_store(podman_bin, source_home, candidate_tmp,
     return staged
 
 
+ANONYMOUS_ENV_ALLOWLIST = frozenset()
+ANONYMOUS_SETTINGS_ENV_ALLOWLIST = frozenset({
+    "OPENCODE_DISABLE_FREE_MODELS", "OPENCODE_MODELS_PATH",
+    "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+})
+
+
 def write_provider_env(source_file, target_file):
-    """Copy only provider/desktop keys; never forward GitHub or Bitwarden secrets."""
+    """Write an empty candidate env; anonymous acceptance gets no credential."""
     values = {}
     if source_file and Path(source_file).is_file():
         for raw_line in Path(source_file).read_text().splitlines():
@@ -586,7 +595,7 @@ def write_provider_env(source_file, target_file):
                 continue
             key, raw = line.split("=", 1)
             key, raw = key.strip(), raw.strip()
-            if key not in PROVIDER_ENV:
+            if key not in ANONYMOUS_ENV_ALLOWLIST:
                 continue
             if raw.startswith(("'", '"')):
                 parsed = shlex.split(raw, comments=False)
@@ -599,7 +608,7 @@ def write_provider_env(source_file, target_file):
                 raise ValueError(f"unsupported multiline candidate provider value {key}")
             values[key] = raw
     target_file = Path(target_file)
-    target_file.write_text("".join(f"{key}={values[key]}\n" for key in PROVIDER_ENV if key in values))
+    target_file.write_text("".join(f"{key}={values[key]}\n" for key in ANONYMOUS_ENV_ALLOWLIST if key in values))
     target_file.chmod(0o400)
     return target_file
 
@@ -910,9 +919,15 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     checks["skills"] = candidate_agent_command(
         engine, name, "agent", "skills", "doctor", "--json"
     ).returncode == 0
-    checks["desktop_transport"] = candidate_agent_command(
+    # This only proves the local desktop CLI is present. It is not a live
+    # transport proof: the anonymous candidate carries no desktop credential.
+    checks["desktop_cli"] = candidate_agent_command(
         engine, name, "agent", "tools", "doctor", "--json", "--only", "ghostship-bladebro"
     ).returncode == 0
+    checks["desktop_transport"] = {
+        "state": "not_applicable",
+        "reason": "anonymous candidate carries no desktop credential; live transport is verified after the switch by the production smoke check",
+    }
     return checks
 
 
@@ -1246,6 +1261,8 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         )
         write_provider_env(provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
+        if tooling_path:
+            assert_candidate_auth_free(home_copy, input_copy, provider_env)
         if model_routing_file:
             try:
                 source = Path(model_routing_file)

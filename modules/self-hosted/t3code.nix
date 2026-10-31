@@ -76,6 +76,7 @@ let
     text = ''
       export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/deploy-image.sh}
     '';
   };
@@ -115,6 +116,7 @@ let
       export COREUTILS_BIN=${pkgs.coreutils}/bin
       export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
       export BASH_BIN=${pkgs.bash}/bin/bash
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
@@ -127,7 +129,10 @@ let
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
-    text = builtins.readFile ../../packages/t3code/receipt-self-check.sh;
+    text = ''
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-self-check.sh}
+    '';
   };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.

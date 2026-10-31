@@ -22,7 +22,7 @@ The minimal image sets the system and user service `PATH` before managed helpers
 run; helpers need `sed` and `head` during early desktop environment discovery.
 Image replacement requires a candidate receipt for the exact image and deployment
 ID at `/var/lib/ghostship/t3code-deployment/receipts/<deployment-id>.json`, including
-signed-in app, provider turn, CLI, skills and desktop checks. The image may restart
+signed-in app, provider turn, CLI, skills and local desktop CLI checks. Live desktop transport is verified after the switch by the production smoke check, where the desktop credential is already authorized. The image may restart
 immediately after those checks pass.
 
 ## Projects and state

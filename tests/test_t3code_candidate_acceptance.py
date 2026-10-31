@@ -647,7 +647,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
     def run_acceptance(self):
         with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value={
-                 name: True for name in acceptance.CHECKS
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
              }), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             return acceptance.accept(
@@ -738,26 +739,69 @@ class CandidateAcceptanceTest(unittest.TestCase):
             self.assertEqual((owner.st_uid, owner.st_gid), (os.getuid(), os.getuid()))
         self.assertFalse((candidate_home / ".codex").exists())
 
-    def test_candidate_provider_auth_contains_only_owner_approved_provider_entries(self):
+    def test_candidate_auth_is_fail_closed(self):
+        self.assertFalse(hasattr(acceptance, "stage_candidate_provider_auth"))
+        candidate_home = self.root / "candidate-home"
+        candidate_inputs = self.root / "candidate-inputs"
+        (candidate_home / ".t3/userdata").mkdir(parents=True)
+        candidate_inputs.mkdir()
+        settings = candidate_home / ".t3/userdata/settings.json"
+        settings.write_text(json.dumps({"providerInstances": {
+            "opencode-free": {"driver": "opencode", "enabled": True,
+                              "config": {"binaryPath": "opencode"}, "environment": []}}}))
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        provider_env.write_text("AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        auth = candidate_home / ".local/share/opencode/auth.json"
+        auth.parent.mkdir(parents=True)
+        auth.write_text(json.dumps({"openrouter": {"type": "api", "key": "private"}}))
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        auth.unlink()
+        settings.write_text(json.dumps({"providerInstances": {
+            "opencode-free": {"driver": "opencode", "enabled": True,
+                              "config": {"binaryPath": "opencode"},
+                              "environment": [{"name": "OPENROUTER_API_KEY", "value": "private"}]}}}))
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        settings.write_text(json.dumps({"providerInstances": {
+            "opencode-free": {"driver": "opencode", "enabled": True,
+                              "config": {"binaryPath": "opencode"}, "environment": []}}}))
+        provider_env.write_text("OPENROUTER_API_KEY=private\n")
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+
+    def test_multiple_production_auth_entries_never_reach_the_candidate(self):
         auth = self.home / ".local/share/opencode/auth.json"
         auth.parent.mkdir(parents=True)
         auth.write_text(json.dumps({
-            "openrouter": {"type": "api", "key": "auth-fixture"},
-            "opencode-go": {"type": "api", "key": "subscription-fixture"},
-            "openai": {"type": "oauth", "refresh": "private-fixture"},
+            "opencode-go": {"type": "api", "key": "go-secret"},
+            "openrouter": {"type": "api", "key": "openrouter-secret"},
+            "literouter": {"type": "api", "key": "literouter-secret"},
+            "openai": {"type": "oauth", "refresh": "openai-secret"},
         }))
         approved = self.root / "approved-free-workers.json"
-        approved.write_text(json.dumps({"entries": [{"provider": "openrouter"}]}))
+        approved.write_text(json.dumps({"entries": [
+            {"provider": "openrouter"}, {"provider": "opencode-go"}, {"provider": "literouter"},
+        ]}))
         candidate_home = self.root / "candidate-home"
-        candidate_home.mkdir()
-        self.assertTrue(acceptance.stage_candidate_provider_auth(
-            self.home, candidate_home, approved
-        ))
-        projected = json.loads((candidate_home / ".local/share/opencode/auth.json").read_text())
-        self.assertEqual(projected, {"openrouter": {"type": "api", "key": "auth-fixture"}})
-        self.assertEqual((candidate_home / ".local/share/opencode/auth.json").stat().st_mode & 0o777, 0o600)
-        self.assertNotIn("private-fixture", json.dumps(projected))
-        self.assertNotIn("subscription-fixture", json.dumps(projected))
+        candidate_inputs = self.root / "candidate-inputs"
+        provider_env = self.root / "provider.env"
+        provider_env.write_text("")
+        with patch.object(acceptance, "stage_candidate_toolchain", return_value=None):
+            acceptance.stage_candidate_inputs(
+                self.home, candidate_home, candidate_inputs, os.getuid(),
+                tooling_path="agent", stage_toolchain=True,
+                approved_free_workers_file=approved,
+            )
+        self.assertFalse((candidate_home / ".local/share/opencode/auth.json").exists())
+        self.assertFalse(any(path.name == "auth.json" for path in candidate_home.rglob("*")))
+        self.assertNotIn("openrouter", json.dumps(json.loads(
+            (candidate_home / ".t3/userdata/settings.json").read_text())))
+        acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
 
     def test_candidate_model_routing_snapshot_is_validated_and_staged_read_only(self):
         source = self.root / "routing.json"
@@ -887,8 +931,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(receipt["image_id"], self.image_id)
         self.assertEqual(receipt["candidate_name"], "t3code-candidate-generation-502")
         self.assertEqual(receipt["live_before"], receipt["live_after"])
-        self.assertEqual(set(receipt["checks"]), set(acceptance.CHECKS))
-        self.assertTrue(all(receipt["checks"].values()))
+        self.assertTrue(set(acceptance.CHECKS).issubset(receipt["checks"]))
+        self.assertTrue(all(receipt["checks"][key] is True for key in acceptance.CHECKS))
+        self.assertEqual(receipt["checks"]["desktop_transport"]["state"], "not_applicable")
         self.assertIn(("rm", "--force", "--time", "10", receipt["candidate_name"]), self.commands)
         self.assertTrue(any("/run/secrets/t3code.env:ro" in str(command)
                             for command in self.commands))
@@ -1331,15 +1376,19 @@ def _selection(document, now):
         projection = self.root / "provider.env"
         projection.write_text(
             "OPENROUTER_API_KEY='provider-only'\n"
+            "OPENCODE_AUTH_CONTENT='opencode-go-secret'\n"
+            "LITEROUTER_API_KEY='literouter-secret'\n"
+            "GOOGLE_GENERATIVE_AI_API_KEY='google-secret'\n"
+            "COMMAND_CODE_API_KEY='command-code-secret'\n"
+            "OLLAMA_API_KEY='ollama-secret'\n"
+            "GEMINI_API_KEY='gemini-secret'\n"
+            "GROQ_API_KEY='groq-secret'\n"
             "AGENT_DESKTOP_API_TOKEN=desktop-only\n"
-            "GOOGLE_GENERATIVE_AI_API_KEY=''\n"
             "GITHUB_TOKEN=must-not-copy\n"
             "BW_CLIENTSECRET=must-not-copy\n"
         )
         filtered = acceptance.write_provider_env(projection, self.root / "candidate.env")
-        self.assertEqual(filtered.read_text(),
-                         "OPENROUTER_API_KEY=provider-only\n"
-                         "AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        self.assertEqual(filtered.read_text(), "")
         self.assertEqual(filtered.stat().st_mode & 0o777, 0o400)
 
     def test_candidate_systemd_does_not_run_bootstrap_or_home_hooks(self):
