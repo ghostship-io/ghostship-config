@@ -212,7 +212,7 @@ receipt_for_image() {
   return 1
 }
 wait_and_verify_serving() {
-  local expected_image=${1#sha256:} cur_img
+  local expected_image=${1#sha256:} allow=${2:-} cur_img
   for _ in {1..100}; do
     if [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}' 2>/dev/null) == healthy ]] &&
        "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service 2>/dev/null &&
@@ -228,7 +228,7 @@ wait_and_verify_serving() {
   [[ ${cur_img#sha256:} == "$expected_image" ]] || fail 'recovered container running unexpected image'
   matched_receipt=$(known_good_receipt "$expected_image") || fail 'recovered container inputs do not match receipt'
   lock_managed_tools
-  no_pending_restart
+  no_pending_restart "$allow"
 }
 serving_matches_start() {
   [[ -f $dir/serving.before && ! -L $dir/serving.before ]] || fail 'serving identity baseline missing'
@@ -571,7 +571,7 @@ case ${1:-} in
   container_was_stopped=0
   if (( already_released )); then
     is_container_running || fail 'container is stopped after release'
-    serving_matches_start
+    serving_matches_start allow-deferred
     require_matching_receipt_and_alias
     printf '%s\n' 'PASS known-good serving identity and existing receipt; window already released.'
     exit 0
@@ -643,7 +643,7 @@ case ${1:-} in
     restore_alias_to_image "$target_img"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$target_img"
+    wait_and_verify_serving "$target_img" allow-deferred
     validated_serving_image=$target_img
   elif [[ $reason == receipted_runtime_failure ]]; then
     current=$(serving_identity) || fail 'serving identity unknown'
@@ -659,7 +659,7 @@ case ${1:-} in
     validated_serving_image=${validated_serving_image#sha256:}
     require_matching_receipt_and_alias
   else
-    serving_matches_start
+    serving_matches_start allow-deferred
     require_matching_receipt_and_alias
   fi
   record_known_good "$dir/unknown-resolved.json"

@@ -38,11 +38,16 @@ setup() {
     cat "$root/evidence/win/serving.before"
   } > "$root/evidence/win/window.start"
 
-  cat > "$root/bin/systemctl" <<'SH'
+  cat > "$root/bin/systemctl" <<SH
 #!/usr/bin/env bash
-if [[ $1 == show ]]; then
-  if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
-  case $2 in t3code-recovery.service) echo active ;; *) echo inactive ;; esac
+if [[ \$1 == start && \$2 == podman-t3code.service ]]; then rm -f "$root/container-stopped"; exit 0; fi
+if [[ \$1 == show ]]; then
+  if [[ \$2 == ghostship-t3code-deploy.service && \$3 == -p && \$4 == Result ]]; then echo success; exit; fi
+  case \$2 in
+    t3code-recovery.service) echo active ;;
+    podman-t3code.service) [[ -e $root/container-stopped ]] && echo inactive || echo active ;;
+    *) echo inactive ;;
+  esac
   exit
 fi
 exit 0
@@ -64,8 +69,9 @@ if [[ \$1 == exec && \$3 == systemctl ]]; then
     *ActiveEnterTimestampMonotonic*) echo 99; exit ;;
   esac
 fi
+if [[ \$1 == image && \$2 == inspect ]]; then printf 'sha256:%s\n' "\$(printf '%064d' 2)"; exit 0; fi
 case "\$1 \$3 \${4:-}" in
-  'inspect --format {{.State.Running}}') echo true ;;
+  'inspect --format {{.State.Running}}') [[ -e $root/container-stopped ]] && echo false || echo true ;;
   'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$(printf '%064d' 2)" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$(printf '%064d' 2)" ;;
   'inspect --format {{.State.Health.Status}}') echo healthy ;;
@@ -109,6 +115,16 @@ run_cmd() {
 attempt() {
   printf '{"deployment_id":"%s","exit_code":77,"outcome":"%s","started_at_ms":%s}\n' \
     "$2" "$3" "$4" > "$1/state/attempts/$2.json"
+}
+
+# A receipt matching what the stubs report for agent revision, tooling path and
+# secret inode, so known_good_receipt can succeed without inventing one.
+write_receipt() {
+  local root=$1 desired=$2 image
+  image=$(printf '%064d' 2)
+  mkdir -p "$root/state/receipts"
+  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"fixture","agent_path":"%s","provider_secret_inode":"1","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
+    "$desired" "$image" "$root/tooling" > "$root/state/receipts/$image.json"
 }
 
 scenario_a() {
@@ -186,11 +202,92 @@ set -e
 rm -rf "$d"
 }
 
+scenario_e() {
+# E: the live sequence. end-unknown releases with reason acceptance_unknown and
+# the container's deferral is still queued; resolve-unknown must still clear the
+# inhibit. A queued restart stays a refusal, and the stopped-container recovery
+# path of the same command must tolerate the deferral as well.
+e=$(mktemp -d); trap 'rm -rf "$e"' EXIT
+desired=$(printf '%064d' 15)
+setup "$e" "$desired"
+attempt "$e" "$desired" acceptance_unknown "$(date +%s%3N)"
+: > "$e/run/t3code-tool-update/update-deferred.pending"
+: > "$e/home/.local/state/t3code-tool-update/update-deferred.pending"
+set +e
+run_cmd "$e" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$e/end.log" 2>&1
+e_end_rc=$?
+set -e
+[[ $e_end_rc == 77 ]] || { echo "E: end rc=$e_end_rc" >&2; cat "$e/end.log" >&2; exit 1; }
+"$JQ" -e '.reason == "acceptance_unknown"' "$e/state/recovery-unknown.json" >/dev/null
+# The receipt is what investigation produces afterwards; end-unknown ran without one.
+write_receipt "$e" "$desired"
+
+: > "$e/run/t3code-tool-update/restart.pending"
+if run_cmd "$e" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$e/refuse.log" 2>&1; then
+  echo 'E: resolve-unknown accepted a queued restart' >&2; exit 1
+fi
+grep -q 'container maintenance state unknown or pending' "$e/refuse.log" \
+  || { echo 'E: unexpected refusal:' >&2; cat "$e/refuse.log" >&2; exit 1; }
+[[ -e $e/hold && -e $e/state/recovery-unknown.json ]] || { echo 'E: refusal changed state' >&2; exit 1; }
+rm "$e/run/t3code-tool-update/restart.pending"
+
+run_cmd "$e" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$e/out.log" 2>&1 \
+  || { echo 'E: ordinary resolve-unknown refused the queued deferral:' >&2; cat "$e/out.log" >&2; exit 1; }
+[[ ! -e $e/hold && ! -e $e/state/recovery-unknown.json ]] || { echo 'E: inhibit not cleared' >&2; exit 1; }
+grep -q 'PASS UNKNOWN resolved' "$e/out.log"
+
+# The same command with the container stopped restores it and proves the new
+# serving, which is the other place the deferral is still queued.
+g=$(mktemp -d); trap 'rm -rf "$g"' EXIT
+desired=$(printf '%064d' 16)
+setup "$g" "$desired"
+attempt "$g" "$desired" acceptance_unknown "$(date +%s%3N)"
+: > "$g/run/t3code-tool-update/update-deferred.pending"
+: > "$g/home/.local/state/t3code-tool-update/update-deferred.pending"
+set +e
+run_cmd "$g" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$g/end.log" 2>&1
+g_end_rc=$?
+set -e
+[[ $g_end_rc == 77 ]] || { echo "E: stopped end rc=$g_end_rc" >&2; cat "$g/end.log" >&2; exit 1; }
+write_receipt "$g" "$desired"
+: > "$g/container-stopped"
+run_cmd "$g" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$g/out.log" 2>&1 \
+  || { echo 'E: stopped resolve-unknown refused the queued deferral:' >&2; cat "$g/out.log" >&2; exit 1; }
+grep -q 'container recovered and recovery inhibit cleared' "$g/out.log"
+[[ ! -e $g/hold && ! -e $g/state/recovery-unknown.json ]] || { echo 'E: stopped inhibit not cleared' >&2; exit 1; }
+rm -rf "$g"
+rm -rf "$e"
+}
+
+scenario_f() {
+# F: rollback's released retry has no active window, so it must ask for the
+# tolerance too; a queued restart still refuses.
+f=$(mktemp -d); trap 'rm -rf "$f"' EXIT
+desired=$(printf '%064d' 17)
+setup "$f" "$desired"
+write_receipt "$f" "$desired"
+rm -f "$f/evidence/active-window" "$f/hold"
+printf '{}\n' > "$f/evidence/win/known-good.json"
+: > "$f/run/t3code-tool-update/update-deferred.pending"
+: > "$f/home/.local/state/t3code-tool-update/update-deferred.pending"
+: > "$f/run/t3code-tool-update/restart.pending"
+if run_cmd "$f" bash "$repo/packages/t3code/release-window.sh" rollback win > "$f/refuse.log" 2>&1; then
+  echo 'F: released rollback accepted a queued restart' >&2; exit 1
+fi
+grep -q 'container maintenance state unknown or pending' "$f/refuse.log" \
+  || { echo 'F: unexpected refusal:' >&2; cat "$f/refuse.log" >&2; exit 1; }
+rm "$f/run/t3code-tool-update/restart.pending"
+run_cmd "$f" bash "$repo/packages/t3code/release-window.sh" rollback win > "$f/out.log" 2>&1 \
+  || { echo 'F: released rollback refused the queued deferral:' >&2; cat "$f/out.log" >&2; exit 1; }
+grep -q 'window already released' "$f/out.log"
+rm -rf "$f"
+}
+
 only=${1:-all}
-for key in A B C D; do
+for key in A B C D E F; do
   if [[ $only == all || $only == "$key" ]]; then
     "scenario_$(printf '%s' "$key" | tr 'A-Z' 'a-z')"
   fi
 done
 
-echo 'UNKNOWN ending proof: acceptance_unknown ends the window, the deferral is tolerated, a queued restart refuses, and a stale or foreign attempt is never taken as acceptance evidence.'
+echo 'UNKNOWN ending proof: acceptance_unknown ends the window, every released command tolerates the queued deferral, a queued restart refuses, and a stale or foreign attempt is never taken as acceptance evidence.'
