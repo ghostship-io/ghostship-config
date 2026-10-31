@@ -1,0 +1,11 @@
+{
+  "schema": "ghostship.t3code-acceptance-route/v1",
+  "provider": "opencode-free",
+  "provider_instance": "opencode-free",
+  "model": "opencode/glm-5.3-flash-free",
+  "billing": "free",
+  "effort": "high",
+  "acceptance_only": true,
+  "owner": "owner 2026-10-31 anonymous OpenCode Zen candidate proof",
+  "source": "https://github.com/ghostship-io/ghostship-agent/issues/1105#issuecomment-6540685895"
+}

@@ -37,6 +37,8 @@ T3_FREE_PROVIDER = "opencode-free"
 # quota windows and snapshot mapping may report availability; they must not
 # decide whether the candidate image can run a turn.
 ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
+ACCEPTANCE_ROUTE = ("opencode-free", "opencode/glm-5.3-flash-free")
+ACCEPTANCE_ROUTE_FILE = "/etc/ghostship/t3code-acceptance-route.json"
 ACCEPTANCE_EFFORT = "high"
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
 ALLOWED_CANDIDATE_MOUNTS = {
@@ -75,7 +77,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
     if tooling_path:
         stage_candidate_provider_settings(source_home, candidate_home, candidate_home_target)
         stage_candidate_opencode_catalog(source_home, candidate_home)
-        stage_candidate_opencode_config(candidate_home)
+        stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target)
         if approved_free_workers_file:
             stage_candidate_provider_auth(
                 source_home, candidate_home, approved_free_workers_file
@@ -130,7 +132,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
 
 def stage_candidate_provider_settings(source_home, candidate_home,
                                       candidate_home_target="/home/t3code"):
-    """Project the non-secret opencode-free and opencode instances."""
+    """Project only the non-secret opencode-free instance."""
     source = Path(source_home) / ".t3/userdata/settings.json"
     if source.is_symlink() or not source.is_file():
         raise RuntimeError("production T3 provider settings are unavailable")
@@ -172,34 +174,6 @@ def stage_candidate_provider_settings(source_home, candidate_home,
     names = {item["name"] for item in environment}
     if "OPENCODE_MODELS_PATH" not in names:
         raise RuntimeError("production opencode-free models path is missing")
-    opencode = instances.get("opencode") if isinstance(instances, dict) else None
-    if (not isinstance(opencode, dict) or opencode.get("driver") != "opencode"
-            or opencode.get("enabled") is not True):
-        raise RuntimeError("production opencode T3 provider is not enabled")
-    opencode_source_config = opencode.get("config")
-    opencode_binary = (opencode_source_config.get("binaryPath")
-                       if isinstance(opencode_source_config, dict) else None)
-    if not isinstance(opencode_binary, str) or not opencode_binary or "\n" in opencode_binary:
-        raise RuntimeError("production opencode provider configuration is invalid")
-    opencode_environment = []
-    for item in opencode.get("environment", []):
-        # Never project a sensitive subscription credential. The owner must
-        # approve that scope separately before acceptance can prove the route.
-        if not isinstance(item, dict) or item.get("sensitive") is True:
-            continue
-        name, value = item.get("name"), item.get("value")
-        if name not in allowed_env:
-            continue
-        if not isinstance(value, str) or "\n" in value or "\0" in value:
-            raise RuntimeError("production opencode provider environment is invalid")
-        if name != "OPENCODE_DISABLE_FREE_MODELS":
-            expected_home = PurePosixPath(candidate_home_target)
-            target = PurePosixPath(value)
-            try:
-                target.relative_to(expected_home)
-            except ValueError:
-                raise RuntimeError("production opencode path leaves the T3 home") from None
-        opencode_environment.append({"name": name, "value": value})
     projected = {
         "providerInstances": {
             T3_FREE_PROVIDER: {
@@ -207,12 +181,6 @@ def stage_candidate_provider_settings(source_home, candidate_home,
                 "enabled": True,
                 "config": {"binaryPath": binary},
                 "environment": environment,
-            },
-            "opencode": {
-                "driver": "opencode",
-                "enabled": True,
-                "config": {"binaryPath": opencode_binary},
-                "environment": opencode_environment,
             },
         }
     }
@@ -242,22 +210,33 @@ def stage_candidate_opencode_catalog(source_home, candidate_home):
         target.chmod(0o444)
 
 
-def stage_candidate_opencode_config(candidate_home):
-    """Stage the opencode-go provider mapping without any credential.
-
-    The production config only declares the provider and defers its models to
-    the staged catalog. This minimal projection avoids copying unrelated MCP
-    servers and never copies auth.json or OPENCODE_AUTH_CONTENT.
-    """
-    config = {
+def stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target="/home/t3code"):
+    """Stage the anonymous Zen free instance without any credential."""
+    source_home = Path(source_home)
+    free = Path(candidate_home) / ".config/opencode-free"
+    catalog_source = source_home / ".config/opencode-free/cache/opencode/models.json"
+    if catalog_source.is_symlink() or not catalog_source.is_file():
+        raise RuntimeError("production anonymous Zen configuration is unavailable")
+    config_target = free / "config/opencode/opencode.jsonc"
+    config_target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    config_target.write_text(json.dumps({
         "$schema": "https://opencode.ai/config.json",
-        "provider": {"opencode-go": {"models": {}}},
-        "enabled_providers": ["opencode-go"],
-    }
-    target = Path(candidate_home) / ".config/opencode/opencode.jsonc"
-    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
-    target.chmod(0o444)
+        "enabled_providers": ["opencode"],
+        "provider": {"opencode": {"models": {}}},
+    }, indent=2, sort_keys=True) + "\n")
+    config_target.chmod(0o444)
+    catalog_target = free / "cache/opencode/models.json"
+    catalog_target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    shutil.copyfile(catalog_source, catalog_target)
+    catalog_target.chmod(0o444)
+    for relative in ("data", "state"):
+        (free / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
+    wrapper = free / "opencode-free"
+    wrapper.write_text(
+        "#!/bin/sh\nset -eu\nexport OPENCODE_DISABLE_FREE_MODELS=0\n"
+        f"exec {candidate_home_target}/.local/share/t3code-tools/opencode/current/bin/opencode \"$@\"\n"
+    )
+    wrapper.chmod(0o755)
 
 
 def stage_candidate_provider_auth(source_home, candidate_home, approved_file):
@@ -862,7 +841,11 @@ def capture_json_result(result):
 
 
 def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
-                    route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None, evidence=None):
+                    route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None,
+                    evidence=None, acceptance_route=None,
+                    acceptance_route_file=None):
+    if acceptance_route is None and acceptance_route_file is not None:
+        acceptance_route = read_acceptance_route(acceptance_route_file)
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
     # Start that same serving path explicitly in the disposable candidate.
@@ -917,6 +900,7 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
         engine, name, provider_env_file, timeout_s=timeout_s,
         tooling_path=tooling_path,
         policy=read_route_policy(route_policy_file), snapshot=routing_snapshot, evidence=evidence,
+        acceptance_route=acceptance_route,
     )
     checks["provider_turn"] = bool(provider_route)
     checks["provider_turn_route"] = provider_route
@@ -973,14 +957,42 @@ def read_route_policy(path="/etc/ghostship/route-policy.json"):
     return data
 
 
-def admitted_acceptance_route(policy, route=ACCEPTANCE_PRIMARY_ROUTE):
-    """Name one exact admitted worker primary for the real-turn proof.
+def read_acceptance_route(path=ACCEPTANCE_ROUTE_FILE):
+    """Read the explicit, acceptance-only route approved by the owner."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        raise PreconditionError("the acceptance route is unavailable") from None
+    if (not isinstance(data, dict)
+            or data.get("schema") != "ghostship.t3code-acceptance-route/v1"
+            or data.get("acceptance_only") is not True
+            or data.get("billing") != "free"
+            or data.get("provider") != T3_FREE_PROVIDER
+            or (data.get("provider_instance"), data.get("model")) != ACCEPTANCE_ROUTE):
+        raise PreconditionError("the acceptance route is invalid")
+    return data
 
-    Dispatch ranks routes from live quota and the picker. Acceptance names one
-    route so a partial snapshot, a stale usage reading or an exhausted
-    alternative cannot decide whether the candidate image is testable. A
-    fallback-only route is never an acceptance route.
+
+def admitted_acceptance_route(policy, acceptance_route=None, route=ACCEPTANCE_PRIMARY_ROUTE):
+    """Return the explicit acceptance-only route, or the legacy admitted primary.
+
+    Runtime acceptance passes the owner-approved acceptance route. The legacy
+    path is retained for the existing policy-admission tests.
     """
+    if acceptance_route is not None:
+        if (not isinstance(acceptance_route, dict)
+                or acceptance_route.get("acceptance_only") is not True
+                or acceptance_route.get("billing") != "free"
+                or acceptance_route.get("provider") != T3_FREE_PROVIDER
+                or (acceptance_route.get("provider_instance"),
+                    acceptance_route.get("model")) != ACCEPTANCE_ROUTE):
+            raise PreconditionError("the acceptance route is invalid")
+        effort = acceptance_route.get("effort")
+        options = {"variant": effort} if isinstance(effort, str) and effort else {}
+        if options and options["variant"] != ACCEPTANCE_EFFORT:
+            raise PreconditionError("the acceptance route effort is invalid")
+        return {"instance": ACCEPTANCE_ROUTE[0], "model": ACCEPTANCE_ROUTE[1],
+                "options": options}
     if (not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2"
             or not isinstance(policy.get("providers"), dict) or not isinstance(policy.get("routes"), list)):
         raise PreconditionError("route admission policy is invalid")
@@ -1049,7 +1061,7 @@ def probe_failure_detail(failure, result):
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
-                        policy=None, snapshot=None, evidence=None):
+                        policy=None, snapshot=None, evidence=None, acceptance_route=None):
     """Prove one exact policy-admitted primary with a real turn on the candidate."""
     del provider_env_file
     policy = read_route_policy() if policy is None else policy
@@ -1068,7 +1080,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     route_summary = summarize_t3_rows(rows)
     if not tooling_path:
         raise RouteUnavailableError(route_summary, route_summary, "provider_turn route_unavailable: managed tools unavailable")
-    target = admitted_acceptance_route(policy)
+    target = admitted_acceptance_route(policy, acceptance_route=acceptance_route)
     identity = (target["instance"], target["model"])
     route = f"{identity[0]}/{identity[1]}"
     # A non-capacity failure is attributable to the candidate only when the
@@ -1084,6 +1096,7 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         "/run/t3code-candidate-inputs/provider-turn-probe.py", route,
         "--instance", identity[0], "--native-model", identity[1],
         "--options-json", json.dumps(target["options"], sort_keys=True),
+        "--acceptance-route-json", json.dumps(acceptance_route, sort_keys=True),
         "--wait", str(min(max(timeout_s - 30, 1), 240)), timeout=min(timeout_s, 270),
     )
     if proof.returncode == 0:
@@ -1187,7 +1200,8 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
            command_fn=command, identity_fn=None, candidate_uid=None,
            candidate_runtime_dir=None, provider_secrets_file=None, tooling_path=None,
            expected_agent_revision=None, candidate_home_target="/candidate-home",
-           deployment_id=None, model_routing_file=None, _evidence=None):
+           deployment_id=None, model_routing_file=None, acceptance_route_file=ACCEPTANCE_ROUTE_FILE,
+           _evidence=None):
     """Boot, check, record and remove one candidate without changing production."""
     identity_fn = identity_fn or _probe.identity
     candidate_uid = os.getuid() if candidate_uid is None else int(candidate_uid)
@@ -1301,7 +1315,8 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             assert_ok(engine, "cp", source, f"{name}:/nix/store/", timeout=120)
         routing_snapshot = json.loads(routing_copy.read_text()) if routing_copy else None
         checks = check_candidate(engine, name, provider_env, tooling_path=tooling_path,
-                                 route_policy_file=route_policy_file, routing_snapshot=routing_snapshot, evidence=evidence)
+                                 route_policy_file=route_policy_file, routing_snapshot=routing_snapshot,
+                                 evidence=evidence, acceptance_route_file=acceptance_route_file)
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
@@ -1449,6 +1464,7 @@ def main():
     parser.add_argument("--agent-revision")
     parser.add_argument("--candidate-home-target", required=True)
     parser.add_argument("--model-routing-file", default="/var/lib/ghostship-ai-usage/routing.json")
+    parser.add_argument("--acceptance-route-file", default=ACCEPTANCE_ROUTE_FILE)
     parser.add_argument("--volume", action="append", default=[])
     parser.add_argument("--systemctl-bin", default="systemctl")
     parser.add_argument("--candidate-uid", type=int, required=True)
@@ -1462,7 +1478,8 @@ def main():
                tooling_path=args.tooling_path,
                expected_agent_revision=args.agent_revision,
                candidate_home_target=args.candidate_home_target,
-               model_routing_file=args.model_routing_file)
+               model_routing_file=args.model_routing_file,
+               acceptance_route_file=args.acceptance_route_file)
     except PreconditionError as error:
         print(f"candidate acceptance precondition not met: {error}", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
