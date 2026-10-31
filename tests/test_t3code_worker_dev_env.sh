@@ -31,9 +31,10 @@ export FAKE_COUNT=$tmp/nix.calls
 # A real linked worktree under the fixed root, which is what the launcher makes.
 mkdir -p "$tmp/origin"
 git -C "$tmp/origin" init -q
+git -C "$tmp/origin" remote add origin https://github.com/ghostship-io/ghostship-config.git
 printf '{}\n' > "$tmp/origin/flake.nix"
 git -C "$tmp/origin" add flake.nix
-git -C "$tmp/origin" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$tmp/origin" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qm init
 wt=$tmp/repo
 git -C "$tmp/origin" worktree add -q "$wt" -b test
 
@@ -75,6 +76,16 @@ git -C "$tmp/origin" worktree add -q "$evil" -b evil
 printf '{}\n' > "$evil/flake.nix"   # untracked drop-in
 out=$(run "$evil" bash -c 'command -v markertool || echo absent')
 [[ $out != *marker-tool* ]] || { echo "F2: evaluated an untracked flake" >&2; exit 1; }
+
+# 6b. A linked worktree of a foreign repository is ignored.
+foreign=$(mktemp -d); trap 'rm -rf "$tmp" "$outside" "$foreign"' EXIT
+mkdir -p "$foreign/src"; git -C "$foreign/src" init -q
+git -C "$foreign/src" remote add origin https://example.com/elsewhere.git
+printf '{}\n' > "$foreign/src/flake.nix"; git -C "$foreign/src" add flake.nix
+git -C "$foreign/src" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qm init
+git -C "$foreign/src" worktree add -q "$foreign/wt" -b foreign
+out=$(run "$foreign/wt" bash -c 'command -v markertool || echo absent')
+[[ $out != *marker-tool* ]] || { echo "F3: evaluated a foreign repository" >&2; exit 1; }
 
 # 6. A plain directory with a flake, not a linked worktree, is ignored.
 plain=$tmp/plain; mkdir -p "$plain"; printf '{}\n' > "$plain/flake.nix"

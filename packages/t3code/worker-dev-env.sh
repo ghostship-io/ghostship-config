@@ -8,6 +8,13 @@
 # The hook never sets IN_NIX_SHELL itself; it comes from Nix. A command that
 # exports IN_NIX_SHELL (or NIX_BUILD_TOP) can still skip the hook, so that is a
 # convention, not an enforcement boundary.
+#
+# Trust model, stated plainly: the hook runs as the worker's own uid, so it
+# cannot tell a launcher-created worktree from one the worker made, and loading
+# a flake the worker wrote grants nothing the worker could not run anyway. What
+# this does protect against is evaluating a *foreign repository's* flake that
+# happens to sit under the worktree root: the origin remote must match the
+# root-owned allowlist installed beside this hook.
 (return 0 2>/dev/null) || { echo 'worker-dev-env: must be sourced' >&2; exit 1; }
 case $- in *i*) return 0 ;; esac
 [[ -n ${IN_NIX_SHELL:-} ]] && return 0
@@ -44,6 +51,23 @@ esac
 # dropped into a worktree the agent made. A worker-created worktree with a
 # hand-written flake stays inert.
 git -C "$root" ls-files --error-unmatch flake.nix >/dev/null 2>&1 || return 0
+# Only the allowed repository origins: an external clone placed under the root
+# is not evaluated.
+origins_file=$(dirname "$self")/worker-dev-env.origins
+[[ -f $origins_file && ! -L $origins_file ]] || return 0
+[[ $(stat -c %u "$origins_file" 2>/dev/null) == "$(stat -c %u "$self" 2>/dev/null)" ]] || return 0
+origin=$(git -C "$root" remote get-url origin 2>/dev/null) || return 0
+origin=${origin,,}
+origin=${origin#https://}; origin=${origin#http://}; origin=${origin#ssh://}
+origin=${origin#git@}; origin=${origin/:/\/}
+origin=${origin%.git}
+[[ -n $origin ]] || return 0
+allowed=0
+while IFS= read -r prefix; do
+  [[ -n $prefix ]] || continue
+  case $origin in "$prefix"*) allowed=1; break ;; esac
+done < "$origins_file"
+(( allowed )) || return 0
 
 # A child shell (including the evaluator itself) that already has this repo's
 # environment returns immediately; a child in another worktree loads its own.

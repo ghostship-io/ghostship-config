@@ -32,6 +32,7 @@ let
       # helpers need these commands before their own environment setup runs.
       install -m 0644 ${./worker-dev-env.sh} etc/ghostship/worker-dev-env.sh
       install -m 0644 ${./worker-dev-env.root} etc/ghostship/worker-dev-env.root
+      install -m 0644 ${./worker-dev-env.origins} etc/ghostship/worker-dev-env.origins
       # Workers get their repository's flake devShell from the shell itself, so
       # no per-command PATH prefixing, wrapping or hand-set markers are needed.
       for manager in system user; do
