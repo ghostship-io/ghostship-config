@@ -204,8 +204,6 @@ in
       "antigravity-acp"
       "claude-code"
       "cursor-cli"
-      "antigravity"
-      "antigravity-ide"
     ];
 
   ghostship.agentHost.enable = true;

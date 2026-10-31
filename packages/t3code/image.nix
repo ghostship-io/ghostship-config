@@ -33,8 +33,7 @@ let
     chmod 0444 $out/VERSION $out/DIGEST
   '';
   # The CLIs the container used to install over the network on first start.
-  # Pinned here so a fresh container never waits on npm, and described in a
-  # manifest the launcher reads instead of guessing at PATH.
+  # Pinned here so a fresh container never waits on npm.
   t3codeAgentClis = [
     { name = "codex"; package = pkgs.codex; binary = "codex"; }
     { name = "claude-code"; package = pkgs.claude-code; binary = "claude"; }
@@ -44,12 +43,6 @@ let
     # (`agy_acp_server.par`) and updates it through the antigravity updater, and
     # `pkgs.antigravity` is a GUI IDE, not that CLI.
   ];
-  t3codeCliManifest = pkgs.writeText "t3code-baked-clis.json" (builtins.toJSON (
-    map (entry: {
-      inherit (entry) name binary;
-      version = entry.package.version;
-      path = "${entry.package}/bin/${entry.binary}";
-    }) t3codeAgentClis));
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
@@ -99,9 +92,6 @@ let
       # One shared answer to "which app does this container serve". Readers run
       # this inside the container instead of each deriving it differently.
       install -Dm 0755 ${./served-identity.sh} usr/share/t3code/served-identity.sh
-      # The launcher and the start-time gate read this instead of checking PATH:
-      # absolute store paths, with the version each entry was built at.
-      install -Dm 0644 ${t3codeCliManifest} usr/share/t3code-baked/clis.json
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
