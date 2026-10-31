@@ -177,7 +177,11 @@
           };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              # Agent work in this repository: Go tooling, git, and the scanner
+              # the repository's privacy hook runs on commit.
+              go_1_26
               git
+              gitleaks
               age
               bashInteractive
               coreutils
