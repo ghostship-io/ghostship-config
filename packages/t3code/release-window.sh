@@ -154,6 +154,7 @@ lock_managed_tools() {
 }
 no_pending_restart() {
   : "${HOME_DIR:?}"
+  local allow=${1:-}
   local f
   # The container defers tool updates for as long as a window is open, so
   # update-deferred.pending is the expected consequence of holding the window,
@@ -162,6 +163,9 @@ no_pending_restart() {
   # in-container maintenance. With no window open the marker still refuses.
   local deferred_allowed=0
   [[ -e $WINDOW_ROOT/active-window || -L $WINDOW_ROOT/active-window ]] && deferred_allowed=1
+  # Commands that run after the record is released (resolve-unknown, the
+  # released end-unknown retry) have no active-window, so they ask explicitly.
+  [[ $allow == allow-deferred ]] && deferred_allowed=1
   local deferred_marker="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
   (( deferred_allowed )) && deferred_marker=/nonexistent-allowed
   for f in "$STATE_DIR/restart.pending" "$HOME_DIR/.local/state/t3code-tool-update/restart.pending" \
