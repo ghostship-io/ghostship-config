@@ -156,24 +156,86 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   builds the committed revision, checks dry-activation, records the generation
   and verifies live health. It accepts the target T3 candidate image before the
   switch; a passing exact-image receipt permits the immediate restart.
-- For an executor-held T3 release window, retire per-release copied executor
-  scripts. After this package is installed, run the tracked command on the
-  target host with `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
-  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, and `WINDOW_SECONDS` set from
-  host configuration. Use a unique window ID and the authorized flake reference:
+- Retire per-release copied T3 window executors. For the transition from an
+  expired legacy holder with its existing recovery inhibit still present, use
+  the release-window binary built in the reviewed candidate closure, before
+  that closure is installed. Set `RELEASE_WINDOW` to that binary. Set
+  `LEGACY_DIR`, `LEGACY_UNIT`, `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
+  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, `WINDOW_SECONDS`, `HOME_DIR`,
+  `CANDIDATE_HOME_TARGET`, and `ACCEPTED_IMAGE_REF` from host configuration.
+  With a unique window ID, the executor runs:
 
   ```sh
-  ghostship-t3code-release-window preflight
-  ghostship-t3code-release-window start "$WINDOW_ID"
-  ghostship-t3code-release-window switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
+  "$RELEASE_WINDOW" preflight --adopt-inhibit
+  "$RELEASE_WINDOW" start --adopt-inhibit "$WINDOW_ID"
+  "$RELEASE_WINDOW" switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
   ```
 
-  Complete the established exact-image acceptance, installed readback and
-  post/rollback procedure after a switch; an intent or an unknown result is
-  never a no-activation success. If no writer announced an effect, the executor
-  can instead run `ghostship-t3code-release-window end-no-activation` to release
-  the window. Windows opened before the tracked start record cannot use that
-  operation. This command does not replace acceptance or post/rollback checks.
+  Preflight is read-only. Adoption requires the expired legacy holder, its
+  intact window evidence, and free writer locks; it preserves the existing
+  inhibit. It does not assert that the legacy window had no effects. Do not
+  run the legacy `window-end` to clear the inhibit. A failed or unknown check
+  is a stop for investigation, not permission to force a lock or invent a
+  result.
+
+  If start fails before its holder is ready, `"$RELEASE_WINDOW" cancel-start`
+  cancels only an unchanged, intent-free incomplete start and preserves an
+  adopted inhibit. Investigate any refusal.
+
+  For a forward PASS, set `EXPECTED_DEPLOYMENT`, `EXPECTED_IMAGE`,
+  `EXPECTED_AGENT_REVISION`, `EXPECTED_TOOLING_PATH`, `PROVIDER_SECRETS_FILE`,
+  `CURRENT_SYSTEM`, and `EXPECTED_SYSTEM` to the approved candidate values.
+  `"$RELEASE_WINDOW" post` verifies the existing exact-image receipt, completed
+  attempt, installed system, live image and inputs. After PASS,
+  `"$RELEASE_WINDOW" end-post "$WINDOW_ID"` repeats those checks before
+  releasing the window. It can be retried with the window ID after a lost
+  acknowledgement.
+
+  When the serving T3 has not changed and its image and inputs match an
+  existing exact receipt, `"$RELEASE_WINDOW" rollback "$WINDOW_ID"` restores
+  the accepted alias if necessary and releases without restarting T3 or
+  requesting another provider turn. If T3's container was fully stopped during
+  the attempt, `rollback` verifies the exact receipt for the known-good image,
+  restores the accepted alias, starts `podman-t3code.service`, verifies live
+  health and receipt inputs, and releases the window without requiring a fresh
+  provider turn or moving to an unreceipted image. It records the actual desired
+  and applied IDs; it does not claim to revert the system generation or
+  reconcile a split deployment. A definitive failed-candidate marker remains in
+  place until the existing audited invalidation procedure is explicitly
+  invoked.
+
+  If no exact known-good receipt exists, `"$RELEASE_WINDOW" end-unknown`
+  records UNKNOWN and the observed desired, applied and absent-receipt state,
+  releases the window locks, retains the recovery inhibit, and exits 77. It
+  prints the investigation command. After an exact matching serving receipt is
+  available, `"$RELEASE_WINDOW" resolve-unknown` rechecks the receipt and alias,
+  starts `podman-t3code.service` if the container was stopped, verifies healthy
+  serving readback, and clears the existing inhibit. Until then, a T3 crash does
+  not auto-recover and its agents die with it: the legacy recovery inhibit
+  blocks all recovery actions, not just moves to an unreceipted image.
+  Independent update timers require separate installed verification. Do not use
+  a no-activation end for an adopted legacy window or treat holder expiry as a
+  successful end.
+
+  If the candidate was restarted with its exact receipt but the runtime then
+  fails or its attempt remains unknown, `"$RELEASE_WINDOW" end-receipted-failure`
+  records that distinct UNKNOWN and exits 77 with the inhibit retained; after
+  investigation and a healthy exact-receipt readback (including container
+  recovery if stopped), use `resolve-unknown`.
+- The hand-placed `/root/tools-332-fallback` starter tree and its
+  `tools-332-fallback-window` unit are no longer used. They were a temporary
+  bootstrap for the release-window transition: an untracked, host-specific copy
+  of a per-release executor that identified competing writers by script name.
+  The next release that installs the #716/#721 tooling supersedes them with the
+  tracked, config-driven `release-window` binary in the candidate closure, which
+  keys on the real window lock, deployment lock and podman target instead. After
+  that release, do not re-create the fallback tree, do not start its window
+  unit, and do not copy a new per-release executor into it. If `release-window`
+  is unavailable on a host that is not yet on the #716/#721 tooling, that is a
+  stop to investigate, not a reason to reintroduce the fallback path.
+  A stale fallback tree left on disk is inert: nothing in the tracked
+  configuration refers to it, and the tooling pointer is owned by
+  `packages/t3code/tooling-pointer.sh` rather than by the fallback directory.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
@@ -188,6 +250,79 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   command.
 
 ## Nix, Builds, and Host Boot
+
+- Every container image we build is measured on real hardware before its
+  runtime change lands. Performance is a requirement, not an aspiration: an
+  image that builds, starts or restarts slowly is a defect even when every
+  functional check passes. This applies to every container we build; the T3
+  Code container leads because its restart interrupts agent work.
+- Measure and record, per image, for both the baseline and the final artifact,
+  on the `aarch64` host:
+  - **size** — the shipped `dockerTools` archive that podman loads, both the
+    archive bytes and its gzipped size, *plus* the Nix store closure from
+    `nix path-info --recursive --closure-size`. Two executors must not produce
+    different numbers under the same words, so name both artifacts;
+  - **build** — clean build from an empty store, and cached/incremental build
+    with the store warm, reported separately;
+  - **cold start** — container start until the app actually serves;
+  - **restart/recovery** — stop, or `systemctl restart`, until the app serves
+    again and agents are usable;
+  - **runtime resource impact** — resident memory and steady-state CPU of the
+    container's main services.
+- "Container running" is never readiness. **Ready means a real request or
+  reconnect succeeds**, using the three-part predicate the release window
+  already applies: `health == healthy`, `systemctl is-active
+  t3code-server.service`, and `podman exec` `curl http://127.0.0.1:3773/`
+  returning 200. The request is outside the app process but inside the
+  container. A process that is `active` but cannot answer is not up.
+- Performance and the functional receipt are separate gates that both stay
+  closed until satisfied. The five-check functional receipt does not measure
+  performance, but **no image feature or release is accepted while its
+  required build, start, restart and usable-app performance is unmeasured or
+  unacceptable** — performance is not post-release polish. Report every
+  measurement as PASS, FAIL or UNKNOWN against the evidence-based budget, and
+  treat UNKNOWN as acceptance left open rather than as a pass.
+- Measured partials do not close the gate: current evidence of 110.1 MiB
+  compressed, 384.4 MiB uncompressed and a 17.7 s cached build says nothing
+  about restart or readiness. Restart and ready timings come from the executor
+  at the planned activation, never from a benchmark-only restart.
+- Record the measured baseline, the final numbers and the agreed budget with
+  the image change's release evidence — the first one is #1636. Performance is
+  **not** part of the candidate-acceptance receipt: that schema is closed at
+  `CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills",
+  "desktop_cli")`; `desktop_transport` is recorded as typed
+  `not_applicable` in the credential-free candidate and is verified live after
+  the switch by the production smoke check. Do not add fields to the required
+  set or expect it to gate on timings. Budgets are set per image from measured evidence; do not invent
+  fleet-wide thresholds, and do not compare images of different roles.
+- Anything on the start path that installs, fetches, compiles, migrates or
+  waits on the network is a defect: move it into the image build, or defer it
+  until after readiness. The known offender today is the T3 bootstrap, which
+  downloads and extracts the app on first start (#1636, measured floor 4.3 s).
+- Two different restart paths exist and both stay fast, but they are gated
+  differently: **image or host-config changes** go through the gated release
+  path; the **in-container app update** is gated by its own eligibility
+  (first-seen under a bounded window, no idle guard) and restarts
+  `t3code-server.service` itself. That in-container restart is precisely why
+  restart time is a requirement.
+- Where a measurement cannot be taken without restarting production, record it
+  as UNKNOWN with the reason and the command the executor should run, rather
+  than estimating it as if it were measured.
+
+- `checks.<system>.config-tests` is the single derivation that runs the T3
+  deployment shell proofs, including `tests/test_t3code_release_window.sh` and
+  `tests/test_t3code_window_lock.sh`. Keep every `tests/test_t3code_*.sh`
+  script wired into that derivation; an unwired script is unverified script.
+  Config CI currently builds `config-tests` only for `x86_64-linux` (the
+  `integration` job in `.github/workflows/ci.yml`), while the production host is
+  `aarch64-linux`, so the shell proofs are not exercised on the architecture
+  that runs them. The `check` PR gate already runs on the ARM64 self-hosted
+  runner (`[self-hosted, Linux, ARM64, ghostship-fast]`) but runs
+  `scripts/check` rather than this derivation; making `aarch64` coverage real
+  therefore needs only that job (or the integration job) to also build
+  `checks.aarch64-linux.config-tests`, and it may need a longer timeout than the
+  current 4 minutes because the suite runs one Python test discovery over
+  thousands of tests.
 
 - Use native Nix commands in repo docs and operations: `nix`, `nixos-rebuild`,
   and `switch-to-configuration`.

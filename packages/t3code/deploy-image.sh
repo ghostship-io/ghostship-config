@@ -1,4 +1,8 @@
 set -euo pipefail
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
 
 publish_attestation() {
   local payload="$1" directory="$STATE_DIR/attestations" temporary
@@ -29,6 +33,7 @@ fi
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
 announce_intent deploy
+[[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
 if [[ ${1:-} == --invalidate-failure ]]; then
   [[ $# == 2 && -n ${2//[[:space:]]/} && ${#2} -le 500 && $2 != *$'\n'* && $2 != *$'\r'* ]] || {
@@ -81,6 +86,7 @@ fi
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
+ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -152,10 +158,9 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)
-     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills, .checks.desktop_transport] | all(. == true))' \
-    "$receipt" >/dev/null 2>&1
+     and (.provider_secret_inode == $secret_inode)' \
+    "$receipt" >/dev/null 2>&1 \
+    && receipt_checks_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -166,10 +171,9 @@ any_receipt_matches_image() {
       '((.image_id | sub("^sha256:"; "")) == $image)
        and (.deployment_id | type == "string" and length > 0)
        and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
-       and (.live_before != null and .live_before == .live_after)
-       and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-             .checks.skills, .checks.desktop_transport] | all(. == true))' \
-      "$candidate" >/dev/null 2>&1; then
+       and (.live_before != null and .live_before == .live_after)' \
+      "$candidate" >/dev/null 2>&1 \
+      && receipt_checks_ok "$candidate"; then
       return 0
     fi
   done
@@ -179,16 +183,48 @@ any_receipt_matches_image() {
 acquire_managed_locks() {
   local tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
   local refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
-  local t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
-  [[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" && -f "$t3_lock" && ! -L "$t3_lock" ]] || {
-    echo 'Managed tool, refresh or T3 update lock missing; candidate is not inspected' >&2; return 1;
+  local t3_tree="$HOME_DIR/.local/share/t3code-tools/t3"
+  local t3_update_lock="$t3_tree/update.lock"
+  local t3_owner
+  [[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" ]] || {
+    echo 'Managed tool or refresh lock missing; candidate is not inspected' >&2; return 1;
   }
+  # A host that has never promoted an in-container T3 app has no app tree, so
+  # there is no competing updater to serialize against and nothing for a receipt
+  # to be bound to. The tree is never created here; a tree that exists with a
+  # non-regular lock is refused, because flock on a symlink or directory can
+  # lock something other than what the updater locks.
+  if [[ -e "$t3_tree" || -L "$t3_tree" ]]; then
+    [[ -d "$t3_tree" && ! -L "$t3_tree" ]] || {
+      echo 'T3 app tree is not a directory; candidate is not inspected' >&2; return 1;
+    }
+    [[ ! -e "$t3_update_lock" || ( -f "$t3_update_lock" && ! -L "$t3_update_lock" ) ]] || {
+      echo 'T3 update lock is not a regular file; candidate is not inspected' >&2; return 1;
+    }
+  fi
   exec 8<>"$tool_lock"
   flock -x 8
   exec 7<>"$refresh_lock"
   flock -x 7
-  exec 6<>"$t3_lock"
-  flock -x 6
+  if [[ -d "$t3_tree" ]]; then
+    # The updater opens this file with O_CREAT, so creating it here is the same
+    # file the updater will lock. Create it owned by the home owner: the updater
+    # runs as that user and opens the lock for append, so a root-owned lock
+    # would fail every app update with EACCES.
+    if [[ ! -e "$t3_update_lock" ]]; then
+      t3_owner=$(stat -c '%u:%g' "$HOME_DIR") || {
+        echo 'T3 app owner unknown; candidate is not inspected' >&2; return 1;
+      }
+      [[ $t3_owner =~ ^[1-9][0-9]*:[0-9]+$ ]] || {
+        echo 'T3 app owner invalid; candidate is not inspected' >&2; return 1;
+      }
+      install -m 0600 -o "${t3_owner%%:*}" -g "${t3_owner##*:}" /dev/null "$t3_update_lock" || {
+        echo 'T3 update lock bootstrap failed; candidate is not inspected' >&2; return 1;
+      }
+    fi
+    exec 6>>"$t3_update_lock"
+    flock -x 6
+  fi
 }
 
 publish_pass_attestation() {
@@ -258,7 +294,8 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
-# Lock order matches managed maintenance: tool, refresh, then T3 updater.
+# Lock order matches managed maintenance: tool, refresh, then the T3 app
+# updater, whose lock is bootstrapped for its owner when the tree exists.
 acquire_managed_locks
 # Hash only the executable acceptance bundle and the candidate/tooling identity.
 # The bundle is copied as named files by t3codeDeploymentScripts; adding a
@@ -315,6 +352,7 @@ candidate_args=(
   --provider-secrets-file "$PROVIDER_SECRETS_FILE"
   --tooling-path "$TOOLING_PATH"
   --agent-revision "$AGENT_REVISION"
+  --acceptance-route-file "$ACCEPTANCE_ROUTE_FILE"
   --candidate-home-target "$CANDIDATE_HOME_TARGET"
   --systemctl-bin "$SYSTEMCTL_BIN"
 )

@@ -4,9 +4,10 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-# The real executor matches deploy script names; run only an isolated copy.
+# Avoid matching any production process-name guard; all state and stubs are isolated.
 fixture_writer="$tmp/fixture-image-writer"
 cp "$root/packages/t3code/deploy-image.sh" "$fixture_writer"
+cp "$root/packages/t3code/receipt-checks.sh" "$tmp/receipt-checks.sh"
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
 mkdir -p "$tmp/window"
 touch "$tmp/window/window.lock"
@@ -55,6 +56,14 @@ if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true ||
   echo 'candidate ran without managed locks' >&2
   exit 3
 fi
+# When an in-container T3 app tree exists, the candidate must hold its updater
+# lock too, so an app promotion cannot interleave with acceptance.
+if [[ -d "$HOME_DIR/.local/share/t3code-tools/t3" ]]; then
+  if flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
+    echo 'candidate ran without the T3 app update lock' >&2
+    exit 3
+  fi
+fi
 if [[ ${CANDIDATE_ROUTE_UNAVAILABLE:-0} == 1 ]]; then
   jq '. + {outcome:"route_unavailable",provider_turn:{routes:"fixture-exhausted"}}' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" > "$STATE_DIR/attempts/route.tmp"
   mv "$STATE_DIR/attempts/route.tmp" "$STATE_DIR/attempts/$DEPLOYMENT_ID.json"
@@ -87,7 +96,7 @@ jq -cn \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-fixture",
     agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 SH
 cat > "$tmp/bin/podman" <<'SH'
@@ -195,25 +204,22 @@ printf '%s\n' "${RUNNING_IMAGE_ID#sha256:}" > "$ACCEPTED_POINTER_FILE"
 jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
   '{deployment_id:"legacy",image_id:$image,candidate_name:"t3code-candidate-legacy",
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/legacy.json"
 
-t3_lock="$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
-mv "$t3_lock" "$t3_lock.saved"
-if bash "$fixture_writer" > "$tmp/missing-t3-lock.log" 2>&1; then
-  echo 'missing T3 update lock unexpectedly allowed deployment' >&2; exit 1
+# An in-container T3 app tree means a competing updater can promote an app
+# under us. The candidate must refuse a symlinked lock, and must hold the real
+# lock through acceptance when the tree is a normal directory.
+mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+ln -s "$tmp/t3-lock-target" "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+: > "$tmp/t3-lock-target"
+if bash "$fixture_writer" > "$tmp/t3-symlink-lock.log" 2>&1; then
+  echo 'symlinked T3 update lock unexpectedly allowed deployment' >&2; exit 1
 fi
-grep -q 'T3 update lock missing' "$tmp/missing-t3-lock.log"
+grep -q 'T3 update lock is not a regular file' "$tmp/t3-symlink-lock.log" || { echo 'expected the symlinked-lock refusal; got:' >&2; cat "$tmp/t3-symlink-lock.log" >&2; exit 1; }
 [[ ! -s "$EVENTS" ]]
-ln -s "$t3_lock.saved" "$t3_lock"
-if bash "$fixture_writer" > "$tmp/symlink-t3-lock.log" 2>&1; then
-  echo 'symlink T3 update lock unexpectedly allowed deployment' >&2; exit 1
-fi
-grep -q 'T3 update lock missing' "$tmp/symlink-t3-lock.log"
-[[ ! -s "$EVENTS" ]]
-rm "$t3_lock"
-mv "$t3_lock.saved" "$t3_lock"
-
+rm "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 bash "$fixture_writer" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
 grep -q '^Restarting podman-t3code.service immediately after exact-image candidate acceptance$' "$tmp/success.log"
@@ -521,7 +527,7 @@ jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
     agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
 rm -f "$ACCEPTED_POINTER_FILE"
 bash "$fixture_writer" > "$tmp/repair.log"
@@ -616,3 +622,27 @@ echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, a
 echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
+
+# A missing updater lock must be created owned by the home owner and unreadable
+# to others, because the in-container updater runs as that user and opens it for
+# append. Creating it as the deploying process with a default umask left a
+# root-owned 0644 lock that broke every app update with EACCES.
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/lock-bootstrap-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+export DEPLOYMENT_ID=deployment-lock-bootstrap
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+bash "$fixture_writer" > "$tmp/lock-bootstrap.log" 2>&1 || true
+[[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]]
+[[ $(stat -c '%a' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == 600 ]]
+[[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]]
+echo 'Updater lock bootstrap proof: a missing app lock is created owner-owned and private.'
+
+# With a real app tree and no lock yet, a re-run bootstraps the lock for the
+# home owner: the updater opens the same file later, so its ownership matters.
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap run failed:' >&2; cat "$tmp/t3-bootstrap-lock.log" >&2; exit 1; }
+[[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]] || { echo 'T3 update lock was not bootstrapped' >&2; exit 1; }
+[[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]] || { echo 'bootstrapped T3 update lock has the wrong owner' >&2; exit 1; }
+echo 'Deploy-image fixture passed.'
