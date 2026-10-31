@@ -7,6 +7,7 @@ trap 'rm -rf "$tmp"' EXIT
 # Avoid matching any production process-name guard; all state and stubs are isolated.
 fixture_writer="$tmp/fixture-image-writer"
 cp "$root/packages/t3code/deploy-image.sh" "$fixture_writer"
+cp "$root/packages/t3code/receipt-checks.sh" "$tmp/receipt-checks.sh"
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
 mkdir -p "$tmp/window"
 touch "$tmp/window/window.lock"

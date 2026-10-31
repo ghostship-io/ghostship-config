@@ -1,4 +1,8 @@
 set -euo pipefail
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
 
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
@@ -130,11 +134,9 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)
-     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills] | all(. == true))
-           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' \
-    "$receipt" >/dev/null 2>&1
+     and (.provider_secret_inode == $secret_inode)' \
+    "$receipt" >/dev/null 2>&1 \
+    && receipt_checks_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -145,11 +147,9 @@ any_receipt_matches_image() {
       '((.image_id | sub("^sha256:"; "")) == $image)
        and (.deployment_id | type == "string" and length > 0)
        and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
-       and (.live_before != null and .live_before == .live_after)
-       and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-             .checks.skills] | all(. == true))
-           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' \
-      "$candidate" >/dev/null 2>&1; then
+       and (.live_before != null and .live_before == .live_after)' \
+      "$candidate" >/dev/null 2>&1 \
+      && receipt_checks_ok "$candidate"; then
       return 0
     fi
   done

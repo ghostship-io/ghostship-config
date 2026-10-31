@@ -1,4 +1,8 @@
 set -euo pipefail
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
 
 : "${STATE_DIR:?}"
 : "${PODMAN_BIN:?}"
@@ -13,11 +17,9 @@ for receipt in "$STATE_DIR"/receipts/*.json; do
     '((.image_id | sub("^sha256:"; "")) == $image)
      and (.deployment_id | type == "string" and length > 0)
      and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
-     and (.live_before != null and .live_before == .live_after)
-     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills] | all(. == true))
-           and ((.checks.desktop_cli == true) or ((.checks.desktop_cli == null) and (.checks.desktop_transport == true)))' \
-    "$receipt" >/dev/null 2>&1; then
+     and (.live_before != null and .live_before == .live_after)' \
+    "$receipt" >/dev/null 2>&1 \
+    && receipt_checks_ok "$receipt"; then
     exit 0
   fi
 done
