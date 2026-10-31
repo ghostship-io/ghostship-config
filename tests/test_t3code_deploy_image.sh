@@ -15,8 +15,10 @@ export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t
 mkdir -p "$tmp/bin" "$tmp/state/receipts" "$tmp/home" "$tmp/home/.local/share/t3code-tools" "$tmp/runtime"
 mkdir -p "$tmp/home/.local/state/t3code-shared-agents/bin"
 mkdir -p "$tmp/home/.local/state/t3code-tool-update"
+mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
 : > "$tmp/home/.local/state/t3code-tool-update/tool-update.lock"
 : > "$tmp/home/.local/state/t3code-shared-agents/refresh.lock"
+: > "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 for tool in agent ghostship ghostship-bladebro; do
   printf '#!/bin/sh\nexec /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-agent/bin/%s "$@"\n' "$tool" > "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
   chmod 0755 "$tmp/home/.local/state/t3code-shared-agents/bin/$tool"
@@ -50,7 +52,7 @@ SH
 cat > "$tmp/accept-candidate" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true || flock -n "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" true; then
+if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true || flock -n "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" true || flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
   echo 'candidate ran without managed locks' >&2
   exit 3
 fi
@@ -113,9 +115,9 @@ if [[ $1 == inspect && $2 == t3code ]]; then
       ;;
     *)
       if [[ -r "$LIVE_IMAGE_FILE" ]]; then
-        printf 'container-id %s started healthy\n' "$(cat "$LIVE_IMAGE_FILE")"
+        printf '%064d %s started healthy\n' 1 "$(cat "$LIVE_IMAGE_FILE")"
       else
-        printf 'container-id sha256:%s started healthy\n' "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
+        printf '%064d sha256:%s started healthy\n' 1 "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
       fi
       ;;
   esac
@@ -143,6 +145,10 @@ cat > "$tmp/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $1 == restart && $2 == podman-t3code.service ]]; then
+  if flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
+    echo 'restart ran without the T3 update lock' >&2
+    exit 1
+  fi
   printf '%s\n' restart >> "$EVENTS"
   rm -f "$LIVE_IMAGE_FILE"
 elif [[ $1 == is-active ]]; then
@@ -205,16 +211,15 @@ jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
 # under us. The candidate must refuse a symlinked lock, and must hold the real
 # lock through acceptance when the tree is a normal directory.
 mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 ln -s "$tmp/t3-lock-target" "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 : > "$tmp/t3-lock-target"
 if bash "$fixture_writer" > "$tmp/t3-symlink-lock.log" 2>&1; then
   echo 'symlinked T3 update lock unexpectedly allowed deployment' >&2; exit 1
 fi
-grep -q 'T3 update lock is not a regular file' "$tmp/t3-symlink-lock.log"
+grep -q 'T3 update lock is not a regular file' "$tmp/t3-symlink-lock.log" || { echo 'expected the symlinked-lock refusal; got:' >&2; cat "$tmp/t3-symlink-lock.log" >&2; exit 1; }
 [[ ! -s "$EVENTS" ]]
 rm "$tmp/home/.local/share/t3code-tools/t3/update.lock"
-: > "$tmp/home/.local/share/t3code-tools/t3/update.lock"
-
 bash "$fixture_writer" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
 grep -q '^Restarting podman-t3code.service immediately after exact-image candidate acceptance$' "$tmp/success.log"
@@ -224,6 +229,12 @@ grep -q '^Restarting podman-t3code.service immediately after exact-image candida
 [[ $(sed -n '4p' "$EVENTS") == restart ]]
 [[ $(cat "$tmp/state/applied") == "$DEPLOYMENT_ID" ]]
 [[ $(jq -r '.mode' "$tmp/ledger.jsonl") == candidate-accepted ]]
+attestation="$STATE_DIR/attestations/current.json"
+jq -e --arg image "$(tar -xOf "$IMAGE_ARCHIVE" config.json | sha256sum | cut -d ' ' -f 1)" \
+  --arg receipt "$DEPLOYMENT_ID" --arg sha "$(sha256sum "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" | cut -d ' ' -f 1)" \
+  '.state == "pass" and .image_id == $image and .receipt_id == $receipt and .receipt_sha256 == $sha and .failed_candidate == false and (.container_id | length == 64)' \
+  "$attestation" >/dev/null
+[[ $(stat -c %a "$attestation") == 444 ]]
 
 # A restart that remains starting for more than 120 simulated seconds must
 # still reach the existing post-restart checks and applied marker.
@@ -268,6 +279,7 @@ set -e
 [[ $first_status != 0 ]]
 grep -q 'Candidate acceptance FAILED' "$tmp/failure.log"
 [[ $(cut -d ' ' -f 1 "$tmp/state/failed-candidate") == "$DEPLOYMENT_ID" ]]
+jq -e '.state == "unknown" and .failed_candidate == true' "$attestation" >/dev/null
 [[ $(jq -r '.deployment_id + ":" + (.exit_code | tostring)' "$tmp/state/attempts/$DEPLOYMENT_ID.json") == "$DEPLOYMENT_ID:1" ]]
 [[ $(jq -r '.started_at_ms | numbers' "$tmp/state/attempts/$DEPLOYMENT_ID.json") =~ ^[0-9]+$ ]]
 [[ $(wc -l < "$EVENTS") == 5 ]]
@@ -626,3 +638,11 @@ bash "$fixture_writer" > "$tmp/lock-bootstrap.log" 2>&1 || true
 [[ $(stat -c '%a' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == 600 ]]
 [[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]]
 echo 'Updater lock bootstrap proof: a missing app lock is created owner-owned and private.'
+
+# With a real app tree and no lock yet, a re-run bootstraps the lock for the
+# home owner: the updater opens the same file later, so its ownership matters.
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap run failed:' >&2; cat "$tmp/t3-bootstrap-lock.log" >&2; exit 1; }
+[[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]] || { echo 'T3 update lock was not bootstrapped' >&2; exit 1; }
+[[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]] || { echo 'bootstrapped T3 update lock has the wrong owner' >&2; exit 1; }
+echo 'Deploy-image fixture passed.'
