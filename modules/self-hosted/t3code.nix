@@ -202,8 +202,6 @@ in
     pkg:
     builtins.elem (lib.getName pkg) [
       "antigravity-acp"
-      "claude-code"
-      "cursor-cli"
     ];
 
   ghostship.agentHost.enable = true;

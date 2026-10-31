@@ -32,21 +32,10 @@ let
     sha256sum ${t3codeBakedSource} | cut -d' ' -f1 > $out/DIGEST
     chmod 0444 $out/VERSION $out/DIGEST
   '';
-  # The CLIs the container used to install over the network on first start.
-  # Pinned here so a fresh container never waits on npm.
-  t3codeAgentClis = [
-    { name = "codex"; package = pkgs.codex; binary = "codex"; }
-    { name = "claude-code"; package = pkgs.claude-code; binary = "claude"; }
-    { name = "opencode"; package = pkgs.opencode; binary = "opencode"; }
-    { name = "cursor-cli"; package = pkgs.cursor-cli; binary = "cursor-agent"; }
-    # antigravity is deliberately not baked: the agent launches its ACP archive
-    # (`agy_acp_server.par`) and updates it through the antigravity updater, and
-    # `pkgs.antigravity` is a GUI IDE, not that CLI.
-  ];
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
-  t3codeImageContents = t3codePackages ++ map (entry: entry.package) t3codeAgentClis ++ [
+  t3codeImageContents = t3codePackages ++ [
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
