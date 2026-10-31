@@ -129,6 +129,9 @@ elif [[ $1 == image && $2 == inspect ]]; then
   else
     exit 1
   fi
+elif [[ $1 == image && $2 == inspect && ${3:-} == sha256:* ]]; then
+  # Streamed-image verification asks for the id podman computed.
+  printf 'sha256:%s\n' "${FIXTURE_LOADED_ID:-${3#sha256:}}"
 elif [[ $1 == exec && $2 == t3code && $3 == readlink ]]; then
   printf '%s\n' "$TOOLING_PATH"
 elif [[ $1 == exec && $2 == t3code && $3 == stat ]]; then
@@ -609,6 +612,43 @@ echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, a
 echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
+
+# A streamed image carries no archive, so the id comes from the stream's own
+# config digest before the load, and the load must produce that same id.
+stream_dir="$tmp/stream"; mkdir -p "$stream_dir"
+printf '{"architecture":"arm64","os":"linux"}\n' > "$stream_dir/config.json"
+stream_id=$(sha256sum "$stream_dir/config.json" | cut -d ' ' -f 1)
+printf '[{"Config":"config.json","RepoTags":["localhost/ghostship-t3code:t3code-runtime"]}]\n' > "$stream_dir/manifest.json"
+tar -cf "$tmp/image-stream.tar" -C "$stream_dir" manifest.json config.json
+cat > "$tmp/stream.sh" <<SH
+#!/usr/bin/env bash
+exec cat "$tmp/image-stream.tar"
+SH
+chmod +x "$tmp/stream.sh"
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/stream-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+export DEPLOYMENT_ID=deployment-streamed-image
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$stream_id" bash "$fixture_writer" > "$tmp/stream-match.log" 2>&1
+stream_rc=$?
+set -e
+[[ $stream_rc == 0 ]]
+grep -q 'Candidate acceptance PASS' "$tmp/stream-match.log"
+# A different id after the load is UNKNOWN: refuse, do not promote, do not receipt.
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$(printf '%064d' 9)" bash "$fixture_writer" > "$tmp/stream-mismatch.log" 2>&1
+mismatch_rc=$?
+set -e
+[[ $mismatch_rc == 77 ]]
+grep -q 'does not match the pre-load id' "$tmp/stream-mismatch.log"
+[[ ! -e $ACCEPTED_POINTER_FILE ]]
+[[ ! -e $STATE_DIR/receipts/$DEPLOYMENT_ID.json ]]
+echo 'Streamed image proof: config-digest id before load, verified after load, mismatch refused.'
 
 # A missing updater lock must be created owned by the home owner and unreadable
 # to others, because the in-container updater runs as that user and opens it for
