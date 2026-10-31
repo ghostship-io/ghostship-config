@@ -182,7 +182,6 @@
               go_1_26
               git
               gitleaks
-              git
               age
               bashInteractive
               coreutils
