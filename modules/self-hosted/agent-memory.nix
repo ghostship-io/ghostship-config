@@ -77,7 +77,7 @@ in
         UMask = "0077";
       };
       script = ''
-        ${pkgs.podman}/bin/podman run --rm --pull=never --network=none \
+        ${config.virtualisation.podman.package}/bin/podman run --rm --pull=never --network=none \
           --user 3000:3000 \
           --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
           -e HOME=/tmp \
@@ -89,7 +89,7 @@ in
           --security-opt=apparmor=ghostship-agent-memory \
           ${cfg.image} \
           basic-memory project add ${cfg.project} /data/projects/${cfg.project}
-        ${pkgs.podman}/bin/podman run --rm --pull=never --network=none \
+        ${config.virtualisation.podman.package}/bin/podman run --rm --pull=never --network=none \
           --user 3000:3000 \
           --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
           -e HOME=/tmp \
