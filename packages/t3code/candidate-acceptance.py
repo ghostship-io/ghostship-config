@@ -766,6 +766,9 @@ def tarfile_open(path):
     return tarfile.open(path)
 
 
+APP_RELEASE_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+
+
 def command(engine, *args, timeout=180):
     return subprocess.run(
         [*engine, *args], check=False, text=True, capture_output=True, timeout=timeout
@@ -784,6 +787,33 @@ def assert_ok(engine, *args, timeout=180):
         suffix = f" ({detail[:180]})" if detail else ""
         raise RuntimeError(f"candidate command failed: {args[0]}{suffix}")
     return result.stdout.strip()
+
+
+def candidate_app_release(engine, name, timeout=60):
+    """The T3 app release the candidate container actually serves.
+
+    Read through the image's single selector so this code, deploy-image and the
+    release window all name the app the same way. Unknown is never a pass: a
+    selector that fails, or reports a release without a valid version, refuses.
+    """
+    result = command(engine, "exec", name, "/usr/share/t3code/served-identity.sh",
+                     timeout=timeout)
+    if result.returncode:
+        raise PreconditionError("candidate app release is unknown")
+    try:
+        payload = json.loads(result.stdout)
+    except ValueError:
+        raise PreconditionError("candidate app release is unreadable") from None
+    served = payload.get("served") if isinstance(payload, dict) else None
+    if not isinstance(served, dict):
+        raise PreconditionError("candidate app release is unreadable")
+    version = served.get("version")
+    digest = served.get("digest") or ""
+    if not isinstance(version, str) or not APP_RELEASE_PATTERN.fullmatch(version):
+        raise PreconditionError("candidate app release is invalid")
+    if digest and not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
+        raise PreconditionError("candidate app release digest is invalid")
+    return f"{version}+{digest}" if digest else version
 
 
 def candidate_agent_command(engine, name, *args, timeout=180):
@@ -1791,9 +1821,11 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                 outcome=outcome, after=None, cleanup=None,
                 identity_unchanged=None, **report_args)
         else:
+            app_release = candidate_app_release(command_fn, name)
             receipt = {
                 "deployment_id": desired,
                 "image_id": image_id,
+                "app_release": app_release,
                 "agent_revision": expected_agent_revision,
                 "agent_path": agent_path,
                 "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)

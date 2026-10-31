@@ -145,12 +145,27 @@ image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f
 secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 
+# The app release the running container actually serves, through the image's
+# single selector. Unknown fails: a receipt never matches an app nobody named.
+served_app_release() {
+  local payload version digest
+  payload=$("$PODMAN_BIN" exec t3code /usr/share/t3code/served-identity.sh 2>/dev/null) || return 1
+  version=$("$JQ_BIN" -er '.served.version // empty' <<<"$payload" 2>/dev/null) || return 1
+  digest=$("$JQ_BIN" -r '.served.digest // ""' <<<"$payload" 2>/dev/null) || return 1
+  [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  [[ -z $digest || $digest =~ ^[0-9a-f]{64}$ ]] || return 1
+  if [[ -n $digest ]]; then printf '%s+%s\n' "$version" "$digest"; else printf '%s\n' "$version"; fi
+}
+
 receipt_matches_image() {
+  local app_release
+  app_release=$(served_app_release) || return 1
   "$JQ_BIN" -e \
     --arg deployment "$DEPLOYMENT_ID" \
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
+    --arg app "$app_release" \
     --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
@@ -158,6 +173,7 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
+     and (.app_release == $app)
      and (.provider_secret_inode == $secret_inode)' \
     "$receipt" >/dev/null 2>&1 \
     && receipt_checks_ok "$receipt"
