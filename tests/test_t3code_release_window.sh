@@ -129,6 +129,7 @@ ln -s "$tmp/other-units/deploy.service" "$tmp/other-generation/etc/systemd/syste
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
 fixture_window="$tmp/fixture-window-command"
 cp "$repo/packages/t3code/release-window.sh" "$fixture_window"
+cp "$repo/packages/t3code/receipt-checks.sh" "$tmp/receipt-checks.sh"
 cmd=(bash "$fixture_window")
 # Preflight reads the actual lock files and ignores unrelated fixture locks.
 mkdir -p "$tmp/evidence/old"
@@ -243,7 +244,7 @@ printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
 mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"
 if "${cmd[@]}" post; then echo 'accepted missing receipt' >&2; exit 1; fi
 inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:$a,agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:$a,agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown","started_at_ms":%s}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
 if "${cmd[@]}" post; then echo 'accepted unknown attempt' >&2; exit 1; fi
 printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":1}\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"

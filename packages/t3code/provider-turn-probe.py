@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import time
@@ -32,6 +33,28 @@ PROBE_PROMPT = (
 )
 
 
+TOOL_ITEM_TYPES = frozenset({"dynamic_tool", "command_execution", "file_change",
+                             "web_search", "image_view"})
+
+
+def _completed_tool_item(item):
+    """A real completed tool item from the T3 v0.1.5 projection.
+
+    T3 emits dynamic_tool/command_execution/file_change/web_search/image_view
+    (session-logic-D8bgEKqg.js, baked app 0.1.5). ``command_execution`` also
+    carries the pre-run workspace preparation; that is not a model tool call.
+    """
+    kind = item.get("type")
+    if kind == "tool_result":
+        return item.get("ok") is True and item.get("status") in (None, "completed")
+    if kind not in TOOL_ITEM_TYPES or item.get("status") != "completed":
+        return False
+    if kind == "command_execution" and (
+            item.get("title") == "Workspace ready" or item.get("input") == "Preparing workspace"):
+        return False
+    return True
+
+
 def has_tool_result(client, thread):
     projection = (client._get(f"/api/orchestration/threads/{quote(thread, safe='')}") or {}).get("projection") or {}
     runs = projection.get("runs") or []
@@ -40,15 +63,26 @@ def has_tool_result(client, thread):
     run_id = runs[0]["id"]
     items = [item for item in projection.get("turnItems") or []
              if isinstance(item, dict) and item.get("runId") == run_id]
-    return any(item.get("type") == "tool_result" and item.get("ok") is True for item in items)
+    return any(_completed_tool_item(item) for item in items)
 
 
-def standard_options(client, instance, model):
-    """Use only supported non-fast options from the live native catalog."""
+def standard_options(client, instance, model, requested=None):
+    """Use only supported non-fast options from the live native catalog.
+
+    ``requested`` carries the approved effort/option from the route policy. It
+    is validated against the native descriptor rather than overwritten, so the
+    real turn uses the same effort as the worker route.
+    """
     providers = client.capabilities(instance).get("providers", [])
     matches = [(provider, item) for provider in providers if provider.get("providerInstanceId") == instance
                for item in provider.get("models", []) if item.get("id") == model]
-    if len(matches) != 1 or matches[0][0].get("available") is not True:
+    if len(matches) != 1:
+        raise ValueError("native route is not currently available")
+    provider = matches[0][0]
+    if provider.get("available") is not True:
+        if (provider.get("authReady") is False
+                or str(provider.get("authStatus") or "").lower() == "unauthenticated"):
+            raise ValueError("native route is not authenticated")
         raise ValueError("native route is not currently available")
     descriptors = {item.get("id"): item for item in matches[0][1].get("options", []) if isinstance(item, dict)}
     options = {}
@@ -65,27 +99,81 @@ def standard_options(client, instance, model):
         if fast.get("type") != "boolean":
             raise ValueError("fast mode cannot be disabled")
         options["fastMode"] = False
+    requested = requested or {}
+    if not isinstance(requested, dict):
+        raise ValueError("invalid native options")
+    if requested.get("serviceTier", "standard") != "standard":
+        raise ValueError("priority or fast mode is not permitted")
+    if requested.get("fastMode", False) is not False:
+        raise ValueError("priority or fast mode is not permitted")
+    for key, value in requested.items():
+        if key in ("serviceTier", "fastMode"):
+            continue
+        descriptor = descriptors.get(key)
+        if descriptor is None:
+            raise ValueError(f"option {key!r} is not available")
+        allowed = descriptor.get("values")
+        if descriptor.get("type") == "boolean":
+            valid = isinstance(value, bool)
+        else:
+            valid = isinstance(value, str) and (allowed is None or value in allowed)
+        if not valid:
+            raise ValueError(f"option {key!r} is not supported")
+        options[key] = value
     return options
 
 
-def native_is_admitted(policy, instance, model):
-    if not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2":
-        return False
-    providers, routes = policy.get("providers"), policy.get("routes")
-    if not isinstance(providers, dict) or not isinstance(routes, list):
-        return False
-    admitted = []
-    for row in routes:
-        if not isinstance(row, dict) or not isinstance(row.get("roles"), list):
-            continue
-        provider = row.get("provider")
-        provider_policy = providers.get(provider) if isinstance(provider, str) else None
-        if (row.get("admit") is True and "worker" in row["roles"]
-                and row.get("provider_instance") == instance and row.get("model") == model
-                and isinstance(provider_policy, dict) and provider_policy.get("admit") is True
-                and row.get("billing") in ("subscription", "free", "promotion")):
-            admitted.append(row)
-    return len(admitted) == 1
+def probe_error_kind(error):
+    """A bounded class for a pre-launch probe failure; never echoes the message."""
+    message = str(error).lower()
+    if "no t3 provider instance" in message:
+        return "provider-instance-missing"
+    if "session token" in message:
+        return "t3-auth"
+    if "unreachable" in message:
+        return "t3-unreachable"
+    if "native route is not authenticated" in message:
+        return "provider-auth"
+    if "native route is not currently available" in message:
+        return "route-not-available"
+    if "option " in message and ("not available" in message or "not supported" in message):
+        return "option-invalid"
+    return "probe-error"
+
+
+def failure_kind(result):
+    """Classify a prove_route failure without echoing provider text."""
+    detail = str(result.get("detail") or "").lower()
+    if re.search(r"\b(?:auth|authentication|unauthorized|forbidden|401|403)\b", detail):
+        return "provider-auth"
+    if "model unavailable" in detail or "model-unavailable" in detail:
+        return "model-unavailable"
+    if "quota" in detail or "rate limit" in detail or "429" in detail:
+        return "quota"
+    outcome = str(result.get("outcome") or "").lower().replace("_", "-")
+    if outcome in ("execution", "timeout", "provider-schema", "invalid-request",
+                   "no-tool-call", "wrong-tool-result"):
+        return outcome
+    return "provider-error"
+
+
+def route_unavailable_output(instance, model, kind):
+    """The structured failure the acceptance record can retain safely."""
+    return {"outcome": "route_unavailable", "settled": True,
+            "error": {"code": "route-unavailable", "kind": kind,
+                      "instance": instance, "model": model}}
+
+
+def acceptance_route_allows(route, instance, model):
+    """Check only that the handed-over route names the requested target.
+
+    Policy admission lives in candidate-acceptance.admitted_acceptance_route;
+    the probe never re-implements provider, billing or acceptance-only policy.
+    """
+    # Policy admission lives in candidate-acceptance.admitted_acceptance_route.
+    # The probe only checks that the handed-over route names this target.
+    return (isinstance(route, dict)
+            and (route.get("provider_instance"), route.get("model")) == (instance, model))
 
 
 def prove_route(route, wait, client, native_target=None):
@@ -167,6 +255,7 @@ def main():
     parser.add_argument("--instance")
     parser.add_argument("--native-model")
     parser.add_argument("--options-json", default="{}")
+    parser.add_argument("--acceptance-route-json")
     args = parser.parse_args()
 
     agent_tools = (os.environ.get("GHOSTSHIP_TOOLS_ROOT")
@@ -182,10 +271,10 @@ def main():
         if not args.instance or not args.native_model:
             parser.error("both native identity fields are required")
         try:
-            policy = json.loads(Path("/etc/ghostship/route-policy.json").read_text())
             options = json.loads(args.options_json)
-            if not native_is_admitted(policy, args.instance, args.native_model):
-                raise ValueError("native route is not admitted")
+            acceptance_route = json.loads(args.acceptance_route_json) if args.acceptance_route_json else None
+            if not acceptance_route_allows(acceptance_route, args.instance, args.native_model):
+                raise ValueError("acceptance route does not admit the native target")
             allowed = ("serviceTier", "fastMode", "variant")
             if (not isinstance(options, dict) or any(k not in allowed for k in options)
                     or ("variant" in options and not isinstance(options["variant"], str))):
@@ -200,11 +289,11 @@ def main():
     client = Bridge()
     if native_target:
         try:
-            safe_options = standard_options(client, native_target[0], native_target[1])
+            safe_options = standard_options(client, native_target[0], native_target[1], options)
             native_target = (native_target[0], native_target[1], safe_options)
-        except (ValueError, TypeError, KeyError, OSError, T3Error):
-            print(json.dumps({"outcome": "route_unavailable", "settled": True,
-                              "error": {"code": "route-unavailable"}}, sort_keys=True))
+        except (ValueError, TypeError, KeyError, OSError, T3Error) as error:
+            print(json.dumps(route_unavailable_output(
+                native_target[0], native_target[1], probe_error_kind(error)), sort_keys=True))
             return 1
     result = prove_route(args.route, args.wait, client, native_target)
     output = {
@@ -216,7 +305,8 @@ def main():
         "settled": result.get("settled"),
     }
     if result.get("outcome") != "passed" or result.get("settled") is not True:
-        output["error"] = {"code": safe_failure_code(result)}
+        output["error"] = {"code": safe_failure_code(result),
+                           "kind": failure_kind(result)}
     print(json.dumps(output, sort_keys=True))
     return 0 if result.get("outcome") == "passed" and result.get("settled") is True else 1
 

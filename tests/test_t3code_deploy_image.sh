@@ -7,6 +7,7 @@ trap 'rm -rf "$tmp"' EXIT
 # Avoid matching any production process-name guard; all state and stubs are isolated.
 fixture_writer="$tmp/fixture-image-writer"
 cp "$root/packages/t3code/deploy-image.sh" "$fixture_writer"
+cp "$root/packages/t3code/receipt-checks.sh" "$tmp/receipt-checks.sh"
 printf '%s\n' "$tmp/window" > "$tmp/window-config"
 mkdir -p "$tmp/window"
 touch "$tmp/window/window.lock"
@@ -93,7 +94,7 @@ jq -cn \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-fixture",
     agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 SH
 cat > "$tmp/bin/podman" <<'SH'
@@ -197,7 +198,7 @@ printf '%s\n' "${RUNNING_IMAGE_ID#sha256:}" > "$ACCEPTED_POINTER_FILE"
 jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
   '{deployment_id:"legacy",image_id:$image,candidate_name:"t3code-candidate-legacy",
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/legacy.json"
 
 # An in-container T3 app tree means a competing updater can promote an app
@@ -514,7 +515,7 @@ jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
     agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
     live_before:{id:"production"},live_after:{id:"production"},
-    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+    checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
 rm -f "$ACCEPTED_POINTER_FILE"
 bash "$fixture_writer" > "$tmp/repair.log"

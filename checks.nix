@@ -136,6 +136,7 @@ let
     "opencode/ollama-cloud/deepseek-v4.1-flash"
     "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
     "opencode/opencode-go/deepseek-v4.1-flash"
+    "opencode-free/opencode/deepseek-v4.1-flash-free"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "opencode/literouter/deepseek-v4.1-flash-1017:full-context"
     "antigravity/gemini-3.8-flash"
@@ -243,6 +244,7 @@ in
         bash tests/test_t3code_deploy_image.sh
         bash tests/test_t3code_release_window.sh
         bash tests/test_t3code_unknown_ending.sh
+        bash tests/test_t3code_worker_dev_env.sh
         bash tests/test_t3code_window_lock.sh
         bash tests/test_t3code_checks_wiring.sh
         bash tests/test_t3code_activate_deployment.sh

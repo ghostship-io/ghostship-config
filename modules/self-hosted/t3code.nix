@@ -29,6 +29,7 @@ let
     cp ${../../packages/t3code/acceptance-launcher-key.py} "$out/acceptance-launcher-key.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/provider-turn-probe.py} "$out/provider-turn-probe.py"
+    cp ${../../packages/t3code/rehearsal-isolation.py} "$out/rehearsal-isolation.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
   '';
   t3codeSecretsFile = "/run/secrets/t3code.env";
@@ -76,6 +77,7 @@ let
     text = ''
       export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/deploy-image.sh}
     '';
   };
@@ -115,6 +117,7 @@ let
       export COREUTILS_BIN=${pkgs.coreutils}/bin
       export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
       export BASH_BIN=${pkgs.bash}/bin/bash
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
@@ -127,7 +130,10 @@ let
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
-    text = builtins.readFile ../../packages/t3code/receipt-self-check.sh;
+    text = ''
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-self-check.sh}
+    '';
   };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
@@ -334,6 +340,8 @@ in
 
   environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
+  environment.etc."ghostship/t3code-acceptance-route.json".source =
+    ../../packages/t3code/acceptance-route.json;
 
   systemd.services.podman-t3code = {
     restartIfChanged = false;

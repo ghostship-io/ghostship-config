@@ -290,8 +290,10 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   the image change's release evidence — the first one is #1636. Performance is
   **not** part of the candidate-acceptance receipt: that schema is closed at
   `CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills",
-  "desktop_transport")`, so do not add fields to it or expect it to gate on
-  timings. Budgets are set per image from measured evidence; do not invent
+  "desktop_cli")`; `desktop_transport` is recorded as typed
+  `not_applicable` in the credential-free candidate and is verified live after
+  the switch by the production smoke check. Do not add fields to the required
+  set or expect it to gate on timings. Budgets are set per image from measured evidence; do not invent
   fleet-wide thresholds, and do not compare images of different roles.
 - Anything on the start path that installs, fetches, compiles, migrates or
   waits on the network is a defect: move it into the image build, or defer it
