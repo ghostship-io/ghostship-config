@@ -1899,6 +1899,14 @@ def _selection(document, now):
             self.assertEqual(rehearsal_observer.ENV_ALLOWLIST[name]["class"], entry)
             self.assertTrue(rehearsal_observer.ENV_ALLOWLIST[name]["reason"])
 
+    def test_bash_env_dev_shell_hook_is_an_allowlisted_runtime_loader(self):
+        verdict = rehearsal_observer.classify_env_names(["BASH_ENV"])
+        self.assertEqual(verdict["violations"], [])
+        entry = rehearsal_observer.ENV_ALLOWLIST["BASH_ENV"]
+        self.assertEqual(entry["class"], "b")
+        self.assertIn("worker-dev-env", entry["reason"])
+        self.assertIn("image.nix", entry["reason"])
+
     def test_production_credentials_and_unknown_names_are_violations(self):
         for name in ("GITHUB_TOKEN", "OPENROUTER_API_KEY",
                      "AGENT_DESKTOP_API_TOKEN", "SOMETHING_UNLISTED"):
