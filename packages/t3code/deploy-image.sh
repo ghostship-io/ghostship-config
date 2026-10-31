@@ -32,8 +32,15 @@ fi
 
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
-# Every non-zero exit must say so; a silent exit 1 hid the failed step.
-trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "deploy: exiting rc=$rc (see the last deploy step above)" >&2; fi' EXIT
+# Every non-zero exit must say so; a silent exit 1 hid the failed step. The
+# attempt writer below replaces this trap, so it calls the same function.
+log_exit_rc() {
+  local rc=${1:-0}
+  if [ "$rc" -ne 0 ]; then
+    echo "deploy: exiting rc=$rc (see the last deploy step above)" >&2
+  fi
+}
+trap 'rc=$?; log_exit_rc "$rc"' EXIT
 announce_intent deploy
 [[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
@@ -134,6 +141,7 @@ write_attempt_result() {
     chmod 0600 "$attempt_temporary"
     mv -f "$attempt_temporary" "$attempt_file"
   fi
+  log_exit_rc "$exit_code"
   return "$exit_code"
 }
 "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
