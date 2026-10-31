@@ -153,17 +153,17 @@
     "ghostship-native-agent": {
       "flake": false,
       "locked": {
-        "lastModified": 1793445951,
-        "narHash": "sha256-2tn147q7TqYLEIcwv3rEYucSWJ8P7UdUsmtwAz/5O+4=",
+        "lastModified": 1793450194,
+        "narHash": "sha256-2Uf+lG0cXTK8RUMFH8T2RhG1UKcK/vMpGAiezWmIsek=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "44f2727f25865ccd2f7a5c9f48ee1358aa4a40d0",
+        "rev": "a2044afb5593d76cd583f51003bd1d83df7b3333",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "44f2727f25865ccd2f7a5c9f48ee1358aa4a40d0",
+        "rev": "a2044afb5593d76cd583f51003bd1d83df7b3333",
         "type": "github"
       }
     },
@@ -172,17 +172,17 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1793445951,
-        "narHash": "sha256-2tn147q7TqYLEIcwv3rEYucSWJ8P7UdUsmtwAz/5O+4=",
+        "lastModified": 1793450194,
+        "narHash": "sha256-2Uf+lG0cXTK8RUMFH8T2RhG1UKcK/vMpGAiezWmIsek=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "44f2727f25865ccd2f7a5c9f48ee1358aa4a40d0",
+        "rev": "a2044afb5593d76cd583f51003bd1d83df7b3333",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "44f2727f25865ccd2f7a5c9f48ee1358aa4a40d0",
+        "rev": "a2044afb5593d76cd583f51003bd1d83df7b3333",
         "type": "github"
       }
     },

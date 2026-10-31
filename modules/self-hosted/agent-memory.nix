@@ -1,21 +1,20 @@
 # Shared active workspace for Wisp and the orchestrator (Basic Memory).
 #
 # Dark by default. Enabling this module is the owner's security decision: it
-# creates a dedicated internal Podman network with only `t3code` and
-# `agent-memory`, adds the private data volume, and registers the notes tools
-# on the connector. Nothing is attached until the reviewed configuration
-# enables it.
+# joins the existing `ghostship_net` service network, adds the private data
+# volume, and registers the notes tools on the connector. Nothing is attached
+# until the reviewed configuration enables it.
 #
 # The image is built on the host (never pulled at runtime) from the pinned
-# upstream release plus a pre-baked embedding model, so the service has no
-# egress and no model download at cold start:
+# upstream release plus a pre-baked embedding model, so cold start needs no
+# download:
 #
 #   podman build -f modules/self-hosted/agent-memory.Containerfile \
 #     -t localhost/agent-memory:1.0.0 modules/self-hosted
 #
 # The container is unauthenticated by upstream design. Its only protection is
-# the dedicated network and the authenticated connector boundary; never publish
-# a port, route or hostname for it.
+# the private service network and the authenticated connector boundary; never
+# publish a port, route or hostname for it.
 {
   config,
   lib,
@@ -25,9 +24,8 @@
 
 let
   cfg = config.ghostship.agentMemory;
-  network = "agent_memory_net";
-  subnet = "10.89.23.0/24";
-  gateway = "10.89.23.1";
+  # Reuse the existing service network; no per-service network or DNS rule.
+  network = "ghostship_net";
   endpoint = "http://agent-memory:8000/mcp";
 in
 {
@@ -61,27 +59,6 @@ in
       "d ${cfg.dataDir}/config 0700 3000 3000 -"
       "d ${cfg.dataDir}/projects 0700 3000 3000 -"
     ];
-
-    systemd.services.init-agent-memory-net = {
-      description = "Create the private agent memory Podman network";
-      after = [ "network.target" ];
-      before = [
-        "podman-agent-memory.service"
-        "podman-t3code.service"
-      ];
-      wantedBy = [ "multi-user.target" ];
-      restartIfChanged = false;
-      stopIfChanged = false;
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-      };
-      script = ''
-        ${pkgs.podman}/bin/podman network inspect ${network} >/dev/null 2>&1 || \
-        ${pkgs.podman}/bin/podman network create --internal --subnet ${subnet} \
-          --gateway ${gateway} ${network}
-      '';
-    };
 
     # Create both projects before the server starts. `project add` is
     # idempotent (a repeat reindexes and exits 0). --network=none proves the
@@ -121,13 +98,6 @@ in
       '';
     };
 
-    # Netavark adds no DNS input rule for an internal network. Without this,
-    # t3code cannot resolve `agent-memory` through aardvark-dns; the network
-    # still has no external route. Same rule as the github internal network.
-    networking.firewall.extraCommands = lib.concatMapStrings (proto: ''
-      iptables -w -A nixos-fw -s ${subnet} -d ${gateway} -p ${proto} --dport 53 -j nixos-fw-accept
-    '') [ "udp" "tcp" ];
-
     virtualisation.oci-containers.containers."agent-memory" = {
       image = cfg.image;
       pull = "never";
@@ -166,7 +136,6 @@ in
       ];
       extraOptions = [
         "--network=${network}"
-        "--hostname=agent-memory"
         "--cap-drop=ALL"
         "--security-opt=no-new-privileges"
         "--pids-limit=256"
@@ -181,28 +150,20 @@ in
     };
 
     systemd.services.podman-agent-memory = {
-      after = [
-        "init-agent-memory-net.service"
-        "agent-memory-projects.service"
-      ];
+      after = [ "agent-memory-projects.service" ];
       requires = [ "agent-memory-projects.service" ];
     };
 
-    # The connector reaches the private MCP endpoint on the dedicated network.
+    # The connector reaches the MCP endpoint over the existing service network.
+    # t3code is already a member; this adds only the notes environment.
     # No host port, Cloudflare route or muximux entry exists.
     virtualisation.oci-containers.containers."t3code" = {
-      extraOptions = lib.mkAfter [ "--network=${network}" ];
       environment = {
         GHOSTSHIP_NOTES_ENDPOINT = endpoint;
         GHOSTSHIP_NOTES_ALLOW_PRIVATE_HTTP = "1";
         GHOSTSHIP_NOTES_PROJECT = cfg.project;
         GHOSTSHIP_NOTES_TEST_PROJECT = cfg.testProject;
       };
-    };
-
-    systemd.services.podman-t3code = {
-      after = lib.mkAfter [ "init-agent-memory-net.service" ];
-      requires = lib.mkAfter [ "init-agent-memory-net.service" ];
     };
   };
 }
