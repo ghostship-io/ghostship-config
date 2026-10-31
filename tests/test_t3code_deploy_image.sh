@@ -482,6 +482,29 @@ grep -q 'receipt did not approve this exact image' "$tmp/absent.log"
 jq -e '.outcome == "acceptance_unknown"' "$tmp/state/attempts/$DEPLOYMENT_ID.json" >/dev/null
 [[ $(wc -l < "$EVENTS") == 6 ]]
 
+# A closed-unaccepted window record is not a receipt: with the deployment
+# marked applied and identical inputs it must not take the already-applied
+# fast path, and the run must still fail on the receipt gate.
+export DEPLOYMENT_ID=deployment-closed RECEIPT_MISSING=1 RECEIPT_IMAGE_MISMATCH=0
+saved_closed_events=$EVENTS; EVENTS="$tmp/closed-events"; : > "$EVENTS"
+saved_applied=$(cat "$tmp/state/applied"); saved_applied_inputs=$(cat "$tmp/state/applied-inputs")
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/applied"
+cp "$tmp/state/desired-inputs" "$tmp/state/applied-inputs"
+printf '{"state":"closed_unaccepted","deployment_id":"%s"}\n' "$DEPLOYMENT_ID" > "$tmp/state/closed-unaccepted.json"
+set +e
+bash "$fixture_writer" > "$tmp/closed-fast.log" 2>&1
+closed_status=$?
+set -e
+[[ $closed_status != 0 ]]
+! grep -q 'already applied' "$tmp/closed-fast.log" || { echo 'closed-unaccepted took the already-applied fast path' >&2; cat "$tmp/closed-fast.log" >&2; exit 1; }
+grep -q 'receipt did not approve this exact image' "$tmp/closed-fast.log"
+rm -f "$tmp/state/closed-unaccepted.json"
+printf '%s\n' "$saved_applied" > "$tmp/state/applied"
+printf '%s\n' "$saved_applied_inputs" > "$tmp/state/applied-inputs"
+EVENTS=$saved_closed_events
+
 # A mismatched receipt is also rejected before the accepted alias can move.
 export DEPLOYMENT_ID=deployment-mismatch RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=1
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
