@@ -65,6 +65,10 @@ in
     systemd.services.init-agent-memory-net = {
       description = "Create the private agent memory Podman network";
       after = [ "network.target" ];
+      before = [
+        "podman-agent-memory.service"
+        "podman-t3code.service"
+      ];
       wantedBy = [ "multi-user.target" ];
       restartIfChanged = false;
       stopIfChanged = false;
@@ -116,6 +120,13 @@ in
           basic-memory project add ${cfg.testProject} /data/projects/${cfg.testProject}
       '';
     };
+
+    # Netavark adds no DNS input rule for an internal network. Without this,
+    # t3code cannot resolve `agent-memory` through aardvark-dns; the network
+    # still has no external route. Same rule as the github internal network.
+    networking.firewall.extraCommands = lib.concatMapStrings (proto: ''
+      iptables -w -A nixos-fw -s ${subnet} -d ${gateway} -p ${proto} --dport 53 -j nixos-fw-accept
+    '') [ "udp" "tcp" ];
 
     virtualisation.oci-containers.containers."agent-memory" = {
       image = cfg.image;
