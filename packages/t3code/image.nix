@@ -1,9 +1,27 @@
 # Only this definition and its base packages determine container identity.
-# Agent releases, host state and tooling are deliberately outside this interface.
+# Agent releases, host state and tooling are deliberately outside this interface,
+# with one deliberate exception: the T3 app itself is baked here, so a fresh
+# container serves immediately instead of downloading ~110 MiB. Image identity
+# therefore pins the baked app release, and only later persisted promotions live
+# outside the image (owner, 2026-10-31).
 { pkgs }:
 let
   inherit (pkgs) lib;
   managedBin = "/home/t3code/.local/state/ghostship-t3-tools/current/bin";
+  # Hash-pinned upstream release, extracted at build time. The version is part of
+  # the directory name so a promotion record and the receipt can name it.
+  t3codeBakedApp = pkgs.runCommand "t3code-baked-app" { } ''
+    mkdir -p $out
+    tar -xzf ${
+      pkgs.fetchurl {
+        url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-arm64.tar.gz";
+        sha256 = "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE=";
+      }
+    } -C $out --strip-components=1
+    mkdir -p $out/bin
+    ln -sfn ../t3 $out/bin/t3
+    printf '0.1.5\n' > $out/VERSION
+  '';
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
@@ -41,6 +59,10 @@ let
       done
       # Existing provider settings use this path; the payload stays managed in home.
       ln -s ${managedBin}/agy_acp_server.par bin/agy_acp_server.par
+      # Stable path so the launcher can prefer the baked app without knowing a
+      # store hash, and without depending on the tooling repo.
+      install -d usr/share
+      ln -s ${t3codeBakedApp} usr/share/t3code-app
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
