@@ -115,6 +115,23 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route)
 
+    def test_acceptance_route_binds_the_free_provider(self):
+        policy = self.nominated_policy()
+        route = {
+            "schema": "ghostship.t3code-acceptance-route/v1",
+            "provider": "opencode", "provider_instance": "opencode-free",
+            "model": "opencode/glm-5.3-flash-free", "billing": "free",
+            "effort": "high", "acceptance_only": True,
+        }
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.admitted_acceptance_route(policy, acceptance_route=route)
+        self.assertFalse(provider_probe.native_is_admitted(
+            policy, "opencode-free", "opencode/glm-5.3-flash-free", route))
+        path = self.root / "wrong-provider-route.json"
+        path.write_text(json.dumps(route))
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.read_acceptance_route(path)
+
     def test_fallback_only_route_is_never_an_acceptance_route(self):
         fallback = self.fallback_route("codex", "codex", "gpt-6.1-terra")
         with self.assertRaises(acceptance.PreconditionError):
@@ -582,7 +599,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
         }}))
         free_config = self.home / ".config/opencode-free/config/opencode/opencode.jsonc"
         free_config.parent.mkdir(parents=True)
-        free_config.write_text(json.dumps({"provider": {"opencode": {"models": {}}}}))
+        free_config.write_text(json.dumps({
+            "enabled_providers": ["google"], "model": "google/gemini-3.5-flash-lite",
+            "provider": {"google": {"env": ["GOOGLE_GENERATIVE_AI_API_KEY"]}},
+            "mcp": {"unrelated": {"url": "https://example.invalid"}},
+        }))
         free_catalog = self.home / ".config/opencode-free/cache/opencode/models.json"
         free_catalog.parent.mkdir(parents=True)
         free_catalog.write_text(json.dumps({"opencode": {
@@ -1000,6 +1021,10 @@ class CandidateAcceptanceTest(unittest.TestCase):
         )
         self.assertEqual(free_config["enabled_providers"], ["opencode"])
         self.assertEqual(free_config["provider"], {"opencode": {"models": {}}})
+        self.assertNotIn("google", json.dumps(free_config))
+        self.assertNotIn("mcp", json.dumps(free_config))
+        wrapper = (candidate_home / ".config/opencode-free/opencode-free").read_text()
+        self.assertIn("/home/t3code/.local/share/t3code-tools/opencode/current/bin/opencode", wrapper)
         self.assertTrue((candidate_home / ".config/opencode-free/cache/opencode/models.json").is_file())
         self.assertFalse((candidate_home / ".local/share/opencode/auth.json").exists())
         self.assertFalse((candidate_home / ".t3/userdata/state.sqlite").exists())

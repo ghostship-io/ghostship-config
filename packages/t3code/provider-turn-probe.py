@@ -168,6 +168,7 @@ def native_is_admitted(policy, instance, model, acceptance_route=None):
     if (isinstance(acceptance_route, dict)
             and acceptance_route.get("acceptance_only") is True
             and acceptance_route.get("billing") == "free"
+            and acceptance_route.get("provider") == "opencode-free"
             and (acceptance_route.get("provider_instance"), acceptance_route.get("model")) == (instance, model)):
         return True
     if not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2":
