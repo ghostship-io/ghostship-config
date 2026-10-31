@@ -15,8 +15,13 @@ LIST = ROOT / "packages/t3code/release-window-env.list"
 
 
 def guard_names():
-    line = SCRIPT.read_text().splitlines()[5]
-    return set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?\}", line))
+    # The guard moved when shared helpers were prepended; find the line that
+    # names the window state rather than depending on a fixed line number.
+    for line in SCRIPT.read_text().splitlines():
+        names = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?\}", line))
+        if "STATE_DIR" in names:
+            return names
+    return set()
 
 
 def listed_names():
