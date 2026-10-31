@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import time
@@ -43,12 +44,23 @@ def has_tool_result(client, thread):
     return any(item.get("type") == "tool_result" and item.get("ok") is True for item in items)
 
 
-def standard_options(client, instance, model):
-    """Use only supported non-fast options from the live native catalog."""
+def standard_options(client, instance, model, requested=None):
+    """Use only supported non-fast options from the live native catalog.
+
+    ``requested`` carries the approved effort/option from the route policy. It
+    is validated against the native descriptor rather than overwritten, so the
+    real turn uses the same effort as the worker route.
+    """
     providers = client.capabilities(instance).get("providers", [])
     matches = [(provider, item) for provider in providers if provider.get("providerInstanceId") == instance
                for item in provider.get("models", []) if item.get("id") == model]
-    if len(matches) != 1 or matches[0][0].get("available") is not True:
+    if len(matches) != 1:
+        raise ValueError("native route is not currently available")
+    provider = matches[0][0]
+    if provider.get("available") is not True:
+        if (provider.get("authReady") is False
+                or str(provider.get("authStatus") or "").lower() == "unauthenticated"):
+            raise ValueError("native route is not authenticated")
         raise ValueError("native route is not currently available")
     descriptors = {item.get("id"): item for item in matches[0][1].get("options", []) if isinstance(item, dict)}
     options = {}
@@ -65,7 +77,69 @@ def standard_options(client, instance, model):
         if fast.get("type") != "boolean":
             raise ValueError("fast mode cannot be disabled")
         options["fastMode"] = False
+    requested = requested or {}
+    if not isinstance(requested, dict):
+        raise ValueError("invalid native options")
+    if requested.get("serviceTier", "standard") != "standard":
+        raise ValueError("priority or fast mode is not permitted")
+    if requested.get("fastMode", False) is not False:
+        raise ValueError("priority or fast mode is not permitted")
+    for key, value in requested.items():
+        if key in ("serviceTier", "fastMode"):
+            continue
+        descriptor = descriptors.get(key)
+        if descriptor is None:
+            raise ValueError(f"option {key!r} is not available")
+        allowed = descriptor.get("values")
+        if descriptor.get("type") == "boolean":
+            valid = isinstance(value, bool)
+        else:
+            valid = isinstance(value, str) and (allowed is None or value in allowed)
+        if not valid:
+            raise ValueError(f"option {key!r} is not supported")
+        options[key] = value
     return options
+
+
+def probe_error_kind(error):
+    """A bounded class for a pre-launch probe failure; never echoes the message."""
+    message = str(error).lower()
+    if "no t3 provider instance" in message:
+        return "provider-instance-missing"
+    if "session token" in message:
+        return "t3-auth"
+    if "unreachable" in message:
+        return "t3-unreachable"
+    if "native route is not authenticated" in message:
+        return "provider-auth"
+    if "native route is not currently available" in message:
+        return "route-not-available"
+    if "option " in message and ("not available" in message or "not supported" in message):
+        return "option-invalid"
+    return "probe-error"
+
+
+def failure_kind(result):
+    """Classify a prove_route failure without echoing provider text."""
+    detail = str(result.get("detail") or "").lower()
+    if re.search(r"\b(?:auth|authentication|unauthorized|forbidden|401|403)\b", detail):
+        return "provider-auth"
+    if "model unavailable" in detail or "model-unavailable" in detail:
+        return "model-unavailable"
+    if "quota" in detail or "rate limit" in detail or "429" in detail:
+        return "quota"
+    outcome = str(result.get("outcome") or "").lower().replace("_", "-")
+    if outcome in ("execution", "timeout", "provider-schema", "invalid-request",
+                   "no-tool-call", "wrong-tool-result"):
+        return outcome
+    return "provider-error"
+
+
+def route_unavailable_output(instance, model, kind):
+    """The structured failure the acceptance record can retain safely."""
+    return {"outcome": "route_unavailable", "settled": True,
+            "error": {"code": "route-unavailable", "kind": kind,
+                      "instance": instance, "model": model}}
 
 
 def native_is_admitted(policy, instance, model):
@@ -200,11 +274,11 @@ def main():
     client = Bridge()
     if native_target:
         try:
-            safe_options = standard_options(client, native_target[0], native_target[1])
+            safe_options = standard_options(client, native_target[0], native_target[1], options)
             native_target = (native_target[0], native_target[1], safe_options)
-        except (ValueError, TypeError, KeyError, OSError, T3Error):
-            print(json.dumps({"outcome": "route_unavailable", "settled": True,
-                              "error": {"code": "route-unavailable"}}, sort_keys=True))
+        except (ValueError, TypeError, KeyError, OSError, T3Error) as error:
+            print(json.dumps(route_unavailable_output(
+                native_target[0], native_target[1], probe_error_kind(error)), sort_keys=True))
             return 1
     result = prove_route(args.route, args.wait, client, native_target)
     output = {
@@ -216,7 +290,8 @@ def main():
         "settled": result.get("settled"),
     }
     if result.get("outcome") != "passed" or result.get("settled") is not True:
-        output["error"] = {"code": safe_failure_code(result)}
+        output["error"] = {"code": safe_failure_code(result),
+                           "kind": failure_kind(result)}
     print(json.dumps(output, sort_keys=True))
     return 0 if result.get("outcome") == "passed" and result.get("settled") is True else 1
 
