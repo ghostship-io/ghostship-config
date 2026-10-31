@@ -444,10 +444,6 @@ case ${1:-} in
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery is not active'
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
-  # Preflight is read-only and has now passed every guard, and this window's
-  # lock is held: only here does the record move. A failure above leaves the
-  # live UNKNOWN untouched.
-  if [[ -n $supersede ]]; then supersede_unknown "$supersede" "$id" "$supersede_record"; fi
   exec 6<"$LOCK_CANDIDATE" 7<"$LOCK_HARDENING"
   flock -n -x 6 || fail 'candidate lock held'
   flock -n -x 7 || fail 'hardening lock held'
@@ -470,6 +466,11 @@ case ${1:-} in
   sync -f "$dir/serving.before"
   { printf 'started=%s start_ms=%s acquired_by=%s\n' "$acquired_at" "$acquired_ms" "$$"; printf '%s\n' "$baseline"; } > "$dir/window.start.tmp"
   sync -f "$dir/window.start.tmp"; mv "$dir/window.start.tmp" "$dir/window.start"; sync -f "$dir"
+  # Preflight passed, the lock is held and the replacement window now exists
+  # with its own evidence. Only here does the released record move: a failure in
+  # the candidate locks, snapshot, serving identity or window creation leaves
+  # the live UNKNOWN where recovery can still find it.
+  if [[ -n $supersede ]]; then supersede_unknown "$supersede" "$id" "$supersede_record"; fi
   printf '%s\n' "$id" > "$WINDOW_ROOT/active-window.tmp"
   sync -f "$WINDOW_ROOT/active-window.tmp"
   mv "$WINDOW_ROOT/active-window.tmp" "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
