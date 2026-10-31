@@ -13,12 +13,10 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     environment: private-source-ci
     runs-on: [self-hosted, Linux, ARM64, ghostship-fast]
-    timeout-minutes: 4 # Headroom for concurrent PR runs on the shared self-hosted runner.
-                       # Measured across ~21 recent CI runs: the "Run fast repository checks"
-                       # step p95 is ~78s (max ~97s) and the check job total p95 is ~118s,
-                       # so lone runs already approach the old 2-minute cap. With two PRs
-                       # sharing the runner, both used to be cancelled at the cap after
-                       # printing PASS. Four minutes gives concurrent runs room to finish.
+    timeout-minutes: 10 # Measured 2026-10-31: the private-source import alone took
+                        # 3m17s (four shallow depth=1 fetches); the old 4-minute cap
+                        # cancelled every run during "Run fast repository checks".
+                        # Ten minutes leaves room for the checks plus a concurrent PR.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
