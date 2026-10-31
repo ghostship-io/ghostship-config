@@ -1691,7 +1691,9 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     receipt_path = None if rehearsal else receipts / f"{desired}.json"
     if receipt_path is not None:
         receipts.mkdir(mode=0o700, parents=True, exist_ok=True)
-        receipt_path.unlink(missing_ok=True)
+        # An existing receipt is only replaced by a successful acceptance. A
+        # failed precondition must never destroy the receipt that still names
+        # the serving image (release #8: the 16:17 run unlinked it first).
     started = time.monotonic()
     before = identity_fn()
     _evidence["live_before"] = before

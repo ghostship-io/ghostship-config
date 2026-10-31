@@ -645,4 +645,18 @@ rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap run failed:' >&2; cat "$tmp/t3-bootstrap-lock.log" >&2; exit 1; }
 [[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]] || { echo 'T3 update lock was not bootstrapped' >&2; exit 1; }
 [[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]] || { echo 'bootstrapped T3 update lock has the wrong owner' >&2; exit 1; }
+# A step that fails after the attempt-result EXIT trap is installed must still
+# say why it exited; the trap replaces the earlier logger, so the writer itself
+# must emit the rc line.
+export DEPLOYMENT_ID=deployment-post-trap
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$STATE_DIR/desired-inputs"
+rm -f "$tmp/missing-provider.env"
+post_trap_status=0
+PROVIDER_SECRETS_FILE="$tmp/missing-provider.env" bash "$fixture_writer" > "$tmp/post-trap.log" 2>&1 || post_trap_status=$?
+[[ $post_trap_status -ne 0 ]] || { echo 'missing provider secret did not fail the deploy' >&2; exit 1; }
+grep -q 'deploy: exiting rc=1' "$tmp/post-trap.log" || { echo 'post-trap failure exited silently' >&2; cat "$tmp/post-trap.log" >&2; exit 1; }
+jq -e '.exit_code == 1' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >/dev/null || { echo 'post-trap attempt did not record rc=1' >&2; cat "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >&2; exit 1; }
+echo 'Post-trap failure proof: a step after the attempt trap records and logs deploy: exiting rc=1.'
+
 echo 'Deploy-image fixture passed.'
