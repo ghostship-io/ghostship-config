@@ -161,12 +161,19 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 return Mock(returncode=0, stdout=json.dumps({"data": {"pick": None}}))
             if "models" in args and "--json" in args:
                 return self.models_result([])
-            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
+            return Mock(returncode=1, stdout=json.dumps({
+                "outcome": "route_unavailable", "settled": True,
+                "error": {"code": "route-unavailable", "kind": "provider-instance-missing",
+                          "instance": "opencode",
+                          "model": "opencode-go/deepseek-v4.1-flash"},
+            }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
-            with self.assertRaises(acceptance.RouteUnavailableError):
+            with self.assertRaises(acceptance.RouteUnavailableError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+        self.assertIn("kind=provider-instance-missing", failure.exception.detail)
+        self.assertIn("instance=opencode", failure.exception.detail)
         probes = self.probe_calls(calls)
         self.assertEqual(len(probes), 1)
         self.assertIn(self.NOMINATED_ROUTE, probes[0])
@@ -202,6 +209,53 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn("quota", record["provider_turn"]["evidence"])
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
 
+    def test_route_unavailable_detail_is_retained_in_attempt(self):
+        failure = acceptance.RouteUnavailableError(
+            "route", "route", "route_unavailable: route failure",
+            detail="kind=provider-instance-missing instance=opencode model=opencode-go/deepseek-v4.1-flash",
+        )
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.RouteUnavailableError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["outcome"], "route_unavailable")
+        self.assertIn("kind=provider-instance-missing", record["provider_turn"]["evidence"])
+        self.assertIn("instance=opencode", record["provider_turn"]["evidence"])
+        self.assertNotIn("route_unavailable: quota", record["provider_turn"]["evidence"])
+
+    def test_route_unknown_detail_is_retained_in_attempt(self):
+        failure = acceptance.RouteUnknownError(
+            "route", "route", "provider_turn outcome unknown: route failure is not attributable to the candidate",
+            detail="kind=no-tool-call instance=opencode model=opencode-go/deepseek-v4.1-flash",
+        )
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.RouteUnknownError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertEqual(record["outcome"], "route_unknown")
+        self.assertIn("kind=no-tool-call", record["provider_turn"]["evidence"])
+        self.assertIn("kind=no-tool-call", record["route_provenance"]["incomplete"])
+
+    def test_candidate_failed_detail_is_retained_in_attempt(self):
+        failure = acceptance.ProviderTurnError(
+            "route", "route", "provider_turn candidate_failed: route failure",
+            detail="kind=no-tool-call instance=opencode model=opencode-go/deepseek-v4.1-flash",
+        )
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.ProviderTurnError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        record = json.loads((self.state / "attempts/generation-502.json").read_text())
+        self.assertIn("kind=no-tool-call", record["provider_turn"]["evidence"])
+
     def test_only_a_t3_proven_route_failure_can_be_attributed_to_candidate(self):
         policy = self.nominated_policy()
         row = {"provider": "opencode-go", "model": "opencode-go/deepseek-v4.1-flash",
@@ -213,21 +267,28 @@ class CandidateAcceptanceTest(unittest.TestCase):
         def run(engine, name, *args, **kwargs):
             if "models" in args and "--json" in args:
                 return self.models_result(rows)
-            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"no-tool-call"}}', stderr="")
+            return Mock(returncode=1, stdout=json.dumps({
+                "settled": True, "error": {"code": "no-tool-call", "kind": "no-tool-call",
+                                           "instance": "opencode",
+                                           "model": "opencode-go/deepseek-v4.1-flash"},
+            }), stderr="")
 
         with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
              patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
             with self.assertRaises(acceptance.ProviderTurnError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
             self.assertNotIsInstance(failure.exception, (acceptance.RouteUnavailableError, acceptance.RouteUnknownError))
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A native-execution proof for the same identity is not T3 proof.
             rows[:] = [{**row, "execution": "native"}]
-            with self.assertRaises(acceptance.RouteUnknownError):
+            with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
             # A T3 row without a proven tool loop is also not attribution.
             rows[:] = [{**row, "tool_loop": {"state": "unknown"}}]
-            with self.assertRaises(acceptance.RouteUnknownError):
+            with self.assertRaises(acceptance.RouteUnknownError) as failure:
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", policy=policy)
+            self.assertIn("kind=no-tool-call", failure.exception.detail)
 
     def test_incomplete_snapshot_failure_retains_safe_route_provenance(self):
         policy = self.nominated_policy()
@@ -357,6 +418,66 @@ class CandidateAcceptanceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             provider_probe.standard_options(client, "codex", "gpt-6.1-terra")
 
+    def test_standard_options_preserves_the_policy_variant(self):
+        client = Mock()
+        model = {"id": "opencode-go/deepseek-v4.1-flash",
+                 "options": [{"id": "variant", "type": "select", "values": ["low", "high", "max"]}]}
+        client.capabilities.return_value = {"providers": [
+            {"providerInstanceId": "opencode", "available": True, "models": [model]}]}
+        self.assertEqual(
+            provider_probe.standard_options(client, "opencode", model["id"], {"variant": "high"}),
+            {"variant": "high"},
+        )
+        with self.assertRaises(ValueError):
+            provider_probe.standard_options(client, "opencode", model["id"], {"variant": "ultra"})
+
+    def test_probe_error_kind_is_bounded_and_names_missing_instance(self):
+        self.assertEqual(
+            provider_probe.probe_error_kind(
+                Exception("no T3 provider instance 'opencode'; known: opencode-free")
+            ),
+            "provider-instance-missing",
+        )
+        self.assertEqual(
+            provider_probe.probe_error_kind(Exception("T3 rejected the session token (401): private")),
+            "t3-auth",
+        )
+        self.assertEqual(
+            provider_probe.probe_error_kind(Exception("native route is not currently available")),
+            "route-not-available",
+        )
+        self.assertEqual(
+            provider_probe.probe_error_kind(Exception("option 'variant' is not available")),
+            "option-invalid",
+        )
+        output = provider_probe.route_unavailable_output(
+            "opencode", "opencode-go/deepseek-v4.1-flash", "provider-instance-missing"
+        )
+        self.assertEqual(output["error"]["kind"], "provider-instance-missing")
+        self.assertNotIn("private", json.dumps(output))
+        self.assertEqual(
+            provider_probe.failure_kind({"outcome": "execution",
+                                         "detail": "401 Unauthorized: private"}),
+            "provider-auth",
+        )
+
+    def test_standard_options_reports_an_unavailable_route_kind(self):
+        client = Mock()
+        model = {"id": "opencode-go/deepseek-v4.1-flash",
+                 "options": [{"id": "variant", "type": "select", "values": ["low", "high"]}]}
+        client.capabilities.return_value = {"providers": [
+            {"providerInstanceId": "opencode", "available": False, "authReady": False,
+             "authStatus": "unauthenticated", "models": [model]}]}
+        with self.assertRaises(ValueError) as failure:
+            provider_probe.standard_options(client, "opencode", model["id"], {"variant": "high"})
+        self.assertEqual(provider_probe.probe_error_kind(failure.exception), "provider-auth")
+        client.capabilities.return_value = {"providers": [
+            {"providerInstanceId": "opencode", "available": False, "authReady": True,
+             "authStatus": "authenticated", "models": []}]}
+        with self.assertRaises(ValueError) as failure:
+            provider_probe.standard_options(client, "opencode", model["id"], {"variant": "high"})
+        self.assertEqual(provider_probe.probe_error_kind(failure.exception), "route-not-available")
+
     def test_direct_native_probe_submits_exact_standard_target(self):
         bridge_module = types.ModuleType("ghostship_t3.bridge")
         bridge_module.T3Error = type("T3Error", (Exception,), {})
@@ -411,6 +532,14 @@ class CandidateAcceptanceTest(unittest.TestCase):
                     {"name": "OPENCODE_MODELS_PATH", "value": "/home/t3code/.local/state/t3code-opencode/models.json"},
                     {"name": "XDG_CONFIG_HOME", "value": "/home/t3code/.config/opencode-free"},
                     {"name": "OPENCODE_AUTH_CONTENT", "value": "do-not-copy"},
+                ],
+            },
+            "opencode": {
+                "driver": "opencode", "enabled": True,
+                "config": {"binaryPath": "opencode"},
+                "environment": [
+                    {"name": "OPENCODE_AUTH_CONTENT", "value": "do-not-copy", "sensitive": True},
+                    {"name": "LITEROUTER_API_KEY", "value": "do-not-copy", "sensitive": True},
                 ],
             },
             "private-provider": {"driver": "private", "config": {"token": "do-not-copy"}},
@@ -556,6 +685,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         auth.parent.mkdir(parents=True)
         auth.write_text(json.dumps({
             "openrouter": {"type": "api", "key": "auth-fixture"},
+            "opencode-go": {"type": "api", "key": "subscription-fixture"},
             "openai": {"type": "oauth", "refresh": "private-fixture"},
         }))
         approved = self.root / "approved-free-workers.json"
@@ -569,6 +699,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertEqual(projected, {"openrouter": {"type": "api", "key": "auth-fixture"}})
         self.assertEqual((candidate_home / ".local/share/opencode/auth.json").stat().st_mode & 0o777, 0o600)
         self.assertNotIn("private-fixture", json.dumps(projected))
+        self.assertNotIn("subscription-fixture", json.dumps(projected))
 
     def test_candidate_model_routing_snapshot_is_validated_and_staged_read_only(self):
         source = self.root / "routing.json"
@@ -821,13 +952,22 @@ class CandidateAcceptanceTest(unittest.TestCase):
         candidate_settings = json.loads(
             (candidate_home / ".t3/userdata/settings.json").read_text()
         )
-        self.assertEqual(list(candidate_settings["providerInstances"]), ["opencode-free"])
+        self.assertEqual(list(candidate_settings["providerInstances"]), ["opencode", "opencode-free"])
         projected = candidate_settings["providerInstances"]["opencode-free"]
         self.assertEqual(projected["config"], {"binaryPath": "opencode"})
         self.assertEqual([item["name"] for item in projected["environment"]], [
             "OPENCODE_MODELS_PATH", "XDG_CONFIG_HOME",
         ])
+        projected_opencode = candidate_settings["providerInstances"]["opencode"]
+        self.assertEqual(projected_opencode["config"], {"binaryPath": "opencode"})
+        self.assertEqual(projected_opencode["environment"], [])
         self.assertNotIn("do-not-copy", json.dumps(candidate_settings))
+        opencode_config = json.loads(
+            (candidate_home / ".config/opencode/opencode.jsonc").read_text()
+        )
+        self.assertEqual(opencode_config["provider"], {"opencode-go": {"models": {}}})
+        self.assertEqual(opencode_config["enabled_providers"], ["opencode-go"])
+        self.assertFalse((candidate_home / ".local/share/opencode/auth.json").exists())
         self.assertFalse((candidate_home / ".t3/userdata/state.sqlite").exists())
         self.assertEqual(
             json.loads((candidate_home / ".cache/opencode/models.json").read_text()),

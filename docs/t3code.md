@@ -586,10 +586,12 @@ proven-working route demonstrates the candidate failure. The probe names one
 exact worker-admitted primary route by identity, pins that route's approved
 effort, and proves one real turn; picker ranking, quota windows and snapshot
 mapping do not decide which route is tested, and a fallback-only route is never
-probed. The nominated route's own exhausted or unavailable turn is recorded as
-`route_unavailable` without a candidate-failed marker; unresolved probe or
-unclassified acceptance outcomes are recorded as unknown and are not
-automatically replayed. Neither is an acceptance PASS.
+probed. The nominated primary's T3 provider instance and non-secret OpenCode
+config are staged into the candidate; a subscription credential is projected
+only after an explicit owner scope decision. The nominated route's own exhausted
+or unavailable turn is recorded as `route_unavailable` without a candidate-
+failed marker; unresolved probe or unclassified acceptance outcomes are recorded
+as unknown and are not automatically replayed. Neither is an acceptance PASS.
 Changes to the acceptance script, its packaged probes or runtime capabilities,
 the managed launcher chains or their immutable Nix store identities, or the
 candidate/tooling identity cause the full acceptance to run again. The deployer
