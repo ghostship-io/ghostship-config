@@ -251,6 +251,37 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 
 ## Nix, Builds, and Host Boot
 
+- Every container image we build is measured on real hardware before its
+  runtime change is accepted. Performance is an acceptance requirement, not an
+  aspiration: an image that builds, starts or restarts slowly is a defect even
+  when every functional check passes. This applies to every container we build;
+  the T3 Code container leads because its restart interrupts agent work.
+- Measure and record, per image, for both the baseline and the final artifact,
+  on the `aarch64` host:
+  - **size** — compressed image archive bytes *plus* the uncompressed runtime
+    closure it needs (state both; either alone is misleading);
+  - **build** — clean build from an empty store, and cached/incremental build
+    with the store warm, reported separately;
+  - **cold start** — container start until the app actually serves;
+  - **restart/recovery** — stop, or `systemctl restart`, until the app serves
+    again and agents are usable;
+  - **runtime resource impact** — resident memory and steady-state CPU of the
+    container's main services.
+- "Container running" is never readiness. **Ready means a real request or
+  reconnect succeeds** against the running service, measured from outside it —
+  the same predicate the release window uses. A process that is `active` but
+  cannot answer is not up.
+- Budgets are set per image from that measured evidence, and belong with the
+  image's own acceptance. Do not invent fleet-wide thresholds, and do not
+  compare images of different roles against one number.
+- Anything on the start path that installs, fetches, compiles, migrates or
+  waits on the network is a defect: move it into the image build, or defer it
+  until after readiness. Work that needs a restart goes through the normal
+  gated release path, whose restart must stay fast.
+- Where a measurement cannot be taken without restarting production, record it
+  as UNKNOWN with the reason and the command the executor should run, rather
+  than estimating it as if it were measured.
+
 - `checks.<system>.config-tests` is the single derivation that runs the T3
   deployment shell proofs, including `tests/test_t3code_release_window.sh` and
   `tests/test_t3code_window_lock.sh`. Keep every `tests/test_t3code_*.sh`
