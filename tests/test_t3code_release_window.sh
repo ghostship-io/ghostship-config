@@ -704,10 +704,6 @@ printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":0,"outcome":null,"s
 if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-attempt.log"; then echo 'closed after a successful attempt' >&2; exit 1; fi
 grep -q 'attempt is not a terminal failed acceptance' "$tmp/closed-attempt.log" || { echo 'C2: unexpected refusal' >&2; cat "$tmp/closed-attempt.log" >&2; exit 1; }
 printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":77,"outcome":"route_unknown","status":null}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
-cp "$STATE_DIR/receipts/b5e4523f00000000000000000000000000000000000000000000000000000000.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
-if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-receipt.log"; then echo 'closed with a receipt for the expected deployment' >&2; exit 1; fi
-grep -q 'expected deployment is receipted; use post' "$tmp/closed-receipt.log" || { echo 'C3: unexpected refusal' >&2; cat "$tmp/closed-receipt.log" >&2; exit 1; }
-rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 export FIXTURE_SERVING_BROKEN=1
 if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-serving.log"; then echo 'closed with an unknown serving identity' >&2; exit 1; fi
 unset FIXTURE_SERVING_BROKEN
@@ -806,6 +802,58 @@ printf '%s\n' actual > "$tmp/evidence/active-window"; : > "$tmp/hold"
 if "${cmd[@]}" post 2>"$tmp/actual-post.log"; then echo 'post accepted the unaccepted closeout' >&2; exit 1; fi
 [[ ! -e $tmp/evidence/actual/post.verified ]]
 rm -f "$tmp/evidence/active-window" "$tmp/hold"
+unset FIXTURE_CONTAINER_INODE JOURNALCTL_BIN
+
+# A receipt can exist while the deploy refused to apply it. closed-unaccepted
+# records it by sha256 with receipt_applied:false, never as accepted proof.
+if [[ -f $tmp/holder-pid ]]; then "$SYSTEMCTL_BIN" stop window.service >/dev/null 2>&1 || true; fi
+rm -f "$tmp/hold" "$tmp/recovery-inactive" "$tmp/evidence/active-window"
+export STATE_DIR="$tmp/state-receipted"; rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"; : > "$STATE_DIR/deploy.lock"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+"${cmd[@]}" start receipted
+now2=$(date +%s); start2=$((now2 - 600)); end2=$((now2 - 300))
+printf '%s %s\n' "$(date -u -d "@$start2" +%FT%TZ)" "$((start2 * 1000))" > "$tmp/evidence/receipted/complete.started"
+printf 'exit_code=0\n' > "$tmp/evidence/receipted/switch.result"
+touch -d "@$end2" "$tmp/evidence/receipted/switch.result"
+: > "$tmp/evidence/receipted/complete.lock"
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":77,"outcome":"acceptance_unknown","status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$((start2 * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+jq -n --arg i "$EXPECTED_IMAGE" '{deployment_id:"unapplied",image_id:$i,candidate_name:"t3code-candidate-fixture",
+  agent_revision:"fixture",agent_path:"/nix/store/old-tooling",provider_secret_inode:"1",
+  live_before:{id:"fixture"},live_after:{id:"fixture"}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+cat > "$tmp/failed-units" <<EOF
+ghostship-ai-usage-command-code.service loaded failed failed
+ghostship-t3code-deploy.service loaded failed failed
+EOF
+printf '%s\t%s\t%s\n' ghostship-ai-usage-command-code.service "$(date -u -d "@$((start2 - 600))" +%FT%TZ)" "$(date -u -d "@$((now2 - 20))" +%FT%TZ)" \
+  ghostship-t3code-deploy.service "$(date -u -d "@$((start2 + 60))" +%FT%TZ)" "$(date -u -d "@$((end2 + 20))" +%FT%TZ)" > "$tmp/journal-first"
+printf '%s\n' '{"MESSAGE":"Failed to start Refresh the private Command Code usage page through the owner'"'"'s browser.","UNIT":"ghostship-ai-usage-command-code.service"}' > "$tmp/journal-activation.jsonl"
+export JOURNALCTL_BIN="$tmp/bin/journalctl" FIXTURE_CONTAINER_INODE=72922092
+receipt_hash=$(sha256sum < "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" | cut -d' ' -f1)
+"${cmd[@]}" closed-unaccepted
+[[ $(sha256sum < "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" | cut -d' ' -f1) == "$receipt_hash" ]]
+record="$tmp/evidence/receipted/closed-unaccepted.json"
+jq -e --arg d "$EXPECTED_DEPLOYMENT" --arg sha "$receipt_hash" '
+  .state == "closed_unaccepted" and .receipt_applied == false and
+  .expected_receipt.deployment_id == $d and .expected_receipt.sha256 == $sha' "$record" >/dev/null \
+  || { echo 'receipted-unapplied record is not truthful' >&2; cat "$record" >&2; exit 1; }
+# An applied attempt is not closable this way: post is the supported path.
+rm -f "$tmp/hold" "$tmp/evidence/active-window" "$tmp/recovery-inactive"
+"${cmd[@]}" start applied
+printf 'exit_code=0\n' > "$tmp/evidence/applied/switch.result"
+: > "$tmp/evidence/applied/complete.lock"
+printf '%s %s\n' "$(date -u -d "@$start2" +%FT%TZ)" "$((start2 * 1000))" > "$tmp/evidence/applied/complete.started"
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":0,"status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$((start2 * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+mkdir -p "$STATE_DIR/receipts"; cp "$tmp/evidence/receipted/closed-unaccepted.json" /dev/null 2>/dev/null || true
+jq -n --arg i "$EXPECTED_IMAGE" '{deployment_id:"applied",image_id:$i,candidate_name:"t3code-candidate-fixture",
+  agent_revision:"fixture",agent_path:"/nix/store/old-tooling",provider_secret_inode:"1",
+  live_before:{id:"fixture"},live_after:{id:"fixture"}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/applied.log"; then echo 'closed with an applied attempt' >&2; exit 1; fi
+grep -q 'attempt is not a terminal failed acceptance' "$tmp/applied.log" || { echo 'P3: unexpected refusal' >&2; cat "$tmp/applied.log" >&2; exit 1; }
+rm -f "$tmp/hold" "$tmp/evidence/active-window"
 unset FIXTURE_CONTAINER_INODE JOURNALCTL_BIN
 
 echo 'Release window refusal and reopen fixture passed.'

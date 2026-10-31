@@ -1133,7 +1133,6 @@ case ${1:-} in
   [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
   applied=$(cat "$STATE_DIR/applied"); expected=$(cat "$STATE_DIR/desired")
   [[ $applied =~ ^[0-9a-f]{64}$ && $expected =~ ^[0-9a-f]{64}$ ]] || fail 'deployment identity unknown'
-  [[ ! -e $STATE_DIR/receipts/$expected.json && ! -L $STATE_DIR/receipts/$expected.json ]] || fail 'expected deployment is receipted; use post'
   read -r _ image _ <<< "$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}} {{.Image}} {{.State.StartedAt}}')" || fail 'serving image unknown'
   image=${image#sha256:}
   [[ $image =~ ^[0-9a-f]{64}$ ]] || fail 'serving image unknown'
@@ -1159,6 +1158,21 @@ case ${1:-} in
   if [[ -e $STATE_DIR/failed-candidate ]]; then
     [[ -f $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed marker state unknown'
     failed_hash=$(sha256sum < "$STATE_DIR/failed-candidate" | cut -d ' ' -f1)
+  fi
+  expected_receipt=null
+  receipt_applied=null
+  expected_receipt_path="$STATE_DIR/receipts/$expected.json"
+  if [[ -e $expected_receipt_path ]]; then
+    # A receipt can exist while the deploy refused to apply it (for example a
+    # validator defect). The attempt check above already required a terminal
+    # failure, so this records the receipt without claiming it was applied.
+    [[ -f $expected_receipt_path && ! -L $expected_receipt_path ]] || fail 'expected receipt state unknown'
+    expected_sha=$(sha256sum < "$expected_receipt_path" | cut -d' ' -f1) || fail 'expected receipt unreadable'
+    expected_image=$("$JQ_BIN" -er '.image_id' "$expected_receipt_path") || fail 'expected receipt identity unreadable'
+    # shellcheck disable=SC2016
+    expected_receipt=$("$JQ_BIN" -cn --arg d "$expected" --arg i "$expected_image" --arg sha "$expected_sha" \
+      '{deployment_id:$d, image_id:$i, sha256:$sha}') || fail 'expected receipt record unreadable'
+    receipt_applied=false
   fi
   not_reused=null
   if not_reused_path=$(receipt_for_image "$image"); then
@@ -1209,12 +1223,14 @@ case ${1:-} in
     --arg switch_result "$switch_result" --arg la "$activation_start" --arg lb "$activation_end" \
     --arg at "$(date -u +%FT%TZ)" --arg failed "$failed_hash" \
     --argjson attempt "$attempt_json" --argjson not_reused "$not_reused" \
-    --argjson failed_units "$failed_units_json" '
+    --argjson failed_units "$failed_units_json" --argjson expected_receipt "$expected_receipt" \
+    --argjson receipt_applied "$receipt_applied" '
     {state:"closed_unaccepted", window:$id, deployment_id:$d, applied:$a,
      attempt:$attempt, serving:{image:$image, agent_revision:$rev,
        tooling_path:$tool, provider_secret_inode:$inode},
      provider_secret_inode_host:$host_inode, provider_secret_inode_match:$inode_match,
      serving_receipt:"absent", receipt_not_reused:$not_reused,
+     expected_receipt:$expected_receipt, receipt_applied:$receipt_applied,
      failed_marker_sha256:$failed, switch_result:$switch_result,
      activation:{start:($la|tonumber), end:($lb|tonumber)},
      failed_units:$failed_units,
