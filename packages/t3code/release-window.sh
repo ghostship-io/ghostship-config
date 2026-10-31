@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
-: "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}"
+: "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}" "${COREUTILS_BIN:?}" "${UTIL_LINUX_BIN:?}" "${BASH_BIN:?}"
 window_root
 validated_serving_image=
 fail() { echo "STOP: $*" >&2; exit 1; }
@@ -155,14 +155,26 @@ lock_managed_tools() {
 no_pending_restart() {
   : "${HOME_DIR:?}"
   local f
+  # The container defers tool updates while a window is open, so
+  # update-deferred.pending is the expected consequence of holding the window,
+  # not pending work. cancel-start only needs it tolerated: it never touches the
+  # container and the deferral clears once the window closes. restart.pending,
+  # hold and in-container maintenance still refuse.
+  local deferred_marker="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
+  [[ ${ALLOW_DEFERRED_MARKER:-0} == 1 ]] && deferred_marker=/nonexistent-allowed
   for f in "$STATE_DIR/restart.pending" "$HOME_DIR/.local/state/t3code-tool-update/restart.pending" \
-    "$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending" "$HOME_DIR/.local/state/t3code-tool-update/hold" \
+    "$deferred_marker" "$HOME_DIR/.local/state/t3code-tool-update/hold" \
     "$HOME_DIR/.local/share/t3code-tools/t3/activation.pending"; do
     [[ ! -e $f && ! -L $f ]] || fail 'pending restart or maintenance marker'
   done
+  local container_markers=/run/t3code-tool-update/restart.pending
+  if [[ ${ALLOW_DEFERRED_MARKER:-0} != 1 ]]; then
+    container_markers="$container_markers /run/t3code-tool-update/update-deferred.pending"
+  fi
+  container_markers="$container_markers /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance"
   # shellcheck disable=SC2016
   "$PODMAN_BIN" exec "$PODMAN_TARGET" sh -c \
-    'for f in /run/t3code-tool-update/restart.pending /run/t3code-tool-update/update-deferred.pending /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance; do [ ! -e "$f" ] && [ ! -L "$f" ] || exit 1; done' || fail 'container maintenance state unknown or pending'
+    'for f in $1; do [ ! -e "$f" ] && [ ! -L "$f" ] || exit 1; done' _ "$container_markers" || fail 'container maintenance state unknown or pending'
 }
 is_container_running() {
   local running
@@ -388,7 +400,12 @@ case ${1:-} in
   mv "$WINDOW_ROOT/active-window.tmp" "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   # Arguments are expanded by the holder shell.
   # shellcheck disable=SC2016
-  "$SYSTEMD_RUN_BIN" --quiet --unit="$WINDOW_UNIT" --collect -p "RuntimeMaxSec=$WINDOW_SECONDS" -- bash -c 'set -e; exec 7<>"$1" 9<>"$2"; flock -w 10 7; flock -w 10 9; printf "%s\n" "$$" > "$3/holder.ready.tmp"; mv "$3/holder.ready.tmp" "$3/holder.ready"; exec sleep infinity' _ "$LOCK_CANDIDATE" "$LOCK_HARDENING" "$dir"
+  # The systemd manager starts this with its own minimal PATH, so `bash`, `mv`,
+  # `flock` and `sleep` must all be absolute; a bare `mv` failed with 127 and the
+  # holder never signalled readiness.
+  "$SYSTEMD_RUN_BIN" --quiet --unit="$WINDOW_UNIT" --collect -p "RuntimeMaxSec=$WINDOW_SECONDS" -- \
+    "$BASH_BIN" -c 'set -e; exec 7<>"$1" 9<>"$2"; "$4" -w 10 7; "$4" -w 10 9; printf "%s\n" "$$" > "$3/holder.ready.tmp"; "$5" "$3/holder.ready.tmp" "$3/holder.ready"; exec "$6" infinity' \
+    _ "$LOCK_CANDIDATE" "$LOCK_HARDENING" "$dir" "$UTIL_LINUX_BIN/flock" "$COREUTILS_BIN/mv" "$COREUTILS_BIN/sleep"
   exec 6<&- 7<&-
   for _ in {1..100}; do [[ -f $dir/holder.ready ]] && break; sleep 0.05; done
   holder_ready || fail 'window holder has not acquired both locks'
@@ -421,6 +438,10 @@ case ${1:-} in
   baseline=$(snapshot) || fail 'state unknown'
   [[ $(tail -n +2 "$dir/window.start") == "$baseline" ]] || fail 'state changed during start'
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
+  # Holding a window makes the container defer tool updates, so that marker is
+  # expected here and must not deadlock the only path that can close a
+  # half-opened window.
+  ALLOW_DEFERRED_MARKER=1
   serving_matches_start
   case $(unit_state "$WINDOW_UNIT") in
     active)
