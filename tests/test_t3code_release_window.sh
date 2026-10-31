@@ -40,7 +40,6 @@ fi
 case "$*" in
   'exec fixture systemctl show t3code-server.service -p MainPID --value') echo "${SERVER_PID:-1234}"; exit ;;
   'exec fixture systemctl show t3code-server.service -p ActiveEnterTimestampMonotonic --value') echo 5678; exit ;;
-  'exec fixture /usr/share/t3code/served-identity.sh') printf '{"served":{"source":"baked","version":"1.0.0","digest":""},"baked":{"version":"1.0.0","digest":""}}\n'; exit ;;
 esac
 if [[ $1 == image && $2 == inspect ]]; then
   if [[ -f $FIXTURE/alias-image ]]; then cat "$FIXTURE/alias-image"; else printf 'sha256:%s\n' "${ALIAS_IMAGE:-$EXPECTED_IMAGE}"; fi
@@ -245,7 +244,7 @@ printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
 mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"
 if "${cmd[@]}" post; then echo 'accepted missing receipt' >&2; exit 1; fi
 inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:$a,agent_path:$p,provider_secret_inode:$s,app_release:"1.0.0",live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:$a,agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 printf '{"deployment_id":"%s","exit_code":77,"outcome":"route_unknown","started_at_ms":%s}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
 if "${cmd[@]}" post; then echo 'accepted unknown attempt' >&2; exit 1; fi
 printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":1}\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
@@ -306,32 +305,8 @@ if "${cmd[@]}" rollback three; then echo 'unexpected rollback stop acknowledgeme
 [[ -f $tmp/evidence/three/known-good.json && -f $tmp/evidence/active-window && -f $tmp/hold ]]
 [[ $(cat "$tmp/alias-image") == "sha256:$EXPECTED_IMAGE" && $(wc -l < "$tmp/podman.events") == 2 ]]
 unset FIXTURE_TAG_LOST_ACK FIXTURE_STOP_LOST_ACK ALIAS_IMAGE
-# A receipt written before app identities existed is refused, and the refusal
-# names the transition: re-accept that image, it is not a generic bad receipt.
-cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt.app"
-jq 'del(.app_release)' "$tmp/receipt.app" > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
-set +e
-"${cmd[@]}" rollback three > "$tmp/pre-app.log" 2>&1
-pre_app_status=$?
-set -e
-[[ $pre_app_status != 0 ]]
-grep -q 'predates the app release identity' "$tmp/pre-app.log" \
-  || { echo 'old receipt was not refused with the re-accept reason:' >&2; cat "$tmp/pre-app.log" >&2; exit 1; }
-[[ -f $tmp/hold && -f $tmp/evidence/active-window ]]
-cp "$tmp/receipt.app" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
-# A receipt that names another app release is not a receipt for what serves.
-cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt.app"
-jq '.app_release="0.0.0"' "$tmp/receipt.app" > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
-if "${cmd[@]}" rollback three; then echo 'receipt for another app release released the window' >&2; exit 1; fi
-[[ -f $tmp/hold && -f $tmp/evidence/active-window ]]
-cp "$tmp/receipt.app" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
-# A legacy receipt must not shadow a valid one for the same image: the scan keeps
-# looking and only reports the transition remedy when nothing valid matches.
-jq 'del(.app_release)' "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" > "$STATE_DIR/receipts/000-legacy.json"
-cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$STATE_DIR/receipts/zzz-valid.json"
 "${cmd[@]}" rollback three
 "${cmd[@]}" rollback three
-rm -f "$STATE_DIR/receipts/000-legacy.json" "$STATE_DIR/receipts/zzz-valid.json"
 [[ $(wc -l < "$tmp/podman.events") == 2 ]]
 [[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
 jq -e --arg d "$new_desired" --arg a "$EXPECTED_DEPLOYMENT" '.state == "KNOWN_GOOD_SERVING" and .desired == $d and .applied == $a' "$tmp/evidence/three/known-good.json" >/dev/null
@@ -666,25 +641,4 @@ if "${cmd[@]}" end-post 2>"$tmp/post-record.log"; then echo 'closed a window wit
 grep -q 'recorded UNKNOWN remains' "$tmp/post-record.log" || { echo 'F: unexpected refusal:' >&2; cat "$tmp/post-record.log" >&2; exit 1; }
 rm "$STATE_DIR/recovery-unknown.json"
 
-# end-unknown with only a legacy (pre-app-identity) receipt for the served
-# image: that is no known-good receipt, but it must proceed and record UNKNOWN,
-# not abort with a misleading "status unknown".
-legacy_desired=$(cat "$STATE_DIR/desired")
-mkdir -p "$tmp/receipts-held"
-for held in "$STATE_DIR"/receipts/*.json; do [[ -e $held ]] && mv "$held" "$tmp/receipts-held/"; done
-jq 'del(.app_release)' "$tmp/known-good.json" | jq --arg d "$legacy_desired" '.deployment_id=$d' > "$STATE_DIR/receipts/000-legacy-only.json"
-printf '{"deployment_id":"%s","exit_code":77,"outcome":"acceptance_unknown","started_at_ms":%s}\n' "$legacy_desired" "$(date +%s%3N)" > "$STATE_DIR/attempts/$legacy_desired.json"
-set +e
-"${cmd[@]}" end-unknown > "$tmp/legacy-end-unknown.log" 2>&1
-legacy_end_status=$?
-set -e
-[[ $legacy_end_status == 77 ]] || { echo "legacy-receipt end-unknown rc=$legacy_end_status" >&2; cat "$tmp/legacy-end-unknown.log" >&2; exit 1; }
-grep -q 'predates the app release identity' "$tmp/legacy-end-unknown.log" \
-  || { echo 'legacy receipt was not reported' >&2; cat "$tmp/legacy-end-unknown.log" >&2; exit 1; }
-if grep -q 'known-good receipt status unknown' "$tmp/legacy-end-unknown.log"; then
-  echo 'a legacy receipt aborted end-unknown as an unknown status' >&2; exit 1
-fi
-jq -e --arg r acceptance_unknown '.state == "UNKNOWN" and .reason == $r' "$STATE_DIR/recovery-unknown.json" >/dev/null
-rm -f "$STATE_DIR/receipts/000-legacy-only.json"
-for held in "$tmp/receipts-held"/*.json; do [[ -e $held ]] && mv "$held" "$STATE_DIR/receipts/"; done
 echo 'Release window refusal and reopen fixture passed.'

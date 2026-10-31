@@ -717,8 +717,6 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
         def command(engine, *args, **kwargs):
             self.commands.append(tuple(args))
-            if args[:1] == ("exec",) and args[-1] == "/usr/share/t3code/served-identity.sh":
-                return Mock(returncode=0, stdout='{"served":{"source":"baked","version":"1.0.0","digest":""},"baked":null}')
             if args[:1] == ("exec",) and args[2:4] == ("curl", "-fsS"):
                 return Mock(returncode=0, stdout="ok")
             if args[:2] == ("inspect", "t3code-candidate-generation-502"):
@@ -727,24 +725,6 @@ class CandidateAcceptanceTest(unittest.TestCase):
 
         self.command = command
         self.identity = ["prod-id", "2026-10-25T00:00:00Z", 42, "13", "16"]
-
-    def test_candidate_app_release_reads_the_selector_and_refuses_unknown(self):
-        good = Mock(returncode=0, stdout='{"served":{"source":"persisted","version":"1.0.0","digest":"' + "a" * 64 + '"},"baked":null}')
-        with patch.object(acceptance, "command", return_value=good) as command:
-            self.assertEqual(acceptance.candidate_app_release(["podman"], "candidate"),
-                             "1.0.0+" + "a" * 64)
-        self.assertEqual(command.call_args.args[1:3], ("exec", "candidate"))
-        self.assertEqual(command.call_args.args[3], "/usr/share/t3code/served-identity.sh")
-
-        for result, reason in (
-            (Mock(returncode=1, stdout="", stderr="no release"), "unknown"),
-            (Mock(returncode=0, stdout="not json"), "unreadable"),
-            (Mock(returncode=0, stdout='{"served":{"version":"latest","digest":""}}'), "invalid"),
-            (Mock(returncode=0, stdout='{"served":{"version":"1.0.0","digest":"xyz"}}'), "digest"),
-        ):
-            with patch.object(acceptance, "command", return_value=result):
-                with self.assertRaisesRegex(acceptance.PreconditionError, reason):
-                    acceptance.candidate_app_release(["podman"], "candidate")
 
     def test_candidate_hostname_fits_linux_limit_for_sha256_deployments(self):
         first = acceptance.candidate_name("a" * 64)
