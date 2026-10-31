@@ -189,17 +189,17 @@
     "ghostship-route-catalog": {
       "flake": false,
       "locked": {
-        "lastModified": 1793378571,
-        "narHash": "sha256-Q2p7T8wUimxCSRlioYNesS4xp1smHQyJYW+5/dZTfsA=",
+        "lastModified": 1793444976,
+        "narHash": "sha256-X9AxWEgTGCxRWP3jlCwZ03gkS1qBsbCvN0g+xs7ahDs=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "7bdbd28b16e16685bbb1da5f79286b750dac8ebb",
+        "rev": "28bb5fc1e9824a24c1a4df9bc2bf45b8037f54e0",
         "type": "github"
       },
       "original": {
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "7bdbd28b16e16685bbb1da5f79286b750dac8ebb",
+        "rev": "28bb5fc1e9824a24c1a4df9bc2bf45b8037f54e0",
         "type": "github"
       }
     },

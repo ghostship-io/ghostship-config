@@ -28,7 +28,7 @@
     # parses, rendered verbatim to /etc/ghostship/route-policy.json. It has its
     # own pin so an approval move does not move the runtime policy with it.
     ghostship-route-catalog = {
-      url = "github:ghostship-io/ghostship-agent/7bdbd28b16e16685bbb1da5f79286b750dac8ebb";
+      url = "github:ghostship-io/ghostship-agent/28bb5fc1e9824a24c1a4df9bc2bf45b8037f54e0";
       flake = false;
     };
 
