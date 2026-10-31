@@ -11,6 +11,13 @@ workroot=${HOME:?}/.t3/worktrees
 mkdir -p "$workroot"
 tmp=$(mktemp -d "$workroot/dev-env-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
+# Run the hook from a copy whose trusted root is this test's worktree root, so
+# the check does not depend on the production home path.
+mkdir -p "$tmp/hook"
+cp "$repo/packages/t3code/worker-dev-env.sh" "$tmp/hook/"
+cp "$repo/packages/t3code/worker-dev-env.origins" "$tmp/hook/"
+printf '%s\n' "$workroot" > "$tmp/hook/worker-dev-env.root"
+hook=$tmp/hook/worker-dev-env.sh
 fake=$tmp/fakebin
 mkdir -p "$fake" "$tmp/marker/bin"
 printf '#!/bin/sh\necho marker-tool\n' > "$tmp/marker/bin/markertool"
@@ -40,26 +47,53 @@ git -C "$tmp/origin" worktree add -q "$wt" -b test
 
 run() {
   local cwd=$1; shift
-  ( cd "$cwd" && env -i HOME="$HOME" PATH="$fake:$base_path" BASH_ENV="$hook" FAKE_ROOT="$tmp" FAKE_COUNT="$FAKE_COUNT" "$@" )
+  ( cd "$cwd" && env -i HOME="$HOME" PATH="$fake:$base_path" BASH_ENV="$hook" \
+      XDG_CACHE_HOME="${TEST_XDG_CACHE_HOME:-}" WORKER_DEV_ENV_RESOLVE="${TEST_RESOLVE:-}" \
+      FAKE_ROOT="$tmp" FAKE_COUNT="$FAKE_COUNT" "$@" )
 }
 
-# 1. A linked worktree under the fixed root loads the devShell from one evaluation.
-out=$(run "$wt" bash -c 'echo "shell=${IN_NIX_SHELL:-none}"; markertool')
-[[ $out == *'shell=impure'* && $out == *marker-tool* ]] || { echo "A: not loaded: $out" >&2; exit 1; }
-[[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "A: evaluated $(wc -l < "$FAKE_COUNT") times" >&2; exit 1; }
-compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.profile" >/dev/null || { echo 'A: no GC root profile' >&2; exit 1; }
+# 1. An empty cache never builds or evaluates on the first command: the shell
+# runs on the image toolchain and says so.
+out=$(run "$wt" bash -c 'command -v markertool || echo image-toolchain' 2>"$tmp/first.err")
+[[ $out == *image-toolchain* ]] || { echo "A: devShell applied without a resolved entry: $out" >&2; exit 1; }
+[[ $(wc -l < "$FAKE_COUNT") == 0 ]] || { echo "A: evaluated on an empty cache" >&2; exit 1; }
+grep -q 'no resolved devShell' "$tmp/first.err" || { echo 'A: no notice' >&2; cat "$tmp/first.err" >&2; exit 1; }
+compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.miss" >/dev/null || { echo 'A: no miss record' >&2; exit 1; }
+
+# 1b. Resolving on request evaluates once and records the locked identity.
+out=$(TEST_RESOLVE=1 run "$wt" bash -c 'echo "shell=${IN_NIX_SHELL:-none}"; markertool')
+[[ $out == *'shell=impure'* && $out == *marker-tool* ]] || { echo "A2: not loaded: $out" >&2; exit 1; }
+[[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "A2: evaluated $(wc -l < "$FAKE_COUNT") times" >&2; exit 1; }
+compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.profile" >/dev/null || { echo 'A2: no GC root profile' >&2; exit 1; }
+compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.lock" >/dev/null || { echo 'A2: no locked identity' >&2; exit 1; }
 
 # 2. A second shell reuses the stored environment and does not evaluate again.
 out=$(run "$wt" bash -c 'markertool')
 [[ $out == *marker-tool* ]] || { echo "B: cached load failed: $out" >&2; exit 1; }
 [[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "B: cached shell re-evaluated" >&2; exit 1; }
 
-# 3. A committed flake change invalidates the cache.
+# 3. A committed flake.nix change keeps the same locked inputs, so it reuses
+# that environment rather than building the repository's packages again. A
+# devShell build of the coordinator ran its Go test suite on every new key and
+# failed one shell at a time on a test that needs git.
 printf '{}\n# changed\n' > "$wt/flake.nix"
 git -C "$wt" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qam change
-out=$(run "$wt" bash -c 'markertool')
-[[ $out == *marker-tool* ]] || { echo "C: change did not reload: $out" >&2; exit 1; }
-[[ $(wc -l < "$FAKE_COUNT") == 2 ]] || { echo "C: change did not re-evaluate" >&2; exit 1; }
+out=$(run "$wt" bash -c 'markertool' 2>"$tmp/reuse.err")
+[[ $out == *marker-tool* ]] || { echo "C: lock-matched reuse did not load: $out" >&2; exit 1; }
+[[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "C: reused a toolchain but re-evaluated" >&2; exit 1; }
+grep -q 'reusing the resolved devShell' "$tmp/reuse.err" || { echo 'C: no reuse notice' >&2; cat "$tmp/reuse.err" >&2; exit 1; }
+compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.reused" >/dev/null || { echo 'C: no reuse record' >&2; exit 1; }
+
+# 3b. A worktree with different locked inputs never reuses another lock's
+# environment and never evaluates.
+git -C "$tmp/origin" worktree add -q "$tmp/repo2" -b reuse
+printf '{"nodes":{}}\n' > "$tmp/repo2/flake.lock"
+git -C "$tmp/repo2" add flake.lock
+git -C "$tmp/repo2" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qm lock
+out=$(run "$tmp/repo2" bash -c 'command -v markertool || echo image-toolchain' 2>"$tmp/reuse2.err")
+[[ $out == *image-toolchain* ]] || { echo "C2: reused an environment for a different lock: $out" >&2; exit 1; }
+[[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "C2: evaluated for a new lock" >&2; exit 1; }
+grep -q 'no resolved devShell' "$tmp/reuse2.err" || { echo 'C2: no notice' >&2; exit 1; }
 
 # 4. Already inside a Nix shell: inert.
 out=$(run "$wt" IN_NIX_SHELL=pure bash -c 'command -v markertool || echo absent')
@@ -118,14 +152,13 @@ git -C "$plain" init -q
 out=$(run "$plain" bash -c 'command -v markertool || echo absent')
 [[ $out != *marker-tool* ]] || { echo "F: evaluated a non-worktree" >&2; exit 1; }
 
-# 7. An unavailable environment fails the command explicitly; no host fallback.
-# A fresh fingerprint forces evaluation instead of reusing the cache.
-printf '{}\n# fail\n' > "$wt/flake.nix"
-git -C "$wt" -c user.email=t@t -c user.name=t -c core.hooksPath=/dev/null commit -qam fail
-if run "$wt" FAKE_NIX_FAIL=1 bash -c 'markertool' >"$tmp/fail.out" 2>"$tmp/fail.err"; then
+# 7. With no resolved environment to reuse, an unavailable devShell still fails
+# the command explicitly; no host fallback.
+# A fresh cache directory forces evaluation instead of reuse.
+if TEST_XDG_CACHE_HOME="$tmp/empty-cache" TEST_RESOLVE=1 run "$wt" FAKE_NIX_FAIL=1 bash -c 'markertool' >"$tmp/fail.out" 2>"$tmp/fail.err"; then
   echo "G: fell back to host tools" >&2; exit 1
 fi
 grep -q 'worker-dev-env: ' "$tmp/fail.err" || { echo 'G: no explicit error' >&2; cat "$tmp/fail.err" >&2; exit 1; }
 grep -q 'marker-tool' "$tmp/fail.out" && { echo 'G: command ran anyway' >&2; exit 1; }
 
-echo 'Worker dev environment: one evaluation per worktree, inert elsewhere, fails closed.'
+echo 'Worker dev environment: resolves only on request, reuses by locked inputs, never builds on a command.'
