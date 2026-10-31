@@ -10,17 +10,21 @@ let
   managedBin = "/home/t3code/.local/state/ghostship-t3-tools/current/bin";
   # Hash-pinned upstream release, extracted at build time. The version is part of
   # the directory name so a promotion record and the receipt can name it.
+  t3codeBakedSource = pkgs.fetchurl {
+    url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-arm64.tar.gz";
+    sha256 = "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE=";
+  };
   t3codeBakedApp = pkgs.runCommand "t3code-baked-app" { } ''
     mkdir -p $out
-    tar -xzf ${
-      pkgs.fetchurl {
-        url = "https://github.com/pingdotgg/t3code/releases/download/v0.1.5/t3-0.1.5-linux-arm64.tar.gz";
-        sha256 = "sha256-OJNi4qNJ6mKzjZvHCPT8ojgZNszLLTJrX8XQdLByrvE=";
-      }
-    } -C $out --strip-components=1
+    tar -xzf ${t3codeBakedSource} -C $out --strip-components=1
     mkdir -p $out/bin
     ln -sfn ../t3 $out/bin/t3
+    # VERSION and DIGEST are the baked identity: the served-identity selector
+    # reads them so a receipt can name the baked release without decoding the
+    # image, and so a persisted promotion can be compared against it.
     printf '0.1.5\n' > $out/VERSION
+    sha256sum ${t3codeBakedSource} | cut -d' ' -f1 > $out/DIGEST
+    chmod 0444 $out/VERSION $out/DIGEST
   '';
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
