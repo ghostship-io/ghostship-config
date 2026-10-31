@@ -1079,7 +1079,13 @@ case ${1:-} in
     fi
     receipt_status=0; known_good_receipt >/dev/null || receipt_status=$?
     [[ $receipt_status != 0 ]] || fail 'existing exact known-good receipt available'
-    [[ $receipt_status == 1 ]] || fail 'known-good receipt status unknown'
+    if [[ $receipt_status == 3 ]]; then
+      # A receipt that predates the app release identity is not a known-good
+      # receipt, but it is not an unknown state either: the UNKNOWN end records
+      # and the operator re-accepts that image before rollback.
+      printf 'warning: a receipt for the served image predates the app release identity; recording UNKNOWN without a known-good receipt\n' >&2
+    fi
+    [[ $receipt_status == 1 || $receipt_status == 3 ]] || fail 'known-good receipt status unknown'
     [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'existing recovery UNKNOWN requires investigation'
     # Existing recovery inhibit remains: gen-590 recovery cannot read this record.
     # shellcheck disable=SC2016
