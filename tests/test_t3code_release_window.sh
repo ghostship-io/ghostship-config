@@ -12,7 +12,7 @@ cat > "$tmp/bin/systemctl" <<'SH'
 printf '%s\n' "$*" >> "$FIXTURE/systemctl.events"
 if [[ $1 == --failed ]]; then cat "$FIXTURE/failed-units" 2>/dev/null; exit 0; fi
 if [[ $1 == show ]]; then
-  if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
+  if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo "${FIXTURE_DEPLOY_RESULT:-success}"; exit; fi
   if [[ $2 == window.service && $3 == -p && $4 == MainPID ]]; then cat "$FIXTURE/holder-pid"; exit; fi
   case $2 in window.service) [[ -f $FIXTURE/holder-pid ]] && kill -0 "$(cat "$FIXTURE/holder-pid")" 2>/dev/null && echo active || echo inactive ;; t3code-recovery.service) [[ -e $FIXTURE/recovery-inactive ]] && echo inactive || echo active ;; ghostship-t3code-deploy.service) [[ ${FIXTURE_DEPLOY_FAILED:-0} == 1 ]] && echo failed || echo inactive ;; podman-t3code.service) [[ -e $FIXTURE/container-stopped ]] && echo inactive || echo active ;; *) echo inactive ;; esac
 elif [[ $1 == stop && $2 == t3code-recovery.service ]]; then touch "$FIXTURE/recovery-inactive"
@@ -67,6 +67,7 @@ case "$1 $3 ${4:-}" in
   'inspect --format {{.State.Running}}') echo true ;;
   'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') [[ ${FIXTURE_SERVING_BROKEN:-0} != 1 ]] || { printf 'broken\n'; exit 0; }; printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
   'inspect --format {{.Image}}') printf 'sha256:%s\n' "$EXPECTED_IMAGE" ;;
+  'inspect --format {{.Id}}') printf '%064d\n' 1 ;;
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
   'exec cat '*) printf '{"revision":"%s"}\n' "$EXPECTED_AGENT_REVISION" ;;
@@ -855,5 +856,57 @@ if "${cmd[@]}" closed-unaccepted 2>"$tmp/applied.log"; then echo 'closed with an
 grep -q 'attempt is not a terminal failed acceptance' "$tmp/applied.log" || { echo 'P3: unexpected refusal' >&2; cat "$tmp/applied.log" >&2; exit 1; }
 rm -f "$tmp/hold" "$tmp/evidence/active-window"
 unset FIXTURE_CONTAINER_INODE JOURNALCTL_BIN
+
+# Applied and healthy, but the PASS attestation failed (a deploy bug): close
+# truthfully with no restart, recording the receipt and the failed attempt.
+if [[ -f $tmp/holder-pid ]]; then "$SYSTEMCTL_BIN" stop window.service >/dev/null 2>&1 || true; fi
+rm -f "$tmp/hold" "$tmp/recovery-inactive" "$tmp/evidence/active-window"
+export STATE_DIR="$tmp/state-unattested"; rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"; : > "$STATE_DIR/deploy.lock"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+"${cmd[@]}" start unattested
+now3=$(date +%s); start3=$((now3 - 600)); end3=$((now3 - 300))
+printf '%s %s\n' "$(date -u -d "@$start3" +%FT%TZ)" "$((start3 * 1000))" > "$tmp/evidence/unattested/complete.started"
+printf 'exit_code=0\n' > "$tmp/evidence/unattested/switch.result"
+touch -d "@$end3" "$tmp/evidence/unattested/switch.result"
+: > "$tmp/evidence/unattested/complete.lock"
+jq -n --arg i "$EXPECTED_IMAGE" '{deployment_id:"attested",image_id:$i,candidate_name:"t3code-candidate-fixture",
+  agent_revision:"fixture",agent_path:"/nix/store/old-tooling",provider_secret_inode:"1",
+  live_before:{id:"fixture"},live_after:{id:"fixture"},
+  checks:{app_ready:true,fixture_turn:true,agent_cli:true,skills:true,desktop_cli:true}}' > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+receipt_hash2=$(sha256sum < "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" | cut -d' ' -f1)
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":1,"outcome":null,"status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$((start3 * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+cat > "$tmp/failed-units" <<EOF
+ghostship-ai-usage-command-code.service loaded failed failed
+ghostship-t3code-deploy.service loaded failed failed
+EOF
+printf '%s\t%s\t%s\n' ghostship-ai-usage-command-code.service "$(date -u -d "@$((start3 - 600))" +%FT%TZ)" "$(date -u -d "@$((now3 - 20))" +%FT%TZ)" \
+  ghostship-t3code-deploy.service "$(date -u -d "@$((start3 + 60))" +%FT%TZ)" "$(date -u -d "@$((end3 + 20))" +%FT%TZ)" > "$tmp/journal-first"
+printf '%s\n' '{"MESSAGE":"Failed to start Refresh the private Command Code usage page through the owner'"'"'s browser.","UNIT":"ghostship-ai-usage-command-code.service"}' > "$tmp/journal-activation.jsonl"
+export JOURNALCTL_BIN="$tmp/bin/journalctl" FIXTURE_DEPLOY_RESULT=exit-code
+events_before=$(grep -c "^restart" "$tmp/systemctl.events" 2>/dev/null || true)
+# An applied attempt (exit 0) is post's path, not this closeout.
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":0,"status":null}\n' "$EXPECTED_DEPLOYMENT" "$((start3 * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+if "${cmd[@]}" closed-unattested 2>"$tmp/unattested-applied.log"; then echo 'closed an applied deployment' >&2; exit 1; fi
+grep -q 'attempt is not a terminal failed deployment' "$tmp/unattested-applied.log" || { echo 'U1: unexpected refusal' >&2; cat "$tmp/unattested-applied.log" >&2; exit 1; }
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":1,"outcome":null,"status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$((start3 * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+# A successful deploy Result is post's path too.
+if FIXTURE_DEPLOY_RESULT=success "${cmd[@]}" closed-unattested 2>"$tmp/unattested-result.log"; then echo 'closed with a successful deploy result' >&2; exit 1; fi
+grep -q 'deploy succeeded; use post' "$tmp/unattested-result.log" || { echo 'U2: unexpected refusal' >&2; cat "$tmp/unattested-result.log" >&2; exit 1; }
+"${cmd[@]}" closed-unattested
+[[ $(sha256sum < "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" | cut -d' ' -f1) == "$receipt_hash2" ]]
+[[ $(grep -c "^restart" "$tmp/systemctl.events" 2>/dev/null || true) == "$events_before" ]]
+[[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+record="$tmp/evidence/unattested/closed-unattested.json"
+jq -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg sha "$receipt_hash2" '
+  .state == "closed_unattested" and .deployment_id == $d and .applied == true and
+  .receipt.image_id == $i and .receipt.sha256 == $sha and
+  .serving.image == $i and .serving.health == "healthy" and
+  .attempt.exit_code == 1 and .attestation == "failed" and .production_turn == "not_run"' "$record" >/dev/null \
+  || { echo 'unattested record is not truthful' >&2; cat "$record" >&2; exit 1; }
+unset FIXTURE_DEPLOY_RESULT JOURNALCTL_BIN
 
 echo 'Release window refusal and reopen fixture passed.'
