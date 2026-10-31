@@ -18,13 +18,11 @@ USER root
 # note. This patch fsyncs both before "synced" can be committed; startup
 # recovery already replays pending/writing/failed rows from the accepted DB
 # content.
-COPY agent-memory-fsync.patch /tmp/agent-memory-fsync.patch
+COPY agent-memory-fsync-patch.py /tmp/agent-memory-fsync-patch.py
 COPY agent-memory-fsync-test.py /tmp/agent-memory-fsync-test.py
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends patch && \
-    patch -p1 -d /app < /tmp/agent-memory-fsync.patch && \
+RUN python /tmp/agent-memory-fsync-patch.py && \
     python /tmp/agent-memory-fsync-test.py && \
-    rm -rf /var/lib/apt/lists/* /tmp/agent-memory-fsync.patch /tmp/agent-memory-fsync-test.py
+    rm -f /tmp/agent-memory-fsync-patch.py /tmp/agent-memory-fsync-test.py
 
 ENV FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache
 RUN mkdir -p "$FASTEMBED_CACHE_PATH" && \
