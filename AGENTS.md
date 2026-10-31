@@ -18,7 +18,11 @@
   [public-service policy](docs/plex-apparmor.md) before changing exposure.
 - Prefer extremely strict AppArmor allowlists in complain mode while learning.
   Add permissions only for verified legitimate workloads; isolate interpreters
-  with narrowly scoped resources. Enforce only after the documented learning gate.
+  with narrowly scoped resources. Enforce only after the documented learning gate,
+  on the orchestrator's recorded approval of the exact profile
+  ([authority](https://github.com/ghostship-io/ghostship-agent/blob/epic/1105-mvp/config/agents/ghostship-orchestrator.md));
+  a complain-mode or weakened assertion never stands in for it, a failed readback
+  is fixed rather than relaxed, and the exposure approval above stays the owner's.
 - Deploy through committed Git changes and direct root SSH on the target host.
   If push or SSH access fails, report the blocker. Do not call `sudo`.
 - T3 Code may restart after candidate acceptance passes for the exact image

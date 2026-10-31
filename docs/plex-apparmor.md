@@ -157,7 +157,8 @@ workflow for policy changes. Leave merging to the user.
 6. After seven full days of verified daily coverage with no policy changes and
    representative workloads exercised, prepare the final PR changing the policy
    state from `complain` to `enforce`. Preserve the same reviewed profile content.
-   Report remaining limitations and leave merging to the user. Once enforcement
+   Report remaining limitations and leave merging to the orchestrator's recorded
+   approval of the exact profile. Once enforcement
    is deployed and verified, disable the learning task and retain the host audit
    collector for regression monitoring.
 
