@@ -114,10 +114,14 @@ if [[ $1 == inspect && $2 == t3code ]]; then
       printf 'true %s\n' "$RUNNING_IMAGE_ID"
       ;;
     *)
+      started_field=started
+      if [[ ${FIXTURE_SPACED_STARTED:-0} == 1 ]]; then
+        started_field='2026-10-31 21:01:02.676622736 +0000 UTC'
+      fi
       if [[ -r "$LIVE_IMAGE_FILE" ]]; then
-        printf '%064d %s started healthy\n' 1 "$(cat "$LIVE_IMAGE_FILE")"
+        printf '%064d %s %s healthy\n' 1 "$(cat "$LIVE_IMAGE_FILE")" "$started_field"
       else
-        printf '%064d sha256:%s started healthy\n' 1 "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)"
+        printf '%064d sha256:%s %s healthy\n' 1 "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" "$started_field"
       fi
       ;;
   esac
@@ -235,6 +239,16 @@ jq -e --arg image "$(tar -xOf "$IMAGE_ARCHIVE" config.json | sha256sum | cut -d 
   '.state == "pass" and .image_id == $image and .receipt_id == $receipt and .receipt_sha256 == $sha and .failed_candidate == false and (.container_id | length == 64)' \
   "$attestation" >/dev/null
 [[ $(stat -c %a "$attestation") == 444 ]]
+# StartedAt contains spaces in production. The health status must come from the
+# final field, so a healthy container still publishes the PASS attestation.
+export FIXTURE_SPACED_STARTED=1
+rm -rf "$STATE_DIR/attestations"
+bash "$fixture_writer" > "$tmp/spaced-started.log"
+grep -q 'already applied' "$tmp/spaced-started.log" || { echo 'spaced StartedAt did not take the already-applied path' >&2; cat "$tmp/spaced-started.log" >&2; exit 1; }
+jq -e '.state == "pass"' "$STATE_DIR/attestations/current.json" >/dev/null || { echo 'spaced StartedAt did not publish a PASS attestation' >&2; cat "$STATE_DIR/attestations/current.json" >&2; exit 1; }
+jq -e '.container_id | length == 64' "$STATE_DIR/attestations/current.json" >/dev/null || { echo 'attestation lost the container identity' >&2; exit 1; }
+unset FIXTURE_SPACED_STARTED
+
 
 # A restart that remains starting for more than 120 simulated seconds must
 # still reach the existing post-restart checks and applied marker.
