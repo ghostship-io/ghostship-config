@@ -53,6 +53,14 @@ if flock -n "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" true ||
   echo 'candidate ran without managed locks' >&2
   exit 3
 fi
+# When an in-container T3 app tree exists, the candidate must hold its updater
+# lock too, so an app promotion cannot interleave with acceptance.
+if [[ -d "$HOME_DIR/.local/share/t3code-tools/t3" ]]; then
+  if flock -n "$HOME_DIR/.local/share/t3code-tools/t3/update.lock" true; then
+    echo 'candidate ran without the T3 app update lock' >&2
+    exit 3
+  fi
+fi
 if [[ ${CANDIDATE_ROUTE_UNAVAILABLE:-0} == 1 ]]; then
   jq '. + {outcome:"route_unavailable",provider_turn:{routes:"fixture-exhausted"}}' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" > "$STATE_DIR/attempts/route.tmp"
   mv "$STATE_DIR/attempts/route.tmp" "$STATE_DIR/attempts/$DEPLOYMENT_ID.json"
@@ -191,6 +199,20 @@ jq -cn --arg image "${RUNNING_IMAGE_ID#sha256:}" \
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/legacy.json"
+
+# An in-container T3 app tree means a competing updater can promote an app
+# under us. The candidate must refuse a symlinked lock, and must hold the real
+# lock through acceptance when the tree is a normal directory.
+mkdir -p "$tmp/home/.local/share/t3code-tools/t3"
+ln -s "$tmp/t3-lock-target" "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+: > "$tmp/t3-lock-target"
+if bash "$fixture_writer" > "$tmp/t3-symlink-lock.log" 2>&1; then
+  echo 'symlinked T3 update lock unexpectedly allowed deployment' >&2; exit 1
+fi
+grep -q 'T3 update lock is not a regular file' "$tmp/t3-symlink-lock.log"
+[[ ! -s "$EVENTS" ]]
+rm "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+: > "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 
 bash "$fixture_writer" > "$tmp/success.log"
 grep -q '^Candidate acceptance PASS .* receipt=' "$tmp/success.log"
@@ -587,3 +609,19 @@ echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, a
 echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
+
+# A missing updater lock must be created owned by the home owner and unreadable
+# to others, because the in-container updater runs as that user and opens it for
+# append. Creating it as the deploying process with a default umask left a
+# root-owned 0644 lock that broke every app update with EACCES.
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/lock-bootstrap-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+export DEPLOYMENT_ID=deployment-lock-bootstrap
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
+bash "$fixture_writer" > "$tmp/lock-bootstrap.log" 2>&1 || true
+[[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]]
+[[ $(stat -c '%a' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == 600 ]]
+[[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]]
+echo 'Updater lock bootstrap proof: a missing app lock is created owner-owned and private.'

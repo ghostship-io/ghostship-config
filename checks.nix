@@ -192,6 +192,8 @@ in
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
         bash tests/test_t3code_release_window.sh
+        bash tests/test_t3code_window_lock.sh
+        bash tests/test_t3code_checks_wiring.sh
         bash tests/test_t3code_activate_deployment.sh
         bash tests/test_t3code_receipt_self_check.sh
         bash tests/test_t3code_tooling_pointer.sh
