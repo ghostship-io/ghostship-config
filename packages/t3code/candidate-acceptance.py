@@ -1286,7 +1286,7 @@ def check_fixture_turn(engine, name, timeout_s=180, tooling_path=None, evidence=
         return False
     if command(engine, "exec", "-d", "--user=3000:3000", "-e", "HOME=" + FIXTURE_ROOT, name,
                "python3", "/tmp/gs-fixture-provider.py", "--port", str(FIXTURE_PORT),
-               "--reply", reply,
+               "--reply", reply, "--nonce", nonce,
                "--pid-file", "/tmp/gs-fixture-provider.pid", timeout=30).returncode != 0:
         record("failed", stage="server")
         return False
@@ -1330,7 +1330,7 @@ def check_fixture_turn(engine, name, timeout_s=180, tooling_path=None, evidence=
                            and not item.get("refused")]
         fixture_received = any(
             str(item.get("model") or "") == FIXTURE_NATIVE_MODEL
-            and nonce in str(item.get("prompt") or "")
+            and item.get("nonce_seen") is True
             for item in placeholder
         )
         passed = (turn.returncode == 0 and reply in output

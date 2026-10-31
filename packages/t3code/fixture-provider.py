@@ -70,11 +70,14 @@ class Handler(BaseHTTPRequestHandler):
         authorization = self.headers.get("authorization", "")
         auth_kind = ("placeholder" if authorization == PLACEHOLDER
                      else ("absent" if not authorization else "other"))
+        nonce_seen = bool(self.server.nonce) and self.server.nonce in body.decode(
+            "utf-8", "replace")
         self.server.requests.append({
             "model": request.get("model"),
-            "prompt": prompt[:4000],
+            "prompt": prompt[:500],
             "path": self.path,
             "auth": auth_kind,
+            "nonce_seen": nonce_seen,
         })
         model = request.get("model") or "probe"
         if request.get("stream"):
@@ -118,11 +121,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=38917)
     parser.add_argument("--reply", default=REPLY)
+    parser.add_argument("--nonce")
     parser.add_argument("--pid-file")
     args = parser.parse_args(argv)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.requests = []
     server.reply = args.reply
+    server.nonce = args.nonce or ""
     if args.pid_file:
         with open(args.pid_file, "w", encoding="utf-8") as handle:
             handle.write(str(os.getpid()))

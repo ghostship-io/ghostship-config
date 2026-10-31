@@ -2283,14 +2283,13 @@ class FixtureTurnTest(unittest.TestCase):
                 if "/requests" in joined:
                     if mode == "match":
                         requests = [{"model": acceptance.FIXTURE_NATIVE_MODEL,
-                                     "prompt": "nonce " + state.get("nonce", ""),
-                                     "auth": "placeholder"}]
+                                     "auth": "placeholder", "nonce_seen": True}]
                     elif mode == "other":
                         requests = [{"model": acceptance.FIXTURE_NATIVE_MODEL,
-                                     "prompt": "nonce " + state.get("nonce", ""),
-                                     "auth": "other"}]
+                                     "auth": "other", "nonce_seen": True}]
                     else:
-                        requests = []
+                        requests = [{"model": acceptance.FIXTURE_NATIVE_MODEL,
+                                     "auth": "placeholder", "nonce_seen": False}]
                     return Mock(returncode=0,
                                 stdout=json.dumps({"count": len(requests),
                                                    "requests": requests}), stderr="")
@@ -2352,6 +2351,58 @@ class FixtureTurnTest(unittest.TestCase):
         self.assertFalse(passed)
         self.assertEqual(
             evidence["candidate_fixture_turn"]["non_placeholder_requests"], 1)
+
+
+class FixtureServerTest(unittest.TestCase):
+    """The fixture searches the whole request body in memory for the nonce."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        import threading
+        from http.server import ThreadingHTTPServer
+        spec = importlib.util.spec_from_file_location(
+            "t3code_fixture_provider", ROOT / "packages/t3code/fixture-provider.py")
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), cls.module.Handler)
+        cls.server.requests = []
+        cls.server.reply = "PROBE_PASS_fixture"
+        cls.server.nonce = "NONCE0123456789"
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.url = "http://127.0.0.1:%d/v1/chat/completions" % cls.server.server_port
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def post(self, body):
+        import urllib.request
+        request = urllib.request.Request(
+            self.url, data=json.dumps(body).encode(),
+            headers={"content-type": "application/json",
+                     "authorization": "Bearer fixture"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status
+
+    def test_nonce_after_ten_thousand_characters_is_seen(self):
+        self.server.requests.clear()
+        prefix = "system " * 2000
+        status = self.post({"model": "deepseek-v4.1-flash-free", "stream": False,
+                            "messages": [{"role": "system", "content": prefix},
+                                         {"role": "user",
+                                          "content": "nonce " + self.server.nonce}]})
+        self.assertEqual(status, 200)
+        self.assertTrue(self.server.requests[-1]["nonce_seen"])
+        self.assertLessEqual(len(self.server.requests[-1]["prompt"]), 500)
+
+    def test_a_request_without_the_nonce_is_not_seen(self):
+        self.server.requests.clear()
+        self.post({"model": "deepseek-v4.1-flash-free", "stream": False,
+                   "messages": [{"role": "user", "content": "no nonce here"}]})
+        self.assertFalse(self.server.requests[-1]["nonce_seen"])
 
 
 class FreeTierLimitClassificationTest(unittest.TestCase):
