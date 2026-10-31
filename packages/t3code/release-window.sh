@@ -155,20 +155,22 @@ lock_managed_tools() {
 no_pending_restart() {
   : "${HOME_DIR:?}"
   local f
-  # The container defers tool updates while a window is open, so
+  # The container defers tool updates for as long as a window is open, so
   # update-deferred.pending is the expected consequence of holding the window,
-  # not pending work. cancel-start only needs it tolerated: it never touches the
-  # container and the deferral clears once the window closes. restart.pending,
-  # hold and in-container maintenance still refuse.
+  # not pending work. Tolerate it whenever a window is open — every ending runs
+  # in that state — and keep refusing restart.pending, hold, activation and
+  # in-container maintenance. With no window open the marker still refuses.
+  local deferred_allowed=0
+  [[ -e $WINDOW_ROOT/active-window || -L $WINDOW_ROOT/active-window ]] && deferred_allowed=1
   local deferred_marker="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
-  [[ ${ALLOW_DEFERRED_MARKER:-0} == 1 ]] && deferred_marker=/nonexistent-allowed
+  (( deferred_allowed )) && deferred_marker=/nonexistent-allowed
   for f in "$STATE_DIR/restart.pending" "$HOME_DIR/.local/state/t3code-tool-update/restart.pending" \
     "$deferred_marker" "$HOME_DIR/.local/state/t3code-tool-update/hold" \
     "$HOME_DIR/.local/share/t3code-tools/t3/activation.pending"; do
     [[ ! -e $f && ! -L $f ]] || fail 'pending restart or maintenance marker'
   done
   local container_markers=/run/t3code-tool-update/restart.pending
-  if [[ ${ALLOW_DEFERRED_MARKER:-0} != 1 ]]; then
+  if (( ! deferred_allowed )); then
     container_markers="$container_markers /run/t3code-tool-update/update-deferred.pending"
   fi
   container_markers="$container_markers /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance"
@@ -438,10 +440,6 @@ case ${1:-} in
   baseline=$(snapshot) || fail 'state unknown'
   [[ $(tail -n +2 "$dir/window.start") == "$baseline" ]] || fail 'state changed during start'
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
-  # Holding a window makes the container defer tool updates, so that marker is
-  # expected here and must not deadlock the only path that can close a
-  # half-opened window.
-  ALLOW_DEFERRED_MARKER=1
   serving_matches_start
   case $(unit_state "$WINDOW_UNIT") in
     active)
