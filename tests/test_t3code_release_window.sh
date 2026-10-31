@@ -6,7 +6,7 @@ mkdir -p "$tmp/evidence" "$tmp/state" "$tmp/bin"
 printf '%s\n' "$tmp/evidence" > "$tmp/config"
 touch "$tmp/evidence/window.lock" "$tmp/state/deploy.lock" "$tmp/candidate.lock" "$tmp/hardening.lock"
 printf 'old\n' > "$tmp/state/applied"; cp "$tmp/state/applied" "$tmp/state/desired"
-ln -s system-1-link "$tmp/profile"
+ln -s "$tmp/system" "$tmp/profile"
 cat > "$tmp/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FIXTURE/systemctl.events"
@@ -116,8 +116,11 @@ touch "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.l
 mkdir -p "$tmp/system" "$tmp/tooling"; printf 'fixture\n' > "$PROVIDER_SECRETS_FILE"; ln -s "$tmp/system" "$CURRENT_SYSTEM"
 # The active generation's deploy unit is where a switch binds the identity it
 # installed; recovery reads it from the window, never from the caller.
-mkdir -p "$tmp/system/etc/systemd/system"
-printf 'Environment="AGENT_REVISION=fixture" "TOOLING_PATH=%s"\n' "$tmp/tooling" > "$tmp/system/etc/systemd/system/ghostship-t3code-deploy.service"
+# Model the real generation: the unit path is a symlink into the units
+# directory, not a regular file.
+mkdir -p "$tmp/system/etc/systemd/system" "$tmp/units"
+printf 'Environment="AGENT_REVISION=fixture" "TOOLING_PATH=%s"\n' "$tmp/tooling" > "$tmp/units/ghostship-t3code-deploy.service"
+ln -s "$tmp/units/ghostship-t3code-deploy.service" "$tmp/system/etc/systemd/system/ghostship-t3code-deploy.service"
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
 fixture_window="$tmp/fixture-window-command"
 cp "$repo/packages/t3code/release-window.sh" "$fixture_window"
@@ -213,8 +216,11 @@ printf 'changed\n' > "$tmp/state/desired"
 if "${cmd[@]}" end-no-activation; then echo 'accepted changed state' >&2; exit 1; fi
 printf 'old\n' > "$tmp/state/desired"
 "${cmd[@]}" end-no-activation
+# CURRENT_SYSTEM is caller-supplied for post; binding must not read it.
+export CURRENT_SYSTEM=/nonexistent-generation
 "${cmd[@]}" start two
 "${cmd[@]}" switch -- true
+export CURRENT_SYSTEM="$tmp/current-system"
 # The switch bound the installed identity from the now-active generation.
 [[ -f "$tmp/evidence/two/declared-target" ]] || { echo 'switch did not bind the installed identity' >&2; exit 1; }
 [[ $(cat "$tmp/evidence/two/declared-target") == "fixture $tmp/tooling" ]]

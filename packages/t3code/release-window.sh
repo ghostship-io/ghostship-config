@@ -249,9 +249,13 @@ serving_matches_start() {
 # identity. Callers may accept the receipt's identity or this declared target,
 # never an inferred one.
 declared_target_from_unit() {
-  local system=${CURRENT_SYSTEM:-/run/current-system} unit revision tooling
-  unit=$(readlink -f "$system")/etc/systemd/system/ghostship-t3code-deploy.service
-  [[ -f $unit && ! -L $unit ]] || return 1
+  local system=/run/current-system unit revision tooling
+  [[ -d $system ]] || system=$(readlink -f "$PROFILE") || return 1
+  [[ -d $system ]] || return 1
+  unit=$system/etc/systemd/system/ghostship-t3code-deploy.service
+  # A generation's unit is itself a symlink into the units directory; -f follows
+  # it and still rejects a disabled or missing unit.
+  [[ -f $unit ]] || return 1
   revision=$(sed -n 's/.*AGENT_REVISION=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
   tooling=$(sed -n 's/.*TOOLING_PATH=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
   [[ -n $revision && -n $tooling ]] || return 1
@@ -717,7 +721,9 @@ case ${1:-} in
     restore_alias_to_image "$baseline_image"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$baseline_image" "" advanced
+    recovery_mode=
+    [[ ! -f $dir/declared-target ]] || recovery_mode=advanced
+    wait_and_verify_serving "$baseline_image" "" "$recovery_mode"
   else
     serving_matches_start allow-deferred
     require_matching_receipt_and_alias
@@ -774,8 +780,17 @@ case ${1:-} in
     restore_alias_to_image "$target_img"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$target_img" allow-deferred advanced
+    recovery_mode=
+    if [[ $reason == acceptance_unknown || $reason == switch_unknown ]]; then
+      [[ -f $dir/declared-target && ! -L $dir/declared-target ]] || fail 'switch did not start; refusing to infer the release target'
+      recovery_mode=advanced
+    fi
+    wait_and_verify_serving "$target_img" allow-deferred "$recovery_mode"
     validated_serving_image=$target_img
+    if [[ $recovery_mode == advanced ]]; then
+      advanced_identity_record=$(serving_identity) || fail 'serving identity unknown'
+      receipt_identity=$(receipt_identity_of "$matched_receipt") || fail 'receipt identity unknown'
+    fi
   elif [[ $reason == acceptance_unknown || $reason == switch_unknown ]]; then
     # The switch may have advanced the home tools before acceptance failed.
     # Verify the served image in the record and accept a receipt whose identity

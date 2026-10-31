@@ -498,8 +498,30 @@ grep -q 'container recovered and recovery inhibit cleared' "$n/out.log"
 rm -rf "$n"
 }
 
+scenario_o() {
+# O: a stopped container whose reason never ran a switch keeps resolving with
+# the live identity, exactly as before the advanced rule existed.
+o=$(mktemp -d); trap 'rm -rf "$o"' EXIT
+desired=$(printf '%064d' 27)
+setup "$o" "$desired"
+attempt "$o" "$desired" acceptance_unknown "$(date +%s%3N)"
+set +e
+run_cmd "$o" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$o/end.log" 2>&1
+o_end_rc=$?
+set -e
+[[ $o_end_rc == 77 ]] || { echo "O: end rc=$o_end_rc" >&2; cat "$o/end.log" >&2; exit 1; }
+"$JQ" '.reason="route_unknown"' "$o/state/recovery-unknown.json" > "$o/r.tmp"
+mv "$o/r.tmp" "$o/state/recovery-unknown.json"
+write_receipt "$o" "$desired"
+: > "$o/container-stopped"
+run_cmd "$o" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$o/out.log" 2>&1 \
+  || { echo 'O: stopped route_unknown refused a live receipt:' >&2; cat "$o/out.log" >&2; exit 1; }
+grep -q 'container recovered and recovery inhibit cleared' "$o/out.log"
+rm -rf "$o"
+}
+
 only=${1:-all}
-for key in A B C D E F G H I J K L M N; do
+for key in A B C D E F G H I J K L M N O; do
   if [[ $only == all || $only == "$key" ]]; then
     "scenario_$(printf '%s' "$key" | tr 'A-Z' 'a-z')"
   fi
