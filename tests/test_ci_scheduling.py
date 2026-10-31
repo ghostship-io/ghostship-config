@@ -13,7 +13,7 @@ class CISchedulingTests(unittest.TestCase):
         self.assertNotIn('|| github.sha', text)
         self.assertNotIn('schedule:', text)
         self.assertIn('runs-on: [self-hosted, Linux, ARM64, ghostship-fast]', text)
-        self.assertIn('timeout-minutes: 4', text)
+        self.assertIn('timeout-minutes: 10', text)
         checkout = text.split('  integration:', 1)[0]
         self.assertIn('filter: blob:none', checkout)
         self.assertIn('fetch-depth: 0', checkout)
