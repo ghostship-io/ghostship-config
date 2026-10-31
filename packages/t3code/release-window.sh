@@ -1122,6 +1122,7 @@ case ${1:-} in
       deployment_id, agent_revision, agent_path, provider_secret_inode,
       receipt_file: ($file | split("/") | last)}' "$not_reused_path") || fail 'unreceipted carrying receipt unreadable'
   fi
+  # shellcheck disable=SC2016
   "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg a "$applied" \
     --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg inode "$inode" \
     --arg at "$(date -u +%FT%TZ)" --arg failed "$failed_hash" \
