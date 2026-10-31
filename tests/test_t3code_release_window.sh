@@ -542,4 +542,64 @@ touch "$tmp/container-stopped"
 unset SERVER_PID
 
 if grep -q '^restart ' "$tmp/systemctl.events"; then echo 'unexpected restart' >&2; exit 1; fi
+# A released window's UNKNOWN record can be superseded by an adopt start, as a
+# recorded operator action. The record is archived, never deleted.
+old_unknown=old-acceptance
+mkdir -p "$tmp/evidence/$old_unknown"
+printf 'started=2026-10-31T04:02:32Z start_ms=1 acquired_by=1\n' > "$tmp/evidence/$old_unknown/window.start"
+printf 'holder_pid=2 held_at=2026-10-31T04:02:32Z\n' >> "$tmp/evidence/$old_unknown/window.start"
+printf '%064d sha256:%064d started\n' 1 2 > "$tmp/evidence/$old_unknown/serving.before"
+printf '1234 5678\n' >> "$tmp/evidence/$old_unknown/serving.before"
+printf '2026-10-31T04:02:40Z 1\n' > "$tmp/evidence/$old_unknown/complete.started"
+: > "$tmp/evidence/$old_unknown/complete.lock"
+: > "$tmp/hold"
+jq -n --arg w "$old_unknown" --arg at "$(date -u -d '-60 seconds' +%FT%TZ)" \
+  '{state:"UNKNOWN",reason:"acceptance_unknown",window:$w,desired:"desired",applied:"applied",receipt:"absent",failed_marker_sha256:"absent",serving:"serving",at:$at,recovery_inhibit:"retained",inhibit_reason:"runtime failure after a receipted restart",clear_command:"ghostship-t3code-release-window resolve-unknown"}' > "$STATE_DIR/recovery-unknown.json"
+
+# Without the flag the existing refusal is kept.
+if "${cmd[@]}" start --adopt-inhibit legacy-next 2>"$tmp/sup-noflag.log"; then echo 'superseded without --supersede-unknown' >&2; exit 1; fi
+grep -q 'recorded UNKNOWN requires investigation' "$tmp/sup-noflag.log" || { echo 'A: unexpected refusal:' >&2; cat "$tmp/sup-noflag.log" >&2; exit 1; }
+
+# Without the inhibit there is nothing being superseded.
+mv "$tmp/hold" "$tmp/hold.away"
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-next 2>"$tmp/sup-nohold.log"; then echo 'superseded without the inhibit' >&2; exit 1; fi
+grep -q 'supersede requires the retained recovery inhibit' "$tmp/sup-nohold.log" || { echo 'B: unexpected refusal:' >&2; cat "$tmp/sup-nohold.log" >&2; exit 1; }
+mv "$tmp/hold.away" "$tmp/hold"
+
+# A record for the window being started is not an older record.
+cp "$STATE_DIR/recovery-unknown.json" "$tmp/record.orig"
+jq --arg w legacy-next '.window=$w' "$tmp/record.orig" > "$STATE_DIR/recovery-unknown.json.tmp"
+mv "$STATE_DIR/recovery-unknown.json.tmp" "$STATE_DIR/recovery-unknown.json"
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-next 2>"$tmp/sup-same.log"; then echo 'superseded its own window' >&2; exit 1; fi
+grep -q 'cannot supersede a record for the window being started' "$tmp/sup-same.log" || { echo 'C: unexpected refusal:' >&2; cat "$tmp/sup-same.log" >&2; exit 1; }
+cp "$tmp/record.orig" "$STATE_DIR/recovery-unknown.json"
+
+# A start that fails a preflight guard leaves the record untouched: the
+# supersede only runs after preflight and under the window lock.
+exec 3>"$LOCK_CANDIDATE"; flock -x 3
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-order 2>"$tmp/sup-order.log"; then echo 'started with a held candidate lock' >&2; exit 1; fi
+flock -u 3; exec 3>&-
+grep -q 'candidate lock held' "$tmp/sup-order.log" || { echo 'H: unexpected refusal:' >&2; cat "$tmp/sup-order.log" >&2; exit 1; }
+[[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'H: superseded before preflight passed' >&2; exit 1; }
+[[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'H: audit written before preflight passed' >&2; exit 1; }
+
+# The recorded shape: acceptance_unknown, released, inhibit retained.
+record_digest=$(sha256sum < "$STATE_DIR/recovery-unknown.json" | cut -d' ' -f1)
+"${cmd[@]}" start --adopt-inhibit --supersede-unknown "assembly superseded the released acceptance_unknown record" legacy-supersede
+[[ ! -e $STATE_DIR/recovery-unknown.json ]]
+[[ -f $tmp/evidence/$old_unknown/archive/recovery-unknown.json ]]
+[[ $(sha256sum < "$tmp/evidence/$old_unknown/archive/recovery-unknown.json") == "$record_digest "* ]]
+jq -e --arg w "$old_unknown" --arg h "$record_digest" '.state == "SUPERSEDED" and .window == $w and .superseded_by == "legacy-supersede" and .record_sha256 == $h and (.reason | length) > 0' "$tmp/evidence/$old_unknown/archive/supersede.json" >/dev/null
+[[ $(cat "$tmp/evidence/active-window") == legacy-supersede ]]
+
+# With a window open the record's window is not released.
+cp "$tmp/evidence/$old_unknown/archive/recovery-unknown.json" "$STATE_DIR/recovery-unknown.json"
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-second 2>"$tmp/sup-active.log"; then echo 'superseded with an active window' >&2; exit 1; fi
+grep -q 'supersede requires a released window' "$tmp/sup-active.log" || { echo 'E: unexpected refusal:' >&2; cat "$tmp/sup-active.log" >&2; exit 1; }
+
+# end-post will not close a window while a live recovery record remains.
+if "${cmd[@]}" end-post 2>"$tmp/post-record.log"; then echo 'closed a window with a live UNKNOWN record' >&2; exit 1; fi
+grep -q 'recorded UNKNOWN remains' "$tmp/post-record.log" || { echo 'F: unexpected refusal:' >&2; cat "$tmp/post-record.log" >&2; exit 1; }
+rm "$STATE_DIR/recovery-unknown.json"
+
 echo 'Release window refusal and reopen fixture passed.'

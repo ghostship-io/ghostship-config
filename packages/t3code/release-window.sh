@@ -43,15 +43,19 @@ legacy_preflight() {
   [[ ! -L $LEGACY_DIR/complete.started ]] || fail 'legacy switch marker invalid'
 }
 preflight() {
-  local mode=${1:-}
+  local mode=${1:-} skip_record=${2:-}
   [[ -z $mode || $mode == --adopt-inhibit ]] || fail 'invalid preflight option'
+  [[ -z $skip_record || $skip_record == --supersede-unknown ]] || fail 'invalid preflight option'
+  [[ -z $skip_record || $mode == --adopt-inhibit ]] || fail '--supersede-unknown requires --adopt-inhibit'
   preflight_core
   if [[ $mode == --adopt-inhibit ]]; then
     legacy_preflight
   else
     [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
   fi
-  [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN requires investigation'
+  if [[ -z $skip_record ]]; then
+    [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN requires investigation'
+  fi
   if [[ -e $WINDOW_ROOT || -L $WINDOW_ROOT ]]; then
     [[ -d $WINDOW_ROOT && ! -L $WINDOW_ROOT && -f $WINDOW_ROOT/window.lock && ! -L $WINDOW_ROOT/window.lock ]] || fail 'window root or lock invalid'
     flock -n -x "$WINDOW_ROOT/window.lock" true || fail 'window lock held'
@@ -349,6 +353,54 @@ post_verify() {
   lock_managed_tools
   no_pending_restart "$allow"
 }
+# Retire a released window's UNKNOWN record as a recorded operator action.
+# The record is never deleted: it moves into that window's archive beside an
+# audit entry naming the reason, the record digest and the window that
+# supersedes it. Only a terminal UNKNOWN for a different window whose own
+# record predates this start can be superseded, and only while the inhibit it
+# guarded is still held.
+supersede_unknown() {
+  : "${JQ_BIN:?}"
+  local check="" expected_old=""
+  if [[ ${1:-} == --check ]]; then check=1; shift; fi
+  local reason=${1:-} new_id=${2:-} expected_old=${3:-} record="$STATE_DIR/recovery-unknown.json" old archive digest at now
+  [[ -n $reason && ${#reason} -le 500 && $reason != *[[:cntrl:]]* ]] || fail 'supersede reason invalid'
+  [[ -f $record && ! -L $record && -r $record ]] || fail 'no recorded UNKNOWN to supersede'
+  [[ -f $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'supersede requires the retained recovery inhibit'
+  [[ ! -e $WINDOW_ROOT/active-window && ! -L $WINDOW_ROOT/active-window ]] || fail 'supersede requires a released window'
+  old=$("$JQ_BIN" -er 'select(.state == "UNKNOWN" and (.reason | test("^(route_unknown|route_unavailable|candidate_failed|switch_unknown|legacy_unknown|acceptance_unknown|receipted_runtime_failure)$"))) | .window' "$record") || fail 'recorded UNKNOWN is not a terminal outcome'
+  window_id_valid "$old" || fail 'recorded window identity invalid'
+  [[ $old != "$new_id" ]] || fail 'cannot supersede a record for the window being started'
+  [[ -z $expected_old || $old == "$expected_old" ]] || fail 'recorded UNKNOWN changed during start; investigate it before superseding'
+  at=$("$JQ_BIN" -er '.at | select(type == "string")' "$record") || fail 'recorded UNKNOWN has no recorded time'
+  [[ $at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || fail 'recorded UNKNOWN time unknown'
+  now=$(date -u +%FT%TZ)
+  [[ ! $at > $now ]] || fail 'recorded UNKNOWN is not older than this start'
+  archive=$WINDOW_ROOT/$old/archive
+  [[ -d $WINDOW_ROOT/$old && ! -L $WINDOW_ROOT/$old ]] || fail 'recorded window evidence missing'
+  (( check )) && return 0
+  digest=$(sha256sum < "$record") || fail 'recorded UNKNOWN digest unknown'
+  digest=${digest%% *}
+  install -d -m 0700 "$archive"
+  cp --preserve=mode,timestamps -- "$record" "$archive/recovery-unknown.json.tmp" || fail 'record archive write failed'
+  chmod 0600 "$archive/recovery-unknown.json.tmp"
+  sync -f "$archive/recovery-unknown.json.tmp"
+  [[ $(sha256sum < "$archive/recovery-unknown.json.tmp") == "$digest "* ]] || fail 'archived record differs from the live record'
+  mv "$archive/recovery-unknown.json.tmp" "$archive/recovery-unknown.json"; sync -f "$archive"
+  local audit_program
+  audit_program=$(cat <<'JQ'
+{state:"SUPERSEDED",window:$w,reason:$r,record_sha256:$h,superseded_by:$n,at:$at}
+JQ
+)
+  "$JQ_BIN" -cn --arg w "$old" --arg r "$reason" --arg h "$digest" --arg n "$new_id" --arg at "$now" \
+    "$audit_program" > "$archive/supersede.json.tmp" || fail 'supersede audit write failed'
+  chmod 0600 "$archive/supersede.json.tmp"
+  sync -f "$archive/supersede.json.tmp"
+  mv "$archive/supersede.json.tmp" "$archive/supersede.json"; sync -f "$archive"
+  # The archive and its audit are durable before the live record is retired.
+  rm "$record"; sync -f "$STATE_DIR"
+  printf 'PASS recorded UNKNOWN superseded window=%s superseded_by=%s\n' "$old" "$new_id"
+}
 case ${1:-} in
  preflight)
   [[ $# -le 2 ]] || fail 'usage: preflight [--adopt-inhibit]'
@@ -357,11 +409,24 @@ case ${1:-} in
   ;;
  start)
   adopt=0
+  supersede=
   if [[ ${2:-} == --adopt-inhibit ]]; then adopt=1; shift; fi
-  [[ $# == 2 ]] || fail 'usage: start [--adopt-inhibit] WINDOW_ID'
+  if [[ ${2:-} == --supersede-unknown ]]; then
+    [[ -n ${3:-} ]] || fail 'usage: --supersede-unknown requires a reason'
+    supersede=$3; shift 2
+  fi
+  [[ $# == 2 ]] || fail 'usage: start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID'
   id=$2; window_id_valid "$id" || fail 'invalid window id'
   : "${WINDOW_SECONDS:?}"
-  if (( adopt )); then preflight --adopt-inhibit; else preflight; fi
+  supersede_record=
+  if [[ -n $supersede ]]; then
+    (( adopt )) || fail '--supersede-unknown requires --adopt-inhibit'
+    supersede_unknown --check "$supersede" "$id"
+    supersede_record=$("$JQ_BIN" -er 'select(.state == "UNKNOWN") | .window' "$STATE_DIR/recovery-unknown.json") || fail 'recorded UNKNOWN identity unknown'
+  fi
+  if (( adopt )); then
+    if [[ -n $supersede ]]; then preflight --adopt-inhibit --supersede-unknown; else preflight --adopt-inhibit; fi
+  else preflight; fi
   if [[ ! -e $WINDOW_ROOT && ! -L $WINDOW_ROOT ]]; then
     : "${WINDOW_BOOTSTRAP:?}"
     bash "$WINDOW_BOOTSTRAP"
@@ -379,6 +444,10 @@ case ${1:-} in
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery is not active'
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
+  # Preflight is read-only and has now passed every guard, and this window's
+  # lock is held: only here does the record move. A failure above leaves the
+  # live UNKNOWN untouched.
+  if [[ -n $supersede ]]; then supersede_unknown "$supersede" "$id" "$supersede_record"; fi
   exec 6<"$LOCK_CANDIDATE" 7<"$LOCK_HARDENING"
   flock -n -x 6 || fail 'candidate lock held'
   flock -n -x 7 || fail 'hardening lock held'
@@ -515,6 +584,7 @@ case ${1:-} in
   fi
   read_active
   [[ $# == 1 || $2 == "$id" ]] || fail 'window ID does not match'
+  [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN remains; supersede it before this window can close'
   case $(unit_state "$WINDOW_UNIT") in
     active) if [[ ! -f $HOLD_FILE || -L $HOLD_FILE ]] || ! holder_ready; then fail 'window state unknown'; fi ;;
     inactive) expired_holder_locks ;;
@@ -889,5 +959,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation' >&2; exit 2 ;;
 esac
