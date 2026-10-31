@@ -104,6 +104,14 @@ in
       container = "agent-memory";
       group = "Agent";
       description = "Basic Memory MCP store shared with the orchestrator";
+      apparmorProfile = "ghostship-agent-memory";
+    };
+
+    # Strict, enforced profile; the process runs as uid 3000 with no
+    # capabilities and the allowlist is derived from the pinned Containerfile.
+    security.apparmor.policies.ghostship-agent-memory = {
+      state = "enforce";
+      profile = builtins.readFile ./apparmor/agent-memory.profile;
     };
 
     virtualisation.oci-containers.containers."agent-memory" = {
