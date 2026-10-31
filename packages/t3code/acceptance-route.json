@@ -2,7 +2,7 @@
   "schema": "ghostship.t3code-acceptance-route/v1",
   "provider": "opencode-free",
   "provider_instance": "opencode-free",
-  "model": "opencode/glm-5.3-flash-free",
+  "model": "opencode/deepseek-v4.1-flash-free",
   "billing": "free",
   "effort": "high",
   "acceptance_only": true,
