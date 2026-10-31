@@ -20,8 +20,8 @@ in
   # deploy switch. No credential changes while it is deferred.
   ghostship.freeWorker.authCutover = "deferred";
   ghostship.githubEngineering.enable = true;
-  # Shared Basic Memory workspace (#1676): one private network with t3code, no
-  # published port, and the #737 DNS accept rendered only while this is enabled.
+  # Shared Basic Memory workspace (#1676): a member of ghostship_net, no
+  # published port, notes tools registered on the connector.
   ghostship.agentMemory.enable = true;
   # Model routing is off: the owner turned it off on 2026-10-22. The static
   # worker table (worker_routes in ghostship-agent's runtime policy) governs
