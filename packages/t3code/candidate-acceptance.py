@@ -946,12 +946,12 @@ def free_tier_limit(probe, extra_text=""):
     """
     if not isinstance(probe, dict):
         probe = {}
-    status = probe.get("error_status")
+    status = str(probe.get("error_status")) if probe.get("error_status") is not None else None
     blob = " ".join(str(probe.get(key) or "") for key in
                     ("error_type", "error_message", "detail", "failure"))
     combined = (blob + "\n" + str(extra_text or "")).lower()
     match = STATUS_TOKEN.search(blob) or STATUS_TOKEN.search(str(extra_text or ""))
-    structured_status = status if str(status or "").startswith(("4", "5")) and len(str(status)) == 3 else None
+    structured_status = status if status and status.startswith(("4", "5")) and len(status) == 3 else None
     if structured_status is None and match is not None:
         structured_status = match.group(1)
     limited = (structured_status == "429" or any(hint in combined for hint in FREE_LIMIT_HINTS))

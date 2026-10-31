@@ -2295,6 +2295,11 @@ class FreeTierLimitClassificationTest(unittest.TestCase):
         'to keep going: https://opencode.ai/go"}}'
     )
 
+    def test_an_integer_status_429_is_normalised(self):
+        payload = {"outcome": "execution", "error": {"code": "quota"}, "error_status": 429}
+        reason = acceptance.free_tier_limit(payload)
+        self.assertIn("429", reason)
+
     def test_bare_execution_kind_plus_opencode_log_is_classified(self):
         payload = {"outcome": "execution", "error": {"code": "execution", "kind": "execution"}}
         self.assertEqual(acceptance.free_tier_limit(payload), "")
