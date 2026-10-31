@@ -13,7 +13,7 @@
     # native private-integration runtime (lib/native-mcp.nix + connector/), so
     # it moves without the service clients and Python packages above.
     ghostship-native-agent = {
-      url = "github:ghostship-io/ghostship-agent/5b4e2f4eefedc15580895a202c872668818bb643";
+      url = "github:ghostship-io/ghostship-agent/ee54bb0d40849882f871de277a6df7f885b21b37";
       flake = false;
     };
 
