@@ -310,6 +310,14 @@ mkdir -p "$HOME_DIR/.local/state/t3code-tool-update"
 touch "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
 if "${cmd[@]}" end-unknown; then echo 'accepted pending restart' >&2; exit 1; fi
 rm "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
+# The container half, which is the live shape: holding a window makes the
+# container defer tool updates, so that marker must not block an ending, while a
+# queued container restart still must.
+mkdir -p "$tmp/container-run"
+: > "$tmp/container-run/restart.pending"
+if "${cmd[@]}" end-unknown; then echo 'accepted a container queued restart' >&2; exit 1; fi
+rm -f "$tmp/container-run/restart.pending"
+rm -rf "$tmp/container-run"
 # The holder may stop while its acknowledgement is lost. The durable UNKNOWN
 # record lets a retry finish releasing the window without inventing success.
 export FIXTURE_STOP_LOST_ACK=1

@@ -154,21 +154,27 @@ lock_managed_tools() {
 }
 no_pending_restart() {
   : "${HOME_DIR:?}"
+  local allow=${1:-}
   local f
-  # The container defers tool updates while a window is open, so
+  # The container defers tool updates for as long as a window is open, so
   # update-deferred.pending is the expected consequence of holding the window,
-  # not pending work. cancel-start only needs it tolerated: it never touches the
-  # container and the deferral clears once the window closes. restart.pending,
-  # hold and in-container maintenance still refuse.
+  # not pending work. Tolerate it whenever a window is open — every ending runs
+  # in that state — and keep refusing restart.pending, hold, activation and
+  # in-container maintenance. With no window open the marker still refuses.
+  local deferred_allowed=0
+  [[ -e $WINDOW_ROOT/active-window || -L $WINDOW_ROOT/active-window ]] && deferred_allowed=1
+  # Commands that run after the record is released (resolve-unknown, the
+  # released end-unknown retry) have no active-window, so they ask explicitly.
+  [[ $allow == allow-deferred ]] && deferred_allowed=1
   local deferred_marker="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
-  [[ ${ALLOW_DEFERRED_MARKER:-0} == 1 ]] && deferred_marker=/nonexistent-allowed
+  (( deferred_allowed )) && deferred_marker=/nonexistent-allowed
   for f in "$STATE_DIR/restart.pending" "$HOME_DIR/.local/state/t3code-tool-update/restart.pending" \
     "$deferred_marker" "$HOME_DIR/.local/state/t3code-tool-update/hold" \
     "$HOME_DIR/.local/share/t3code-tools/t3/activation.pending"; do
     [[ ! -e $f && ! -L $f ]] || fail 'pending restart or maintenance marker'
   done
   local container_markers=/run/t3code-tool-update/restart.pending
-  if [[ ${ALLOW_DEFERRED_MARKER:-0} != 1 ]]; then
+  if (( ! deferred_allowed )); then
     container_markers="$container_markers /run/t3code-tool-update/update-deferred.pending"
   fi
   container_markers="$container_markers /run/t3code-tool-update/hold /run/t3code-tool-update/maintenance"
@@ -206,7 +212,7 @@ receipt_for_image() {
   return 1
 }
 wait_and_verify_serving() {
-  local expected_image=${1#sha256:} cur_img
+  local expected_image=${1#sha256:} allow=${2:-} cur_img
   for _ in {1..100}; do
     if [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}' 2>/dev/null) == healthy ]] &&
        "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service 2>/dev/null &&
@@ -222,7 +228,7 @@ wait_and_verify_serving() {
   [[ ${cur_img#sha256:} == "$expected_image" ]] || fail 'recovered container running unexpected image'
   matched_receipt=$(known_good_receipt "$expected_image") || fail 'recovered container inputs do not match receipt'
   lock_managed_tools
-  no_pending_restart
+  no_pending_restart "$allow"
 }
 serving_matches_start() {
   [[ -f $dir/serving.before && ! -L $dir/serving.before ]] || fail 'serving identity baseline missing'
@@ -232,7 +238,7 @@ serving_matches_start() {
   [[ $("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') == healthy ]] || fail 'serving container unhealthy'
   "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'serving server inactive'
   lock_managed_tools
-  no_pending_restart
+  no_pending_restart "${1:-}"
 }
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
@@ -438,10 +444,6 @@ case ${1:-} in
   baseline=$(snapshot) || fail 'state unknown'
   [[ $(tail -n +2 "$dir/window.start") == "$baseline" ]] || fail 'state changed during start'
   exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
-  # Holding a window makes the container defer tool updates, so that marker is
-  # expected here and must not deadlock the only path that can close a
-  # half-opened window.
-  ALLOW_DEFERRED_MARKER=1
   serving_matches_start
   case $(unit_state "$WINDOW_UNIT") in
     active)
@@ -569,7 +571,7 @@ case ${1:-} in
   container_was_stopped=0
   if (( already_released )); then
     is_container_running || fail 'container is stopped after release'
-    serving_matches_start
+    serving_matches_start allow-deferred
     require_matching_receipt_and_alias
     printf '%s\n' 'PASS known-good serving identity and existing receipt; window already released.'
     exit 0
@@ -586,7 +588,7 @@ case ${1:-} in
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
     wait_and_verify_serving "$baseline_image"
   else
-    serving_matches_start
+    serving_matches_start allow-deferred
     require_matching_receipt_and_alias
   fi
   record_known_good "$dir/known-good.json"
@@ -641,7 +643,7 @@ case ${1:-} in
     restore_alias_to_image "$target_img"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$target_img"
+    wait_and_verify_serving "$target_img" allow-deferred
     validated_serving_image=$target_img
   elif [[ $reason == receipted_runtime_failure ]]; then
     current=$(serving_identity) || fail 'serving identity unknown'
@@ -652,12 +654,12 @@ case ${1:-} in
     "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'serving server inactive'
     "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'serving server unresponsive'
     lock_managed_tools
-    no_pending_restart
+    no_pending_restart allow-deferred
     read -r _ validated_serving_image _ <<< "$current"
     validated_serving_image=${validated_serving_image#sha256:}
     require_matching_receipt_and_alias
   else
-    serving_matches_start
+    serving_matches_start allow-deferred
     require_matching_receipt_and_alias
   fi
   record_known_good "$dir/unknown-resolved.json"
@@ -784,7 +786,7 @@ case ${1:-} in
     complete_locks_free
     case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
     case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
-    serving_matches_start
+    serving_matches_start allow-deferred
     printf '%s\n' 'UNKNOWN: window already released; recovery inhibit retained. After investigation and an exact matching receipt, run ghostship-t3code-release-window resolve-unknown.'
     exit 77
   fi
@@ -811,7 +813,7 @@ case ${1:-} in
   if (( recorded )); then
     # shellcheck disable=SC2016
     "$JQ_BIN" -e --arg id "$id" --arg desired "$desired" --arg applied "$applied" --arg failed "$failed_hash" --arg serving "$(cat "$dir/serving.before")" '
-      .state == "UNKNOWN" and (.reason == "route_unknown" or .reason == "route_unavailable" or .reason == "candidate_failed" or .reason == "switch_unknown" or .reason == "legacy_unknown") and .window == $id and .desired == $desired and .applied == $applied and .receipt == "absent" and .serving == $serving and .failed_marker_sha256 == $failed and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null || fail 'recorded UNKNOWN differs from current evidence'
+      .state == "UNKNOWN" and (.reason == "route_unknown" or .reason == "route_unavailable" or .reason == "candidate_failed" or .reason == "switch_unknown" or .reason == "legacy_unknown" or .reason == "acceptance_unknown") and .window == $id and .desired == $desired and .applied == $applied and .receipt == "absent" and .serving == $serving and .failed_marker_sha256 == $failed and .recovery_inhibit == "retained"' "$STATE_DIR/recovery-unknown.json" >/dev/null || fail 'recorded UNKNOWN differs from current evidence'
   else
     attempt="$STATE_DIR/attempts/$desired.json"
     read -r _ start_ms_field _ < "$dir/window.start" || fail 'window start evidence unreadable'
@@ -832,6 +834,10 @@ case ${1:-} in
       reason=route_unavailable
     elif [[ -f $attempt ]] && "$JQ_BIN" -e --arg d "$desired" --argjson min "$minimum_ms" '.deployment_id == $d and .exit_code == 1 and .status == null and (.started_at_ms | type == "number" and . >= $min)' "$attempt" >/dev/null && [[ $failed_hash != absent ]] && [[ $(cat "$STATE_DIR/failed-candidate") =~ ^${desired}\ [0-9a-f]{64}$ ]]; then
       reason=candidate_failed
+    elif [[ -f $attempt ]] && "$JQ_BIN" -e --arg d "$desired" --argjson min "$minimum_ms" '.deployment_id == $d and .outcome == "acceptance_unknown" and .exit_code == 77 and .status == null and (.started_at_ms | type == "number" and . >= $min)' "$attempt" >/dev/null; then
+      # The switch ran and acceptance then failed as unknown: no receipt exists,
+      # so this is an unreceipted UNKNOWN end with the inhibit retained.
+      reason=acceptance_unknown
     elif [[ -f $dir/complete.started && ! -L $dir/complete.started ]]; then
       reason=switch_unknown
     elif [[ -f $dir/legacy.adopted && ! -L $dir/legacy.adopted ]]; then
