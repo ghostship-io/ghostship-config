@@ -583,6 +583,16 @@ grep -q 'candidate lock held' "$tmp/sup-order.log" || { echo 'H: unexpected refu
 [[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'H: superseded before preflight passed' >&2; exit 1; }
 [[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'H: audit written before preflight passed' >&2; exit 1; }
 
+# The record moves only while the window lock is held. With another writer
+# holding it, a start must not archive or remove the record.
+exec 5<"$tmp/evidence/window.lock"; flock -x 5
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-locked 2>"$tmp/sup-locked.log"; then echo 'started while another window writer held the lock' >&2; exit 1; fi
+flock -u 5; exec 5<&-
+grep -q 'window lock held' "$tmp/sup-locked.log" || { echo 'I: unexpected refusal:' >&2; cat "$tmp/sup-locked.log" >&2; exit 1; }
+[[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'I: superseded without the window lock' >&2; exit 1; }
+[[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'I: audit written without the window lock' >&2; exit 1; }
+[[ ! -e $tmp/evidence/$old_unknown/archive ]] || { echo 'I: record archived without the window lock' >&2; exit 1; }
+
 # The recorded shape: acceptance_unknown, released, inhibit retained.
 record_digest=$(sha256sum < "$STATE_DIR/recovery-unknown.json" | cut -d' ' -f1)
 "${cmd[@]}" start --adopt-inhibit --supersede-unknown "assembly superseded the released acceptance_unknown record" legacy-supersede
