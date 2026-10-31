@@ -567,13 +567,21 @@ grep -q 'supersede requires the retained recovery inhibit' "$tmp/sup-nohold.log"
 mv "$tmp/hold.away" "$tmp/hold"
 
 # A record for the window being started is not an older record.
-mkdir -p "$tmp/evidence/legacy-next"
 cp "$STATE_DIR/recovery-unknown.json" "$tmp/record.orig"
 jq --arg w legacy-next '.window=$w' "$tmp/record.orig" > "$STATE_DIR/recovery-unknown.json.tmp"
 mv "$STATE_DIR/recovery-unknown.json.tmp" "$STATE_DIR/recovery-unknown.json"
 if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-next 2>"$tmp/sup-same.log"; then echo 'superseded its own window' >&2; exit 1; fi
 grep -q 'cannot supersede a record for the window being started' "$tmp/sup-same.log" || { echo 'C: unexpected refusal:' >&2; cat "$tmp/sup-same.log" >&2; exit 1; }
 cp "$tmp/record.orig" "$STATE_DIR/recovery-unknown.json"
+
+# A start that fails a preflight guard leaves the record untouched: the
+# supersede only runs after preflight and under the window lock.
+exec 3>"$LOCK_CANDIDATE"; flock -x 3
+if "${cmd[@]}" start --adopt-inhibit --supersede-unknown "test" legacy-order 2>"$tmp/sup-order.log"; then echo 'started with a held candidate lock' >&2; exit 1; fi
+flock -u 3; exec 3>&-
+grep -q 'candidate lock held' "$tmp/sup-order.log" || { echo 'H: unexpected refusal:' >&2; cat "$tmp/sup-order.log" >&2; exit 1; }
+[[ -f $STATE_DIR/recovery-unknown.json ]] || { echo 'H: superseded before preflight passed' >&2; exit 1; }
+[[ ! -e $tmp/evidence/$old_unknown/archive/supersede.json ]] || { echo 'H: audit written before preflight passed' >&2; exit 1; }
 
 # The recorded shape: acceptance_unknown, released, inhibit retained.
 record_digest=$(sha256sum < "$STATE_DIR/recovery-unknown.json" | cut -d' ' -f1)
