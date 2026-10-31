@@ -52,6 +52,16 @@ if [[ $1 == tag ]]; then
   [[ ${FIXTURE_TAG_LOST_ACK:-0} != 1 ]] || exit 1
   exit
 fi
+# Container marker check: the tool runs `sh -c 'for f in $1; ...' _ MARKERS`
+# inside the container. Interpret the markers against a fixture directory so the
+# container half of the deferral tolerance is actually exercised.
+if [[ $1 == exec && $3 == sh && ${4:-} == -c && ${6:-} == _ ]]; then
+  for f in ${7:-}; do
+    rel=${f#/run/t3code-tool-update/}
+    [[ ! -e $FIXTURE/container-run/$rel ]] || exit 1
+  done
+  exit 0
+fi
 case "$1 $3 ${4:-}" in
   'inspect --format {{.State.Running}}') echo true ;;
   'inspect --format {{.Id}} {{.Image}} {{.State.StartedAt}}') printf '%064d sha256:%s started\n' 1 "$EXPECTED_IMAGE" ;;
@@ -128,7 +138,16 @@ deferred="$HOME_DIR/.local/state/t3code-tool-update/update-deferred.pending"
 if "${cmd[@]}" cancel-start; then echo 'cancel-start accepted a queued restart' >&2; exit 1; fi
 [[ -e $tmp/evidence/active-window ]]
 rm -f "$HOME_DIR/.local/state/t3code-tool-update/restart.pending"
+# The live failure was the container's own deferral marker, so prove that half
+# too: a container restart.pending still refuses, the deferral does not.
+mkdir -p "$tmp/container-run"
+: > "$tmp/container-run/update-deferred.pending"
+: > "$tmp/container-run/restart.pending"
+if "${cmd[@]}" cancel-start; then echo 'cancel-start accepted a container restart' >&2; exit 1; fi
+[[ -e $tmp/evidence/active-window ]]
+rm -f "$tmp/container-run/restart.pending"
 "${cmd[@]}" cancel-start
+rm -rf "$tmp/container-run"
 [[ ! -e $tmp/evidence/active-window && ! -e $tmp/hold ]]
 rm -f "$deferred"
 # A candidate closure can preflight before first installation without touching
