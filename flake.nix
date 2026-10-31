@@ -7,7 +7,7 @@
     # icon.
     # Native-agent-only move for notes: ghostship-private-agent returns to 5b4e2f4e
     # with the first accepted T3 deployment; this pin keeps the deployment id.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/e89d0abd4879387012702c54cf4d317a072b9b5d";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/0136744a8f52a56b1b4ed52db7ca131e2173712c";
     # Independently reviewed native connector increment; unrelated service
     # runtimes keep their existing release pin. This input drives only the
     # native private-integration runtime (lib/native-mcp.nix + connector/), so
