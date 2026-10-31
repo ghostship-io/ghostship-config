@@ -77,8 +77,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
     if tooling_path:
         stage_candidate_provider_settings(source_home, candidate_home, candidate_home_target)
         stage_candidate_opencode_catalog(source_home, candidate_home)
-        stage_candidate_opencode_config(candidate_home)
-        stage_candidate_opencode_free(source_home, candidate_home)
+        stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target)
         if approved_free_workers_file:
             stage_candidate_provider_auth(
                 source_home, candidate_home, approved_free_workers_file
@@ -133,7 +132,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
 
 def stage_candidate_provider_settings(source_home, candidate_home,
                                       candidate_home_target="/home/t3code"):
-    """Project the non-secret opencode-free and opencode instances."""
+    """Project only the non-secret opencode-free instance."""
     source = Path(source_home) / ".t3/userdata/settings.json"
     if source.is_symlink() or not source.is_file():
         raise RuntimeError("production T3 provider settings are unavailable")
@@ -175,34 +174,6 @@ def stage_candidate_provider_settings(source_home, candidate_home,
     names = {item["name"] for item in environment}
     if "OPENCODE_MODELS_PATH" not in names:
         raise RuntimeError("production opencode-free models path is missing")
-    opencode = instances.get("opencode") if isinstance(instances, dict) else None
-    if (not isinstance(opencode, dict) or opencode.get("driver") != "opencode"
-            or opencode.get("enabled") is not True):
-        raise RuntimeError("production opencode T3 provider is not enabled")
-    opencode_source_config = opencode.get("config")
-    opencode_binary = (opencode_source_config.get("binaryPath")
-                       if isinstance(opencode_source_config, dict) else None)
-    if not isinstance(opencode_binary, str) or not opencode_binary or "\n" in opencode_binary:
-        raise RuntimeError("production opencode provider configuration is invalid")
-    opencode_environment = []
-    for item in opencode.get("environment", []):
-        # Never project a sensitive subscription credential. The owner must
-        # approve that scope separately before acceptance can prove the route.
-        if not isinstance(item, dict) or item.get("sensitive") is True:
-            continue
-        name, value = item.get("name"), item.get("value")
-        if name not in allowed_env:
-            continue
-        if not isinstance(value, str) or "\n" in value or "\0" in value:
-            raise RuntimeError("production opencode provider environment is invalid")
-        if name != "OPENCODE_DISABLE_FREE_MODELS":
-            expected_home = PurePosixPath(candidate_home_target)
-            target = PurePosixPath(value)
-            try:
-                target.relative_to(expected_home)
-            except ValueError:
-                raise RuntimeError("production opencode path leaves the T3 home") from None
-        opencode_environment.append({"name": name, "value": value})
     projected = {
         "providerInstances": {
             T3_FREE_PROVIDER: {
@@ -210,12 +181,6 @@ def stage_candidate_provider_settings(source_home, candidate_home,
                 "enabled": True,
                 "config": {"binaryPath": binary},
                 "environment": environment,
-            },
-            "opencode": {
-                "driver": "opencode",
-                "enabled": True,
-                "config": {"binaryPath": opencode_binary},
-                "environment": opencode_environment,
             },
         }
     }
@@ -245,43 +210,31 @@ def stage_candidate_opencode_catalog(source_home, candidate_home):
         target.chmod(0o444)
 
 
-def stage_candidate_opencode_config(candidate_home):
-    """Stage the opencode-go provider mapping without any credential.
-
-    The production config only declares the provider and defers its models to
-    the staged catalog. This minimal projection avoids copying unrelated MCP
-    servers and never copies auth.json or OPENCODE_AUTH_CONTENT.
-    """
-    config = {
-        "$schema": "https://opencode.ai/config.json",
-        "provider": {"opencode-go": {"models": {}}},
-        "enabled_providers": ["opencode-go"],
-    }
-    target = Path(candidate_home) / ".config/opencode/opencode.jsonc"
-    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
-    target.chmod(0o444)
-
-
-def stage_candidate_opencode_free(source_home, candidate_home):
+def stage_candidate_opencode_free(source_home, candidate_home, candidate_home_target="/home/t3code"):
     """Stage the anonymous Zen free instance without any credential."""
     source_home = Path(source_home)
     free = Path(candidate_home) / ".config/opencode-free"
-    config_source = source_home / ".config/opencode-free/config/opencode/opencode.jsonc"
     catalog_source = source_home / ".config/opencode-free/cache/opencode/models.json"
-    for source, target in ((config_source, free / "config/opencode/opencode.jsonc"),
-                           (catalog_source, free / "cache/opencode/models.json")):
-        if source.is_symlink() or not source.is_file():
-            raise RuntimeError("production anonymous Zen configuration is unavailable")
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-        target.chmod(0o444)
+    if catalog_source.is_symlink() or not catalog_source.is_file():
+        raise RuntimeError("production anonymous Zen configuration is unavailable")
+    config_target = free / "config/opencode/opencode.jsonc"
+    config_target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    config_target.write_text(json.dumps({
+        "$schema": "https://opencode.ai/config.json",
+        "enabled_providers": ["opencode"],
+        "provider": {"opencode": {"models": {}}},
+    }, indent=2, sort_keys=True) + "\n")
+    config_target.chmod(0o444)
+    catalog_target = free / "cache/opencode/models.json"
+    catalog_target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    shutil.copyfile(catalog_source, catalog_target)
+    catalog_target.chmod(0o444)
     for relative in ("data", "state"):
         (free / relative).mkdir(mode=0o700, parents=True, exist_ok=True)
     wrapper = free / "opencode-free"
     wrapper.write_text(
         "#!/bin/sh\nset -eu\nexport OPENCODE_DISABLE_FREE_MODELS=0\n"
-        "exec /home/t3code/.local/share/t3code-tools/opencode/current/bin/opencode \"$@\"\n"
+        f"exec {candidate_home_target}/.local/share/t3code-tools/opencode/current/bin/opencode \"$@\"\n"
     )
     wrapper.chmod(0o755)
 
@@ -1014,6 +967,7 @@ def read_acceptance_route(path=ACCEPTANCE_ROUTE_FILE):
             or data.get("schema") != "ghostship.t3code-acceptance-route/v1"
             or data.get("acceptance_only") is not True
             or data.get("billing") != "free"
+            or data.get("provider") != T3_FREE_PROVIDER
             or (data.get("provider_instance"), data.get("model")) != ACCEPTANCE_ROUTE):
         raise PreconditionError("the acceptance route is invalid")
     return data
@@ -1029,6 +983,7 @@ def admitted_acceptance_route(policy, acceptance_route=None, route=ACCEPTANCE_PR
         if (not isinstance(acceptance_route, dict)
                 or acceptance_route.get("acceptance_only") is not True
                 or acceptance_route.get("billing") != "free"
+                or acceptance_route.get("provider") != T3_FREE_PROVIDER
                 or (acceptance_route.get("provider_instance"),
                     acceptance_route.get("model")) != ACCEPTANCE_ROUTE):
             raise PreconditionError("the acceptance route is invalid")

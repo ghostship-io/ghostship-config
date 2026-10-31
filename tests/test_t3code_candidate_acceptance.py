@@ -111,6 +111,9 @@ class CandidateAcceptanceTest(unittest.TestCase):
         route["acceptance_only"] = False
         with self.assertRaises(acceptance.PreconditionError):
             acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route)
+        route.update(acceptance_only=True, provider="opencode")
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.admitted_acceptance_route(self.nominated_policy(), acceptance_route=route)
 
     def test_fallback_only_route_is_never_an_acceptance_route(self):
         fallback = self.fallback_route("codex", "codex", "gpt-6.1-terra")
@@ -983,23 +986,20 @@ class CandidateAcceptanceTest(unittest.TestCase):
         candidate_settings = json.loads(
             (candidate_home / ".t3/userdata/settings.json").read_text()
         )
-        self.assertEqual(list(candidate_settings["providerInstances"]), ["opencode", "opencode-free"])
+        self.assertEqual(list(candidate_settings["providerInstances"]), ["opencode-free"])
         projected = candidate_settings["providerInstances"]["opencode-free"]
         self.assertEqual(projected["config"], {"binaryPath": "opencode"})
         self.assertEqual([item["name"] for item in projected["environment"]], [
             "OPENCODE_MODELS_PATH", "XDG_CONFIG_HOME",
         ])
-        projected_opencode = candidate_settings["providerInstances"]["opencode"]
-        self.assertEqual(projected_opencode["config"], {"binaryPath": "opencode"})
-        self.assertEqual(projected_opencode["environment"], [])
         self.assertNotIn("do-not-copy", json.dumps(candidate_settings))
-        opencode_config = json.loads(
-            (candidate_home / ".config/opencode/opencode.jsonc").read_text()
-        )
-        self.assertEqual(opencode_config["provider"], {"opencode-go": {"models": {}}})
-        self.assertEqual(opencode_config["enabled_providers"], ["opencode-go"])
+        self.assertFalse((candidate_home / ".config/opencode/opencode.jsonc").exists())
         self.assertTrue((candidate_home / ".config/opencode-free/opencode-free").is_file())
-        self.assertTrue((candidate_home / ".config/opencode-free/config/opencode/opencode.jsonc").is_file())
+        free_config = json.loads(
+            (candidate_home / ".config/opencode-free/config/opencode/opencode.jsonc").read_text()
+        )
+        self.assertEqual(free_config["enabled_providers"], ["opencode"])
+        self.assertEqual(free_config["provider"], {"opencode": {"models": {}}})
         self.assertTrue((candidate_home / ".config/opencode-free/cache/opencode/models.json").is_file())
         self.assertFalse((candidate_home / ".local/share/opencode/auth.json").exists())
         self.assertFalse((candidate_home / ".t3/userdata/state.sqlite").exists())
