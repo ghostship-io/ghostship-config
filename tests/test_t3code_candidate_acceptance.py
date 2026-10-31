@@ -25,6 +25,11 @@ probe_spec = importlib.util.spec_from_file_location(
 )
 provider_probe = importlib.util.module_from_spec(probe_spec)
 probe_spec.loader.exec_module(provider_probe)
+observer_spec = importlib.util.spec_from_file_location(
+    "t3code_rehearsal_isolation", ROOT / "packages/t3code/rehearsal-isolation.py"
+)
+rehearsal_observer = importlib.util.module_from_spec(observer_spec)
+observer_spec.loader.exec_module(rehearsal_observer)
 
 
 class CandidateDeploymentPackagingTest(unittest.TestCase):
@@ -1454,16 +1459,41 @@ def _selection(document, now):
         self.assertEqual(receipt["provider_secret_inode"], str(secrets.stat().st_ino))
         self.assertIn(("cp", staged, f"{receipt['candidate_name']}:/nix/store/"), self.commands)
 
+    def observed_isolation(self):
+        return {
+            "state": "observed",
+            "env_file": {"present": True, "bytes": 0, "state": "empty"},
+            "env_file_bytes": 0,
+            "env_names": {"1": ["PATH"]},
+            "processes": {"1": "t3code-server"},
+            "env_allowlisted": ["PATH"],
+            "env_secret_names": [],
+            "env_unrecognized_names": [],
+            "env_violations": [],
+            "auth_artifacts": [],
+            "auth_scan": {"truncated": False, "visited": 1, "max_depth": 5},
+            "mount_violations": [],
+            "secret_names": [],
+            "provider_instances": ["opencode-free"],
+        }
+
     def run_rehearsal(self, **overrides):
         report_path = self.root / "rehearsal.json"
+        closure = Path(overrides.get("closure_path") or (self.root / "rehearsal-closure"))
+        closure.mkdir(parents=True, exist_ok=True)
+        (closure / "README").write_text("build output\n")
         options = dict(
             command_fn=self.command, identity_fn=lambda: self.identity,
             candidate_uid=os.getuid(), model_routing_file=None,
             rehearsal=True, rehearsal_report=str(report_path),
-            deployment_id="rehearsal-fixture",
+            deployment_id="rehearsal-fixture", closure_path=str(closure),
         )
         options.update(overrides)
-        with patch.object(acceptance, "check_candidate", return_value={
+        isolation = options.pop("isolation", self.observed_isolation())
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "read_isolation", return_value=isolation), \
+             patch.object(acceptance, "check_candidate", return_value={
                 **{name: True for name in acceptance.CHECKS},
                 "desktop_transport": {"state": "not_applicable"},
                 "provider_turn_route": "opencode-free/opencode/glm-5.3-flash-free",
@@ -1490,17 +1520,15 @@ def _selection(document, now):
             captured["bytes"] = Path(target).read_bytes()
             return result
 
-        isolation = {"state": "observed", "reason": None, "env_file_bytes": 0,
-                     "auth_paths": {}, "secret_names": [], "mounts": [],
-                     "env_names": {"1": ["PATH"]}, "provider_instances": []}
+        isolation = self.observed_isolation()
         closure = self.root / "closure-ok"
         closure.mkdir()
         (closure / "README").write_text("build output\n")
-        with patch.object(acceptance, "write_provider_env", side_effect=write_provider_env), \
-             patch.object(acceptance, "read_isolation", return_value=isolation):
+        with patch.object(acceptance, "write_provider_env", side_effect=write_provider_env):
             report, path = self.run_rehearsal(
                 provider_secrets_file=str(secrets), closure_path=str(closure),
-                build_seconds=26.0, build_source="release-5-build.log:4")
+                isolation=isolation, build_seconds=26.0,
+                build_source="release-5-build.log:4")
         self.assertIsNone(captured["source"])
         self.assertEqual(captured["bytes"], b"")
         self.assertEqual(report["env_file_bytes"], 0)
@@ -1520,7 +1548,11 @@ def _selection(document, now):
         failing = {name: True for name in acceptance.CHECKS}
         failing["provider_turn"] = False
         path = self.root / "rehearsal-failed.json"
-        with patch.object(acceptance, "command", side_effect=self.command), \
+        closure = self.root / "closure-failed"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value=failing), \
              patch.object(acceptance, "candidate_agent_path",
                           return_value="/nix/store/agent"), \
@@ -1532,7 +1564,7 @@ def _selection(document, now):
                     command_fn=self.command, identity_fn=lambda: self.identity,
                     candidate_uid=os.getuid(), model_routing_file=None,
                     rehearsal=True, rehearsal_report=str(path),
-                    closure_path=str(self.root / "closure-absent"),
+                    closure_path=str(closure),
                     deployment_id="rehearsal-fail",
                 )
         report = json.loads(path.read_text())
@@ -1618,14 +1650,16 @@ def _selection(document, now):
                     "provider_turn_route": "computed/route-must-not-be-quoted",
                     "desktop_transport": {"state": "not_applicable"}}
 
-        with patch.object(acceptance, "command", side_effect=self.command), \
+        closure = self.root / "closure-route"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", side_effect=checked), \
              patch.object(acceptance, "candidate_agent_path",
                           return_value="/nix/store/agent"), \
-             patch.object(acceptance, "read_isolation", return_value={
-                 "state": "observed", "env_file_bytes": 0, "env_names": {"1": ["PATH"]},
-                 "secret_names": [], "mount_violations": [],
-             }), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
             report = acceptance.accept(
                 self.state, self.archive, "podman",
@@ -1633,6 +1667,7 @@ def _selection(document, now):
                 command_fn=self.command, identity_fn=lambda: self.identity,
                 candidate_uid=os.getuid(), model_routing_file=None,
                 rehearsal=True, rehearsal_report=str(path),
+                closure_path=str(closure),
                 deployment_id="rehearsal-route",
             )
         self.assertEqual(report["provider_turn"]["route"], reported)
@@ -1642,6 +1677,185 @@ def _selection(document, now):
                             "computed/route-must-not-be-quoted")
         self.assertNotIn("computed/route-must-not-be-quoted", json.dumps(report))
         self.assertEqual(json.loads(path.read_text())["provider_turn"]["route"], reported)
+
+    def test_non_rehearsal_missing_provider_settings_still_fails_closed(self):
+        candidate_home = self.root / "no-settings-home"
+        candidate_inputs = self.root / "no-settings-inputs"
+        candidate_home.mkdir()
+        candidate_inputs.mkdir()
+        provider_env = self.root / "no-settings.env"
+        provider_env.write_text("")
+        with self.assertRaisesRegex(acceptance.PreconditionError,
+                                    "settings are unreadable"):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        # Only the explicit rehearsal-without-tooling call may allow absence.
+        acceptance.assert_candidate_auth_free(
+            candidate_home, candidate_inputs, provider_env, allow_missing_settings=True)
+        def empty_staging(home, candidate_home, candidate_inputs, uid, *args, **kwargs):
+            Path(candidate_home).mkdir(mode=0o700)
+            Path(candidate_inputs).mkdir(mode=0o700)
+            return None
+
+        with patch.object(acceptance, "stage_candidate_inputs",
+                          side_effect=empty_staging):
+            with self.assertRaisesRegex(acceptance.PreconditionError,
+                                        "settings are unreadable"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    tooling_path="/nix/store/tooling-without-projected-settings",
+                )
+
+    def test_each_release5_secret_env_name_is_a_violation(self):
+        names = (
+            "GOOGLE_GENERATIVE_AI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN",
+            "COHERE_API_KEY", "COMMAND_CODE_API_KEY", "AI_GATEWAY_API_KEY",
+            "OLLAMA_API_KEY", "OPENROUTER_API_KEY", "KILO_API_KEY",
+            "REQUESTY_API_KEY", "ORCAROUTER_API_KEY", "INCEPTION_API_KEY",
+            "MISTRAL_API_KEY", "UPSTAGE_API_KEY", "ZHIPU_API_KEY",
+            "POOLSIDE_API_KEY", "AGENT_DESKTOP_API_TOKEN",
+        )
+        self.assertEqual(len(set(names)), 17)
+        for name in names:
+            with self.subTest(name=name):
+                verdict = rehearsal_observer.classify_env_names([name])
+                self.assertIn(name, verdict["violations"])
+        allowed = rehearsal_observer.classify_env_names(["PATH", "HOME", "LANG"])
+        self.assertEqual(allowed["violations"], [])
+        unknown = rehearsal_observer.classify_env_names(["SOMETHING_UNLISTED"])
+        self.assertIn("SOMETHING_UNLISTED", unknown["violations"])
+
+    def test_auth_artifacts_are_found_deep_under_home(self):
+        home = self.root / "auth-walk-home"
+        for relative in (
+            ".local/share/opencode/auth.json",
+            ".config/gh/credentials.json",
+            ".config/some/deep/path/hosts.yml",
+            ".codex/credentials",
+            "ordinary.txt",
+        ):
+            path = home / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("not read")
+        found, scan = rehearsal_observer.find_auth_artifacts(home)
+        self.assertEqual(scan["truncated"], False)
+        rendered = "\n".join(found)
+        self.assertIn(".local/share/opencode/auth.json", rendered)
+        self.assertIn(".config/gh/credentials.json", rendered)
+        self.assertIn(".config/some/deep/path/hosts.yml", rendered)
+        self.assertIn(".codex/credentials", rendered)
+        self.assertNotIn("ordinary.txt", rendered)
+
+    def test_store_scan_walks_closure_requisites_beyond_depth_two(self):
+        top = self.root / "closure-top"
+        top.mkdir()
+        deep = self.root / "store" / "abc-agent-tools"
+        (deep / "share" / "nested" / "deeper").mkdir(parents=True)
+        (deep / "share" / "nested" / "deeper" / "auth.json").write_text("{}\n")
+        (top / "README").write_text("build output\n")
+        requisites = [str(top), str(deep)]
+        with patch.object(acceptance.subprocess, "run",
+                          return_value=Mock(returncode=0, stdout="\n".join(requisites) + "\n")):
+            scan = acceptance.store_secret_scan([str(top)])
+        self.assertEqual(scan["paths_scanned"], 2)
+        self.assertEqual(scan["findings"], [str(deep / "share/nested/deeper/auth.json")])
+        self.assertFalse(scan["truncated"])
+
+    def test_rehearsal_report_is_written_after_teardown_with_cleanup_result(self):
+        report, path = self.run_rehearsal(isolation=self.observed_isolation())
+        self.assertIsInstance(report["cleanup"], dict)
+        self.assertTrue(report["cleanup"]["container_removed"])
+        self.assertTrue(report["cleanup"]["manager_stopped"])
+        self.assertTrue(report["cleanup"]["workspace_removed"])
+        self.assertEqual(report["live_after"], report["live_before"])
+        self.assertTrue(report["identity_unchanged"])
+        self.assertEqual(json.loads(path.read_text())["cleanup"], report["cleanup"])
+
+    def test_rehearsal_identity_change_after_teardown_is_unknown(self):
+        changed = list(self.identity)
+        changed[2] = 99
+        observations = iter([self.identity, self.identity, changed])
+        path = self.root / "rehearsal-identity.json"
+        closure = self.root / "closure-identity"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value={
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
+             }), \
+             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=self.command, identity_fn=lambda: next(observations),
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure),
+                    deployment_id="rehearsal-identity",
+                )
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "unknown")
+        self.assertFalse(report["identity_unchanged"])
+        self.assertEqual(report["live_after"], changed)
+        self.assertIsInstance(report["cleanup"], dict)
+
+    def test_rehearsal_teardown_failure_turns_the_report_unknown(self):
+        def failing_remove(engine, *args, **kwargs):
+            if args[:2] == ("rm", "--force"):
+                return Mock(returncode=1, stdout="", stderr="")
+            return self.command(engine, *args, **kwargs)
+
+        path = self.root / "rehearsal-teardown.json"
+        closure = self.root / "closure-teardown"
+        closure.mkdir()
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", return_value={
+                 **{name: True for name in acceptance.CHECKS},
+                 "desktop_transport": {"state": "not_applicable"},
+             }), \
+             patch.object(acceptance, "candidate_agent_path", return_value="/nix/store/agent"), \
+             patch.object(acceptance, "read_isolation",
+                          return_value=self.observed_isolation()), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaisesRegex(RuntimeError, "teardown failed"):
+                acceptance.accept(
+                    self.state, self.archive, "podman",
+                    "/run/t3code-podman-candidate/podman.sock", self.home,
+                    command_fn=failing_remove, identity_fn=lambda: self.identity,
+                    candidate_uid=os.getuid(), model_routing_file=None,
+                    rehearsal=True, rehearsal_report=str(path),
+                    closure_path=str(closure),
+                    deployment_id="rehearsal-teardown",
+                )
+        report = json.loads(path.read_text())
+        self.assertEqual(report["outcome"], "unknown")
+        self.assertFalse(report["cleanup"]["container_removed"])
+        self.assertIn("teardown", report["cleanup"]["error"])
+        self.assertEqual(report["live_after"], report["live_before"])
+        self.assertTrue(report["identity_unchanged"])
+
+    def test_absent_env_file_is_reported_as_absent_not_not_empty(self):
+        document = {"state": "observed", "env_names": {"1": ["PATH"]},
+                    "env_secret_names": [], "env_unrecognized_names": [],
+                    "auth_artifacts": [], "mount_violations": [],
+                    "env_file": {"present": False, "bytes": None, "state": "absent"},
+                    "env_file_present": False, "env_file_bytes": None}
+        with patch.object(acceptance, "candidate_agent_command",
+                          return_value=Mock(returncode=0, stdout=json.dumps(document))):
+            observed = acceptance.read_isolation(["podman"], "t3code-candidate-x")
+        self.assertEqual(observed["state"], "violation")
+        self.assertIn("absent", observed["reason"])
+        self.assertNotIn("not empty", observed["reason"])
 
     def test_rehearsal_cli_refuses_secrets_and_requires_a_closure(self):
         base = [
@@ -1669,9 +1883,8 @@ def _selection(document, now):
             {"state": "violation", "reason": "credential-like names observed",
              "secret_names": ["OPENROUTER_API_KEY"], "env_file_bytes": 0},
         ):
-            with self.subTest(observed=observed), \
-                 patch.object(acceptance, "read_isolation", return_value=observed):
-                report, path = self.run_rehearsal()
+            with self.subTest(observed=observed):
+                report, path = self.run_rehearsal(isolation=observed)
             self.assertEqual(report["outcome"], "unknown")
             self.assertEqual(json.loads(path.read_text())["outcome"], "unknown")
 
@@ -1686,13 +1899,21 @@ def _selection(document, now):
                  patch.object(acceptance, "candidate_agent_command", return_value=result):
                 observed = acceptance.read_isolation(["podman"], "t3code-candidate-x")
             self.assertEqual(observed["state"], "unknown")
+        empty_file = {"present": True, "bytes": 0, "state": "empty"}
         for document in (
             {"state": "observed", "env_names": {"1": ["PATH"]},
-             "secret_names": ["OPENROUTER_API_KEY"]},
+             "secret_names": ["OPENROUTER_API_KEY"], "env_file": empty_file},
             {"state": "observed", "env_names": {"1": ["PATH"]},
-             "secret_names": [], "env_file_bytes": 1},
+             "env_unrecognized_names": ["SOMETHING_UNLISTED"],
+             "env_file": empty_file},
             {"state": "observed", "env_names": {"1": ["PATH"]},
-             "secret_names": [], "env_file_bytes": 0,
+             "auth_artifacts": [".local/share/opencode/auth.json"],
+             "env_file": empty_file},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "secret_names": [], "env_file": {"present": True, "bytes": 1,
+                                             "state": "not_empty"}},
+            {"state": "observed", "env_names": {"1": ["PATH"]},
+             "secret_names": [], "env_file": empty_file,
              "mount_violations": ["production home is mounted at /candidate-home"]},
         ):
             with self.subTest(document=document), patch.object(
@@ -1729,11 +1950,15 @@ def _selection(document, now):
         (closure / "lib/README").write_text("build output\n")
         (closure / "auth.json").write_text("{}\n")
         (closure / "lib/t3code.env").write_text("TOKEN=x\n")
-        self.assertEqual(acceptance.store_secret_scan([str(closure)]), [
+        scan = acceptance.store_secret_scan([], requisites=[str(closure)])
+        self.assertEqual(scan["findings"], [
             str(closure / "auth.json"), str(closure / "lib/t3code.env"),
         ])
+        self.assertEqual(scan["paths_scanned"], 1)
         path = self.root / "rehearsal-store.json"
-        with patch.object(acceptance, "command", side_effect=self.command), \
+        with patch.object(acceptance, "closure_requisites",
+                          return_value=([str(closure)], [])), \
+             patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "read_isolation") as observer:
             with self.assertRaises(acceptance.PreconditionError):
                 acceptance.accept(

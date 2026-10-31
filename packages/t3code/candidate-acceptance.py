@@ -59,8 +59,13 @@ def valid_runtime_layout(source_home, t3_release, runtime_version):
     return runtime_version.parent == runtime_root
 
 
-def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env):
-    """Refuse to start a candidate carrying any provider credential artifact."""
+def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env,
+                               allow_missing_settings=False):
+    """Refuse to start a candidate carrying any provider credential artifact.
+
+    A missing provider settings file is a failure unless the caller explicitly
+    says this is a rehearsal with no staged tooling; absence is never inferred.
+    """
     for root in (Path(candidate_home), Path(candidate_inputs)):
         for path in root.rglob("*"):
             if path.is_file() and path.name == "auth.json":
@@ -74,9 +79,10 @@ def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env):
                 if not isinstance(providers, dict) or set(providers) != {"opencode"}:
                     raise PreconditionError("candidate OpenCode config names another provider")
     settings = Path(candidate_home) / ".t3/userdata/settings.json"
-    # A tooling-free rehearsal stages no provider settings; there is then no
-    # instance projection to inspect, and the observer cannot report observed.
-    if settings.exists():
+    if not settings.exists():
+        if not allow_missing_settings:
+            raise PreconditionError("candidate provider settings are unreadable")
+    else:
         try:
             document = json.loads(settings.read_text())
         except (OSError, ValueError):
@@ -1283,34 +1289,124 @@ def read_isolation(engine, name):
     if (not isinstance(data, dict) or data.get("state") != "observed"
             or not data.get("env_names")):
         return {"state": "unknown", "reason": "isolation was not observed"}
-    if data.get("secret_names"):
-        return {**data, "state": "violation", "reason": "credential-like names observed"}
+    if (data.get("auth_scan") or {}).get("truncated"):
+        return {**data, "state": "unknown", "reason": "the auth artifact scan was truncated"}
+    if data.get("env_violations") or data.get("env_secret_names") or data.get("env_unrecognized_names"):
+        names = sorted(set(data.get("env_violations") or [])
+                       | set(data.get("env_secret_names") or [])
+                       | set(data.get("env_unrecognized_names") or []))
+        return {**data, "state": "violation",
+                "reason": "environment names are not allowlisted: " + ", ".join(names[:20])}
+    if data.get("auth_artifacts"):
+        return {**data, "state": "violation",
+                "reason": "credential-shaped files exist under HOME: "
+                          + ", ".join(data["auth_artifacts"][:20])}
     if data.get("mount_violations"):
         return {**data, "state": "violation", "reason": "unexpected candidate mount"}
-    if data.get("env_file_bytes") != 0:
+    if data.get("secret_names"):
+        return {**data, "state": "violation",
+                "reason": "credential-like names or files observed"}
+    env_file = data.get("env_file") if isinstance(data.get("env_file"), dict) else {}
+    if env_file.get("present") is False:
+        return {**data, "state": "violation",
+                "reason": "the candidate env file is absent"}
+    if env_file.get("bytes") is None:
+        return {**data, "state": "violation",
+                "reason": "the candidate env file size is unreadable"}
+    if env_file.get("bytes") != 0:
         return {**data, "state": "violation",
                 "reason": "the candidate env file is not empty"}
     return data
 
 
-def store_secret_scan(paths):
-    """Bounded scan of the closure/tooling paths for secret-bearing names."""
-    findings = []
+STORE_SCAN_DEPTH = 3
+STORE_SCAN_MAX_ENTRIES = 200000
+
+
+def is_secret_artifact_name(name):
+    """Secret-bearing file or directory name; never reads the content."""
+    return (name in SECRET_FILE_NAMES or name == "secrets"
+            or name.endswith((".key", ".pem")))
+
+
+def closure_requisites(paths):
+    """Every store path reachable from the closure and tooling paths."""
+    requisites = set()
+    errors = []
     for root in paths:
         if not root:
             continue
-        root = Path(root)
-        if not root.exists() or root.is_symlink():
+        try:
+            result = subprocess.run(["nix-store", "-qR", str(root)],
+                                    capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as error:
+            errors.append(f"{root}: nix-store -qR failed: {error}")
             continue
-        for base, directories, files in os.walk(root, followlinks=False):
-            depth = len(Path(base).relative_to(root).parts)
-            if depth >= 2:
+        if result.returncode:
+            errors.append(f"{root}: nix-store -qR exited {result.returncode}")
+            continue
+        stdout = result.stdout if isinstance(result.stdout, str) else ""
+        if not stdout.strip():
+            errors.append(f"{root}: nix-store -qR returned no paths")
+            continue
+        requisites.update(line.strip() for line in stdout.splitlines()
+                          if line.strip())
+    return sorted(requisites), errors
+
+
+def store_secret_scan(paths, requisites=None, depth=STORE_SCAN_DEPTH,
+                      max_entries=STORE_SCAN_MAX_ENTRIES):
+    """Scan every requisite store path for secret-bearing names.
+
+    The toplevel closure path is usually a set of symlinks, so walking it is
+    not enough: enumerate the closure with nix-store -qR, then walk each real
+    store path to a bounded depth. An incomplete enumeration or truncated walk
+    is reported, never treated as clean.
+    """
+    if requisites is None:
+        requisites, errors = closure_requisites(paths)
+    else:
+        errors = []
+        requisites = [str(item) for item in requisites]
+    findings = []
+    paths_scanned = 0
+    entries_scanned = 0
+    truncated = False
+    for root in requisites:
+        root_path = Path(root)
+        if not root_path.exists() or root_path.is_symlink():
+            errors.append(f"{root}: store path is missing or a symlink")
+            continue
+        paths_scanned += 1
+        if is_secret_artifact_name(root_path.name):
+            findings.append(str(root_path))
+        for base, directories, files in os.walk(root_path, followlinks=False):
+            relative_depth = len(Path(base).relative_to(root_path).parts)
+            if relative_depth >= depth:
                 directories[:] = []
+            directories[:] = [name for name in directories
+                              if not (Path(base) / name).is_symlink()]
             for name in list(directories) + list(files):
-                if (name in SECRET_FILE_NAMES or name == "secrets"
-                        or name.endswith((".key", ".pem"))):
+                entries_scanned += 1
+                if entries_scanned > max_entries:
+                    truncated = True
+                    break
+                if is_secret_artifact_name(name):
                     findings.append(str(Path(base) / name))
-    return sorted(set(findings))
+            if truncated:
+                break
+        if truncated:
+            break
+    return {
+        "roots": [str(path) for path in paths if path],
+        "paths_scanned": paths_scanned,
+        "requisite_count": len(requisites),
+        "entries_scanned": entries_scanned,
+        "depth": depth,
+        "truncated": truncated,
+        "errors": errors,
+        "findings": sorted(set(findings)),
+    }
 
 
 def _nix_path_info(path):
@@ -1357,7 +1453,8 @@ def rehearsal_document(*, outcome, image_archive, image_id, name, tooling_path,
                        store_scan, closure_path, build_seconds, build_source,
                        started, candidate_turn=None,
                        acceptance_route_file=ACCEPTANCE_ROUTE_FILE,
-                       before=None, after=None, error=None):
+                       before=None, after=None, cleanup=None,
+                       identity_unchanged=None, error=None):
     """One report shape for passed, unknown and failed rehearsals."""
     try:
         image_size = Path(image_archive).stat().st_size
@@ -1406,7 +1503,8 @@ def rehearsal_document(*, outcome, image_archive, image_id, name, tooling_path,
         },
         "live_before": before,
         "live_after": after,
-        "cleanup": "performed in finally",
+        "identity_unchanged": identity_unchanged,
+        "cleanup": cleanup,
     }
     if error is not None:
         document["error"] = error
@@ -1447,12 +1545,18 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         receipt_path.unlink(missing_ok=True)
     started = time.monotonic()
     before = identity_fn()
-    store_findings = store_secret_scan([closure_path, tooling_path])
+    _evidence["live_before"] = before
+    if rehearsal and not closure_path:
+        raise PreconditionError("the store closure is required")
+    store_scan = (store_secret_scan([closure_path, tooling_path])
+                  if rehearsal or closure_path else None)
     if rehearsal:
-        _evidence["store_scan"] = {"paths": [p for p in (closure_path, tooling_path) if p],
-                                   "findings": store_findings}
-        if store_findings:
+        _evidence["store_scan"] = store_scan
+        if store_scan["findings"]:
             raise PreconditionError("the store scan found a secret-bearing path")
+        if (store_scan["errors"] or store_scan["truncated"]
+                or not store_scan["paths_scanned"]):
+            raise PreconditionError("the store scan could not cover the closure")
     engine = [podman_bin, "--remote", "--url", f"unix://{candidate_socket}"]
     candidate_runtime_dir = Path(candidate_runtime_dir or tempfile.gettempdir())
     candidate_runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1465,6 +1569,8 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     manager_started = False
     checks = {}
     evidence = _evidence
+    report_args = None
+    report_document = None
     try:
         staged_toolchain = stage_candidate_inputs(
             home_dir, home_copy, input_copy, candidate_uid, tooling_path,
@@ -1474,7 +1580,9 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
         write_provider_env(None if rehearsal else provider_secrets_file, provider_env)
         os.chown(provider_env, candidate_uid, candidate_uid)
         if rehearsal or tooling_path:
-            assert_candidate_auth_free(home_copy, input_copy, provider_env)
+            assert_candidate_auth_free(
+                home_copy, input_copy, provider_env,
+                allow_missing_settings=bool(rehearsal and not tooling_path))
         if model_routing_file:
             try:
                 source = Path(model_routing_file)
@@ -1562,63 +1670,104 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             isolation = read_isolation(engine, name)
             outcome = ("passed" if isolation.get("state") == "observed"
                        else "unknown")
-            report = rehearsal_document(
-                outcome=outcome, image_archive=image_archive, image_id=image_id,
-                name=name, tooling_path=tooling_path,
-                agent_revision=expected_agent_revision,
-                candidate_toolchain=staged_toolchain, checks=checks,
-                isolation=isolation, store_scan=_evidence.get("store_scan"),
-                closure_path=closure_path, build_seconds=build_seconds,
-                build_source=build_source, started=started,
-                candidate_turn=_evidence.get("candidate_provider_turn"),
-                acceptance_route_file=acceptance_route_file,
-                before=before, after=after,
-            )
-            _write_report(rehearsal_report or (Path(state_dir) / "rehearsal.json"), report)
-            return report
-        receipt = {
-            "deployment_id": desired,
-            "image_id": image_id,
-            "agent_revision": expected_agent_revision,
-            "agent_path": agent_path,
-            "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)
-                                      if provider_secrets_file else None),
-            "candidate_name": name,
-            "candidate_toolchain": staged_toolchain,
-            "live_before": before,
-            "live_after": after,
-            "checks": checks,
-        }
-        temporary = receipt_path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(receipt, sort_keys=True) + "\n")
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, receipt_path)
-        return receipt
+            report_args = {
+                "image_archive": image_archive, "image_id": image_id,
+                "name": name, "tooling_path": tooling_path,
+                "agent_revision": expected_agent_revision,
+                "candidate_toolchain": staged_toolchain, "checks": checks,
+                "isolation": isolation, "store_scan": _evidence.get("store_scan"),
+                "closure_path": closure_path, "build_seconds": build_seconds,
+                "build_source": build_source, "started": started,
+                "candidate_turn": _evidence.get("candidate_provider_turn"),
+                "acceptance_route_file": acceptance_route_file,
+                "before": before,
+            }
+            # Written after teardown, with the observed post-teardown identity.
+            report_document = rehearsal_document(
+                outcome=outcome, after=None, cleanup=None,
+                identity_unchanged=None, **report_args)
+        else:
+            receipt = {
+                "deployment_id": desired,
+                "image_id": image_id,
+                "agent_revision": expected_agent_revision,
+                "agent_path": agent_path,
+                "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)
+                                          if provider_secrets_file else None),
+                "candidate_name": name,
+                "candidate_toolchain": staged_toolchain,
+                "live_before": before,
+                "live_after": after,
+                "checks": checks,
+            }
+            temporary = receipt_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, receipt_path)
+            return receipt
     finally:
         cleanup_error = None
+        cleanup_record = {
+            "container_created": created,
+            "container_removed": None,
+            "manager_started": manager_started,
+            "manager_stopped": None,
+            "workspace_removed": False,
+            "error": None,
+        }
         if created:
             removed = command_fn(engine, "rm", "--force", "--time", "10", name, timeout=30)
+            cleanup_record["container_removed"] = removed.returncode == 0
             if removed.returncode:
                 cleanup_error = "candidate container teardown failed"
         if manager_started:
             try:
                 subprocess.run([systemctl_bin, "stop", "t3code-podman-candidate.service"],
                                check=True, timeout=30)
+                cleanup_record["manager_stopped"] = True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                cleanup_record["manager_stopped"] = False
                 cleanup_error = "candidate Podman manager teardown failed"
         try:
             remove_candidate_workspace(candidate_tmp)
         except OSError:
             cleanup_error = "candidate acceptance workspace teardown failed"
+        cleanup_record["workspace_removed"] = not candidate_tmp.exists()
         if candidate_tmp.exists():
             cleanup_error = "candidate acceptance workspace teardown failed"
-        after = identity_fn()
+        try:
+            after = identity_fn()
+        except Exception:
+            after = None
+            cleanup_error = "production T3 identity could not be observed after teardown"
+        cleanup_record["error"] = cleanup_error
+        _evidence["cleanup"] = cleanup_record
+        _evidence["live_after"] = after
+        _evidence["identity_unchanged"] = before == after
         if receipt_path is not None and (before != after or cleanup_error):
             receipt_path.unlink(missing_ok=True)
+        if report_args is not None and report_document is not None:
+            final_outcome = report_document.get("outcome", "unknown")
+            if cleanup_error or before != after:
+                final_outcome = "unknown"
+            report_document = rehearsal_document(
+                outcome=final_outcome, after=after,
+                cleanup=cleanup_record, identity_unchanged=before == after,
+                **report_args)
+            try:
+                _write_report(
+                    Path(rehearsal_report or (Path(state_dir) / "rehearsal.json")),
+                    report_document)
+            except OSError as report_error:
+                print(f"candidate rehearsal report could not be written: {report_error}",
+                      file=sys.stderr)
         if cleanup_error:
             raise RuntimeError(cleanup_error)
         if before != after:
             raise RuntimeError("production T3 identity changed during candidate teardown")
+    if rehearsal and report_document is not None:
+        return report_document
+    return None
 
 
 def safe_unknown_evidence(error):
@@ -1657,6 +1806,10 @@ def _write_failed_rehearsal(state, image_archive, kwargs, desired, evidence, sta
         build_source=kwargs.get("build_source"), started=started,
         candidate_turn=evidence.get("candidate_provider_turn"),
         acceptance_route_file=kwargs.get("acceptance_route_file", ACCEPTANCE_ROUTE_FILE),
+        before=(existing.get("live_before") if isinstance(existing, dict)
+                else evidence.get("live_before")),
+        after=evidence.get("live_after"), cleanup=evidence.get("cleanup"),
+        identity_unchanged=evidence.get("identity_unchanged"),
         error=rehearsal_error_text(error),
     )
     try:

@@ -647,15 +647,32 @@ own output (`provider_turn.source` names it), not recomputed by the host.
 
 The report uses `ghostship.t3code-rehearsal/v1`. A separate read-only observer
 (`rehearsal-isolation.py`) runs inside the candidate and returns only names and
-booleans: process environment names, auth-path existence, the mount list,
-provider-instance keys and OpenCode provider keys. A missing, unreadable or
-incomplete observer result is `UNKNOWN`; credential-like names, a non-empty env
-file or an unexpected mount makes isolation `violation`. Neither can be
-`PASS`. Before startup the rehearsal scans the closure and tooling paths (depth
-2) for `auth.json`, `t3code.env`, `credentials.json`, `secrets`, `*.key` and
-`*.pem`, and stops as `precondition_not_met` if one is present. That scan is the
-check for a secret-bearing path under `/nix/store`; the store itself is a
+booleans: selected process IDs with `comm`, environment names, credential-shaped
+files under HOME, the mount list, provider-instance keys and OpenCode provider
+keys. Every observed environment name must be on an explicit non-secret
+allowlist; anything else is a violation, and names matching
+`KEY|TOKEN|SECRET|PASSWORD|AUTH|SESSION|COOKIE|CREDENTIAL` are violations unless
+the allowlist names them with a reason. Credential-shaped files (`auth.json`,
+`credentials*`, `hosts.yml`) are found by a bounded HOME walk without reading
+them. A missing, unreadable or truncated observation is `UNKNOWN`; an
+unexpected name, file or mount is `violation`. The env file is reported as
+present-empty, present-not-empty, or absent; absence is a violation and is not
+reported as "not empty". None of these can be `PASS`.
+
+Before startup the rehearsal enumerates each closure with
+`nix-store -qR <closure>` (plus the tooling closure), then scans every requisite
+store path to a bounded depth for `auth.json`, `t3code.env`, `credentials.json`,
+`secrets`, `*.key` and `*.pem`. The report records `paths_scanned`,
+`requisite_count`, `truncated` and errors; a finding, an incomplete enumeration
+or a truncated walk stops the rehearsal as `precondition_not_met`. That scan is
+the check for a secret-bearing path under `/nix/store`; the store itself is a
 content-addressed, world-readable build tree and is mounted read-only (`:O`).
+
+The report is written after candidate teardown with the observed post-teardown
+identity, `identity_unchanged`, and the actual cleanup result
+(`container_removed`, `manager_stopped`, `workspace_removed`, `error`). A
+teardown failure or an identity change turns the report outcome into `unknown`,
+never `passed`.
 
 The report names every performance source: `image_size_bytes` from the image
 archive, `closure` and `tooling_closure` from `nix path-info -S`, and
