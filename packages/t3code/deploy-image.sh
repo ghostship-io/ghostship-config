@@ -1,4 +1,8 @@
 set -euo pipefail
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
 
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
@@ -59,6 +63,7 @@ fi
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
+ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -129,10 +134,9 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)
-     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills, .checks.desktop_transport] | all(. == true))' \
-    "$receipt" >/dev/null 2>&1
+     and (.provider_secret_inode == $secret_inode)' \
+    "$receipt" >/dev/null 2>&1 \
+    && receipt_checks_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -143,10 +147,9 @@ any_receipt_matches_image() {
       '((.image_id | sub("^sha256:"; "")) == $image)
        and (.deployment_id | type == "string" and length > 0)
        and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
-       and (.live_before != null and .live_before == .live_after)
-       and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-             .checks.skills, .checks.desktop_transport] | all(. == true))' \
-      "$candidate" >/dev/null 2>&1; then
+       and (.live_before != null and .live_before == .live_after)' \
+      "$candidate" >/dev/null 2>&1 \
+      && receipt_checks_ok "$candidate"; then
       return 0
     fi
   done
@@ -315,6 +318,7 @@ candidate_args=(
   --provider-secrets-file "$PROVIDER_SECRETS_FILE"
   --tooling-path "$TOOLING_PATH"
   --agent-revision "$AGENT_REVISION"
+  --acceptance-route-file "$ACCEPTANCE_ROUTE_FILE"
   --candidate-home-target "$CANDIDATE_HOME_TARGET"
   --systemctl-bin "$SYSTEMCTL_BIN"
 )

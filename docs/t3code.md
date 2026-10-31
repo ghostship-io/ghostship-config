@@ -22,7 +22,7 @@ The minimal image sets the system and user service `PATH` before managed helpers
 run; helpers need `sed` and `head` during early desktop environment discovery.
 Image replacement requires a candidate receipt for the exact image and deployment
 ID at `/var/lib/ghostship/t3code-deployment/receipts/<deployment-id>.json`, including
-signed-in app, provider turn, CLI, skills and desktop checks. The image may restart
+signed-in app, provider turn, CLI, skills and local desktop CLI checks. Live desktop transport is verified after the switch by the production smoke check, where the desktop credential is already authorized. The image may restart
 immediately after those checks pass.
 
 ## Projects and state
@@ -582,15 +582,19 @@ ID in the `io.ghostship.t3code.deployment` label. A successful run records the
 deployment as applied only after the new container is healthy and its runtime
 inputs match. Failed candidate acceptance raises the service failure incident
 once and blocks the same image and acceptance bundle only when a previously
-proven-working route demonstrates the candidate failure. The probe matches exact
-native provider/model identities to the worker-admitted route policy; picker
-free-model approval is not work admission. It uses admitted fallback-only routes
-after observed usable primary routes are tried; an unrelated missing primary row
-does not prevent testing a fallback with its own fresh capacity evidence. A
-missing or unreadable row for the fallback remains unknown. Codex uses standard tier and fast mode is never enabled. Exhausted or unavailable
-routes are recorded as `route_unavailable` without a candidate-failed marker;
-unresolved probe or unclassified acceptance outcomes are recorded as unknown
-and are not automatically replayed. Neither is an acceptance PASS.
+proven-working route demonstrates the candidate failure. The probe names the
+owner-approved, acceptance-only anonymous OpenCode Zen route
+(`opencode-free` / `opencode/glm-5.3-flash-free`, high effort), pins that
+route's effort, and proves one real turn; worker admission is unchanged, picker
+ranking, quota windows and snapshot mapping do not decide which route is tested,
+and a fallback-only route is never probed. This proves the candidate's
+T3/provider/tool path, not OpenCode Go subscription auth wiring. The acceptance
+route's provider instance and non-secret OpenCode config are staged into the
+candidate; the candidate projects no provider credential of any kind and its
+env file is empty. The route's own exhausted
+or unavailable turn is recorded as `route_unavailable` without a candidate-
+failed marker; unresolved probe or unclassified acceptance outcomes are recorded
+as unknown and are not automatically replayed. Neither is an acceptance PASS.
 Changes to the acceptance script, its packaged probes or runtime capabilities,
 the managed launcher chains or their immutable Nix store identities, or the
 candidate/tooling identity cause the full acceptance to run again. The deployer
@@ -606,6 +610,102 @@ record as an invalidation request: a crash can leave the marker in place.
 Reasons must not contain secrets. The next deployment still runs all acceptance
 checks and requires the exact-image PASS receipt before any restart. Backups include
 the home and projects but exclude the development engine and Nix stores.
+
+### Candidate rehearsal
+
+`candidate-acceptance.py --rehearsal` runs the same `accept()`/`_accept()` path
+against a built image and closure without a release window, switch, deploy
+receipt or failed-candidate marker. It never reads `/run/secrets/t3code.env`:
+the candidate env file is written empty (`env_file_bytes=0`), and the CLI
+refuses `--provider-secrets-file` in rehearsal mode. The only persistent host
+record is the selected report (0600); the candidate runtime directory is
+disposable scratch and the candidate manager/container are torn down:
+
+```sh
+test -f /nix/store/<t3code-deployment-scripts>/candidate-acceptance.py
+python3 /nix/store/<t3code-deployment-scripts>/candidate-acceptance.py \
+  --rehearsal --state-dir /var/lib/t3code-podman-candidate/acceptance \
+  --rehearsal-report /var/lib/ghostship/t3code-deployment/rehearsal/<image>.json \
+  --closure-path /nix/store/<system-closure> \
+  --build-seconds <log value> --build-source <log path:line> \
+  --image-archive <image.tar> --podman-bin /run/current-system/sw/bin/podman \
+  --candidate-socket /run/t3code-podman-candidate/podman.sock \
+  --candidate-runtime-dir /var/lib/t3code-podman-candidate/acceptance \
+  --candidate-uid <podman-t3code uid + 1> --home-dir /srv/apps/t3code/home \
+  --candidate-home-target /home/t3code --tooling-path <t3code-tools> \
+  --agent-revision <rev> \
+  --acceptance-route-file /etc/ghostship/t3code-acceptance-route.json \
+  --volume /etc/ghostship/route-policy.json:/etc/ghostship/route-policy.json:ro \
+  --volume /etc/ghostship/approved-free-workers.json:/etc/ghostship/approved-free-workers.json:ro \
+  --volume /nix/store:/nix/store:O
+```
+
+Runtime acceptance reads only the explicit acceptance-route file
+(`/etc/ghostship/t3code-acceptance-route.json`); a missing or invalid file is a
+precondition failure, never a fallback to the retired nominated primary. The
+rehearsal report's `provider_turn.route` is copied from the candidate probe's
+own output (`provider_turn.source` names it), not recomputed by the host.
+
+The report uses `ghostship.t3code-rehearsal/v1`. A separate read-only observer
+(`rehearsal-isolation.py`) runs inside the candidate and returns only names and
+booleans: selected process IDs with `comm`, environment names, credential-shaped
+files under HOME, the mount list, provider-instance keys and OpenCode provider
+keys. Every observed environment name must be on an explicit non-secret
+allowlist; anything else is a violation, and names matching
+`KEY|TOKEN|SECRET|PASSWORD|AUTH|SESSION|COOKIE|CREDENTIAL` are violations unless
+the allowlist names them with a reason. Credential-shaped files (`auth.json`,
+`credentials*`, `hosts.yml`) are found by a bounded HOME walk without reading
+them. A missing, unreadable or truncated observation is `UNKNOWN`; an
+unexpected name, file or mount is `violation`. The allowlist is closed; every
+entry carries its class (`b` runtime/service or `c` T3-generated per-process)
+and reason in `rehearsal-isolation.py`. `OPENCODE_PASSWORD` and
+`OPENCODE_CONFIG_CONTENT` are class (c): T3 generates the password per local
+opencode process and the config content is candidate-local, constrained by the
+anonymous settings gate. Production credential names (`GITHUB_TOKEN`, `*_API_KEY`,
+`AGENT_DESKTOP_API_TOKEN`) are never allowlisted. The env file is reported as
+present-empty, present-not-empty, or absent; absence is a violation and is not
+reported as "not empty". None of these can be `PASS`.
+
+The CLI exit is taken from the same report outcome: `passed` is 0,
+`precondition_not_met` 75, `route_unavailable` 76, `unknown` 77,
+`candidate_failed` 78 and `failed` 1. A rehearsal cannot exit 0 with an
+`unknown` or isolation `violation` report. Non-rehearsal acceptance keeps its
+existing exit behavior.
+
+Before startup the rehearsal scans only the inputs this command stages or
+mounts from us: `tooling_path`, the resolved agent path, and the staged
+acceptance source directory. It walks each owned root to a bounded depth for
+`auth.json`, `credentials*`, `hosts.yml`, `t3code.env`, `secrets`, `*.key` and
+`*.pem`. A pre-start owned-root finding, a missing/dangling/invalid owned root,
+or a truncated walk stops as `precondition_not_met`; a valid symlink root is
+resolved, never called missing. The agent root is resolved only after the
+candidate starts, so an agent-root failure is reported as `failed` with the
+owned-root reason, never as a retryable pre-effect precondition. The command must name host-visible paths (use the `test -f` precheck
+above); a container-only path such as `/workspace/nixos-config/...` is a handover
+defect.
+
+The candidate still mounts the whole host `/nix/store` read-only (`:O`), so the
+rehearsal cannot prove "no secret anywhere in the store". That is prevented at
+source: agenix-encrypted secrets stay encrypted in the store and decrypt only
+under `/run`, and the repository's staged-diff secret scan keeps them out of
+source. Public upstream package/CA/test fixtures are not scanned. The four
+`config/credentials.json` files seen in the Release #5 readback are ours,
+names-only manifests verified with no values, outside the candidate's owned
+inputs; they are recorded once in the trial outcome, not exempted by name. If an
+owned root ever contains a credentials file, it is a finding.
+
+The report is written after candidate teardown with the observed post-teardown
+identity, `identity_unchanged`, and the actual cleanup result
+(`container_removed`, `manager_stopped`, `workspace_removed`, `error`). A
+teardown failure or an identity change turns the report outcome into `unknown`,
+never `passed`.
+
+The report names every performance source: `image_size_bytes` from the image
+archive, `closure` and `tooling_closure` from `nix path-info -S`, and
+`build_seconds`/`build_source` copied from the release build log. Because
+release #5 measures a cached system-closure build, the field is labelled
+`build_kind: cached_system_closure_build`; it is not a clean image build. Missing
+build-log values stay `null`, never estimated.
 
 ```sh
 systemctl status podman-t3code.service --no-pager

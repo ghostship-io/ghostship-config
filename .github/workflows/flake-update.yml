@@ -33,7 +33,7 @@ jobs:
       - name: Refresh public inputs (private revisions are explicit pins)
         run: python3 -c 'import json, subprocess; subprocess.run(["nix", "flake", "update", *[k for k in json.load(open("flake.lock"))["nodes"]["root"]["inputs"] if not k.startswith("ghostship-private-")]], check=True)'
       - name: Validate candidate lock
-        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
+        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package .#checks.x86_64-linux.window-holder
       - name: Restore portable private source locks before publishing
         run: python3 scripts/ci-private-inputs.py --restore
       - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7

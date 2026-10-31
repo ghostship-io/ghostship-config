@@ -68,14 +68,38 @@ run_cross() {
   : > "$W/dir/complete.lock"; : > "$W/dir/complete.started"
   rm -f "$W/recovery-inactive" "$W/state/receipts/$OLD_DEP.json"
   printf '%s\n' "$W/newroot" > "$W/config"
+  holder="$PROOF_DIR/fixture-window-holder"
+  {
+    printf '#!%s\n' "$(command -v bash)"
+    printf 'export PATH="%s:%s"\n' "$(dirname "$(command -v mv)")" "$(dirname "$(command -v flock)")"
+    printf 'exec "%s" "%s" "$@"\n' "$(command -v bash)" "$GHOSTSHIP_REPO/packages/t3code/window-holder.sh"
+  } > "$holder"
+  chmod +x "$holder"
+  required_env=$(cat "$GHOSTSHIP_REPO/packages/t3code/release-window-env.list")
+  # The list is only authoritative if it still matches the tool guard, so the
+  # harness refuses to run against a drifted list instead of proving a fiction.
+  guard_env=$(sed -n '6p' "$GHOSTSHIP_REPO/packages/t3code/release-window.sh" \
+    | grep -oE '\$\{[A-Z][A-Z0-9_]*:\?\}' | tr -d '${:?}' | sort -u)
+  [ "$guard_env" = "$(printf '%s\n' $required_env | sort -u)" ] \
+    || { echo 'release-window-env.list drifted from the release-window guard' >&2; exit 1; }
   export FIXTURE="$W" WINDOW_CONFIG="$W/config" WINDOW_INTENT_HELPER="$PROOF_DIR/fixture-window-intent" WINDOW_BOOTSTRAP="$PROOF_DIR/fixture-window-bootstrap" \
     STATE_DIR="$W/state" SYSTEMCTL_BIN="$PROOF_DIR/systemctl" PODMAN_BIN="$PROOF_DIR/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window \
     HOLD_FILE="$W/hold" LOCK_CANDIDATE="$W/lock1" LOCK_HARDENING="$W/lock2" PROFILE="$W/profile" SYSTEMD_RUN_BIN="$PROOF_DIR/systemd-run" WINDOW_SECONDS=100 \
     COREUTILS_BIN="$(dirname "$(command -v mv)")" UTIL_LINUX_BIN="$(dirname "$(command -v flock)")" BASH_BIN="$(command -v bash)" \
+    WINDOW_HOLDER_BIN="$holder" \
     LEGACY_DIR="$W/dir" LEGACY_UNIT=legacy HOME_DIR="$W/home" EXPECTED_IMAGE="$IMAGE" EXPECTED_DEPLOYMENT="$NEW_DEP" \
     EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$W/tooling" PROVIDER_SECRETS_FILE="$W/secrets/t3code.env" \
     CANDIDATE_HOME_TARGET=/home/fixture ACCEPTED_IMAGE_REF=fixture:accepted CURRENT_SYSTEM="$W/current" EXPECTED_SYSTEM="$W/sysnew" JQ_BIN="$(command -v jq)" \
     DEPLOYMENT_ID="$NEW_DEP" AGENT_REVISION=fixture TOOLING_PATH="$W/tooling"
+  # The harness must cover every variable the tool's guard demands; this list is
+  # the same one a unit test checks against release-window.sh, so a new required
+  # variable fails here instead of at a live attempt.
+  missing_env=""
+  for name in $required_env; do
+    eval "value=\${$name:-}"
+    [ -n "$value" ] || missing_env="$missing_env $name"
+  done
+  [ -z "$missing_env" ] || { echo "cross-generation harness is missing:$missing_env" >&2; exit 1; }
   printf '%s\n' "$OLD_DEP" > "$STATE_DIR/applied"; printf '%s\n' "$NEW_DEP" > "$STATE_DIR/desired"
   hold_inode=$(stat -c %i "$HOLD_FILE")
   printf '%s PREINSTALL_ROOT: ' "$mode"; [[ ! -e $W/newroot ]] && echo absent || echo present
@@ -99,7 +123,7 @@ run_cross() {
     printf '%s\n' "$NEW_DEP" > "$STATE_DIR/applied"
     jq -n --arg d "$NEW_DEP" --argjson n "$(date +%s%3N)" '{deployment_id:$d,started_at_ms:$n,exit_code:0}' > "$STATE_DIR/attempts/$NEW_DEP.json"
     inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$NEW_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$NEW_DEP.json"
+    jq -n --arg d "$NEW_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$NEW_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" post 2>&1); rc=$?; printf '%s POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 ]] || exit 23
     output=$(bash "$PROOF_DIR/fixture-release-window" end-post "$mode" 2>&1); rc=$?; printf '%s END_POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 && ! -e $HOLD_FILE ]] || exit 24
     printf '%s SERVER: fixture PID changed; exact synthetic receipt verified\n' "$mode"
@@ -113,7 +137,7 @@ run_cross() {
   output=$(bash "$PROOF_DIR/fixture-release-window" post 2>&1); rc=$?; printf '%s POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 1 ]] || exit 18
   if [[ $mode == known ]]; then
     inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
+    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?; printf '%s ROLLBACK rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 && ! -e $HOLD_FILE && -f $STATE_DIR/failed-candidate ]] || exit 25
     [[ $(cat "$STATE_DIR/applied") != "$(cat "$STATE_DIR/desired")" ]] || exit 26
     printf '%s STATE: serving receipt verified; desired/applied remain split; failed marker retained\n' "$mode"
@@ -126,7 +150,7 @@ run_cross() {
     printf '%s ROLLBACK_NO_RECEIPT rc=%s: %s\n' "$mode" "$rc" "$output"
     [[ $rc == 1 && -e $HOLD_FILE && -e $W/container-stopped ]] || exit 27
     inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
+    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?
     printf '%s ROLLBACK_RECOVER rc=%s: %s\n' "$mode" "$rc" "$output"
     [[ $rc == 0 && ! -e $HOLD_FILE && ! -e $W/container-stopped && -f $STATE_DIR/failed-candidate ]] || exit 28
@@ -159,7 +183,7 @@ run_cross restart
  path = os.environ['PATH']
  bin_dir = os.path.dirname(unshare_bin)
  if bin_dir not in path.split(':'): path = bin_dir + ':' + path
- env={'PATH':path,'HOME':str(d),'TMPDIR':str(d),'PROOF_DIR':str(d),'S':str(d/'old.sh'),'LEGACY_GENERATION':str(args.legacy_generation)}
+ env={'GHOSTSHIP_REPO':str(repo),'PATH':path,'HOME':str(d),'TMPDIR':str(d),'PROOF_DIR':str(d),'S':str(d/'old.sh'),'LEGACY_GENERATION':str(args.legacy_generation)}
  p=subprocess.Popen([unshare_bin,'-Ur','bash',str(harness)],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
  try:
   stdout,stderr=p.communicate(timeout=180)
