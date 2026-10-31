@@ -23,6 +23,11 @@ let
       children = [ "python" "readiness" "tools" "ffprobe" "unrar" ];
       required = [ "python" ];
     };
+    # Basic Memory runs one Python process (venv console script, uid 3000, no
+    # capabilities) plus its heartbeat; flat policy, no child labels.
+    agent-memory = {
+      top = true;
+    };
     # The image has no cat; cloudflared reads the boot ID as a (rejected) config.
     cloudflared.heartbeat = [
       "@entrypoint"
