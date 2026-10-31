@@ -641,4 +641,71 @@ if "${cmd[@]}" end-post 2>"$tmp/post-record.log"; then echo 'closed a window wit
 grep -q 'recorded UNKNOWN remains' "$tmp/post-record.log" || { echo 'F: unexpected refusal:' >&2; cat "$tmp/post-record.log" >&2; exit 1; }
 rm "$STATE_DIR/recovery-unknown.json"
 
+# --- closed-unaccepted: the real spent-window state -------------------------
+# Reproduce #8.2: the switch succeeded, the holder expired, the deployment was
+# attempted and failed 77, no receipt names it, and the serving identity has
+# no exact accepted receipt (a same-image receipt exists with different
+# agent/tooling/inode and must not be reused).
+if [[ -f $tmp/holder-pid ]]; then "$SYSTEMCTL_BIN" stop window.service >/dev/null 2>&1 || true; fi
+rm -f "$tmp/hold" "$tmp/recovery-inactive"
+if [[ -e "$tmp/evidence/active-window" ]]; then rm "$tmp/evidence/active-window"; fi
+export STATE_DIR="$tmp/state-unaccepted"; rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"; : > "$STATE_DIR/deploy.lock"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+"${cmd[@]}" start spent
+printf 'exit_code=0\n' > "$tmp/evidence/spent/switch.result"
+printf '%s %s\n' "$(date -u +%FT%TZ)" "$(date +%s%3N)" > "$tmp/evidence/spent/complete.started"
+: > "$tmp/evidence/spent/complete.lock"
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":77,"outcome":"route_unknown","status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+# The same-image receipt with a different identity is what b5e4523f is here.
+jq -n --arg i "$EXPECTED_IMAGE" '{deployment_id:"b5e4523f00000000000000000000000000000000000000000000000000000000",
+  image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"oldagent",
+  agent_path:"/nix/store/old-tooling",provider_secret_inode:"1",
+  live_before:{id:"fixture"},live_after:{id:"fixture"},
+  checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
+  > "$STATE_DIR/receipts/b5e4523f00000000000000000000000000000000000000000000000000000000.json"
+# Model the expired holder.
+kill "$(cat "$tmp/holder-pid")"; rm -f "$tmp/holder-pid"
+# Every refusal leaves the window open.
+printf 'exit_code=1\n' > "$tmp/evidence/spent/switch.result"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-switch.log"; then echo 'closed after a failed switch' >&2; exit 1; fi
+grep -q 'switch did not succeed' "$tmp/closed-switch.log" || { echo 'C1: unexpected refusal' >&2; cat "$tmp/closed-switch.log" >&2; exit 1; }
+printf 'exit_code=0\n' > "$tmp/evidence/spent/switch.result"
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":0,"outcome":null,"status":null}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-attempt.log"; then echo 'closed after a successful attempt' >&2; exit 1; fi
+grep -q 'attempt is not a terminal failed acceptance' "$tmp/closed-attempt.log" || { echo 'C2: unexpected refusal' >&2; cat "$tmp/closed-attempt.log" >&2; exit 1; }
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":77,"outcome":"route_unknown","status":null}\n' "$EXPECTED_DEPLOYMENT" "$(date +%s%3N)" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+cp "$STATE_DIR/receipts/b5e4523f00000000000000000000000000000000000000000000000000000000.json" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-receipt.log"; then echo 'closed with a receipt for the expected deployment' >&2; exit 1; fi
+grep -q 'expected deployment is receipted; use post' "$tmp/closed-receipt.log" || { echo 'C3: unexpected refusal' >&2; cat "$tmp/closed-receipt.log" >&2; exit 1; }
+rm "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+export FIXTURE_SERVING_BROKEN=1
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-serving.log"; then echo 'closed with an unknown serving identity' >&2; exit 1; fi
+unset FIXTURE_SERVING_BROKEN
+[[ ! -e $tmp/evidence/spent/closed-unaccepted.json && -e $tmp/hold && -e $tmp/evidence/active-window ]] || { echo 'C4: refusal mutated the window' >&2; exit 1; }
+# The truthful close records the live inode only and names the unreused receipt.
+"${cmd[@]}" closed-unaccepted
+record="$tmp/evidence/spent/closed-unaccepted.json"
+[[ -f $record ]]
+jq -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg inode "$(stat -Lc %i "$PROVIDER_SECRETS_FILE")" --arg nr "$STATE_DIR/receipts/b5e4523f00000000000000000000000000000000000000000000000000000000.json" '
+  .state == "closed_unaccepted" and .deployment_id == $d and .applied == $d and
+  .attempt.exit_code == 77 and .attempt.outcome == "route_unknown" and
+  .serving.image == $i and .serving.provider_secret_inode == $inode and
+  .serving_receipt == "absent" and .receipt_not_reused.deployment_id == "b5e4523f00000000000000000000000000000000000000000000000000000000" and
+  .receipt_not_reused.agent_revision == "oldagent" and .receipt_not_reused.agent_path == "/nix/store/old-tooling" and
+  .receipt_not_reused.provider_secret_inode == "1" and .switch_result == "exit_code=0"' "$record" >/dev/null || { echo 'record is not truthful' >&2; cat "$record" >&2; exit 1; }
+[[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+[[ ! -e $tmp/evidence/spent/post.verified ]]
+# A closed-unaccepted record can never satisfy accepted-deployment gates.
+printf '%s\n' spent > "$tmp/evidence/active-window"; : > "$tmp/hold"
+if "${cmd[@]}" post 2>"$tmp/closed-post.log"; then echo 'post accepted a closed-unaccepted window' >&2; exit 1; fi
+grep -q 'receipt or attempt missing' "$tmp/closed-post.log" || { echo 'C5: post refusal was not the receipt gate' >&2; cat "$tmp/closed-post.log" >&2; exit 1; }
+[[ ! -e $tmp/evidence/spent/post.verified ]]
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-again.log"; then echo 'closed an already closed window' >&2; exit 1; fi
+grep -q 'window already closed unaccepted' "$tmp/closed-again.log" || { echo 'C6: unexpected second refusal' >&2; cat "$tmp/closed-again.log" >&2; exit 1; }
+rm -f "$tmp/evidence/active-window" "$tmp/hold"
+[[ $(ls "$STATE_DIR/receipts" | wc -l) == 1 ]]
+
 echo 'Release window refusal and reopen fixture passed.'
