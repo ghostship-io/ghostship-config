@@ -554,6 +554,9 @@ case_recovery() {
   case_start D
   if [ "$DRY_RUN" = 1 ]; then
     dry_commands <<CMDS
+podman run --rm --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -v $BASE/data:/data:rw $IMAGE basic-memory project add agent-memory /data/projects/agent-memory
+podman run --rm --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -v $BASE/data:/data:rw $IMAGE basic-memory project add agent-memory-test /data/projects/agent-memory-test
+podman run -d --name $APP --pull=never --network=none --user 3000:3000 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m -e HOME=/tmp -e BASIC_MEMORY_CONFIG_DIR=/data/config -e BASIC_MEMORY_HOME=/data/projects/.main -e BASIC_MEMORY_PROJECT_ROOT=/data/projects -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache -e BASIC_MEMORY_SQLITE_SYNCHRONOUS=FULL -e BASIC_MEMORY_DEFAULT_SEARCH_TYPE=text -v $BASE/data:/data:rw --health-cmd "$HEALTH_CMD" --health-interval=1s --health-start-period=1s --health-timeout=5s --health-retries=180 $IMAGE basic-memory mcp --transport streamable-http --host 127.0.0.1 --port 8000 --path /mcp
 podman start $APP
 podman wait --condition=healthy $APP
 podman exec $APP basic-memory tool write --project agent-memory --identifier $RECOVERY_NOTE --content "$RECOVERY_BODY" --json
@@ -570,8 +573,12 @@ CMDS
     return 0
   fi
 
-  podman container exists "$APP" 2>/dev/null ||
-    { unknown_case "case C did not create the evidence container"; return 77; }
+  # A targeted --cases D,F run has no case C; create the same prerequisites.
+  if ! podman container exists "$APP" 2>/dev/null; then
+    project_add agent-memory || { fail_case "project add agent-memory failed"; return 1; }
+    project_add agent-memory-test || { fail_case "project add agent-memory-test failed"; return 1; }
+    start_app >/dev/null || { fail_case "could not start the evidence container"; return 1; }
+  fi
   podman start "$APP" >/dev/null 2>&1 || true
   wait_healthy "$APP" || { unknown_case "container is not healthy before recovery"; return 77; }
 
