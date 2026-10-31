@@ -164,6 +164,40 @@ in
     (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { })
     .tests.native-loader;
   podman-ipam = import ./packages/podman-network/regression.nix { pkgs = securityPkgs; };
+  # The release-window holder must be proved as the *generated* wrapper, not as
+  # the repository text: `$$` once reached the built script as `$`, which two
+  # live releases discovered and no source-level test could.
+  window-holder = let
+    holder = pkgs.writeShellApplication {
+      name = "ghostship-t3code-window-holder";
+      runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
+      text = builtins.readFile ./packages/t3code/window-holder.sh;
+    };
+    # Building the generated release-window wrapper also proves it parses and
+    # passes its own checks; the source text alone never did.
+    window = pkgs.writeShellApplication {
+      name = "ghostship-t3code-release-window";
+      runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
+      text = builtins.readFile ./packages/t3code/release-window.sh;
+    };
+  in
+  pkgs.runCommand "ghostship-t3code-window-holder-check" { } ''
+    dir="$TMPDIR/window"; mkdir -p "$dir"
+    : > "$TMPDIR/lock1"; : > "$TMPDIR/lock2"
+    # Run the built binary in the environment the systemd manager provides.
+    /usr/bin/env -i PATH=/nonexistent       ${holder}/bin/ghostship-t3code-window-holder "$TMPDIR/lock1" "$TMPDIR/lock2" "$dir" &
+    holder=$!
+    for _ in $(seq 1 200); do [ -f "$dir/holder.ready" ] && break; sleep 0.05; done
+    [ -f "$dir/holder.ready" ] || { echo 'holder never wrote holder.ready' >&2; kill $holder; exit 1; }
+    pid=$(cat "$dir/holder.ready")
+    case "$pid" in
+      '''|*[!0-9]*) echo "holder.ready is not a numeric PID: '$pid'" >&2; kill $holder; exit 1 ;;
+    esac
+    kill "$holder" 2>/dev/null || true
+    test -x ${window}/bin/ghostship-t3code-release-window
+    touch "$out"
+  '';
+
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"
