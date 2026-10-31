@@ -31,8 +31,10 @@ podman build -f modules/self-hosted/agent-memory.Containerfile \
   -t localhost/agent-memory:1.0.0 modules/self-hosted
 ```
 
-Then enable `ghostship.agentMemory.enable = true` in the reviewed host
-configuration. The `agent-memory-projects` oneshot creates `agent-memory` and
+The build runs `agent-memory-fsync-test.py` after applying the patch; it writes
+a note into a brand-new `active/` folder and fails the build unless the file,
+parent and grandparent are all fsynced. Then enable
+`ghostship.agentMemory.enable = true` in the reviewed host configuration. The `agent-memory-projects` oneshot creates `agent-memory` and
 `agent-memory-test` with `--network=none` before the server starts; a repeat is
 idempotent. The production workspace starts empty. Basic Memory also seeds a
 `main` project at `/data/projects/.main`; it is empty, never used by the
@@ -46,8 +48,10 @@ materializer is asynchronous:
 
 1. `accept_write` commits the accepted row (`pending`) before the tool returns.
 2. The materializer writes a temp file, fsyncs it, renames it, and fsyncs the
-   parent directory (the `agent-memory-fsync.patch` change), then publishes
-   `file_write_status="synced"` in a FULL transaction.
+   parent and grandparent directories (the `agent-memory-fsync.patch` change),
+   then publishes `file_write_status="synced"` in a FULL transaction. The
+   grandparent matters for the first note in a newly created `active/` or
+   `archive/` directory.
 3. If the process or host dies before `synced`, startup recovery re-drives
    `pending`/`writing`/`failed` rows from the accepted DB content and rewrites
    the file. Verified locally: a row forced to `writing` with its file removed

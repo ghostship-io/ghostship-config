@@ -19,10 +19,12 @@ USER root
 # recovery already replays pending/writing/failed rows from the accepted DB
 # content.
 COPY agent-memory-fsync.patch /tmp/agent-memory-fsync.patch
+COPY agent-memory-fsync-test.py /tmp/agent-memory-fsync-test.py
 RUN apt-get update && \
     apt-get install -y --no-install-recommends patch && \
     patch -p1 -d /app < /tmp/agent-memory-fsync.patch && \
-    rm -rf /var/lib/apt/lists/* /tmp/agent-memory-fsync.patch
+    python /tmp/agent-memory-fsync-test.py && \
+    rm -rf /var/lib/apt/lists/* /tmp/agent-memory-fsync.patch /tmp/agent-memory-fsync-test.py
 
 ENV FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache
 RUN mkdir -p "$FASTEMBED_CACHE_PATH" && \

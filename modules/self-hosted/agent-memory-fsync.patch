@@ -1,5 +1,5 @@
 diff --git a/src/basic_memory/file_utils.py b/src/basic_memory/file_utils.py
-index d2f6125c..a654d72d 100644
+index d2f6125c..0b31cf9c 100644
 --- a/src/basic_memory/file_utils.py
 +++ b/src/basic_memory/file_utils.py
 @@ -1,6 +1,7 @@
@@ -31,15 +31,7 @@ index d2f6125c..a654d72d 100644
  async def write_file_atomic(path: FilePath, content: str) -> None:
      """
      Write file with atomic operation using temporary file.
-@@ -121,6 +136,7 @@ async def write_file_atomic(path: FilePath, content: str) -> None:
- 
-     try:
-         temp_path, target_mode = _create_atomic_temp_path(path_obj)
-+        parent_existed = path_obj.parent.exists()
-         # Trigger: callers hand us normalized Python text, but the final bytes are allowed
-         #          to use the host platform's native newline convention during the write.
-         # Why: preserving CRLF on Windows keeps local files aligned with editors like
-@@ -130,11 +146,16 @@ async def write_file_atomic(path: FilePath, content: str) -> None:
+@@ -130,11 +145,19 @@ async def write_file_atomic(path: FilePath, content: str) -> None:
          #          reintroducing checksum drift in sync or move detection.
          async with aiofiles.open(temp_path, mode="w", encoding="utf-8") as f:
              await f.write(content)
@@ -51,16 +43,16 @@ index d2f6125c..a654d72d 100644
          # Atomic rename (this is fast, doesn't need async)
          temp_path.replace(path_obj)
 +        _fsync_directory(path_obj.parent)
-+        if not parent_existed:
-+            _fsync_directory(path_obj.parent.parent)
++        # The parent directory must exist for the temp file, so its own entry in
++        # the grandparent is the one a newly created folder has not persisted
++        # yet. Fsync it unconditionally; a redundant fsync is cheaper than
++        # losing the first note written into active/ or archive/.
++        _fsync_directory(path_obj.parent.parent)
          logger.debug("Wrote file atomically", path=str(path_obj), content_length=len(content))
      except Exception as e:  # pragma: no cover
          if temp_path is not None:
-@@ -150,12 +171,18 @@ async def write_file_atomic_bytes(path: FilePath, content: bytes) -> None:
- 
-     try:
+@@ -152,10 +175,18 @@ async def write_file_atomic_bytes(path: FilePath, content: bytes) -> None:
          temp_path, target_mode = _create_atomic_temp_path(path_obj)
-+        parent_existed = path_obj.parent.exists()
          async with aiofiles.open(temp_path, mode="wb") as f:
              await f.write(content)
 +            await f.flush()
@@ -70,8 +62,11 @@ index d2f6125c..a654d72d 100644
              temp_path.chmod(target_mode)
          temp_path.replace(path_obj)
 +        _fsync_directory(path_obj.parent)
-+        if not parent_existed:
-+            _fsync_directory(path_obj.parent.parent)
++        # The parent directory must exist for the temp file, so its own entry in
++        # the grandparent is the one a newly created folder has not persisted
++        # yet. Fsync it unconditionally; a redundant fsync is cheaper than
++        # losing the first note written into active/ or archive/.
++        _fsync_directory(path_obj.parent.parent)
          logger.debug("Wrote file atomically", path=str(path_obj), content_length=len(content))
      except Exception as e:  # pragma: no cover
          if temp_path is not None:
