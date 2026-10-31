@@ -71,6 +71,7 @@ run_cross() {
   export FIXTURE="$W" WINDOW_CONFIG="$W/config" WINDOW_INTENT_HELPER="$PROOF_DIR/fixture-window-intent" WINDOW_BOOTSTRAP="$PROOF_DIR/fixture-window-bootstrap" \
     STATE_DIR="$W/state" SYSTEMCTL_BIN="$PROOF_DIR/systemctl" PODMAN_BIN="$PROOF_DIR/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window \
     HOLD_FILE="$W/hold" LOCK_CANDIDATE="$W/lock1" LOCK_HARDENING="$W/lock2" PROFILE="$W/profile" SYSTEMD_RUN_BIN="$PROOF_DIR/systemd-run" WINDOW_SECONDS=100 \
+    COREUTILS_BIN="$(dirname "$(command -v mv)")" UTIL_LINUX_BIN="$(dirname "$(command -v flock)")" BASH_BIN="$(command -v bash)" \
     LEGACY_DIR="$W/dir" LEGACY_UNIT=legacy HOME_DIR="$W/home" EXPECTED_IMAGE="$IMAGE" EXPECTED_DEPLOYMENT="$NEW_DEP" \
     EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$W/tooling" PROVIDER_SECRETS_FILE="$W/secrets/t3code.env" \
     CANDIDATE_HOME_TARGET=/home/fixture ACCEPTED_IMAGE_REF=fixture:accepted CURRENT_SYSTEM="$W/current" EXPECTED_SYSTEM="$W/sysnew" JQ_BIN="$(command -v jq)" \

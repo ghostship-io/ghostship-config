@@ -109,6 +109,11 @@ let
       export PODMAN_BIN=${pkgs.podman}/bin/podman
       export JQ_BIN=${pkgs.jq}/bin/jq
       export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
+      # The window holder runs under the systemd manager, which does not inherit
+      # this script's PATH, so every command it uses must be an absolute path.
+      export COREUTILS_BIN=${pkgs.coreutils}/bin
+      export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
+      export BASH_BIN=${pkgs.bash}/bin/bash
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
