@@ -46,9 +46,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.rstrip("/").endswith("/chat/completions"):
             self._send(404, {"error": "not found"})
             return
-        if self.headers.get("authorization", "") != PLACEHOLDER:
-            # Only the acceptance's placeholder is served; a real credential is
-            # refused rather than exercised.
+        authorization = self.headers.get("authorization", "")
+        if authorization != PLACEHOLDER:
+            # Only the acceptance's placeholder is served; any other credential
+            # is refused and recorded as a kind only, never as a value.
+            self.server.requests.append({
+                "model": None,
+                "prompt": None,
+                "path": self.path,
+                "auth": "absent" if not authorization else "other",
+                "refused": True,
+            })
             self._send(403, {"error": "fixture accepts only the placeholder credential"})
             return
         try:
@@ -59,19 +67,47 @@ class Handler(BaseHTTPRequestHandler):
         messages = request.get("messages") if isinstance(request, dict) else None
         prompt = " ".join(str(item.get("content") or "") for item in messages or []
                           if isinstance(item, dict))
+        authorization = self.headers.get("authorization", "")
+        auth_kind = ("placeholder" if authorization == PLACEHOLDER
+                     else ("absent" if not authorization else "other"))
         self.server.requests.append({
             "model": request.get("model"),
-            "prompt": prompt[:500],
+            "prompt": prompt[:4000],
             "path": self.path,
+            "auth": auth_kind,
         })
+        model = request.get("model") or "probe"
+        if request.get("stream"):
+            # OpenAI-compatible SSE: opencode requires a finish_reason event.
+            events = [
+                {"id": "chatcmpl-fixture", "object": "chat.completion.chunk",
+                 "created": 0, "model": model,
+                 "choices": [{"index": 0, "delta": {"role": "assistant", "content": self.server.reply},
+                              "finish_reason": None}]},
+                {"id": "chatcmpl-fixture", "object": "chat.completion.chunk",
+                 "created": 0, "model": model,
+                 "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+            ]
+            body = b"".join(
+                b"data: " + json.dumps(event).encode() + b"\n\n" for event in events
+            ) + b"data: [DONE]\n\n"
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("cache-control", "no-cache")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+            return
         self._send(200, {
             "id": "chatcmpl-fixture",
             "object": "chat.completion",
             "created": 0,
-            "model": request.get("model") or "probe",
+            "model": model,
             "choices": [{
                 "index": 0,
-                "message": {"role": "assistant", "content": REPLY},
+                "message": {"role": "assistant", "content": self.server.reply},
                 "finish_reason": "stop",
             }],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
@@ -81,10 +117,12 @@ class Handler(BaseHTTPRequestHandler):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=38917)
+    parser.add_argument("--reply", default=REPLY)
     parser.add_argument("--pid-file")
     args = parser.parse_args(argv)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.requests = []
+    server.reply = args.reply
     if args.pid_file:
         with open(args.pid_file, "w", encoding="utf-8") as handle:
             handle.write(str(os.getpid()))

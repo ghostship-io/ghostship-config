@@ -2268,52 +2268,64 @@ class RuntimeLayoutTest(unittest.TestCase):
 
 
 class FixtureTurnTest(unittest.TestCase):
-    """Claim 1: one deterministic candidate turn with no account, proven by the
-    fixture's own record of the request."""
+    """Claim 1: one deterministic candidate turn with no account, proven by a
+    per-run nonce that only the fixture can turn into the required reply."""
 
-    def fake_command(self, run_rc=0, run_out="PROBE_PASS", requests=None, health=0):
-        seen = []
+    def fake_command(self, run_rc=0, mode="match", health=0):
+        state = {}
 
         def fake(engine, *args, timeout=None):
             items = [str(item) for item in args]
             joined = " ".join(items)
-            seen.append(joined)
             if items and items[0] == "cp":
                 return Mock(returncode=0, stdout="", stderr="")
             if "curl" in items:
                 if "/requests" in joined:
+                    if mode == "match":
+                        requests = [{"model": acceptance.FIXTURE_NATIVE_MODEL,
+                                     "prompt": "nonce " + state.get("nonce", ""),
+                                     "auth": "placeholder"}]
+                    elif mode == "other":
+                        requests = [{"model": acceptance.FIXTURE_NATIVE_MODEL,
+                                     "prompt": "nonce " + state.get("nonce", ""),
+                                     "auth": "other"}]
+                    else:
+                        requests = []
                     return Mock(returncode=0,
-                                stdout=json.dumps({"count": len(requests or []),
-                                                   "requests": requests or []}), stderr="")
+                                stdout=json.dumps({"count": len(requests),
+                                                   "requests": requests}), stderr="")
                 if "/health" in joined:
                     return Mock(returncode=health, stdout="ok", stderr="")
             if "run" in items:
-                return Mock(returncode=run_rc, stdout=run_out, stderr="")
+                message = items[-1]
+                token = message.split("exactly ", 1)[1].split(" (nonce", 1)[0]
+                nonce = message.split("nonce ", 1)[1].rstrip(")")
+                state["token"] = token
+                state["nonce"] = nonce
+                return Mock(returncode=run_rc,
+                            stdout=(token if run_rc == 0 else "fixture error"),
+                            stderr="")
             return Mock(returncode=0, stdout="", stderr="")
 
-        return fake, seen
+        return fake, state
 
     def test_candidate_turn_passes_without_credentials(self):
-        fake, seen = self.fake_command(requests=[{
-            "model": acceptance.FIXTURE_MODEL,
-            "prompt": "Reply with exactly PROBE_PASS",
-        }])
+        fake, state = self.fake_command(mode="match")
         evidence = {}
         with patch.object(acceptance, "command", side_effect=fake):
             passed = acceptance.check_fixture_turn(
                 ["podman"], "candidate", evidence=evidence)
         self.assertTrue(passed)
-        self.assertTrue(evidence["candidate_fixture_turn"]["fixture_received_turn"])
-        self.assertEqual(evidence["candidate_fixture_turn"]["credentials"], "none")
+        recorded = evidence["candidate_fixture_turn"]
+        self.assertTrue(recorded["fixture_received_turn"])
+        self.assertEqual(recorded["credentials"], "none")
+        self.assertEqual(recorded["non_placeholder_requests"], 0)
+        self.assertIn(state["nonce"], recorded["nonce"])
         self.assertIn("fixture_turn", acceptance.CHECKS)
         self.assertNotIn("provider_turn", acceptance.CHECKS)
-        joined = "\n".join(seen)
-        self.assertNotIn("auth.json", joined)
-        self.assertNotIn("/run/secrets", joined)
-        self.assertIn("OPENCODE_API_KEY=fixture", joined)
 
     def test_a_reply_without_the_fixture_record_is_refused(self):
-        fake, _ = self.fake_command(run_out="PROBE_PASS", requests=[])
+        fake, _ = self.fake_command(mode="none")
         evidence = {}
         with patch.object(acceptance, "command", side_effect=fake):
             passed = acceptance.check_fixture_turn(
@@ -2322,14 +2334,24 @@ class FixtureTurnTest(unittest.TestCase):
         self.assertFalse(evidence["candidate_fixture_turn"]["fixture_received_turn"])
 
     def test_fixture_turn_failure_is_refused(self):
-        fake, _ = self.fake_command(run_rc=1, run_out="fixture connection refused",
-                                    requests=[])
+        fake, _ = self.fake_command(run_rc=1)
         evidence = {}
         with patch.object(acceptance, "command", side_effect=fake):
             passed = acceptance.check_fixture_turn(
                 ["podman"], "candidate", evidence=evidence)
         self.assertFalse(passed)
         self.assertEqual(evidence["candidate_fixture_turn"]["outcome"], "failed")
+        self.assertEqual(evidence["candidate_fixture_turn"]["turn_exit"], 1)
+
+    def test_a_non_placeholder_credential_refuses_the_claim(self):
+        fake, _ = self.fake_command(mode="other")
+        evidence = {}
+        with patch.object(acceptance, "command", side_effect=fake):
+            passed = acceptance.check_fixture_turn(
+                ["podman"], "candidate", evidence=evidence)
+        self.assertFalse(passed)
+        self.assertEqual(
+            evidence["candidate_fixture_turn"]["non_placeholder_requests"], 1)
 
 
 class FreeTierLimitClassificationTest(unittest.TestCase):
