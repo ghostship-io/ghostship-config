@@ -1299,3 +1299,44 @@ def _selection(document, now):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuntimeLayoutTest(unittest.TestCase):
+    """Both managed T3 layouts are accepted; anything else is refused."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.home = Path(temporary.name)
+
+    def release(self, version):
+        path = self.home / ".local/share/t3code-tools/t3/releases" / version
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def legacy(self, version):
+        path = self.home / ".t3/runtime/versions" / version
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def test_the_managed_release_directory_is_a_valid_runtime(self):
+        # The layout update-t3.py installs today: the release dir holds the app.
+        release = self.release("0.1.5")
+        self.assertTrue(acceptance.valid_runtime_layout(self.home, release, release))
+
+    def test_the_legacy_version_tree_is_still_valid(self):
+        release = self.release("0.1.5")
+        legacy = self.legacy("0.1.1")
+        self.assertTrue(acceptance.valid_runtime_layout(self.home, release, legacy))
+
+    def test_a_runtime_beside_the_release_is_refused(self):
+        release = self.release("0.1.5")
+        stray = self.home / "elsewhere" / "0.1.5"
+        stray.mkdir(parents=True)
+        self.assertFalse(acceptance.valid_runtime_layout(self.home, release, stray))
+
+    def test_a_missing_runtime_directory_is_refused(self):
+        release = self.release("0.1.5")
+        self.assertFalse(
+            acceptance.valid_runtime_layout(self.home, release, self.home / "absent")
+        )

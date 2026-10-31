@@ -41,6 +41,22 @@ ALLOWED_CANDIDATE_MOUNTS = {
 }
 
 
+def valid_runtime_layout(source_home, t3_release, runtime_version):
+    """Accept both managed layouts for the T3 runtime directory.
+
+    The release directory is the runtime when update-t3.py installs the whole app
+    under t3/releases/<version>; older installations link the binary into a
+    separate .t3/runtime/versions tree. Comparing resolved paths matters because
+    the home itself may be a symlink.
+    """
+    if not runtime_version.is_dir():
+        return False
+    if runtime_version == t3_release:
+        return True
+    runtime_root = (source_home / ".t3/runtime/versions").resolve()
+    return runtime_version.parent == runtime_root
+
+
 def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candidate_uid,
                            tooling_path=None, candidate_home_target="/home/t3code",
                            stage_toolchain=False, approved_free_workers_file=None):
@@ -335,9 +351,14 @@ def stage_candidate_toolchain(source_home, candidate_home, candidate_uid,
     )
     if not t3_binary.is_file() or not os.access(t3_binary, os.X_OK):
         raise RuntimeError("candidate requires an executable installed T3 CLI")
+    # Two layouts are valid. The managed release directory IS the runtime when
+    # update-t3.py installs the whole app under t3/releases/<version> and points
+    # `current` at it; older installations instead link the binary into a
+    # separate .t3/runtime/versions tree. Requiring only the old tree rejected
+    # every candidate on the current layout, which is the 04:04 failure.
+    # Compare resolved paths on both sides: the home may itself be a symlink.
     runtime_version = t3_binary.parent
-    runtime_root = source_home / ".t3/runtime/versions"
-    if runtime_version.parent != runtime_root or not runtime_version.is_dir():
+    if not valid_runtime_layout(source_home, t3_release, runtime_version):
         raise RuntimeError("candidate T3 runtime is outside its managed version tree")
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", runtime_version.name):
         raise RuntimeError("candidate T3 runtime has an invalid version")
