@@ -19,6 +19,8 @@ cat > "$fake/nix" <<'SH'
 #!/usr/bin/env bash
 [[ ${1:-} == print-dev-env ]] || { echo 'unsupported: fake nix' >&2; exit 1; }
 printf '%s\n' "$*" >> "${FAKE_COUNT:?}"
+# Model the GC root that --profile creates.
+if [[ $2 == --profile ]]; then mkdir -p "$3"; fi
 if [[ ${FAKE_NIX_FAIL:-0} == 1 ]]; then echo 'error: cannot evaluate the flake' >&2; exit 1; fi
 printf 'export PATH=%s/marker/bin:$PATH\nexport IN_NIX_SHELL=impure\n' "${FAKE_ROOT:?}"
 SH
@@ -44,6 +46,7 @@ run() {
 out=$(run "$wt" bash -c 'echo "shell=${IN_NIX_SHELL:-none}"; markertool')
 [[ $out == *'shell=impure'* && $out == *marker-tool* ]] || { echo "A: not loaded: $out" >&2; exit 1; }
 [[ $(wc -l < "$FAKE_COUNT") == 1 ]] || { echo "A: evaluated $(wc -l < "$FAKE_COUNT") times" >&2; exit 1; }
+compgen -G "$HOME/.cache/ghostship/worker-dev-env/*.profile" >/dev/null || { echo 'A: no GC root profile' >&2; exit 1; }
 
 # 2. A second shell reuses the stored environment and does not evaluate again.
 out=$(run "$wt" bash -c 'markertool')
@@ -65,6 +68,13 @@ outside=$(mktemp -d); trap 'rm -rf "$tmp" "$outside"' EXIT
 git -C "$tmp/origin" worktree add -q "$outside/wt" -b outside
 out=$(run "$outside/wt" bash -c 'command -v markertool || echo absent')
 [[ $out != *marker-tool* ]] || { echo "E: evaluated outside the fixed root" >&2; exit 1; }
+
+# 6a. A linked worktree whose flake is not committed content is ignored.
+evil=$tmp/evil
+git -C "$tmp/origin" worktree add -q "$evil" -b evil
+printf '{}\n' > "$evil/flake.nix"   # untracked drop-in
+out=$(run "$evil" bash -c 'command -v markertool || echo absent')
+[[ $out != *marker-tool* ]] || { echo "F2: evaluated an untracked flake" >&2; exit 1; }
 
 # 6. A plain directory with a flake, not a linked worktree, is ignored.
 plain=$tmp/plain; mkdir -p "$plain"; printf '{}\n' > "$plain/flake.nix"

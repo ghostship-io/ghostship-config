@@ -40,6 +40,10 @@ esac
 # flake is not an assigned worktree and is left alone.
 [[ -f $root/.git ]] || return 0
 [[ -f $root/flake.nix ]] || return 0
+# The flake must be repository content at this worktree's HEAD, not a file
+# dropped into a worktree the agent made. A worker-created worktree with a
+# hand-written flake stays inert.
+git -C "$root" ls-files --error-unmatch flake.nix >/dev/null 2>&1 || return 0
 
 # A child shell (including the evaluator itself) that already has this repo's
 # environment returns immediately; a child in another worktree loads its own.
@@ -61,7 +65,9 @@ if [[ ! -f $env_file ]]; then
   mkdir -p "$cache" || die "cannot create $cache"
   chmod 0700 "$cache" 2>/dev/null || true
   err_file=$(mktemp "$cache/.err.XXXXXX") || die "cannot create an error file in $cache"
-  if ! nix print-dev-env "$root" > "$env_file.tmp.$$" 2>"$err_file"; then
+  # --profile keeps the devShell closure as a GC root, so the store paths the
+  # cached environment exports cannot be collected underneath us.
+  if ! nix print-dev-env --profile "$cache/$key.profile" "$root" > "$env_file.tmp.$$" 2>"$err_file"; then
     reason=$(head -n1 "$err_file" 2>/dev/null)
     rm -f "$env_file.tmp.$$" "$err_file"
     die "cannot evaluate the devShell for $root${reason:+: $reason}"
