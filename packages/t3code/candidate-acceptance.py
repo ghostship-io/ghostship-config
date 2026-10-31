@@ -75,6 +75,7 @@ def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candid
     if tooling_path:
         stage_candidate_provider_settings(source_home, candidate_home, candidate_home_target)
         stage_candidate_opencode_catalog(source_home, candidate_home)
+        stage_candidate_opencode_config(candidate_home)
         if approved_free_workers_file:
             stage_candidate_provider_auth(
                 source_home, candidate_home, approved_free_workers_file
@@ -171,6 +172,34 @@ def stage_candidate_provider_settings(source_home, candidate_home,
     names = {item["name"] for item in environment}
     if "OPENCODE_MODELS_PATH" not in names:
         raise RuntimeError("production opencode-free models path is missing")
+    opencode = instances.get("opencode") if isinstance(instances, dict) else None
+    if (not isinstance(opencode, dict) or opencode.get("driver") != "opencode"
+            or opencode.get("enabled") is not True):
+        raise RuntimeError("production opencode T3 provider is not enabled")
+    opencode_source_config = opencode.get("config")
+    opencode_binary = (opencode_source_config.get("binaryPath")
+                       if isinstance(opencode_source_config, dict) else None)
+    if not isinstance(opencode_binary, str) or not opencode_binary or "\n" in opencode_binary:
+        raise RuntimeError("production opencode provider configuration is invalid")
+    opencode_environment = []
+    for item in opencode.get("environment", []):
+        # Never project a sensitive subscription credential. The owner must
+        # approve that scope separately before acceptance can prove the route.
+        if not isinstance(item, dict) or item.get("sensitive") is True:
+            continue
+        name, value = item.get("name"), item.get("value")
+        if name not in allowed_env:
+            continue
+        if not isinstance(value, str) or "\n" in value or "\0" in value:
+            raise RuntimeError("production opencode provider environment is invalid")
+        if name != "OPENCODE_DISABLE_FREE_MODELS":
+            expected_home = PurePosixPath(candidate_home_target)
+            target = PurePosixPath(value)
+            try:
+                target.relative_to(expected_home)
+            except ValueError:
+                raise RuntimeError("production opencode path leaves the T3 home") from None
+        opencode_environment.append({"name": name, "value": value})
     projected = {
         "providerInstances": {
             T3_FREE_PROVIDER: {
@@ -178,7 +207,13 @@ def stage_candidate_provider_settings(source_home, candidate_home,
                 "enabled": True,
                 "config": {"binaryPath": binary},
                 "environment": environment,
-            }
+            },
+            "opencode": {
+                "driver": "opencode",
+                "enabled": True,
+                "config": {"binaryPath": opencode_binary},
+                "environment": opencode_environment,
+            },
         }
     }
     settings = Path(candidate_home) / ".t3/userdata/settings.json"
@@ -205,6 +240,24 @@ def stage_candidate_opencode_catalog(source_home, candidate_home):
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         shutil.copyfile(path, target)
         target.chmod(0o444)
+
+
+def stage_candidate_opencode_config(candidate_home):
+    """Stage the opencode-go provider mapping without any credential.
+
+    The production config only declares the provider and defers its models to
+    the staged catalog. This minimal projection avoids copying unrelated MCP
+    servers and never copies auth.json or OPENCODE_AUTH_CONTENT.
+    """
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "provider": {"opencode-go": {"models": {}}},
+        "enabled_providers": ["opencode-go"],
+    }
+    target = Path(candidate_home) / ".config/opencode/opencode.jsonc"
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    target.chmod(0o444)
 
 
 def stage_candidate_provider_auth(source_home, candidate_home, approved_file):
@@ -894,10 +947,11 @@ def register_candidate_workspace(engine, name):
 
 
 class ProviderTurnError(RuntimeError):
-    def __init__(self, pick, routes, message):
+    def __init__(self, pick, routes, message, detail=None):
         super().__init__(message)
         self.pick = pick
         self.routes = routes
+        self.detail = detail
 
 
 class RouteUnavailableError(ProviderTurnError):
@@ -969,6 +1023,25 @@ def _target_identity(row):
             target.get("model") or target.get("model_id"))
 
 
+def probe_error_detail(result):
+    """Retain the probe's structured failure kind without arbitrary text."""
+    error = result.get("error") if isinstance(result, dict) else None
+    if not isinstance(error, dict):
+        return None
+    fields = []
+    kind = error.get("kind")
+    if isinstance(kind, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", kind):
+        fields.append("kind=" + kind)
+    for key in ("instance", "model"):
+        value = error.get(key)
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._:/+-]{1,200}", value):
+            fields.append(f"{key}={value}")
+    code = error.get("code")
+    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code):
+        fields.append("code=" + code)
+    return " ".join(fields) or None
+
+
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
                         policy=None, snapshot=None, evidence=None):
     """Prove one exact policy-admitted primary with a real turn on the candidate."""
@@ -1029,8 +1102,11 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     code = str((result.get("error") or {}).get("code") or "") if isinstance(result.get("error"), dict) else ""
     capacity = code in ("quota", "model-unavailable", "route-unavailable", "rate_limit", "unavailable") or category == "route-unavailable"
     if capacity:
-        # External availability is not a candidate regression.
-        raise RouteUnavailableError(route, route_summary, f"provider_turn route_unavailable: {failure}")
+        # External availability is not a candidate regression. Retain the
+        # probe's structured kind so a missing instance/auth is not hidden.
+        raise RouteUnavailableError(route, route_summary,
+                                    f"provider_turn route_unavailable: {failure}",
+                                    detail=probe_error_detail(result))
     if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
         raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
     raise ProviderTurnError(route, route_summary,
@@ -1309,10 +1385,25 @@ def accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir, *ar
                 record = {}
             if isinstance(error, ProviderTurnError):
                 # Provider-provided strings can contain arbitrary credentials.
+                # Only the structured kind/identity from the probe is retained.
+                if isinstance(error, RouteUnknownError):
+                    evidence_text = safe_unknown_evidence(error)
+                    if error.detail:
+                        evidence_text += "; " + error.detail
+                elif isinstance(error, RouteUnavailableError):
+                    evidence_text = "route_unavailable"
+                    if error.detail:
+                        evidence_text += ": " + error.detail
+                    elif "quota" in str(error).lower():
+                        evidence_text += ": quota"
+                else:
+                    evidence_text = "provider route failure"
                 record["provider_turn"] = {"pick": evidence_hash(error.pick),
                                            "routes": evidence_hash(error.routes),
-                                           "evidence": safe_unknown_evidence(error) if isinstance(error, RouteUnknownError) else ("route_unavailable: quota" if isinstance(error, RouteUnavailableError) and "quota" in str(error).lower() else "provider route failure")}
+                                           "evidence": evidence_text}
             evidence["incomplete"] = safe_unknown_evidence(error) if isinstance(error, RouteUnknownError) else None
+            if isinstance(error, RouteUnknownError) and error.detail:
+                evidence["incomplete"] = (evidence["incomplete"] or "") + "; " + error.detail
             if len(json.dumps(evidence)) > 131072:
                 evidence = {"candidate": evidence["candidate"], "incomplete": evidence.get("incomplete"),
                             "truncated": True, "reason": "route provenance exceeds 128 KiB"}
