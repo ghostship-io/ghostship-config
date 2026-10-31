@@ -35,7 +35,10 @@ class McpEntrypoint(unittest.TestCase):
         # bump would publish source that did not change.
         self.assertIn('restartTriggers = [ agent.outPath inputs.ghostship-native-agent.outPath ];', service)
         self.assertIn('"${agent.packages.${system}.native-mcp}/bin/ghostship-rollout"', body)
-        self.assertIn('(toString ./skills-publish-gate.sh) "install"', body)
+        # Interpolated path: copied to the store and executable, so the unit
+        # cannot point at a file that does not exist at runtime.
+        self.assertIn('"${../../packages/t3code/skills-publish-gate.sh}" "install"', body)
+        self.assertNotIn('(toString ./skills-publish-gate.sh)', body)
         gate = (ROOT / "packages/t3code/skills-publish-gate.sh").read_text()
         self.assertIn('activate --skills-cli', gate, "the publish path must still run the consumer rollout")
         # The gate script builds the rollout arguments; the pinned values stay
@@ -49,7 +52,7 @@ class McpEntrypoint(unittest.TestCase):
         for flag in ('--skills-cli', '--repo', '--source-sha', '--app-id', '--state', '--bridge'):
             self.assertIn(flag, gate, f"the publish path must pass {flag} to the rollout")
         self.assertIn('ExecStartPre = activatePrepare;', body)
-        self.assertIn('(toString ./skills-publish-gate.sh) "verify" activateVerify', body)
+        self.assertIn('"${../../packages/t3code/skills-publish-gate.sh}" "verify" activateVerify', body)
         self.assertIn('ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run/lock" "/run/containers" "/run/libpod" ]', body,
                       "root podman needs its storage lock writable")
         self.assertIn('desktop.enabled', source, "a disabled desktop probe must trigger one restart")

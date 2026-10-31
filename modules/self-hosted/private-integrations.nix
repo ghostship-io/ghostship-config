@@ -661,7 +661,7 @@ in {
         ReadWritePaths = [ "/var/lib/ghostship-skills" "/var/lib/containers" "/run/lock" "/run/containers" "/run/libpod" ];
         ExecStartPre = activatePrepare;
         ExecStartPost = lib.escapeShellArgs [
-          "${pkgs.bash}/bin/bash" (toString ./skills-publish-gate.sh) "verify" activateVerify
+          "${pkgs.bash}/bin/bash" "${../../packages/t3code/skills-publish-gate.sh}" "verify" activateVerify
         ];
         Environment = [
           "HOME=/var/lib/ghostship-skills"
@@ -675,7 +675,7 @@ in {
           "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
         ];
         ExecStart = lib.escapeShellArgs [
-          "${pkgs.bash}/bin/bash" (toString ./skills-publish-gate.sh) "install"
+          "${pkgs.bash}/bin/bash" "${../../packages/t3code/skills-publish-gate.sh}" "install"
           "${agent.packages.${system}.native-mcp}/bin/ghostship-rollout"
           skillsOwner
           (toString inputs.ghostship-private-agent)
