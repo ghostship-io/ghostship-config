@@ -251,6 +251,62 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 
 ## Nix, Builds, and Host Boot
 
+- Every container image we build is measured on real hardware before its
+  runtime change lands. Performance is a requirement, not an aspiration: an
+  image that builds, starts or restarts slowly is a defect even when every
+  functional check passes. This applies to every container we build; the T3
+  Code container leads because its restart interrupts agent work.
+- Measure and record, per image, for both the baseline and the final artifact,
+  on the `aarch64` host:
+  - **size** — the shipped `dockerTools` archive that podman loads, both the
+    archive bytes and its gzipped size, *plus* the Nix store closure from
+    `nix path-info --recursive --closure-size`. Two executors must not produce
+    different numbers under the same words, so name both artifacts;
+  - **build** — clean build from an empty store, and cached/incremental build
+    with the store warm, reported separately;
+  - **cold start** — container start until the app actually serves;
+  - **restart/recovery** — stop, or `systemctl restart`, until the app serves
+    again and agents are usable;
+  - **runtime resource impact** — resident memory and steady-state CPU of the
+    container's main services.
+- "Container running" is never readiness. **Ready means a real request or
+  reconnect succeeds**, using the three-part predicate the release window
+  already applies: `health == healthy`, `systemctl is-active
+  t3code-server.service`, and `podman exec` `curl http://127.0.0.1:3773/`
+  returning 200. The request is outside the app process but inside the
+  container. A process that is `active` but cannot answer is not up.
+- Performance and the functional receipt are separate gates that both stay
+  closed until satisfied. The five-check functional receipt does not measure
+  performance, but **no image feature or release is accepted while its
+  required build, start, restart and usable-app performance is unmeasured or
+  unacceptable** — performance is not post-release polish. Report every
+  measurement as PASS, FAIL or UNKNOWN against the evidence-based budget, and
+  treat UNKNOWN as acceptance left open rather than as a pass.
+- Measured partials do not close the gate: current evidence of 110.1 MiB
+  compressed, 384.4 MiB uncompressed and a 17.7 s cached build says nothing
+  about restart or readiness. Restart and ready timings come from the executor
+  at the planned activation, never from a benchmark-only restart.
+- Record the measured baseline, the final numbers and the agreed budget with
+  the image change's release evidence — the first one is #1636. Performance is
+  **not** part of the candidate-acceptance receipt: that schema is closed at
+  `CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills",
+  "desktop_transport")`, so do not add fields to it or expect it to gate on
+  timings. Budgets are set per image from measured evidence; do not invent
+  fleet-wide thresholds, and do not compare images of different roles.
+- Anything on the start path that installs, fetches, compiles, migrates or
+  waits on the network is a defect: move it into the image build, or defer it
+  until after readiness. The known offender today is the T3 bootstrap, which
+  downloads and extracts the app on first start (#1636, measured floor 4.3 s).
+- Two different restart paths exist and both stay fast, but they are gated
+  differently: **image or host-config changes** go through the gated release
+  path; the **in-container app update** is gated by its own eligibility
+  (first-seen under a bounded window, no idle guard) and restarts
+  `t3code-server.service` itself. That in-container restart is precisely why
+  restart time is a requirement.
+- Where a measurement cannot be taken without restarting production, record it
+  as UNKNOWN with the reason and the command the executor should run, rather
+  than estimating it as if it were measured.
+
 - `checks.<system>.config-tests` is the single derivation that runs the T3
   deployment shell proofs, including `tests/test_t3code_release_window.sh` and
   `tests/test_t3code_window_lock.sh`. Keep every `tests/test_t3code_*.sh`
