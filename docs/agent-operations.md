@@ -275,6 +275,17 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   t3code-server.service`, and `podman exec` `curl http://127.0.0.1:3773/`
   returning 200. The request is outside the app process but inside the
   container. A process that is `active` but cannot answer is not up.
+- Performance and the functional receipt are separate gates that both stay
+  closed until satisfied. The five-check functional receipt does not measure
+  performance, but **no image feature or release is accepted while its
+  required build, start, restart and usable-app performance is unmeasured or
+  unacceptable** — performance is not post-release polish. Report every
+  measurement as PASS, FAIL or UNKNOWN against the evidence-based budget, and
+  treat UNKNOWN as acceptance left open rather than as a pass.
+- Measured partials do not close the gate: current evidence of 110.1 MiB
+  compressed, 384.4 MiB uncompressed and a 17.7 s cached build says nothing
+  about restart or readiness. Restart and ready timings come from the executor
+  at the planned activation, never from a benchmark-only restart.
 - Record the measured baseline, the final numbers and the agreed budget with
   the image change's release evidence — the first one is #1636. Performance is
   **not** part of the candidate-acceptance receipt: that schema is closed at
