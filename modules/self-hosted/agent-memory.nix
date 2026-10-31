@@ -176,16 +176,19 @@ in
       requires = [ "agent-memory-projects.service" ];
     };
 
-    # The connector reaches the MCP endpoint over the existing service network.
-    # t3code is already a member; this adds only the notes environment.
+    # The native connector runs in ghostship-private-integrations, not in
+    # t3code. It is the MCP server that registers the notes tools, and it is
+    # already a member of ghostship_net; give it the endpoint there.
     # No host port, Cloudflare route or muximux entry exists.
-    virtualisation.oci-containers.containers."t3code" = {
-      environment = {
-        GHOSTSHIP_NOTES_ENDPOINT = endpoint;
-        GHOSTSHIP_NOTES_ALLOW_PRIVATE_HTTP = "1";
-        GHOSTSHIP_NOTES_PROJECT = cfg.project;
-        GHOSTSHIP_NOTES_TEST_PROJECT = cfg.testProject;
-      };
-    };
+    virtualisation.oci-containers.containers."ghostship-private-integrations" =
+      lib.mkIf config.ghostship.privateIntegrations.enable
+        {
+          environment = {
+            GHOSTSHIP_NOTES_ENDPOINT = endpoint;
+            GHOSTSHIP_NOTES_ALLOW_PRIVATE_HTTP = "1";
+            GHOSTSHIP_NOTES_PROJECT = cfg.project;
+            GHOSTSHIP_NOTES_TEST_PROJECT = cfg.testProject;
+          };
+        };
   };
 }
