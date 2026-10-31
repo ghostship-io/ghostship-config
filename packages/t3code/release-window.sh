@@ -43,15 +43,19 @@ legacy_preflight() {
   [[ ! -L $LEGACY_DIR/complete.started ]] || fail 'legacy switch marker invalid'
 }
 preflight() {
-  local mode=${1:-}
+  local mode=${1:-} skip_record=${2:-}
   [[ -z $mode || $mode == --adopt-inhibit ]] || fail 'invalid preflight option'
+  [[ -z $skip_record || $skip_record == --supersede-unknown ]] || fail 'invalid preflight option'
+  [[ -z $skip_record || $mode == --adopt-inhibit ]] || fail '--supersede-unknown requires --adopt-inhibit'
   preflight_core
   if [[ $mode == --adopt-inhibit ]]; then
     legacy_preflight
   else
     [[ ! -e $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery hold already exists'
   fi
-  [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN requires investigation'
+  if [[ -z $skip_record ]]; then
+    [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN requires investigation'
+  fi
   if [[ -e $WINDOW_ROOT || -L $WINDOW_ROOT ]]; then
     [[ -d $WINDOW_ROOT && ! -L $WINDOW_ROOT && -f $WINDOW_ROOT/window.lock && ! -L $WINDOW_ROOT/window.lock ]] || fail 'window root or lock invalid'
     flock -n -x "$WINDOW_ROOT/window.lock" true || fail 'window lock held'
@@ -380,11 +384,14 @@ post_verify() {
 # Retire a released window's UNKNOWN record as a recorded operator action.
 # The record is never deleted: it moves into that window's archive beside an
 # audit entry naming the reason, the record digest and the window that
-# supersedes it. Only a terminal UNKNOWN for a different, older window can be
-# superseded, and only while the inhibit it guarded is still held.
+# supersedes it. Only a terminal UNKNOWN for a different window whose own
+# record predates this start can be superseded, and only while the inhibit it
+# guarded is still held.
 supersede_unknown() {
   : "${JQ_BIN:?}"
-  local reason=$1 new_id=$2 record="$STATE_DIR/recovery-unknown.json" old archive digest at now
+  local check= expected_old=
+  if [[ ${1:-} == --check ]]; then check=1; shift; fi
+  local reason=${1:-} new_id=${2:-} expected_old=${3:-} record="$STATE_DIR/recovery-unknown.json" old archive digest at now
   [[ -n $reason && ${#reason} -le 500 && $reason != *[[:cntrl:]]* ]] || fail 'supersede reason invalid'
   [[ -f $record && ! -L $record && -r $record ]] || fail 'no recorded UNKNOWN to supersede'
   [[ -f $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'supersede requires the retained recovery inhibit'
@@ -392,12 +399,14 @@ supersede_unknown() {
   old=$("$JQ_BIN" -er 'select(.state == "UNKNOWN" and (.reason | test("^(route_unknown|route_unavailable|candidate_failed|switch_unknown|legacy_unknown|acceptance_unknown|receipted_runtime_failure)$"))) | .window' "$record") || fail 'recorded UNKNOWN is not a terminal outcome'
   window_id_valid "$old" || fail 'recorded window identity invalid'
   [[ $old != "$new_id" ]] || fail 'cannot supersede a record for the window being started'
+  [[ -z $expected_old || $old == "$expected_old" ]] || fail 'recorded UNKNOWN changed during start; investigate it before superseding'
   at=$("$JQ_BIN" -er '.at | select(type == "string")' "$record") || fail 'recorded UNKNOWN has no recorded time'
   [[ $at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || fail 'recorded UNKNOWN time unknown'
   now=$(date -u +%FT%TZ)
   [[ ! $at > $now ]] || fail 'recorded UNKNOWN is not older than this start'
   archive=$WINDOW_ROOT/$old/archive
   [[ -d $WINDOW_ROOT/$old && ! -L $WINDOW_ROOT/$old ]] || fail 'recorded window evidence missing'
+  (( check )) && return 0
   digest=$(sha256sum < "$record") || fail 'recorded UNKNOWN digest unknown'
   digest=${digest%% *}
   install -d -m 0700 "$archive"
@@ -432,11 +441,15 @@ case ${1:-} in
   [[ $# == 2 ]] || fail 'usage: start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID'
   id=$2; window_id_valid "$id" || fail 'invalid window id'
   : "${WINDOW_SECONDS:?}"
+  supersede_record=
   if [[ -n $supersede ]]; then
     (( adopt )) || fail '--supersede-unknown requires --adopt-inhibit'
-    supersede_unknown "$supersede" "$id"
+    supersede_unknown --check "$supersede" "$id"
+    supersede_record=$("$JQ_BIN" -er 'select(.state == "UNKNOWN") | .window' "$STATE_DIR/recovery-unknown.json") || fail 'recorded UNKNOWN identity unknown'
   fi
-  if (( adopt )); then preflight --adopt-inhibit; else preflight; fi
+  if (( adopt )); then
+    if [[ -n $supersede ]]; then preflight --adopt-inhibit --supersede-unknown; else preflight --adopt-inhibit; fi
+  else preflight; fi
   if [[ ! -e $WINDOW_ROOT && ! -L $WINDOW_ROOT ]]; then
     : "${WINDOW_BOOTSTRAP:?}"
     bash "$WINDOW_BOOTSTRAP"
@@ -454,6 +467,10 @@ case ${1:-} in
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery is not active'
   [[ ! -e $WINDOW_ROOT/active-window && ! -e $WINDOW_ROOT/$id ]] || fail 'window already exists or active'
   [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'window holder not inactive'
+  # Preflight is read-only and has now passed every guard, and this window's
+  # lock is held: only here does the record move. A failure above leaves the
+  # live UNKNOWN untouched.
+  if [[ -n $supersede ]]; then supersede_unknown "$supersede" "$id" "$supersede_record"; fi
   exec 6<"$LOCK_CANDIDATE" 7<"$LOCK_HARDENING"
   flock -n -x 6 || fail 'candidate lock held'
   flock -n -x 7 || fail 'hardening lock held'
