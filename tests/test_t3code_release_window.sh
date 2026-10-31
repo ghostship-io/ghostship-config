@@ -10,6 +10,7 @@ ln -s "$tmp/system" "$tmp/profile"
 cat > "$tmp/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FIXTURE/systemctl.events"
+if [[ $1 == --failed ]]; then cat "$FIXTURE/failed-units" 2>/dev/null; exit 0; fi
 if [[ $1 == show ]]; then
   if [[ $2 == ghostship-t3code-deploy.service && $3 == -p && $4 == Result ]]; then echo success; exit; fi
   if [[ $2 == window.service && $3 == -p && $4 == MainPID ]]; then cat "$FIXTURE/holder-pid"; exit; fi
@@ -69,7 +70,7 @@ case "$1 $3 ${4:-}" in
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
   'exec cat '*) printf '{"revision":"%s"}\n' "$EXPECTED_AGENT_REVISION" ;;
-  'exec stat -Lc') stat -Lc '%i' "$PROVIDER_SECRETS_FILE" ;;
+  'exec stat -Lc') if [[ -n ${FIXTURE_CONTAINER_INODE:-} ]]; then printf '%s\n' "$FIXTURE_CONTAINER_INODE"; else stat -Lc '%i' "$PROVIDER_SECRETS_FILE"; fi ;;
   'exec sha256sum '*) if [[ ${FIXTURE_SECRET_MISMATCH:-0} == 1 ]]; then printf '%064d  /run/secrets/t3code.env\n' 0; else sha256sum "$PROVIDER_SECRETS_FILE"; fi ;;
   'exec systemctl is-active'|'exec curl -fsS'|'exec sh -c') exit 0 ;;
   *) exit 1 ;;
@@ -92,6 +93,24 @@ else
   /usr/bin/env -i PATH=/nonexistent "$@" 3<&- 6<&- 7<&- 8<&- >/dev/null 2>&1 &
 fi
 printf "%s\n" "$!" > "$FIXTURE/holder-pid"
+SH
+cat > "$tmp/bin/journalctl" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *" -o json "*) cat "$FIXTURE/journal-activation.jsonl" 2>/dev/null; exit 0 ;;
+esac
+unit=
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  [[ ${args[i]} == -u ]] && unit=${args[i + 1]}
+done
+[[ -n $unit ]] || exit 0
+while IFS=$'\t' read -r u first last; do
+  [[ $u == "$unit" ]] || continue
+  [[ -n $first ]] && printf '%s host %s: Failed with result '"'"'exit-code'"'"'.\n' "$first" "$unit"
+  if [[ -n $last && $last != "$first" ]]; then printf '%s host %s: Failed with result '"'"'exit-code'"'"'.\n' "$last" "$unit"; fi
+done < "$FIXTURE/journal-first"
+exit 0
 SH
 chmod +x "$tmp/bin/"*
 export SUEXEC_BIN="$tmp/bin/su-exec"
@@ -707,5 +726,78 @@ if "${cmd[@]}" closed-unaccepted 2>"$tmp/closed-again.log"; then echo 'closed an
 grep -q 'window already closed unaccepted' "$tmp/closed-again.log" || { echo 'C6: unexpected second refusal' >&2; cat "$tmp/closed-again.log" >&2; exit 1; }
 rm -f "$tmp/evidence/active-window" "$tmp/hold"
 [[ $(ls "$STATE_DIR/receipts" | wc -l) == 1 ]]
+
+# --- closed-unaccepted on the ACTUAL #8.2 state (switch exit_code=4) --------
+# Values copied from the host: switch ended failed (status 4); attempt 77
+# route_unknown; serving a60e80ca/e89d0abd/kqxwm9pd; container inode 72922092
+# and a different host inode; four failed units with their first failures.
+if [[ -f $tmp/holder-pid ]]; then "$SYSTEMCTL_BIN" stop window.service >/dev/null 2>&1 || true; fi
+rm -f "$tmp/hold" "$tmp/recovery-inactive" "$tmp/evidence/active-window"
+export STATE_DIR="$tmp/state-actual"; rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"; : > "$STATE_DIR/deploy.lock"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+"${cmd[@]}" start actual
+now=$(date +%s); start=$((now - 600)); end=$((now - 300))
+printf '%s %s\n' "$(date -u -d "@$start" +%FT%TZ)" "$((start * 1000))" > "$tmp/evidence/actual/complete.started"
+printf 'exit_code=4\n' > "$tmp/evidence/actual/switch.result"
+touch -d "@$end" "$tmp/evidence/actual/switch.result"
+: > "$tmp/evidence/actual/complete.lock"
+printf '{"deployment_id":"%s","started_at_ms":%s,"exit_code":77,"outcome":"route_unknown","status":null}\n' \
+  "$EXPECTED_DEPLOYMENT" "$((start * 1000 + 1000))" > "$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json"
+jq -n --arg i "$EXPECTED_IMAGE" '{deployment_id:"b5e4523f00000000000000000000000000000000000000000000000000000000",
+  image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"17abf6d7fixture",
+  agent_path:"/nix/store/g1bhm0sbfixture",provider_secret_inode:"72477600",
+  live_before:{id:"fixture"},live_after:{id:"fixture"},
+  checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
+  > "$STATE_DIR/receipts/b5e4523f00000000000000000000000000000000000000000000000000000000.json"
+cc52=cc52fa842626570da34c889ef2f0b62ddd625559c31340512327013eb9ab3253-68fc61b280239393.service
+cat > "$tmp/failed-units" <<EOF
+$cc52 loaded failed failed
+ghostship-ai-usage-command-code.service loaded failed failed
+github-runner-ghostship-agent-2.service loaded failed failed
+ghostship-t3code-deploy.service loaded failed failed
+EOF
+printf '%s\t%s\t%s\n' "$cc52" "$(date -u -d "@$((start - 3000))" +%FT%TZ)" "$(date -u -d "@$((now - 10))" +%FT%TZ)" \
+  ghostship-ai-usage-command-code.service "$(date -u -d "@$((start - 1800))" +%FT%TZ)" "$(date -u -d "@$((now - 20))" +%FT%TZ)" \
+  github-runner-ghostship-agent-2.service "$(date -u -d "@$((end + 5))" +%FT%TZ)" "$(date -u -d "@$((end + 5))" +%FT%TZ)" \
+  ghostship-t3code-deploy.service "$(date -u -d "@$((start + 60))" +%FT%TZ)" "$(date -u -d "@$((end + 20))" +%FT%TZ)" > "$tmp/journal-first"
+printf '%s\n' '{"MESSAGE":"Failed to start Refresh the private Command Code usage page through the owner'"'"'s browser.","UNIT":"ghostship-ai-usage-command-code.service"}' > "$tmp/journal-activation.jsonl"
+export JOURNALCTL_BIN="$tmp/bin/journalctl" FIXTURE_CONTAINER_INODE=72922092
+# A unit whose FIRST failure is inside the activation window refuses.
+printf '%s\n' 'switch-caused.service loaded failed failed' >> "$tmp/failed-units"
+printf '%s\t%s\t%s\n' switch-caused.service "$(date -u -d "@$((start + 120))" +%FT%TZ)" "$(date -u -d "@$((start + 120))" +%FT%TZ)" >> "$tmp/journal-first"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/actual-switch-caused.log"; then echo 'closed with a switch-caused failure' >&2; exit 1; fi
+grep -q 'unclassified failed unit: switch-caused.service' "$tmp/actual-switch-caused.log" || { echo 'A1: unexpected refusal' >&2; cat "$tmp/actual-switch-caused.log" >&2; exit 1; }
+[[ ! -e $tmp/evidence/actual/closed-unaccepted.json && -e $tmp/hold ]]
+sed -i '$d' "$tmp/failed-units"; sed -i '$d' "$tmp/journal-first"
+# A failed unit with no journal first-failure stays unclassified and refuses.
+printf '%s\n' 'no-journal.service loaded failed failed' >> "$tmp/failed-units"
+if "${cmd[@]}" closed-unaccepted 2>"$tmp/actual-unclassified.log"; then echo 'closed with an unclassified failure' >&2; exit 1; fi
+grep -q 'unclassified failed unit: no-journal.service' "$tmp/actual-unclassified.log" || { echo 'A2: unexpected refusal' >&2; cat "$tmp/actual-unclassified.log" >&2; exit 1; }
+sed -i '$d' "$tmp/failed-units"
+# The real classification passes and records both inodes and every class.
+"${cmd[@]}" closed-unaccepted
+record="$tmp/evidence/actual/closed-unaccepted.json"
+jq -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg host "$(stat -Lc %i "$PROVIDER_SECRETS_FILE")" --argjson start "$start" --argjson end "$end" '
+  .state == "closed_unaccepted" and .deployment_id == $d and .applied == $d and
+  .switch_result == "exit_code=4" and .attempt.exit_code == 77 and .attempt.outcome == "route_unknown" and
+  .serving.image == $i and .serving.provider_secret_inode == "72922092" and
+  .provider_secret_inode_host == $host and .provider_secret_inode_match == false and
+  .activation.start == $start and .activation.end == $end and
+  (.failed_units | length) == 4 and
+  ([.failed_units[] | select(.class == "pre_existing")] | length) == 2 and
+  ([.failed_units[] | select(.class == "later")] | length) == 1 and
+  ([.failed_units[] | select(.class == "expected_deploy")] | length) == 1 and
+  .serving_receipt == "absent" and .receipt_not_reused.deployment_id == "b5e4523f00000000000000000000000000000000000000000000000000000000"' "$record" >/dev/null || { echo 'actual-state record is not truthful' >&2; cat "$record" >&2; exit 1; }
+[[ ! -e $tmp/hold && ! -e $tmp/evidence/active-window ]]
+[[ ! -e $tmp/evidence/actual/post.verified ]]
+[[ $(ls "$STATE_DIR/receipts" | wc -l) == 1 ]]
+# Accepted-deployment gates still refuse afterwards.
+printf '%s\n' actual > "$tmp/evidence/active-window"; : > "$tmp/hold"
+if "${cmd[@]}" post 2>"$tmp/actual-post.log"; then echo 'post accepted the unaccepted closeout' >&2; exit 1; fi
+[[ ! -e $tmp/evidence/actual/post.verified ]]
+rm -f "$tmp/evidence/active-window" "$tmp/hold"
+unset FIXTURE_CONTAINER_INODE JOURNALCTL_BIN
 
 echo 'Release window refusal and reopen fixture passed.'
