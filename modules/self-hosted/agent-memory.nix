@@ -67,6 +67,10 @@ in
       description = "Create the shared Basic Memory projects";
       before = [ "podman-agent-memory.service" ];
       requiredBy = [ "podman-agent-memory.service" ];
+      # The bootstrap writes /data and loads the image's Python; run it under
+      # the same enforced profile as the service, after the policy is loaded.
+      after = [ "apparmor.service" ];
+      requires = [ "apparmor.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -82,6 +86,7 @@ in
           -e BASIC_MEMORY_PROJECT_ROOT=/data/projects \
           -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache \
           -v ${cfg.dataDir}:/data:rw \
+          --security-opt=apparmor=ghostship-agent-memory \
           ${cfg.image} \
           basic-memory project add ${cfg.project} /data/projects/${cfg.project}
         ${pkgs.podman}/bin/podman run --rm --pull=never --network=none \
@@ -93,6 +98,7 @@ in
           -e BASIC_MEMORY_PROJECT_ROOT=/data/projects \
           -e FASTEMBED_CACHE_PATH=/opt/agent-memory/fastembed_cache \
           -v ${cfg.dataDir}:/data:rw \
+          --security-opt=apparmor=ghostship-agent-memory \
           ${cfg.image} \
           basic-memory project add ${cfg.testProject} /data/projects/${cfg.testProject}
       '';
