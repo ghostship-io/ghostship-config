@@ -168,11 +168,7 @@ in
   # the repository text: `$$` once reached the built script as `$`, which two
   # live releases discovered and no source-level test could.
   window-holder = let
-    holder = pkgs.writeShellApplication {
-      name = "ghostship-t3code-window-holder";
-      runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-      text = builtins.readFile ./packages/t3code/window-holder.sh;
-    };
+    holder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
     # Building the generated release-window wrapper also proves it parses and
     # passes its own checks; the source text alone never did.
     window = pkgs.writeShellApplication {
@@ -194,6 +190,14 @@ in
       '''|*[!0-9]*) echo "holder.ready is not a numeric PID: '$pid'" >&2; kill $holder; exit 1 ;;
     esac
     kill "$holder" 2>/dev/null || true
+    # systemd expands `$$` in an ExecStart, so a PID written there arrives as
+    # "$". Forbid it on the systemd-run command line specifically; `$$` is still
+    # legitimate elsewhere in the script.
+    if ${pkgs.gnugrep}/bin/grep -A1 'SYSTEMD_RUN_BIN" --quiet' \
+        ${window}/bin/ghostship-t3code-release-window | ${pkgs.gnugrep}/bin/grep -q '\$\$'; then
+      echo 'systemd-run command line contains $$, which systemd expands to $' >&2
+      exit 1
+    fi
     test -x ${window}/bin/ghostship-t3code-release-window
     touch "$out"
   '';

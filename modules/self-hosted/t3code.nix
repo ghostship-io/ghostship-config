@@ -118,14 +118,11 @@ let
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
-  # The window holder writes its own PID, so it must be its own program: the
-  # same text inlined into the release-window generator lost `$$` and recorded
-  # "$" instead of a PID.
-  t3codeWindowHolder = pkgs.writeShellApplication {
-    name = "ghostship-t3code-window-holder";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-    text = builtins.readFile ../../packages/t3code/window-holder.sh;
-  };
+  # The window holder writes its own PID, so it must be its own program. Inlined
+  # into the release-window unit, systemd's ExecStart expansion turned `$$` into
+  # `$`, so holder.ready recorded "$" instead of a PID. One shared definition, so
+  # the check below builds the same artifact the module installs.
+  t3codeWindowHolder = import ../../packages/t3code/window-holder.nix { inherit pkgs; };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];

@@ -66,7 +66,7 @@ jobs:
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
         run: nix develop .#ci --no-write-lock-file -c scripts/check-integration
       - name: Evaluate hosts and run regression tests
-        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
+        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package .#checks.x86_64-linux.window-holder
       - name: Check workflows and backup script
         run: |
           nix develop .#ci -c actionlint
