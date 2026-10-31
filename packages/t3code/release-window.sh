@@ -320,7 +320,7 @@ post_verify() {
   [[ ! -e $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed candidate exists'
   [[ $(cat "$STATE_DIR/applied") == "$EXPECTED_DEPLOYMENT" && $(cat "$STATE_DIR/desired") == "$EXPECTED_DEPLOYMENT" ]] || fail 'deployment state not reconciled'
   [[ $(readlink -f "$CURRENT_SYSTEM") == "$EXPECTED_SYSTEM" && $(readlink -f "$PROFILE") == "$EXPECTED_SYSTEM" ]] || fail 'system generation not reconciled'
-  local receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" inode image switch_at switch_ms host_secret live_secret
+  local allow=${1:-} receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" inode image switch_at switch_ms host_secret live_secret
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
@@ -347,7 +347,7 @@ post_verify() {
   host_secret=${host_secret%% *}; live_secret=${live_secret%% *}
   [[ $host_secret =~ ^[0-9a-f]{64}$ && $live_secret == "$host_secret" ]] || fail 'live secret differs from receipt inputs'
   lock_managed_tools
-  no_pending_restart
+  no_pending_restart "$allow"
 }
 case ${1:-} in
  preflight)
@@ -509,7 +509,7 @@ case ${1:-} in
     dir=$WINDOW_ROOT/$id
     [[ -f $dir/post.verified && ! -L $dir/post.verified && ! -e $HOLD_FILE && $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'completed post state unknown'
     lock_candidate_pair
-    post_verify
+    post_verify allow-deferred
     printf 'PASS post; window already released deployment=%s image=%s\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
     exit 0
   fi
@@ -734,7 +734,8 @@ case ${1:-} in
     attempt_state=completed_unhealthy
   fi
   lock_managed_tools
-  no_pending_restart
+  # An already-released retry has no active-window to explain the deferral.
+  if (( already_released )); then no_pending_restart allow-deferred; else no_pending_restart; fi
   if is_container_running; then
     current=$(serving_identity allow-stopped-server) || fail 'current container or server identity unknown'
     read -r _ current_image _ <<< "$current"; current_image=${current_image#sha256:}

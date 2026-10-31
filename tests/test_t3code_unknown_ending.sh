@@ -83,7 +83,7 @@ case "\$1 \$3 \${4:-}" in
       *) exit 1 ;;
     esac ;;
   'exec cat '*) printf '{"revision":"fixture"}\n' ;;
-  'exec stat -Lc') echo 1 ;;
+  'exec stat -Lc') stat -Lc '%i' "$root/secrets" ;;
   'exec sha256sum '*) sha256sum "$root/secrets" ;;
   'exec systemctl is-active'|'exec curl -fsS') exit 0 ;;
   *) exit 1 ;;
@@ -120,11 +120,12 @@ attempt() {
 # A receipt matching what the stubs report for agent revision, tooling path and
 # secret inode, so known_good_receipt can succeed without inventing one.
 write_receipt() {
-  local root=$1 desired=$2 image
+  local root=$1 desired=$2 image inode
   image=$(printf '%064d' 2)
+  inode=$(stat -Lc %i "$root/secrets")
   mkdir -p "$root/state/receipts"
-  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"fixture","agent_path":"%s","provider_secret_inode":"1","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
-    "$desired" "$image" "$root/tooling" > "$root/state/receipts/$image.json"
+  printf '{"deployment_id":"%s","image_id":"%s","candidate_name":"t3code-candidate-fixture","agent_revision":"fixture","agent_path":"%s","provider_secret_inode":"%s","live_before":{"id":"fixture"},"live_after":{"id":"fixture"},"checks":{"app_ready":true,"provider_turn":true,"agent_cli":true,"skills":true,"desktop_transport":true}}\n' \
+    "$desired" "$image" "$root/tooling" "$inode" > "$root/state/receipts/$desired.json"
 }
 
 scenario_a() {
@@ -283,8 +284,74 @@ grep -q 'window already released' "$f/out.log"
 rm -rf "$f"
 }
 
+scenario_g() {
+# G: end-post's already-released retry has no active window either, so the
+# post verification it reruns must ask for the tolerance.
+g=$(mktemp -d); trap 'rm -rf "$g"' EXIT
+desired=$(printf '%064d' 3)
+setup "$g" "$desired"
+rm -rf "$g/current-system"; ln -s "$g/system" "$g/current-system"
+write_receipt "$g" "$desired"
+switch_ms=$(date +%s%3N)
+printf '2026-10-31T04:02:40Z %s\n' "$switch_ms" > "$g/evidence/win/complete.started"
+printf '{"deployment_id":"%s","exit_code":0,"started_at_ms":%s}\n' "$desired" "$switch_ms" > "$g/state/attempts/$desired.json"
+rm -f "$g/evidence/active-window" "$g/hold"
+printf '{}\n' > "$g/evidence/win/post.verified"
+: > "$g/run/t3code-tool-update/update-deferred.pending"
+: > "$g/home/.local/state/t3code-tool-update/update-deferred.pending"
+: > "$g/run/t3code-tool-update/restart.pending"
+if run_cmd "$g" bash "$repo/packages/t3code/release-window.sh" end-post win > "$g/refuse.log" 2>&1; then
+  echo 'G: released end-post accepted a queued restart' >&2; exit 1
+fi
+grep -q 'container maintenance state unknown or pending' "$g/refuse.log" \
+  || { echo 'G: unexpected refusal:' >&2; cat "$g/refuse.log" >&2; exit 1; }
+rm "$g/run/t3code-tool-update/restart.pending"
+run_cmd "$g" bash "$repo/packages/t3code/release-window.sh" end-post win > "$g/out.log" 2>&1 \
+  || { echo 'G: released end-post refused the queued deferral:' >&2; cat "$g/out.log" >&2; exit 1; }
+grep -q 'window already released' "$g/out.log"
+rm -rf "$g"
+}
+
+scenario_h() {
+# H: end-receipted-failure's already-released retry runs with no active window.
+# Run it once against the open window so the tool writes its own UNKNOWN record,
+# then retry with the container's deferral still queued.
+h=$(mktemp -d); trap 'rm -rf "$h"' EXIT
+desired=$(printf '%064d' 4)
+setup "$h" "$desired"
+write_receipt "$h" "$desired"
+switch_ms=$(date +%s%3N)
+printf '2026-10-31T04:02:40Z %s\n' "$switch_ms" > "$h/evidence/win/complete.started"
+printf '{"deployment_id":"%s","exit_code":1,"started_at_ms":%s}\n' "$desired" "$switch_ms" > "$h/state/attempts/$desired.json"
+set +e
+run_cmd "$h" bash "$repo/packages/t3code/release-window.sh" end-receipted-failure > "$h/first.log" 2>&1
+h_first_rc=$?
+set -e
+[[ $h_first_rc == 77 ]] || { echo "H: first rc=$h_first_rc" >&2; cat "$h/first.log" >&2; exit 1; }
+[[ ! -e $h/evidence/active-window && -e $h/hold && -e $h/state/recovery-unknown.json ]] \
+  || { echo 'H: window not released as expected' >&2; exit 1; }
+: > "$h/run/t3code-tool-update/update-deferred.pending"
+: > "$h/home/.local/state/t3code-tool-update/update-deferred.pending"
+: > "$h/run/t3code-tool-update/restart.pending"
+set +e
+run_cmd "$h" bash "$repo/packages/t3code/release-window.sh" end-receipted-failure > "$h/refuse.log" 2>&1
+h_refuse_rc=$?
+set -e
+[[ $h_refuse_rc == 1 ]] || { echo "H: refused retry rc=$h_refuse_rc" >&2; cat "$h/refuse.log" >&2; exit 1; }
+grep -q 'container maintenance state unknown or pending' "$h/refuse.log" \
+  || { echo 'H: unexpected refusal:' >&2; cat "$h/refuse.log" >&2; exit 1; }
+rm "$h/run/t3code-tool-update/restart.pending"
+set +e
+run_cmd "$h" bash "$repo/packages/t3code/release-window.sh" end-receipted-failure > "$h/out.log" 2>&1
+h_retry_rc=$?
+set -e
+[[ $h_retry_rc == 77 ]] || { echo "H: released retry rc=$h_retry_rc" >&2; cat "$h/out.log" >&2; exit 1; }
+grep -q 'window released' "$h/out.log"
+rm -rf "$h"
+}
+
 only=${1:-all}
-for key in A B C D E F; do
+for key in A B C D E F G H; do
   if [[ $only == all || $only == "$key" ]]; then
     "scenario_$(printf '%s' "$key" | tr 'A-Z' 'a-z')"
   fi
