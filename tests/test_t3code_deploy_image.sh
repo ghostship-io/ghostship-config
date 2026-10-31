@@ -90,11 +90,12 @@ config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
 if [[ ${RECEIPT_MISSING:-0} == 1 ]]; then exit 0; fi
 if [[ ${RECEIPT_IMAGE_MISMATCH:-0} == 1 ]]; then image=unreceipted-image; fi
+if [[ ${RECEIPT_APP_MISMATCH:-0} == 1 ]]; then app="0.0.0"; else app="9.9.9"; fi
 jq -cn \
   --arg deployment "$DEPLOYMENT_ID" --arg image "$image" --arg agent "$AGENT_REVISION" \
-  --arg tooling "$TOOLING_PATH" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
+  --arg tooling "$TOOLING_PATH" --arg app "$app" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-fixture",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
+    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,app_release:$app,
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
@@ -102,6 +103,10 @@ SH
 cat > "$tmp/bin/podman" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $1 == exec && ${3:-} == /usr/share/t3code/served-identity.sh ]]; then
+  printf '{"served":{"source":"baked","version":"9.9.9","digest":""},"baked":{"version":"9.9.9","digest":""}}\n'
+  exit 0
+fi
 if [[ $1 == inspect && $2 == t3code ]]; then
   case "$4" in
     '{{.State.Health.Status}}')
@@ -525,7 +530,7 @@ jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
   --arg agent "$AGENT_REVISION" --arg tooling "$TOOLING_PATH" \
   --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
+    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,app_release:"9.9.9",
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
@@ -645,4 +650,17 @@ rm -f "$tmp/home/.local/share/t3code-tools/t3/update.lock"
 bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap run failed:' >&2; cat "$tmp/t3-bootstrap-lock.log" >&2; exit 1; }
 [[ -f "$tmp/home/.local/share/t3code-tools/t3/update.lock" ]] || { echo 'T3 update lock was not bootstrapped' >&2; exit 1; }
 [[ $(stat -c '%u:%g' "$tmp/home/.local/share/t3code-tools/t3/update.lock") == "$(stat -c '%u:%g' "$tmp/home")" ]] || { echo 'bootstrapped T3 update lock has the wrong owner' >&2; exit 1; }
+# A receipt that names another app release does not describe what serves, so the
+# already-applied fast path must not accept it.
+export DEPLOYMENT_ID=deployment-app-mismatch CANDIDATE_FAIL=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0 RECEIPT_APP_MISMATCH=1
+printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
+printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+set +e
+bash "$fixture_writer" > "$tmp/app-mismatch.log" 2>&1
+app_mismatch_status=$?
+set -e
+if grep -q 'already applied' "$tmp/app-mismatch.log"; then
+  echo 'receipt for another app release approved the image' >&2; exit 1
+fi
+[[ $app_mismatch_status != 0 || -s "$tmp/app-mismatch.log" ]]
 echo 'Deploy-image fixture passed.'

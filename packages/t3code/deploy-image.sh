@@ -145,12 +145,16 @@ image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f
 secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 
+
 receipt_matches_image() {
+  local app_release
+  app_release=$(served_app_release) || return 1
   "$JQ_BIN" -e \
     --arg deployment "$DEPLOYMENT_ID" \
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
+    --arg app "$app_release" \
     --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
@@ -158,6 +162,7 @@ receipt_matches_image() {
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)
+     and (.app_release == $app)
      and (.provider_secret_inode == $secret_inode)' \
     "$receipt" >/dev/null 2>&1 \
     && receipt_checks_ok "$receipt"
