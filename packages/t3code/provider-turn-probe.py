@@ -222,7 +222,7 @@ def prove_route(route, wait, client, native_target=None):
             outcome = "provider_schema"
         elif "invalid_request" in detail or "invalid request" in detail:
             outcome = "invalid_request"
-        elif "rate limit" in detail or "quota" in detail or "429" in detail:
+        elif re.search(r"\b429\b|usage limit|freeusagelimiterror|rate limit|quota", detail):
             outcome = "quota"
         elif status in ("failed", "error", "cancelled", "interrupted"):
             outcome = "execution"
@@ -230,7 +230,12 @@ def prove_route(route, wait, client, native_target=None):
             outcome = "no_tool_call"
         else:
             outcome = "timeout"
-        result.update(outcome=outcome, detail=state.get("last_error") if outcome != "passed" else None)
+        last_error = str(state.get("last_error") or "")
+        status_match = re.search(r"(?:http(?:\s+status)?|status)[\"']?\s*[=:]?\s*([45]\d\d)\b", last_error, re.IGNORECASE)
+        result.update(outcome=outcome, detail=last_error if outcome != "passed" else None,
+                      error_status=int(status_match.group(1)) if status_match else None,
+                      error_type=("FreeUsageLimitError" if "FreeUsageLimitError" in last_error else ""),
+                      error_message=last_error[:300])
     except (T3Error, OSError, ValueError, TypeError, AttributeError) as exc:
         result["detail"] = str(exc)[:256] or "execution"
     finally:
@@ -306,7 +311,13 @@ def main():
     }
     if result.get("outcome") != "passed" or result.get("settled") is not True:
         output["error"] = {"code": safe_failure_code(result),
-                           "kind": failure_kind(result)}
+                           "kind": failure_kind(result),
+                           "status": result.get("error_status"),
+                           "type": result.get("error_type"),
+                           "message": result.get("error_message")}
+        output["error_status"] = result.get("error_status")
+        output["error_type"] = result.get("error_type")
+        output["error_message"] = result.get("error_message")
     print(json.dumps(output, sort_keys=True))
     return 0 if result.get("outcome") == "passed" and result.get("settled") is True else 1
 

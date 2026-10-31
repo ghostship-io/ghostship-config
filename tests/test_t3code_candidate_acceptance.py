@@ -489,6 +489,37 @@ class CandidateAcceptanceTest(unittest.TestCase):
             with self.assertRaises(acceptance.RouteUnknownError):
                 acceptance.check_provider_turn([], "candidate", None, tooling_path="agent", acceptance_route=self.zen_route(), policy=policy)
 
+    def test_free_usage_limit_in_the_candidate_log_is_route_unavailable(self):
+        log_fixture = (
+            '{"time":"2026-10-31T17:07:12.034Z","level":"ERROR","service":"provider",'
+            '"message":"provider request failed","status":429,'
+            '"error":{"type":"FreeUsageLimitError","message":"Free usage limit reached. '
+            'Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go '
+            'to keep going: https://opencode.ai/go"}}'
+        )
+        policy = self.nominated_policy()
+        row = {"provider": "opencode", "model": "opencode/deepseek-v4.1-flash-free",
+               "available": True, "execution": "t3",
+               "target": {"providerInstanceId": "opencode-free",
+                          "model": "opencode/deepseek-v4.1-flash-free"},
+               "tool_loop": {"state": "proven"}}
+
+        def run(engine, name, *args, **kwargs):
+            if "models" in args and "--json" in args:
+                return self.models_result([row])
+            return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"execution"}}', stderr="")
+
+        def command(engine, *args, **kwargs):
+            return Mock(returncode=0, stdout=log_fixture, stderr="")
+
+        with patch.object(acceptance, "candidate_agent_command", side_effect=run), \
+             patch.object(acceptance, "command", side_effect=command), \
+             patch.object(acceptance, "candidate_provider_diagnostics", return_value="fixture"):
+            with self.assertRaises(acceptance.RouteUnavailableError) as failure:
+                acceptance.check_provider_turn([], "candidate", None, tooling_path="agent",
+                                                acceptance_route=self.zen_route(), policy=policy)
+        self.assertIn("free-tier", str(failure.exception))
+
     def test_unreadable_route_evidence_is_unknown(self):
         policy = self.nominated_policy()
         with patch.object(acceptance, "candidate_agent_command",
@@ -2245,3 +2276,58 @@ class RuntimeLayoutTest(unittest.TestCase):
         self.assertFalse(
             acceptance.valid_runtime_layout(self.home, release, self.home / "absent")
         )
+
+
+class FreeTierLimitClassificationTest(unittest.TestCase):
+    """A provider 429/free-tier refusal is route_unavailable, not UNKNOWN."""
+
+    LIMIT_PAYLOAD = {
+        "outcome": "execution",
+        "error": {"code": "quota", "kind": "providers"},
+        "error_status": 429,
+        "error_type": "FreeUsageLimitError",
+        "error_message": (
+            'HTTP 429 {"type":"error","error":{"type":"FreeUsageLimitError",'
+            '"message":"Free usage limit reached. Free models work in OpenCode '
+            '(https://opencode.ai); subscribe to OpenCode Go to keep going: '
+            'https://opencode.ai/go"}}'
+        ),
+    }
+
+    def test_exact_free_usage_limit_payload_is_classified(self):
+        reason = acceptance.free_tier_limit(self.LIMIT_PAYLOAD)
+        self.assertIn("429", reason)
+
+    def test_bare_message_without_a_status_is_still_classified(self):
+        payload = dict(self.LIMIT_PAYLOAD, error_status=None)
+        self.assertTrue(acceptance.free_tier_limit(payload))
+
+    def test_a_plain_execution_error_is_not_a_limit(self):
+        payload = {"outcome": "execution", "error": {"code": "execution"},
+                   "error_status": None, "error_type": "", "error_message": "connection reset"}
+        self.assertEqual(acceptance.free_tier_limit(payload), "")
+
+    OPENCODE_LIMIT_LOG = (
+        '{"time":"2026-10-31T17:07:12.034Z","level":"ERROR","service":"provider",'
+        '"message":"provider request failed","status":429,'
+        '"error":{"type":"FreeUsageLimitError","message":"Free usage limit reached. '
+        'Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go '
+        'to keep going: https://opencode.ai/go"}}'
+    )
+
+    def test_an_integer_status_429_is_normalised(self):
+        payload = {"outcome": "execution", "error": {"code": "quota"}, "error_status": 429}
+        reason = acceptance.free_tier_limit(payload)
+        self.assertIn("429", reason)
+
+    def test_bare_execution_kind_plus_opencode_log_is_classified(self):
+        payload = {"outcome": "execution", "error": {"code": "execution", "kind": "execution"}}
+        self.assertEqual(acceptance.free_tier_limit(payload), "")
+        reason = acceptance.free_tier_limit(payload, self.OPENCODE_LIMIT_LOG)
+        self.assertIn("429", reason)
+
+    def test_a_bare_number_in_free_text_is_not_an_http_status(self):
+        text = "processed 500 items and retried 504 times"
+        self.assertEqual(acceptance.free_tier_limit({"outcome": "execution"}, text), "")
+        explicit = "HTTP 429 from upstream"
+        self.assertIn("429", acceptance.free_tier_limit({"outcome": "execution"}, explicit))
