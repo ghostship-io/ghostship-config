@@ -90,15 +90,15 @@ def assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env):
     if not isinstance(environment, list):
         raise PreconditionError("candidate provider environment is invalid")
     for item in environment:
-        if isinstance(item, dict) and item.get("name") in _AUTH_ENV_NAMES:
-            raise PreconditionError("candidate provider environment carries a credential")
+        if not isinstance(item, dict) or item.get("name") not in ANONYMOUS_SETTINGS_ENV_ALLOWLIST:
+            raise PreconditionError("candidate provider environment is not allowlisted")
     try:
         keys = {line.split("=", 1)[0].strip() for line in Path(provider_env).read_text().splitlines()
                 if "=" in line and line.strip() and not line.strip().startswith("#")}
     except OSError:
         keys = set()
-    if keys & _AUTH_ENV_NAMES:
-        raise PreconditionError("candidate provider env file carries a credential")
+    if keys - ANONYMOUS_ENV_ALLOWLIST:
+        raise PreconditionError("candidate provider env file carries a non-allowlisted value")
 
 
 def stage_candidate_inputs(source_home, candidate_home, candidate_inputs, candidate_uid,
@@ -581,11 +581,10 @@ def stage_candidate_agent_store(podman_bin, source_home, candidate_tmp,
     return staged
 
 
-ANONYMOUS_ENV_ALLOWLIST = frozenset({"AGENT_DESKTOP_API_TOKEN"})
-PROVIDER_CREDENTIAL_ENV = frozenset(PROVIDER_ENV) - ANONYMOUS_ENV_ALLOWLIST
-_AUTH_ENV_NAMES = PROVIDER_CREDENTIAL_ENV | frozenset({
-    "OPENCODE_AUTH_CONTENT", "LITEROUTER_API_KEY", "OPENCODE_API_KEY",
-    "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+ANONYMOUS_ENV_ALLOWLIST = frozenset()
+ANONYMOUS_SETTINGS_ENV_ALLOWLIST = frozenset({
+    "OPENCODE_DISABLE_FREE_MODELS", "OPENCODE_MODELS_PATH",
+    "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
 })
 
 

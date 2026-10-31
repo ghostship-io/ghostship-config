@@ -749,8 +749,11 @@ class CandidateAcceptanceTest(unittest.TestCase):
             "opencode-free": {"driver": "opencode", "enabled": True,
                               "config": {"binaryPath": "opencode"}, "environment": []}}}))
         provider_env = self.root / "provider.env"
-        provider_env.write_text("AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        provider_env.write_text("")
         acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
+        provider_env.write_text("AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        with self.assertRaises(acceptance.PreconditionError):
+            acceptance.assert_candidate_auth_free(candidate_home, candidate_inputs, provider_env)
         auth = candidate_home / ".local/share/opencode/auth.json"
         auth.parent.mkdir(parents=True)
         auth.write_text(json.dumps({"openrouter": {"type": "api", "key": "private"}}))
@@ -1371,13 +1374,19 @@ def _selection(document, now):
         projection = self.root / "provider.env"
         projection.write_text(
             "OPENROUTER_API_KEY='provider-only'\n"
+            "OPENCODE_AUTH_CONTENT='opencode-go-secret'\n"
+            "LITEROUTER_API_KEY='literouter-secret'\n"
+            "GOOGLE_GENERATIVE_AI_API_KEY='google-secret'\n"
+            "COMMAND_CODE_API_KEY='command-code-secret'\n"
+            "OLLAMA_API_KEY='ollama-secret'\n"
+            "GEMINI_API_KEY='gemini-secret'\n"
+            "GROQ_API_KEY='groq-secret'\n"
             "AGENT_DESKTOP_API_TOKEN=desktop-only\n"
-            "GOOGLE_GENERATIVE_AI_API_KEY=''\n"
             "GITHUB_TOKEN=must-not-copy\n"
             "BW_CLIENTSECRET=must-not-copy\n"
         )
         filtered = acceptance.write_provider_env(projection, self.root / "candidate.env")
-        self.assertEqual(filtered.read_text(), "AGENT_DESKTOP_API_TOKEN=desktop-only\n")
+        self.assertEqual(filtered.read_text(), "")
         self.assertEqual(filtered.stat().st_mode & 0o777, 0o400)
 
     def test_candidate_systemd_does_not_run_bootstrap_or_home_hooks(self):
