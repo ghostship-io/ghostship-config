@@ -260,7 +260,12 @@ receipt_identity_of() {
   local receipt=$1 revision tooling
   revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 1
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 1
-  if "$JQ_BIN" -e --arg a "$revision" --arg p "$tooling" '.agent_revision == $a and .agent_path == $p' "$receipt" >/dev/null 2>&1; then
+  local identity_program
+  identity_program=$(cat <<'JQ'
+.agent_revision == $a and .agent_path == $p
+JQ
+)
+  if "$JQ_BIN" -e --arg a "$revision" --arg p "$tooling" "$identity_program" "$receipt" >/dev/null 2>&1; then
     printf 'live\n'
   else
     printf 'declared\n'
@@ -268,7 +273,7 @@ receipt_identity_of() {
 }
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision= declared_tooling=
+  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling=""
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
