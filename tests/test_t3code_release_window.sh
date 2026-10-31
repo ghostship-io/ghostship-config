@@ -276,6 +276,14 @@ export SERVER_PID=5678
 export FIXTURE_SECRET_MISMATCH=1
 if "${cmd[@]}" post; then echo 'accepted mismatched live secret content' >&2; exit 1; fi
 unset FIXTURE_SECRET_MISMATCH
+# A failed production turn must refuse the post, leave the window open and the
+# known-good rollback path available; a later passing turn releases it.
+export PRODUCTION_TURN_COMMAND='exit 1'
+if "${cmd[@]}" post 2>"$tmp/production-fail.log"; then echo 'post accepted a failed production turn' >&2; exit 1; fi
+grep -q 'production turn failed' "$tmp/production-fail.log" || { echo 'P1: unexpected refusal' >&2; cat "$tmp/production-fail.log" >&2; exit 1; }
+[[ ! -e $tmp/evidence/two/post.verified && -e $tmp/hold && -e $tmp/evidence/active-window ]]
+jq -e '.claim == "production_turn" and .outcome == "failed"' "$tmp/evidence/two/production-turn.json" >/dev/null
+export PRODUCTION_TURN_COMMAND='echo PROBE_PASS'
 "${cmd[@]}" post
 [[ -f $HOME_DIR/.local/share/t3code-tools/t3/update.lock ]]
 export FIXTURE_STOP_LOST_ACK=1

@@ -40,6 +40,7 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         for name in (
             "candidate-acceptance.py", "acceptance-launcher-key.py", "hardening-probe.py",
             "provider-turn-probe.py", "rehearsal-isolation.py", "runtime-caps.json",
+            "fixture-provider.py",
         ):
             with self.subTest(name=name):
                 self.assertIn(f"$out/{name}", module)
@@ -54,6 +55,11 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
         self.assertIn('start --no-block ghostship-t3code-deploy.service', activation)
         self.assertNotIn('t3code-deploy-when-idle', module)
         self.assertNotIn('t3code-safe-restart', module)
+
+    def test_fixture_provider_is_not_part_of_the_image(self):
+        image = (ROOT / "packages/t3code/image.nix").read_text()
+        self.assertNotIn("fixture-provider", image)
+        self.assertNotIn("fixture_provider", image)
 
     def test_t3code_image_exposes_systemd_as_oci_entrypoint(self):
         image = (ROOT / "packages/t3code/image.nix").read_text()
@@ -1114,7 +1120,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
             }}}))
 
         with patch.object(acceptance, "command", side_effect=command), \
-             patch.object(acceptance, "check_provider_turn", return_value=True):
+             patch.object(acceptance, "check_fixture_turn", return_value=True):
             checks = acceptance.check_candidate(
                 ["podman"], "candidate", "provider.env",
                 tooling_path="/nix/store/test-agent",
@@ -1258,21 +1264,14 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 return Mock(returncode=1, stdout='{"settled":true,"error":{"code":"quota"}}', stderr="")
             return self.command(engine, *args, **kwargs)
 
-        route = self.root / "acceptance-route.json"
-        route.write_text(json.dumps({
-            "schema": "ghostship.t3code-acceptance-route/v1",
-            "provider": "opencode-free", "provider_instance": "opencode-free",
-            "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
-            "effort": "high", "acceptance_only": True,
-        }))
         with patch.object(acceptance, "command", side_effect=no_route), \
+             patch.object(acceptance, "check_fixture_turn", return_value=False), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
-            with self.assertRaises(acceptance.RouteUnavailableError):
+            with self.assertRaisesRegex(RuntimeError, "acceptance failed"):
                 acceptance.accept(
                     self.state, self.archive, "podman",
                     "/run/t3code-podman-candidate/podman.sock", self.home,
                     command_fn=no_route, identity_fn=lambda: self.identity,
-                    acceptance_route_file=route,
                 )
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
         self.assertIn(("rm", "--force", "--time", "10", "t3code-candidate-generation-502"),
@@ -1636,7 +1635,7 @@ def _selection(document, now):
 
     def test_failed_rehearsal_records_the_failure_and_no_deploy_state(self):
         failing = {name: True for name in acceptance.CHECKS}
-        failing["provider_turn"] = False
+        failing["fixture_turn"] = False
         path = self.root / "rehearsal-failed.json"
         closure = self.root / "closure-failed"
         closure.mkdir()
@@ -1658,7 +1657,7 @@ def _selection(document, now):
         report = json.loads(path.read_text())
         self.assertEqual(report["outcome"], "failed")
         self.assertIn("candidate acceptance failed", report["error"])
-        self.assertFalse(report["checks"]["provider_turn"])
+        self.assertFalse(report["checks"]["fixture_turn"])
         self.assertFalse((self.state / "receipts").exists())
         self.assertFalse((self.state / "attempts").exists())
         self.assertEqual(
@@ -1666,31 +1665,26 @@ def _selection(document, now):
                 RuntimeError("candidate acceptance workspace teardown failed")),
             "unknown")
 
-    def test_runtime_acceptance_route_is_required_and_fails_closed(self):
+    def test_candidate_acceptance_does_not_require_a_provider_route(self):
         env = self.root / "provider.env"
-        with self.assertRaisesRegex(acceptance.PreconditionError,
-                                    "acceptance route is required"):
-            acceptance.check_candidate(["podman"], "t3code-candidate-x", env,
-                                       acceptance_route_file=None)
-        with self.assertRaisesRegex(acceptance.PreconditionError,
-                                    "acceptance route is unavailable"):
-            acceptance.check_candidate(
+        env.write_text("")
+
+        def command(engine, *args, **kwargs):
+            if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                return Mock(returncode=0, stdout="")
+            if args[:4] == ("exec", "candidate", "curl", "-fsS"):
+                return Mock(returncode=0, stdout="ok")
+            if args[:3] == ("exec", "candidate", "agent"):
+                return Mock(returncode=0, stdout="ok")
+            return Mock(returncode=0, stdout="{}")
+
+        with patch.object(acceptance, "command", side_effect=command), \
+             patch.object(acceptance, "check_fixture_turn", return_value=True):
+            checks = acceptance.check_candidate(
                 ["podman"], "t3code-candidate-x", env,
-                acceptance_route_file=str(self.root / "missing-route.json"))
-        invalid = self.root / "invalid-route.json"
-        invalid.write_text(json.dumps({"schema": "ghostship.t3code-acceptance-route/v1",
-                                       "provider": "opencode", "provider_instance": "opencode-free",
-                                       "model": "opencode/deepseek-v4.1-flash-free", "billing": "free",
-                                       "effort": "high", "acceptance_only": True}))
-        with self.assertRaisesRegex(acceptance.PreconditionError,
-                                    "acceptance route is invalid"):
-            acceptance.check_candidate(["podman"], "t3code-candidate-x", env,
-                                       acceptance_route_file=str(invalid))
-        with self.assertRaisesRegex(acceptance.PreconditionError,
-                                    "acceptance route is required"):
-            acceptance.check_provider_turn(
-                ["podman"], "t3code-candidate-x", env,
-                tooling_path="/nix/store/tools", acceptance_route=None)
+                acceptance_route_file=None, tooling_path="/nix/store/tools")
+        self.assertTrue(checks["fixture_turn"])
+        self.assertNotIn("provider_turn", checks)
 
     def test_provider_turn_records_the_route_the_candidate_reported(self):
         route = {"schema": "ghostship.t3code-acceptance-route/v1",
@@ -2195,7 +2189,7 @@ def _selection(document, now):
 
     def test_a_failed_acceptance_never_leaves_an_approving_receipt(self):
         failing = {name: True for name in acceptance.CHECKS}
-        failing["provider_turn"] = False
+        failing["fixture_turn"] = False
         with patch.object(acceptance, "command", side_effect=self.command), \
              patch.object(acceptance, "check_candidate", return_value=failing), \
              patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
@@ -2271,6 +2265,71 @@ class RuntimeLayoutTest(unittest.TestCase):
         self.assertFalse(
             acceptance.valid_runtime_layout(self.home, release, self.home / "absent")
         )
+
+
+class FixtureTurnTest(unittest.TestCase):
+    """Claim 1: one deterministic candidate turn with no account, proven by the
+    fixture's own record of the request."""
+
+    def fake_command(self, run_rc=0, run_out="PROBE_PASS", requests=None, health=0):
+        seen = []
+
+        def fake(engine, *args, timeout=None):
+            items = [str(item) for item in args]
+            joined = " ".join(items)
+            seen.append(joined)
+            if items and items[0] == "cp":
+                return Mock(returncode=0, stdout="", stderr="")
+            if "curl" in items:
+                if "/requests" in joined:
+                    return Mock(returncode=0,
+                                stdout=json.dumps({"count": len(requests or []),
+                                                   "requests": requests or []}), stderr="")
+                if "/health" in joined:
+                    return Mock(returncode=health, stdout="ok", stderr="")
+            if "run" in items:
+                return Mock(returncode=run_rc, stdout=run_out, stderr="")
+            return Mock(returncode=0, stdout="", stderr="")
+
+        return fake, seen
+
+    def test_candidate_turn_passes_without_credentials(self):
+        fake, seen = self.fake_command(requests=[{
+            "model": acceptance.FIXTURE_MODEL,
+            "prompt": "Reply with exactly PROBE_PASS",
+        }])
+        evidence = {}
+        with patch.object(acceptance, "command", side_effect=fake):
+            passed = acceptance.check_fixture_turn(
+                ["podman"], "candidate", evidence=evidence)
+        self.assertTrue(passed)
+        self.assertTrue(evidence["candidate_fixture_turn"]["fixture_received_turn"])
+        self.assertEqual(evidence["candidate_fixture_turn"]["credentials"], "none")
+        self.assertIn("fixture_turn", acceptance.CHECKS)
+        self.assertNotIn("provider_turn", acceptance.CHECKS)
+        joined = "\n".join(seen)
+        self.assertNotIn("auth.json", joined)
+        self.assertNotIn("/run/secrets", joined)
+        self.assertIn("OPENCODE_API_KEY=fixture", joined)
+
+    def test_a_reply_without_the_fixture_record_is_refused(self):
+        fake, _ = self.fake_command(run_out="PROBE_PASS", requests=[])
+        evidence = {}
+        with patch.object(acceptance, "command", side_effect=fake):
+            passed = acceptance.check_fixture_turn(
+                ["podman"], "candidate", evidence=evidence)
+        self.assertFalse(passed)
+        self.assertFalse(evidence["candidate_fixture_turn"]["fixture_received_turn"])
+
+    def test_fixture_turn_failure_is_refused(self):
+        fake, _ = self.fake_command(run_rc=1, run_out="fixture connection refused",
+                                    requests=[])
+        evidence = {}
+        with patch.object(acceptance, "command", side_effect=fake):
+            passed = acceptance.check_fixture_turn(
+                ["podman"], "candidate", evidence=evidence)
+        self.assertFalse(passed)
+        self.assertEqual(evidence["candidate_fixture_turn"]["outcome"], "failed")
 
 
 class FreeTierLimitClassificationTest(unittest.TestCase):
