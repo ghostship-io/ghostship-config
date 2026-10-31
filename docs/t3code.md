@@ -582,15 +582,14 @@ ID in the `io.ghostship.t3code.deployment` label. A successful run records the
 deployment as applied only after the new container is healthy and its runtime
 inputs match. Failed candidate acceptance raises the service failure incident
 once and blocks the same image and acceptance bundle only when a previously
-proven-working route demonstrates the candidate failure. The probe matches exact
-native provider/model identities to the worker-admitted route policy; picker
-free-model approval is not work admission. It uses admitted fallback-only routes
-after observed usable primary routes are tried; an unrelated missing primary row
-does not prevent testing a fallback with its own fresh capacity evidence. A
-missing or unreadable row for the fallback remains unknown. Codex uses standard tier and fast mode is never enabled. Exhausted or unavailable
-routes are recorded as `route_unavailable` without a candidate-failed marker;
-unresolved probe or unclassified acceptance outcomes are recorded as unknown
-and are not automatically replayed. Neither is an acceptance PASS.
+proven-working route demonstrates the candidate failure. The probe names one
+exact worker-admitted primary route by identity, pins that route's approved
+effort, and proves one real turn; picker ranking, quota windows and snapshot
+mapping do not decide which route is tested, and a fallback-only route is never
+probed. The nominated route's own exhausted or unavailable turn is recorded as
+`route_unavailable` without a candidate-failed marker; unresolved probe or
+unclassified acceptance outcomes are recorded as unknown and are not
+automatically replayed. Neither is an acceptance PASS.
 Changes to the acceptance script, its packaged probes or runtime capabilities,
 the managed launcher chains or their immutable Nix store identities, or the
 candidate/tooling identity cause the full acceptance to run again. The deployer
