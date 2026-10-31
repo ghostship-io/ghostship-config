@@ -235,7 +235,10 @@ let
       Documentation=man:user@.service(5)
       DefaultDependencies=no
       After=t3code-container-setup.service nix-daemon.socket
-      Requires=t3code-container-setup.service nix-daemon.socket
+      # Ordered after setup, but not required by it: a slow or failed
+      # maintenance step must not block the user manager and therefore the
+      # server that requires it.
+      Requires=nix-daemon.socket
       Conflicts=shutdown.target
       Before=t3code-bootstrap.service t3code-server.service shutdown.target
       IgnoreOnIsolate=yes
@@ -392,7 +395,6 @@ let
       Description=T3 Code access through the Cloudflare-authenticated site
       DefaultDependencies=no
       After=t3code-server.service
-      Requires=t3code-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
