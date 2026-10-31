@@ -32,6 +32,8 @@ fi
 
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
+# Every non-zero exit must say so; a silent exit 1 hid the failed step.
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "deploy: exiting rc=$rc (see the last deploy step above)" >&2; fi' EXIT
 announce_intent deploy
 [[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 

@@ -312,6 +312,21 @@ class CandidateAcceptanceTest(unittest.TestCase):
         self.assertIn("quota", record["provider_turn"]["evidence"])
         self.assertFalse((self.state / "receipts/generation-502.json").exists())
 
+    def test_a_failed_acceptance_preserves_the_existing_receipt(self):
+        receipt = self.state / "receipts/generation-502.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text('{"previous": true}')
+        digest = hashlib.sha256(receipt.read_bytes()).hexdigest()
+        failure = acceptance.RouteUnavailableError("route", "route", "route_unavailable: quota")
+        with patch.object(acceptance, "command", side_effect=self.command), \
+             patch.object(acceptance, "check_candidate", side_effect=failure), \
+             patch.object(acceptance.subprocess, "run", return_value=Mock(returncode=0)):
+            with self.assertRaises(acceptance.RouteUnavailableError):
+                acceptance.accept(self.state, self.archive, "podman", "/socket", self.home,
+                                  command_fn=self.command, identity_fn=lambda: self.identity)
+        self.assertTrue(receipt.exists(), "a failed acceptance deleted the existing receipt")
+        self.assertEqual(hashlib.sha256(receipt.read_bytes()).hexdigest(), digest)
+
     def test_route_unavailable_detail_is_retained_in_attempt(self):
         failure = acceptance.RouteUnavailableError(
             "route", "route", "route_unavailable: route failure",
