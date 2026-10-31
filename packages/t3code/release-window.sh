@@ -303,17 +303,6 @@ JQ
     printf 'unknown\n'
   fi
 }
-# The app release the running container serves, through the image's single
-# selector. Unknown fails: a receipt never matches an app nobody named.
-served_app_release() {
-  local payload version digest
-  payload=$("$PODMAN_BIN" exec "$PODMAN_TARGET" /usr/share/t3code/served-identity.sh 2>/dev/null) || return 1
-  version=$("$JQ_BIN" -er '.served.version // empty' <<<"$payload" 2>/dev/null) || return 1
-  digest=$("$JQ_BIN" -r '.served.digest // ""' <<<"$payload" 2>/dev/null) || return 1
-  [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
-  [[ -z $digest || $digest =~ ^[0-9a-f]{64}$ ]] || return 1
-  if [[ -n $digest ]]; then printf '%s+%s\n' "$version" "$digest"; else printf '%s\n' "$version"; fi
-}
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
   local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling="" app_release
@@ -345,6 +334,21 @@ known_good_receipt() {
       && receipt_checks_ok "$receipt"; then
       printf '%s\n' "$receipt"
       return 0
+    fi
+    # A receipt written before app identities existed names the right image and
+    # inputs but cannot describe the app. Refusing is correct, and it must say
+    # what to do: re-accept that image so the receipt carries app_release.
+    # shellcheck disable=SC2016
+    if "$JQ_BIN" -e --arg i "$image" --arg a "$revision" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
+      --arg da "$declared_revision" --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
+      (.image_id | sub("^sha256:"; "")) == $i and
+      (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
+      (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
+      .live_before != null and .live_before == .live_after and
+      .provider_secret_inode == $s and .app_release == null and
+      ((.agent_revision == $a and .agent_path == $p) or
+        ($adv == "1" and .agent_revision == $da and .agent_path == $dp))' "$receipt" >/dev/null 2>&1; then
+      fail "receipt $receipt predates the app release identity; re-accept image sha256:$image before rollback"
     fi
   done
   return 1
@@ -407,6 +411,9 @@ post_verify() {
   [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
   inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'provider secret identity unknown'
   app_release=$(served_app_release) || fail 'serving app release unknown'
+  if [[ $("$JQ_BIN" -r '.app_release // "absent"' "$receipt") == absent ]]; then
+    fail "receipt $receipt predates the app release identity; re-accept image sha256:$EXPECTED_IMAGE before post"
+  fi
   # shellcheck disable=SC2016
   if ! {
     "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" --arg app "$app_release" '

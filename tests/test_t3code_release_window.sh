@@ -306,6 +306,19 @@ if "${cmd[@]}" rollback three; then echo 'unexpected rollback stop acknowledgeme
 [[ -f $tmp/evidence/three/known-good.json && -f $tmp/evidence/active-window && -f $tmp/hold ]]
 [[ $(cat "$tmp/alias-image") == "sha256:$EXPECTED_IMAGE" && $(wc -l < "$tmp/podman.events") == 2 ]]
 unset FIXTURE_TAG_LOST_ACK FIXTURE_STOP_LOST_ACK ALIAS_IMAGE
+# A receipt written before app identities existed is refused, and the refusal
+# names the transition: re-accept that image, it is not a generic bad receipt.
+cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt.app"
+jq 'del(.app_release)' "$tmp/receipt.app" > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+set +e
+"${cmd[@]}" rollback three > "$tmp/pre-app.log" 2>&1
+pre_app_status=$?
+set -e
+[[ $pre_app_status != 0 ]]
+grep -q 'predates the app release identity; re-accept image' "$tmp/pre-app.log" \
+  || { echo 'old receipt was not refused with the re-accept reason:' >&2; cat "$tmp/pre-app.log" >&2; exit 1; }
+[[ -f $tmp/hold && -f $tmp/evidence/active-window ]]
+cp "$tmp/receipt.app" "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
 # A receipt that names another app release is not a receipt for what serves.
 cp "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" "$tmp/receipt.app"
 jq '.app_release="0.0.0"' "$tmp/receipt.app" > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
