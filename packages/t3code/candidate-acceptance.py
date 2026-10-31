@@ -1319,69 +1319,51 @@ def read_isolation(engine, name):
     return data
 
 
-STORE_SCAN_DEPTH = 3
-STORE_SCAN_MAX_ENTRIES = 200000
+OWNED_SCAN_DEPTH = 3
+OWNED_SCAN_MAX_ENTRIES = 200000
 
 
 def is_secret_artifact_name(name):
     """Secret-bearing file or directory name; never reads the content."""
     return (name in SECRET_FILE_NAMES or name == "secrets"
+            or name.startswith("credentials") or name == "hosts.yml"
             or name.endswith((".key", ".pem")))
 
 
-def closure_requisites(paths):
-    """Every store path reachable from the closure and tooling paths."""
-    requisites = set()
-    errors = []
-    for root in paths:
-        if not root:
-            continue
-        try:
-            result = subprocess.run(["nix-store", "-qR", str(root)],
-                                    capture_output=True, text=True, timeout=120)
-        except (OSError, subprocess.SubprocessError) as error:
-            errors.append(f"{root}: nix-store -qR failed: {error}")
-            continue
-        if result.returncode:
-            errors.append(f"{root}: nix-store -qR exited {result.returncode}")
-            continue
-        stdout = result.stdout if isinstance(result.stdout, str) else ""
-        if not stdout.strip():
-            errors.append(f"{root}: nix-store -qR returned no paths")
-            continue
-        requisites.update(line.strip() for line in stdout.splitlines()
-                          if line.strip())
-    return sorted(requisites), errors
+def owned_input_scan(roots, depth=OWNED_SCAN_DEPTH,
+                     max_entries=OWNED_SCAN_MAX_ENTRIES):
+    """Scan only the inputs this command stages or mounts from us.
 
-
-def store_secret_scan(paths, requisites=None, depth=STORE_SCAN_DEPTH,
-                      max_entries=STORE_SCAN_MAX_ENTRIES):
-    """Scan every requisite store path for secret-bearing names.
-
-    The toplevel closure path is usually a set of symlinks, so walking it is
-    not enough: enumerate the closure with nix-store -qR, then walk each real
-    store path to a bounded depth. An incomplete enumeration or truncated walk
-    is reported, never treated as clean.
+    The candidate mounts the whole host store; this scan is not a store-wide
+    proof and does not walk public upstream packages. Missing, dangling or
+    non-directory owned roots stop the run.
     """
-    if requisites is None:
-        requisites, errors = closure_requisites(paths)
-    else:
-        errors = []
-        requisites = [str(item) for item in requisites]
     findings = []
+    errors = []
     paths_scanned = 0
     entries_scanned = 0
     truncated = False
-    for root in requisites:
-        root_path = Path(root)
-        if not root_path.exists() or root_path.is_symlink():
-            errors.append(f"{root}: store path is missing or a symlink")
+    for raw in roots:
+        if not raw:
+            continue
+        root = Path(raw)
+        if root.is_symlink():
+            try:
+                root = root.resolve(strict=True)
+            except OSError:
+                errors.append(f"{raw}: owned root is a dangling symlink")
+                continue
+        if not root.exists():
+            errors.append(f"{raw}: owned root is missing")
+            continue
+        if not root.is_dir():
+            errors.append(f"{raw}: owned root is not a directory")
             continue
         paths_scanned += 1
-        if is_secret_artifact_name(root_path.name):
-            findings.append(str(root_path))
-        for base, directories, files in os.walk(root_path, followlinks=False):
-            relative_depth = len(Path(base).relative_to(root_path).parts)
+        if is_secret_artifact_name(root.name):
+            findings.append(str(root))
+        for base, directories, files in os.walk(root, followlinks=False):
+            relative_depth = len(Path(base).relative_to(root).parts)
             if relative_depth >= depth:
                 directories[:] = []
             directories[:] = [name for name in directories
@@ -1398,9 +1380,9 @@ def store_secret_scan(paths, requisites=None, depth=STORE_SCAN_DEPTH,
         if truncated:
             break
     return {
-        "roots": [str(path) for path in paths if path],
+        "mode": "owned_inputs",
+        "roots": [str(path) for path in roots if path],
         "paths_scanned": paths_scanned,
-        "requisite_count": len(requisites),
         "entries_scanned": entries_scanned,
         "depth": depth,
         "truncated": truncated,
@@ -1492,6 +1474,12 @@ def rehearsal_document(*, outcome, image_archive, image_id, name, tooling_path,
         "isolation": isolation,
         "env_file_bytes": (isolation or {}).get("env_file_bytes"),
         "store_scan": store_scan,
+        "store_residual": (
+            "the candidate mounts the whole host /nix/store; this rehearsal "
+            "scans only ghostship-owned inputs and cannot prove the store has "
+            "no secret anywhere; source controls are agenix-encrypted secrets, "
+            "decryption under /run, and the repository staged-diff secret scan"
+        ),
         "performance": {
             "image_size_bytes": image_size,
             "closure": _nix_path_info(closure_path),
@@ -1548,15 +1536,15 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
     _evidence["live_before"] = before
     if rehearsal and not closure_path:
         raise PreconditionError("the store closure is required")
-    store_scan = (store_secret_scan([closure_path, tooling_path])
-                  if rehearsal or closure_path else None)
+    store_scan = (owned_input_scan([tooling_path, str(Path(__file__).parent)])
+                  if rehearsal else None)
     if rehearsal:
         _evidence["store_scan"] = store_scan
         if store_scan["findings"]:
-            raise PreconditionError("the store scan found a secret-bearing path")
+            raise PreconditionError("the owned input scan found a secret-bearing path")
         if (store_scan["errors"] or store_scan["truncated"]
                 or not store_scan["paths_scanned"]):
-            raise PreconditionError("the store scan could not cover the closure")
+            raise PreconditionError("the owned input scan could not cover its roots")
     engine = [podman_bin, "--remote", "--url", f"unix://{candidate_socket}"]
     candidate_runtime_dir = Path(candidate_runtime_dir or tempfile.gettempdir())
     candidate_runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1656,6 +1644,45 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                                  evidence=evidence, acceptance_route_file=acceptance_route_file)
         evidence["rehearsal_checks"] = checks
         agent_path = candidate_agent_path(engine, name, candidate_home_target)
+        if rehearsal:
+            if not agent_path:
+                store_scan["errors"].append("resolved agent path is missing")
+                _evidence["store_scan"] = store_scan
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "resolved agent path is missing")
+            resolved_agent = Path(agent_path).resolve()
+            resolved_tooling = (Path(tooling_path).resolve()
+                                if tooling_path else None)
+            inside_tooling = bool(resolved_tooling) and (
+                resolved_agent == resolved_tooling
+                or resolved_tooling in resolved_agent.parents)
+            if inside_tooling:
+                store_scan["agent_path_owner"] = str(resolved_tooling)
+                store_scan["agent_path_inside_tooling"] = True
+            elif str(resolved_agent) in {str(Path(root).resolve())
+                                         for root in store_scan["roots"] if root}:
+                store_scan["agent_path_owner"] = str(resolved_agent)
+                store_scan["agent_path_inside_tooling"] = False
+            else:
+                agent_scan = owned_input_scan([str(resolved_agent)])
+                store_scan["agent_path_owner"] = str(resolved_agent)
+                store_scan["agent_path_inside_tooling"] = False
+                for key in ("findings", "errors"):
+                    store_scan[key] = sorted(set(store_scan[key]) | set(agent_scan[key]))
+                store_scan["paths_scanned"] += agent_scan["paths_scanned"]
+                store_scan["entries_scanned"] += agent_scan["entries_scanned"]
+                store_scan["truncated"] = (store_scan["truncated"]
+                                           or agent_scan["truncated"])
+            _evidence["store_scan"] = store_scan
+            if store_scan["findings"]:
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "an owned root carries a secret-bearing path")
+            if store_scan["errors"] or store_scan["truncated"]:
+                raise RuntimeError(
+                    "candidate owned input scan failed after start: "
+                    "an owned root is missing, dangling or truncated")
         if tooling_path and agent_path != str(Path(tooling_path).resolve()):
             checks["agent_cli"] = False
         after = identity_fn()
@@ -1928,7 +1955,7 @@ def main():
     parser.add_argument("--rehearsal-report",
                         help="report path (default <state-dir>/rehearsal.json)")
     parser.add_argument("--closure-path",
-                        help="built system closure under test, for the store scan and size")
+                        help="built system closure under test, for the #725 closure size")
     parser.add_argument("--build-seconds", type=float,
                         help="duration measured by the release build log")
     parser.add_argument("--build-source",
@@ -1938,7 +1965,7 @@ def main():
         print("candidate rehearsal never reads a provider secrets file", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
     if args.rehearsal and not args.closure_path:
-        print("candidate rehearsal requires --closure-path for the store scan", file=sys.stderr)
+        print("candidate rehearsal requires --closure-path for the #725 closure size", file=sys.stderr)
         sys.exit(PRECONDITION_EXIT)
     if args.build_seconds is not None and (args.build_seconds < 0
                                            or args.build_seconds != args.build_seconds):

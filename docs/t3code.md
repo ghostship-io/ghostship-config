@@ -622,6 +622,7 @@ record is the selected report (0600); the candidate runtime directory is
 disposable scratch and the candidate manager/container are torn down:
 
 ```sh
+test -f /nix/store/<t3code-deployment-scripts>/candidate-acceptance.py
 python3 /nix/store/<t3code-deployment-scripts>/candidate-acceptance.py \
   --rehearsal --state-dir /var/lib/t3code-podman-candidate/acceptance \
   --rehearsal-report /var/lib/ghostship/t3code-deployment/rehearsal/<image>.json \
@@ -659,14 +660,27 @@ unexpected name, file or mount is `violation`. The env file is reported as
 present-empty, present-not-empty, or absent; absence is a violation and is not
 reported as "not empty". None of these can be `PASS`.
 
-Before startup the rehearsal enumerates each closure with
-`nix-store -qR <closure>` (plus the tooling closure), then scans every requisite
-store path to a bounded depth for `auth.json`, `t3code.env`, `credentials.json`,
-`secrets`, `*.key` and `*.pem`. The report records `paths_scanned`,
-`requisite_count`, `truncated` and errors; a finding, an incomplete enumeration
-or a truncated walk stops the rehearsal as `precondition_not_met`. That scan is
-the check for a secret-bearing path under `/nix/store`; the store itself is a
-content-addressed, world-readable build tree and is mounted read-only (`:O`).
+Before startup the rehearsal scans only the inputs this command stages or
+mounts from us: `tooling_path`, the resolved agent path, and the staged
+acceptance source directory. It walks each owned root to a bounded depth for
+`auth.json`, `credentials*`, `hosts.yml`, `t3code.env`, `secrets`, `*.key` and
+`*.pem`. A pre-start owned-root finding, a missing/dangling/invalid owned root,
+or a truncated walk stops as `precondition_not_met`; a valid symlink root is
+resolved, never called missing. The agent root is resolved only after the
+candidate starts, so an agent-root failure is reported as `failed` with the
+owned-root reason, never as a retryable pre-effect precondition. The command must name host-visible paths (use the `test -f` precheck
+above); a container-only path such as `/workspace/nixos-config/...` is a handover
+defect.
+
+The candidate still mounts the whole host `/nix/store` read-only (`:O`), so the
+rehearsal cannot prove "no secret anywhere in the store". That is prevented at
+source: agenix-encrypted secrets stay encrypted in the store and decrypt only
+under `/run`, and the repository's staged-diff secret scan keeps them out of
+source. Public upstream package/CA/test fixtures are not scanned. The four
+`config/credentials.json` files seen in the Release #5 readback are ours,
+names-only manifests verified with no values, outside the candidate's owned
+inputs; they are recorded once in the trial outcome, not exempted by name. If an
+owned root ever contains a credentials file, it is a finding.
 
 The report is written after candidate teardown with the observed post-teardown
 identity, `identity_unchanged`, and the actual cleanup result
