@@ -47,6 +47,12 @@ jobs:
             args+=(--override-input "$name" "$url")
           done < "$overrides"
           nix develop .#ci "${args[@]}" --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"
+      - name: Check the isolated-service evidence script
+        run: |
+          nix develop .#ci --no-write-lock-file -c shellcheck -s bash -e SC1091 modules/self-hosted/agent-memory-evidence.sh
+          modules/self-hosted/agent-memory-evidence.sh --dry-run > /tmp/agent-memory-evidence-dry-run.txt
+          test "$(grep -c '^CASE ' /tmp/agent-memory-evidence-dry-run.txt)" -eq 7
+          test "$(grep -c '^SUMMARY dry-run cases=7$' /tmp/agent-memory-evidence-dry-run.txt)" -eq 1
   integration:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     environment: private-source-main
@@ -80,6 +86,6 @@ jobs:
       - name: Check workflows and backup script
         run: |
           nix develop .#ci -c actionlint
-          nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh scripts/activate-host
+          nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh modules/self-hosted/agent-memory-evidence.sh scripts/activate-host
       - name: Scan current source for secrets
         run: nix develop .#ci -c gitleaks dir --redact --no-banner .
