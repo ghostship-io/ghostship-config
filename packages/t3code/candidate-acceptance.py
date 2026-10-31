@@ -927,6 +927,41 @@ def capture_json_result(result):
             "parse_error": data is None}
 
 
+FREE_LIMIT_HINTS = ("freeusagelimiterror", "free usage limit", "usage limit reached")
+
+
+def free_tier_limit(probe):
+    """Return a short reason when a provider turn was refused by a free-tier 429.
+
+    The upstream body is not always in the probe's bounded failure kind, so the
+    status and the provider's own error type/message decide. This is a
+    classification, not a retry.
+    """
+    if not isinstance(probe, dict):
+        return ""
+    status = probe.get("error_status")
+    blob = " ".join(str(probe.get(key) or "") for key in
+                    ("error_type", "error_message", "detail", "failure")).lower()
+    limited_status = status == 429 or str(status or "").startswith("429")
+    if limited_status or any(hint in blob for hint in FREE_LIMIT_HINTS):
+        return f"provider free-tier limit: status={status or 'unknown'}"
+    return ""
+
+
+def capture_candidate_log(engine, name, evidence):
+    """Keep the candidate's own log before teardown; the upstream error and the
+    provider's reply are only visible there once the probe's bounded kind is
+    gone. Read-only and bounded; never fatal."""
+    if evidence is None:
+        return
+    try:
+        logs = command(engine, "logs", name, timeout=20)
+        text = (logs.stdout or "") + "\n" + (logs.stderr or "")
+        evidence["candidate_log_tail"] = text[-4000:]
+    except Exception:  # diagnostics must never decide the release
+        evidence.setdefault("candidate_log_tail", "")
+
+
 def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
                     route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None,
                     evidence=None, acceptance_route=None,
@@ -1231,6 +1266,12 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
         if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
                 or passed.get("settled") is not True or passed.get("instance") != identity[0]
                 or passed.get("model") != identity[1]):
+            limit = free_tier_limit(passed)
+            capture_candidate_log(engine, name, evidence)
+            if limit:
+                raise RouteUnavailableError(route, route_summary,
+                                            f"provider_turn route_unavailable: {limit}",
+                                            detail=probe_error_detail(passed))
             raise RouteUnknownError(route, route_summary,
                                     "provider_turn outcome unknown: exact settled proof is missing",
                                     detail=probe_error_detail(passed))
@@ -1243,6 +1284,12 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
     except (ValueError, TypeError):
         result = {}
     record_candidate_turn(evidence, result)
+    limit = free_tier_limit(result)
+    capture_candidate_log(engine, name, evidence)
+    if limit:
+        raise RouteUnavailableError(route, route_summary,
+                                    f"provider_turn route_unavailable: {limit}",
+                                    detail=probe_failure_detail(failure, result))
     if not isinstance(result, dict) or result.get("settled") is not True:
         raise RouteUnknownError(route, route_summary,
                                 "provider_turn outcome unknown: probe settlement not proven",

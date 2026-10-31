@@ -2225,3 +2225,33 @@ class RuntimeLayoutTest(unittest.TestCase):
         self.assertFalse(
             acceptance.valid_runtime_layout(self.home, release, self.home / "absent")
         )
+
+
+class FreeTierLimitClassificationTest(unittest.TestCase):
+    """A provider 429/free-tier refusal is route_unavailable, not UNKNOWN."""
+
+    LIMIT_PAYLOAD = {
+        "outcome": "execution",
+        "error": {"code": "quota", "kind": "providers"},
+        "error_status": 429,
+        "error_type": "FreeUsageLimitError",
+        "error_message": (
+            'HTTP 429 {"type":"error","error":{"type":"FreeUsageLimitError",'
+            '"message":"Free usage limit reached. Free models work in OpenCode '
+            '(https://opencode.ai); subscribe to OpenCode Go to keep going: '
+            'https://opencode.ai/go"}}'
+        ),
+    }
+
+    def test_exact_free_usage_limit_payload_is_classified(self):
+        reason = acceptance.free_tier_limit(self.LIMIT_PAYLOAD)
+        self.assertIn("429", reason)
+
+    def test_bare_message_without_a_status_is_still_classified(self):
+        payload = dict(self.LIMIT_PAYLOAD, error_status=None)
+        self.assertTrue(acceptance.free_tier_limit(payload))
+
+    def test_a_plain_execution_error_is_not_a_limit(self):
+        payload = {"outcome": "execution", "error": {"code": "execution"},
+                   "error_status": None, "error_type": "", "error_message": "connection reset"}
+        self.assertEqual(acceptance.free_tier_limit(payload), "")
