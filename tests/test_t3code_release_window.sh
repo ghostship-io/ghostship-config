@@ -114,6 +114,10 @@ export EXPECTED_AGENT_REVISION=fixture EXPECTED_TOOLING_PATH="$tmp/tooling" PROV
 mkdir -p "$HOME_DIR/.local/state/t3code-tool-update" "$HOME_DIR/.local/state/t3code-shared-agents" "$HOME_DIR/.local/share/t3code-tools/t3"
 touch "$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock" "$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock" "$HOME_DIR/.local/share/t3code-tools/t3/update.lock"
 mkdir -p "$tmp/system" "$tmp/tooling"; printf 'fixture\n' > "$PROVIDER_SECRETS_FILE"; ln -s "$tmp/system" "$CURRENT_SYSTEM"
+# The active generation's deploy unit is where a switch binds the identity it
+# installed; recovery reads it from the window, never from the caller.
+mkdir -p "$tmp/system/etc/systemd/system"
+printf 'Environment="AGENT_REVISION=fixture" "TOOLING_PATH=%s"\n' "$tmp/tooling" > "$tmp/system/etc/systemd/system/ghostship-t3code-deploy.service"
 export FIXTURE="$tmp" WINDOW_CONFIG="$tmp/config" WINDOW_INTENT_HELPER="$repo/packages/t3code/window-intent.sh" STATE_DIR="$tmp/state" SYSTEMCTL_BIN="$tmp/bin/systemctl" PODMAN_BIN="$tmp/bin/podman" PODMAN_TARGET=fixture WINDOW_UNIT=window HOLD_FILE="$tmp/hold" LOCK_CANDIDATE="$tmp/candidate.lock" LOCK_HARDENING="$tmp/hardening.lock" PROFILE="$tmp/profile" SYSTEMD_RUN_BIN="$tmp/bin/systemd-run" WINDOW_SECONDS=100
 fixture_window="$tmp/fixture-window-command"
 cp "$repo/packages/t3code/release-window.sh" "$fixture_window"
@@ -211,6 +215,9 @@ printf 'old\n' > "$tmp/state/desired"
 "${cmd[@]}" end-no-activation
 "${cmd[@]}" start two
 "${cmd[@]}" switch -- true
+# The switch bound the installed identity from the now-active generation.
+[[ -f "$tmp/evidence/two/declared-target" ]] || { echo 'switch did not bind the installed identity' >&2; exit 1; }
+[[ $(cat "$tmp/evidence/two/declared-target") == "fixture $tmp/tooling" ]]
 if "${cmd[@]}" end-no-activation; then echo 'accepted announced switch' >&2; exit 1; fi
 [[ -f "$tmp/evidence/two/complete.started" ]]
 shopt -s nullglob

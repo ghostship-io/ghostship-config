@@ -112,6 +112,11 @@ run_cmd() {
   "$@"
 }
 
+write_bound_target() {
+  local root=$1 revision=$2 tooling=$3
+  printf '%s %s\n' "$revision" "$tooling" > "$root/evidence/win/declared-target"
+}
+
 attempt() {
   printf '{"deployment_id":"%s","exit_code":77,"outcome":"%s","started_at_ms":%s}\n' \
     "$2" "$3" "$4" > "$1/state/attempts/$2.json"
@@ -211,6 +216,7 @@ scenario_e() {
 e=$(mktemp -d); trap 'rm -rf "$e"' EXIT
 desired=$(printf '%064d' 15)
 setup "$e" "$desired"
+write_bound_target "$e" fixture "$e/tooling"
 attempt "$e" "$desired" acceptance_unknown "$(date +%s%3N)"
 : > "$e/run/t3code-tool-update/update-deferred.pending"
 : > "$e/home/.local/state/t3code-tool-update/update-deferred.pending"
@@ -242,6 +248,7 @@ grep -q 'PASS UNKNOWN resolved' "$e/out.log"
 g=$(mktemp -d); trap 'rm -rf "$g"' EXIT
 desired=$(printf '%064d' 16)
 setup "$g" "$desired"
+write_bound_target "$g" fixture "$g/tooling"
 attempt "$g" "$desired" acceptance_unknown "$(date +%s%3N)"
 : > "$g/run/t3code-tool-update/update-deferred.pending"
 : > "$g/home/.local/state/t3code-tool-update/update-deferred.pending"
@@ -266,6 +273,7 @@ scenario_f() {
 f=$(mktemp -d); trap 'rm -rf "$f"' EXIT
 desired=$(printf '%064d' 17)
 setup "$f" "$desired"
+write_bound_target "$f" fixture "$f/tooling"
 write_receipt "$f" "$desired"
 rm -f "$f/evidence/active-window" "$f/hold"
 printf '{}\n' > "$f/evidence/win/known-good.json"
@@ -351,12 +359,13 @@ rm -rf "$h"
 }
 
 scenario_i() {
-# I: the release advanced the home identity before acceptance failed. The
-# receipt describes the declared target, not the live tools, and resolution
-# accepts it while recording both identities.
+# I: the release advanced the home identity before acceptance failed. The window
+# bound the installed target at switch time; the receipt describes that target
+# and the previous deployment, not the failed window's desired deployment.
 i=$(mktemp -d); trap 'rm -rf "$i"' EXIT
 desired=$(printf '%064d' 21)
 setup "$i" "$desired"
+write_bound_target "$i" declared-rev "$i/packages-declared"
 attempt "$i" "$desired" acceptance_unknown "$(date +%s%3N)"
 : > "$i/run/t3code-tool-update/update-deferred.pending"
 : > "$i/home/.local/state/t3code-tool-update/update-deferred.pending"
@@ -366,18 +375,21 @@ i_end_rc=$?
 set -e
 [[ $i_end_rc == 77 ]] || { echo "I: end rc=$i_end_rc" >&2; cat "$i/end.log" >&2; exit 1; }
 write_receipt "$i" "$desired" declared-rev "$i/packages-declared"
-run_cmd "$i" EXPECTED_AGENT_REVISION=declared-rev EXPECTED_TOOLING_PATH="$i/packages-declared" \
+"$JQ" --arg d "$(printf '%064d' 20)" '.deployment_id=$d' "$i/state/receipts/$desired.json" > "$i/r.tmp"
+mv "$i/r.tmp" "$i/state/receipts/$desired.json"
+# The caller names something else entirely; the bound target is the authority.
+run_cmd "$i" EXPECTED_AGENT_REVISION=caller-claim EXPECTED_TOOLING_PATH=/caller/claim \
   bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$i/out.log" 2>&1 \
   || { echo 'I: advanced-home resolve refused:' >&2; cat "$i/out.log" >&2; exit 1; }
 [[ ! -e "$i/hold" && ! -e "$i/state/recovery-unknown.json" ]] || { echo 'I: inhibit not cleared' >&2; exit 1; }
-"$JQ" -e '.receipt_identity == "declared" and (.serving_at_resolve | length) > 0 and .declared_agent_revision == "declared-rev"' \
-  "$i/evidence/win/unknown-resolved.json" >/dev/null || { echo 'I: resolution did not record both identities' >&2; cat "$i/evidence/win/unknown-resolved.json" >&2; exit 1; }
+"$JQ" -e '.receipt_identity == "declared" and (.serving_at_resolve | length) > 0 and .declared_agent_revision == "declared-rev" and .declared_tooling_path == "'"$i"'/packages-declared"' \
+  "$i/evidence/win/unknown-resolved.json" >/dev/null || { echo 'I: resolution did not record the bound identity' >&2; cat "$i/evidence/win/unknown-resolved.json" >&2; exit 1; }
 rm -rf "$i"
 }
 
 scenario_j() {
-# J: with no declared target the advanced identity cannot be verified, and the
-# tool refuses instead of inferring one.
+# J: with no target bound in the window the advanced identity cannot be
+# verified, and the tool refuses instead of taking one from the caller.
 j=$(mktemp -d); trap 'rm -rf "$j"' EXIT
 desired=$(printf '%064d' 22)
 setup "$j" "$desired"
@@ -388,11 +400,11 @@ j_end_rc=$?
 set -e
 [[ $j_end_rc == 77 ]] || { echo "J: end rc=$j_end_rc" >&2; cat "$j/end.log" >&2; exit 1; }
 write_receipt "$j" "$desired" declared-rev "$j/packages-declared"
-if run_cmd "$j" EXPECTED_AGENT_REVISION= EXPECTED_TOOLING_PATH= \
+if run_cmd "$j" EXPECTED_AGENT_REVISION=declared-rev EXPECTED_TOOLING_PATH="$j/packages-declared" \
      bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$j/out.log" 2>&1; then
-  echo 'J: resolved without a declared target' >&2; exit 1
+  echo 'J: resolved without a bound target' >&2; exit 1
 fi
-grep -q 'declared release target .* missing; refusing to infer it' "$j/out.log" \
+grep -q 'declared release target not recorded' "$j/out.log" \
   || { echo 'J: unexpected refusal:' >&2; cat "$j/out.log" >&2; exit 1; }
 [[ -e "$j/hold" && -e "$j/state/recovery-unknown.json" ]] || { echo 'J: refusal changed state' >&2; exit 1; }
 rm -rf "$j"
@@ -421,24 +433,73 @@ rm -rf "$k"
 }
 
 scenario_l() {
-# L: rollback shares the rule; its released retry accepts the declared identity.
+# L: rollback shares the rule; its released retry accepts the bound identity.
 l=$(mktemp -d); trap 'rm -rf "$l"' EXIT
 desired=$(printf '%064d' 24)
 setup "$l" "$desired"
 rm -f "$l/evidence/active-window" "$l/hold"
 printf '{}\n' > "$l/evidence/win/known-good.json"
+write_bound_target "$l" declared-rev "$l/packages-declared"
 write_receipt "$l" "$desired" declared-rev "$l/packages-declared"
 : > "$l/run/t3code-tool-update/update-deferred.pending"
 : > "$l/home/.local/state/t3code-tool-update/update-deferred.pending"
-run_cmd "$l" EXPECTED_AGENT_REVISION=declared-rev EXPECTED_TOOLING_PATH="$l/packages-declared" \
-  bash "$repo/packages/t3code/release-window.sh" rollback win > "$l/out.log" 2>&1 \
-  || { echo 'L: released rollback refused the declared identity:' >&2; cat "$l/out.log" >&2; exit 1; }
+run_cmd "$l" bash "$repo/packages/t3code/release-window.sh" rollback win > "$l/out.log" 2>&1 \
+  || { echo 'L: released rollback refused the bound identity:' >&2; cat "$l/out.log" >&2; exit 1; }
 grep -q 'window already released' "$l/out.log"
 rm -rf "$l"
 }
 
+scenario_m() {
+# M: a caller naming the receipt's identity cannot authorise it. The window
+# bound the live identity, so the receipt matches neither and must be refused
+# even though the environment supplies exactly the receipt's values.
+m=$(mktemp -d); trap 'rm -rf "$m"' EXIT
+desired=$(printf '%064d' 25)
+setup "$m" "$desired"
+write_bound_target "$m" fixture "$m/tooling"
+attempt "$m" "$desired" acceptance_unknown "$(date +%s%3N)"
+set +e
+run_cmd "$m" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$m/end.log" 2>&1
+m_end_rc=$?
+set -e
+[[ $m_end_rc == 77 ]] || { echo "M: end rc=$m_end_rc" >&2; cat "$m/end.log" >&2; exit 1; }
+write_receipt "$m" "$desired" caller-claim /caller/claim
+if run_cmd "$m" EXPECTED_AGENT_REVISION=caller-claim EXPECTED_TOOLING_PATH=/caller/claim \
+     bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$m/out.log" 2>&1; then
+  echo 'M: a caller-supplied identity authorised recovery' >&2; exit 1
+fi
+grep -q 'no exact known-good receipt' "$m/out.log" \
+  || { echo 'M: unexpected refusal:' >&2; cat "$m/out.log" >&2; exit 1; }
+[[ -e "$m/hold" && -e "$m/state/recovery-unknown.json" ]] || { echo 'M: refusal changed state' >&2; exit 1; }
+rm -rf "$m"
+}
+
+scenario_n() {
+# N: the stopped-container branch of resolve-unknown shares the rule. The
+# container is down; recovery starts it and must accept the bound identity.
+n=$(mktemp -d); trap 'rm -rf "$n"' EXIT
+desired=$(printf '%064d' 26)
+setup "$n" "$desired"
+write_bound_target "$n" declared-rev "$n/packages-declared"
+attempt "$n" "$desired" acceptance_unknown "$(date +%s%3N)"
+: > "$n/run/t3code-tool-update/update-deferred.pending"
+: > "$n/home/.local/state/t3code-tool-update/update-deferred.pending"
+set +e
+run_cmd "$n" bash "$repo/packages/t3code/release-window.sh" end-unknown > "$n/end.log" 2>&1
+n_end_rc=$?
+set -e
+[[ $n_end_rc == 77 ]] || { echo "N: end rc=$n_end_rc" >&2; cat "$n/end.log" >&2; exit 1; }
+write_receipt "$n" "$desired" declared-rev "$n/packages-declared"
+: > "$n/container-stopped"
+run_cmd "$n" bash "$repo/packages/t3code/release-window.sh" resolve-unknown > "$n/out.log" 2>&1 \
+  || { echo 'N: stopped resolve refused the bound identity:' >&2; cat "$n/out.log" >&2; exit 1; }
+grep -q 'container recovered and recovery inhibit cleared' "$n/out.log"
+[[ ! -e "$n/hold" && ! -e "$n/state/recovery-unknown.json" ]] || { echo 'N: inhibit not cleared' >&2; exit 1; }
+rm -rf "$n"
+}
+
 only=${1:-all}
-for key in A B C D E F G H I J K L; do
+for key in A B C D E F G H I J K L M N; do
   if [[ $only == all || $only == "$key" ]]; then
     "scenario_$(printf '%s' "$key" | tr 'A-Z' 'a-z')"
   fi

@@ -248,16 +248,35 @@ serving_matches_start() {
 # tools before acceptance, so the previous receipt no longer describes the live
 # identity. Callers may accept the receipt's identity or this declared target,
 # never an inferred one.
+declared_target_from_unit() {
+  local system=${CURRENT_SYSTEM:-/run/current-system} unit revision tooling
+  unit=$(readlink -f "$system")/etc/systemd/system/ghostship-t3code-deploy.service
+  [[ -f $unit && ! -L $unit ]] || return 1
+  revision=$(sed -n 's/.*AGENT_REVISION=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
+  tooling=$(sed -n 's/.*TOOLING_PATH=\([^"[:space:]]*\).*/\1/p' "$unit" | head -n1)
+  [[ -n $revision && -n $tooling ]] || return 1
+  printf '%s %s\n' "$revision" "$tooling"
+}
+record_declared_target() {
+  local target
+  target=$(declared_target_from_unit) || return 1
+  printf '%s\n' "$target" > "$dir/declared-target.tmp" || return 1
+  chmod 0600 "$dir/declared-target.tmp"
+  sync -f "$dir/declared-target.tmp"
+  mv "$dir/declared-target.tmp" "$dir/declared-target"; sync -f "$dir"
+}
 declared_target() {
-  local revision=${EXPECTED_AGENT_REVISION:-} tooling=${EXPECTED_TOOLING_PATH:-}
-  [[ $revision =~ ^[0-9a-zA-Z][0-9a-zA-Z._-]{0,127}$ ]] || fail 'declared release target (agent revision) missing; refusing to infer it'
-  [[ $tooling == /* && $tooling != *$'\n'* ]] || fail 'declared release target (tooling path) missing; refusing to infer it'
+  local revision tooling
+  [[ -f $dir/declared-target && ! -L $dir/declared-target ]] || fail 'declared release target not recorded for this window; refusing to infer it'
+  read -r revision tooling < "$dir/declared-target" || fail 'declared release target unreadable; refusing to infer it'
+  [[ $revision =~ ^[0-9a-zA-Z][0-9a-zA-Z._-]{0,127}$ ]] || fail 'declared release target (agent revision) invalid; refusing to infer it'
+  [[ $tooling == /* && $tooling != *$'\n'* ]] || fail 'declared release target (tooling path) invalid; refusing to infer it'
   printf '%s %s\n' "$revision" "$tooling"
 }
 # Which identity a matched receipt describes: the live one, or the release's
 # declared target that superseded it.
 receipt_identity_of() {
-  local receipt=$1 revision tooling
+  local receipt=$1 revision tooling bound_revision bound_tooling
   revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 1
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 1
   local identity_program
@@ -265,10 +284,13 @@ receipt_identity_of() {
 .agent_revision == $a and .agent_path == $p
 JQ
 )
+  read -r bound_revision bound_tooling <<< "$(declared_target)" || return 1
   if "$JQ_BIN" -e --arg a "$revision" --arg p "$tooling" "$identity_program" "$receipt" >/dev/null 2>&1; then
     printf 'live\n'
-  else
+  elif "$JQ_BIN" -e --arg a "$bound_revision" --arg p "$bound_tooling" "$identity_program" "$receipt" >/dev/null 2>&1; then
     printf 'declared\n'
+  else
+    printf 'unknown\n'
   fi
 }
 known_good_receipt() {
@@ -585,6 +607,12 @@ case ${1:-} in
   sync -f "$dir/complete.started"; sync -f "$dir"
   switch_rc=0
   "$@" || switch_rc=$?
+  # The active generation now carries the deploy unit this switch installed.
+  # Bind its identity to the window so recovery cannot be told one by a caller.
+  if ! record_declared_target; then
+    printf 'at=%s reason=deploy unit identity unreadable\n' "$(date -u +%FT%TZ)" > "$dir/declared-target.absent"
+    sync -f "$dir/declared-target.absent"
+  fi
   printf 'exit_code=%s\n' "$switch_rc" > "$dir/switch.result.tmp"
   sync -f "$dir/switch.result.tmp"; mv "$dir/switch.result.tmp" "$dir/switch.result"; sync -f "$dir"
   exit "$switch_rc"
@@ -746,7 +774,7 @@ case ${1:-} in
     restore_alias_to_image "$target_img"
     "$SYSTEMCTL_BIN" start "${PODMAN_SERVICE:-podman-t3code}.service"
     [[ $(unit_state "${PODMAN_SERVICE:-podman-t3code}") == active ]] || fail 'container service failed to start'
-    wait_and_verify_serving "$target_img" allow-deferred
+    wait_and_verify_serving "$target_img" allow-deferred advanced
     validated_serving_image=$target_img
   elif [[ $reason == acceptance_unknown || $reason == switch_unknown ]]; then
     # The switch may have advanced the home tools before acceptance failed.
@@ -788,9 +816,10 @@ case ${1:-} in
   fi
   record_known_good "$dir/unknown-resolved.json"
   if [[ -n ${advanced_identity_record:-} ]]; then
+    read -r bound_revision bound_tooling <<< "$(declared_target)" || fail 'declared release target unreadable'
     # shellcheck disable=SC2016
     "$JQ_BIN" --arg serving "$advanced_identity_record" --arg identity "${receipt_identity:-live}" \
-      --arg revision "${EXPECTED_AGENT_REVISION:-}" --arg tooling "${EXPECTED_TOOLING_PATH:-}" \
+      --arg revision "$bound_revision" --arg tooling "$bound_tooling" \
       '. + {serving_at_resolve:$serving,receipt_identity:$identity,declared_agent_revision:$revision,declared_tooling_path:$tooling}' \
       "$dir/unknown-resolved.json" > "$dir/unknown-resolved.json.tmp"
     chmod 0600 "$dir/unknown-resolved.json.tmp"; sync -f "$dir/unknown-resolved.json.tmp"
