@@ -3,6 +3,10 @@ set -Eeuo pipefail
 umask 077
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
 : "${STATE_DIR:?}" "${SYSTEMCTL_BIN:?}" "${PODMAN_BIN:?}" "${PODMAN_TARGET:?}" "${WINDOW_UNIT:?}" "${HOLD_FILE:?}" "${LOCK_CANDIDATE:?}" "${LOCK_HARDENING:?}" "${PROFILE:?}" "${SYSTEMD_RUN_BIN:?}" "${WINDOW_HOLDER_BIN:?}"
 window_root
 validated_serving_image=
@@ -207,8 +211,8 @@ receipt_for_image() {
       (.image_id | sub("^sha256:"; "")) == $i and
       (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
-      .live_before != null and .live_before == .live_after and
-      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null 2>&1; then
+      .live_before != null and .live_before == .live_after' "$receipt" >/dev/null 2>&1 \
+      && receipt_checks_ok "$receipt"; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -325,8 +329,8 @@ known_good_receipt() {
       .live_before != null and .live_before == .live_after and
       .provider_secret_inode == $s and
       ((.agent_revision == $a and .agent_path == $p) or
-        ($adv == "1" and .agent_revision == $da and .agent_path == $dp)) and
-      ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null 2>&1; then
+        ($adv == "1" and .agent_revision == $da and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
+      && receipt_checks_ok "$receipt"; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -395,8 +399,8 @@ post_verify() {
     .deployment_id == $d and (.image_id | sub("^sha256:"; "")) == $i and
     (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
     .live_before != null and .live_before == .live_after and .agent_revision == $a and
-    .agent_path == $p and .provider_secret_inode == $s and
-    ([.checks.app_ready,.checks.provider_turn,.checks.agent_cli,.checks.skills,.checks.desktop_transport] | all(. == true))' "$receipt" >/dev/null || fail 'exact-image receipt invalid'
+    .agent_path == $p and .provider_secret_inode == $s' "$receipt" >/dev/null \
+    && receipt_checks_ok "$receipt" || fail 'exact-image receipt invalid'
   # shellcheck disable=SC2016
   "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --argjson min "$switch_ms" '.deployment_id == $d and .exit_code == 0 and (.status == null) and (.outcome == null) and (.started_at_ms | type == "number" and . >= $min)' "$attempt" >/dev/null || fail 'deployment attempt failed or unknown'
   image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'live image unknown'
