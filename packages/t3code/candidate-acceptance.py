@@ -33,6 +33,10 @@ PROVIDER_ENV = (
     "AGENT_DESKTOP_API_TOKEN",
 )
 T3_FREE_PROVIDER = "opencode-free"
+# Acceptance names one exact owner-approved worker primary. Dispatch's picker,
+# quota windows and snapshot mapping may report availability; they must not
+# decide whether the candidate image can run a turn.
+ACCEPTANCE_PRIMARY_ROUTE = ("opencode", "opencode-go/deepseek-v4.1-flash")
 MODEL_ROUTING_TARGET = "/run/ghostship-integrations/model-routing.json"
 ALLOWED_CANDIDATE_MOUNTS = {
     "/etc/ghostship/route-policy.json": "/etc/ghostship/route-policy.json",
@@ -251,22 +255,9 @@ def stage_candidate_model_routing(source_file, candidate_tmp, candidate_uid):
             or document.get("schema_version") != 1
             or not isinstance(document.get("partial"), bool)):
         raise PreconditionError("live model routing snapshot is invalid")
-    # A partial snapshot still carries the full catalog; one unread quota
-    # source must not block every deploy. A failed source still does.
-    coverage = document.get("coverage")
-    # A partial snapshot is degraded, not blocking: unrelated exhausted or
-    # unavailable sources must not stop a candidate that has a usable route.
-    # Require at least one usable candidate and one ok tier; the candidate's
-    # own provider turn remains the real functional verification.
-    if document["partial"]:
-        candidates = document.get("candidates")
-        usable = isinstance(candidates, list) and any(
-            isinstance(row, dict) and row.get("available") is True for row in candidates)
-        tiers = coverage.get("tiers") if isinstance(coverage, dict) else None
-        tier_ok = isinstance(tiers, dict) and any(
-            isinstance(tier, dict) and tier.get("state") == "ok" for tier in tiers.values())
-        if not usable or not tier_ok:
-            raise RouteUnknownError("unknown", "partial snapshot: no usable candidate", "provider_turn outcome unknown: partial live model routing snapshot has no usable candidate")
+    # The snapshot is a candidate runtime input and diagnostic evidence, not a
+    # release gate: stage a partial snapshot as-is and let the real provider
+    # turn decide whether the candidate can serve.
     target = Path(candidate_tmp) / "model-routing.json"
     shutil.copyfile(source, target)
     target.chmod(0o444)
@@ -927,134 +918,59 @@ def read_route_policy(path="/etc/ghostship/route-policy.json"):
     return data
 
 
-def admitted_route_candidates(policy, rows, exhausted=(), complete=False):
-    """Match exact native targets against the route policy, never picker approval."""
+def admitted_acceptance_route(policy, route=ACCEPTANCE_PRIMARY_ROUTE):
+    """Name one exact admitted worker primary for the real-turn proof.
+
+    Dispatch ranks routes from live quota and the picker. Acceptance names one
+    route so a partial snapshot, a stale usage reading or an exhausted
+    alternative cannot decide whether the candidate image is testable. A
+    fallback-only route is never an acceptance route.
+    """
     if (not isinstance(policy, dict) or policy.get("schema") != "ghostship.route-policy/v2"
             or not isinstance(policy.get("providers"), dict) or not isinstance(policy.get("routes"), list)):
         raise PreconditionError("route admission policy is invalid")
-    if not isinstance(rows, list):
-        return []
-    entries = {}
+    if (not isinstance(route, (tuple, list)) or len(route) != 2
+            or not all(isinstance(part, str) and part for part in route)):
+        raise PreconditionError("the nominated acceptance route is invalid")
+    instance, model = route
+    matches = []
     for item in policy["routes"]:
         if not isinstance(item, dict):
             continue
-        provider, instance, model = item.get("provider"), item.get("provider_instance"), item.get("model")
+        provider = item.get("provider")
         provider_record = policy["providers"].get(provider) if isinstance(provider, str) else None
-        if (item.get("admit") is not True or not isinstance(item.get("roles"), list) or "worker" not in item["roles"]
-                or not isinstance(provider, str) or not isinstance(instance, str) or not isinstance(model, str)
+        if (item.get("admit") is not True or item.get("fallback_only") is True
+                or not isinstance(item.get("roles"), list) or "worker" not in item["roles"]
+                or item.get("billing") not in ("subscription", "free", "promotion")
                 or not isinstance(provider_record, dict) or provider_record.get("admit") is not True):
             continue
-        key = (instance, model)
-        if key in entries:
-            raise PreconditionError("duplicate admitted native route")
-        entries[key] = item
-    primary, fallback, seen = [], [], set()
-    for row in rows:
-        if not isinstance(row, dict) or row.get("execution") not in (None, "t3"):
-            continue
-        target = row.get("target") or row.get("native") or {}
-        if not isinstance(target, dict):
-            continue
-        instance = target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id")
-        model = target.get("model") or target.get("model_id")
-        if (not isinstance(instance, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", instance)
-                or not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9._:/+-]{1,200}", model)):
-            continue
-        key = (instance, model)
-        item = entries.get(key)
-        if not item:
-            continue
-        if (row.get("available") is not True or target.get("available") is False
-                or ("provider_instance_id" in target and (target.get("mapped") is not True or target.get("available") is not True))
-                or key in seen or key in exhausted):
-            continue
-        # The owner authorizes subscription/free routes only; no fast or
-        # priority option may be inherited from the picker.
-        if item.get("billing") not in ("subscription", "free", "promotion"):
-            continue
-        options = {}
-        if instance == "codex":
-            options["serviceTier"] = "standard"
-            options["fastMode"] = False
-        elif instance == "claudeAgent":
-            options["fastMode"] = False
-        evidence = row.get("tool_loop")
-        candidate = {"instance": instance, "model": model, "options": options,
-                     "proven": isinstance(evidence, dict) and evidence.get("state") == "proven",
-                     "fallback": item.get("fallback_only") is True}
-        (fallback if item.get("fallback_only") is True else primary).append(candidate)
-        seen.add(key)
-    if primary:
-        return primary
-    # Unknown capacity for an unrelated route does not invalidate an exact,
-    # policy-admitted fallback with its own available native row. Prefer every
-    # observed usable primary first; missing fallback evidence remains unknown.
-    return fallback
+        if (item.get("provider_instance"), item.get("model")) == (instance, model):
+            matches.append(item)
+    if len(matches) != 1:
+        raise PreconditionError(
+            "the nominated acceptance route is not exactly one admitted worker primary"
+        )
+    return {"instance": instance, "model": model, "options": {}}
 
 
-def fresh_snapshot_routes(snapshot):
-    """Only a fresh picker snapshot can establish fallback capacity."""
-    if not isinstance(snapshot, dict):
-        return []
-    selected = snapshot.get("model_selection")
-    if not isinstance(selected, dict) or selected.get("schema") != "ghostship.model-selection/v1":
-        return []
-    stamp = selected.get("generated_at_epoch")
-    if stamp is None:
-        try:
-            stamp = datetime.fromisoformat(str(selected.get("generated_at")).replace("Z", "+00:00")).timestamp()
-        except (ValueError, TypeError, OverflowError):
-            return []
-    max_age = selected.get("max_age_seconds", 900)
-    if (isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or not math.isfinite(stamp)
-            or isinstance(max_age, bool) or not isinstance(max_age, (int, float))
-            or not 0 < max_age <= 86400 or not -60 <= time.time() - stamp <= max_age):
-        return []
-    rows = snapshot.get("candidates")
-    workers = selected.get("worker")
-    return (rows if isinstance(rows, list) else []) + (workers if isinstance(workers, list) else [])
-
-
-def fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, observations):
-    """Require fresh, unambiguous mapped capacity for this exact fallback."""
-    if not fresh_rows or not isinstance(snapshot, dict) or not isinstance(snapshot.get("candidates"), list):
-        return False
-    matches = []
-    for row in snapshot["candidates"]:
-        if not isinstance(row, dict) or not isinstance(row.get("native"), dict):
-            continue
-        native = row["native"]
-        if (native.get("provider_instance_id"), native.get("model_id")) == identity:
-            matches.append(row)
-    if not matches or not all(row.get("available") is True
-                              and row["native"].get("mapped") is True
-                              and row["native"].get("available") is True
-                              for row in matches):
-        return False
-    for row in observations:
-        if not isinstance(row, dict):
-            continue
-        native = row.get("native") or row.get("target") or {}
-        if not isinstance(native, dict):
-            continue
-        key = (native.get("provider_instance_id") or native.get("instanceId") or native.get("providerInstanceId"),
-               native.get("model_id") or native.get("model"))
-        if key == identity and (row.get("available") is not True or native.get("available") is False):
-            return False
-    return True
+def _target_identity(row):
+    """The native identity a producer row names, or None."""
+    if not isinstance(row, dict):
+        return None
+    target = row.get("target") or row.get("native") or {}
+    if not isinstance(target, dict):
+        return None
+    return (target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id"),
+            target.get("model") or target.get("model_id"))
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
                         policy=None, snapshot=None, evidence=None):
-    """Prove an exact policy-admitted native route; availability is evidence, not approval."""
+    """Prove one exact policy-admitted primary with a real turn on the candidate."""
     del provider_env_file
     policy = read_route_policy() if policy is None else policy
     diagnostics = candidate_provider_diagnostics(engine, name)
     route_result = candidate_agent_command(engine, name, "agent", "models", "--json")
-    pick = candidate_agent_command(engine, name, "agent", "models", "pick", "--role", "worker", "--kind", "code", "--json")
-    if evidence is not None:
-        evidence.update(model_list=capture_json_result(route_result), picker=capture_json_result(pick),
-                        snapshot=route_evidence(snapshot), admission=route_evidence(policy))
     rows = []
     try:
         rows = json.loads(route_result.stdout).get("data", {}).get("selected", []) if not route_result.returncode else []
@@ -1062,157 +978,58 @@ def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_
             rows = []
     except (ValueError, TypeError, AttributeError):
         rows = []
-    try:
-        choice = json.loads(pick.stdout).get("data", {}).get("pick", {}) if not pick.returncode else {}
-        if isinstance(choice, dict) and choice:
-            rows.insert(0, choice)
-    except (ValueError, TypeError, AttributeError):
-        choice = {}
-    fresh_rows = fresh_snapshot_routes(snapshot)
-    rows.extend(fresh_rows)
-    complete = bool(fresh_rows) and snapshot.get("partial") is False if isinstance(snapshot, dict) else False
+    if evidence is not None:
+        evidence.update(model_list=capture_json_result(route_result),
+                        snapshot=route_evidence(snapshot), admission=route_evidence(policy))
     route_summary = summarize_t3_rows(rows)
-    pick_summary = summarize_t3_rows([choice])
     if not tooling_path:
-        raise RouteUnavailableError(pick_summary, route_summary, "provider_turn route_unavailable: managed tools unavailable")
-    exhausted = set()
-    failures = []
-    proven_failure = False
-    primary_attempts = fallback_attempts = 0
-    for _ in range(MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES):
-        candidates = admitted_route_candidates(policy, rows, exhausted, complete=complete)
-        if not candidates:
-            break
-        target = candidates[0]
-        if target["fallback"]:
-            if fallback_attempts >= MAX_FALLBACK_ROUTES:
-                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: fallback probe limit reached")
-            fallback_attempts += 1
-        else:
-            if primary_attempts >= MAX_ACCEPTANCE_ROUTES:
-                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: primary probe limit reached")
-            primary_attempts += 1
-        identity = (target["instance"], target["model"])
-        if target["fallback"] and not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
-            raise RouteUnknownError(pick_summary, route_summary,
-                                    "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
-        exhausted.add(identity)
-        route = f"{identity[0]}/{identity[1]}"
-        proof = candidate_agent_command(
-            engine, name, "agent", "run", "--", "python3",
-            "/run/t3code-candidate-inputs/provider-turn-probe.py", route,
-            "--instance", identity[0], "--native-model", identity[1],
-            "--options-json", json.dumps(target["options"], sort_keys=True),
-            "--wait", str(min(max(timeout_s - 30, 1), 240)), timeout=min(timeout_s, 270),
-        )
-        if proof.returncode == 0:
-            try:
-                passed = json.loads(proof.stdout)
-            except (ValueError, TypeError):
-                passed = None
-            if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
-                    or passed.get("settled") is not True or passed.get("instance") != identity[0]
-                    or passed.get("model") != identity[1]):
-                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: exact settled proof is missing")
-            return route
-        category = candidate_error_category(proof)
-        summary = candidate_error_summary(proof)
-        failures.append(f"{route}:{category}-{summary}")
+        raise RouteUnavailableError(route_summary, route_summary, "provider_turn route_unavailable: managed tools unavailable")
+    target = admitted_acceptance_route(policy)
+    identity = (target["instance"], target["model"])
+    route = f"{identity[0]}/{identity[1]}"
+    # A non-capacity failure is attributable to the candidate only when the
+    # same route is currently proven working. Missing evidence stays unknown.
+    target["proven"] = any(
+        _target_identity(row) == identity
+        and isinstance(row.get("tool_loop"), dict) and row["tool_loop"].get("state") == "proven"
+        for row in rows
+    )
+    proof = candidate_agent_command(
+        engine, name, "agent", "run", "--", "python3",
+        "/run/t3code-candidate-inputs/provider-turn-probe.py", route,
+        "--instance", identity[0], "--native-model", identity[1],
+        "--options-json", json.dumps(target["options"], sort_keys=True),
+        "--wait", str(min(max(timeout_s - 30, 1), 240)), timeout=min(timeout_s, 270),
+    )
+    if proof.returncode == 0:
         try:
-            result = json.loads(proof.stdout or "{}")
+            passed = json.loads(proof.stdout)
         except (ValueError, TypeError):
-            result = {}
-        if not isinstance(result, dict) or result.get("settled") is not True:
-            raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: probe settlement not proven")
-        code = str((result.get("error") or {}).get("code") or "") if isinstance(result, dict) and isinstance(result.get("error"), dict) else ""
-        capacity = code in ("quota", "model-unavailable", "route-unavailable", "rate_limit", "unavailable") or category == "route-unavailable"
-        if not capacity:
-            # Without current evidence that the route works, a provider or
-            # transport error cannot be attributed to the candidate image.
-            if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
-                raise RouteUnknownError(pick_summary, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
-            proven_failure = True
-            break
-    # A fallback whose own current capacity cannot be proved is unknown even
-    # when an unversioned catalog or an explicitly unavailable row is present.
-    if not proven_failure:
-        for item in policy["routes"]:
-            if not isinstance(item, dict) or item.get("fallback_only") is not True or item.get("admit") is not True:
-                continue
-            provider = policy["providers"].get(item.get("provider"))
-            identity = (item.get("provider_instance"), item.get("model"))
-            if (not isinstance(provider, dict) or provider.get("admit") is not True
-                    or not isinstance(item.get("roles"), list) or "worker" not in item["roles"]
-                    or item.get("billing") not in ("subscription", "free", "promotion")
-                    or identity in exhausted):
-                continue
-            if not fallback_snapshot_proves_capacity(snapshot, fresh_rows, identity, rows):
-                raise RouteUnknownError(pick_summary, route_summary,
-                                        "provider_turn outcome unknown: fallback fresh mapped capacity is missing or conflicting")
-    # An absent, malformed or unreadable route is not evidence of exhaustion.
-    # A complete fresh snapshot may establish absence; otherwise every admitted
-    # route must have an explicit capacity observation or exhausted probe.
-    admitted = {(item.get("provider_instance"), item.get("model")) for item in policy["routes"]
-                if isinstance(item, dict) and item.get("admit") is True
-                and "worker" in item.get("roles", []) and item.get("billing") in ("subscription", "free", "promotion")
-                and isinstance(policy["providers"].get(item.get("provider")), dict)
-                and policy["providers"][item["provider"]].get("admit") is True}
-    observed = set(exhausted)
-    unknown = set()
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        target = row.get("target") or row.get("native") or {}
-        if not isinstance(target, dict):
-            continue
-        key = (target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id"),
-               target.get("model") or target.get("model_id"))
-        if key not in admitted:
-            continue
-        if isinstance(row.get("available"), bool) and ("provider_instance_id" not in target or isinstance(target.get("available"), bool)):
-            observed.add(key)
-        else:
-            unknown.add(key)
-    if not proven_failure and ((unknown - observed) or (admitted - observed and not complete)):
-        missing = sorted(admitted - observed)
-        fields = []
-        for instance, model in missing:
-            if not isinstance(instance, str) or not isinstance(model, str):
-                continue
-            prefix = f"{evidence_hash(instance)}/{evidence_hash(model)}"
-            matching = []
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                target = row.get("target") or row.get("native") or {}
-                if not isinstance(target, dict):
-                    continue
-                if ((target.get("providerInstanceId") or target.get("instanceId") or target.get("provider_instance_id")) == instance
-                        and (target.get("model") or target.get("model_id")) == model):
-                    matching.append((row, target))
-            if not matching:
-                fields.append(prefix + ":row_missing")
-            for row, target in matching:
-                if not isinstance(row.get("available"), bool):
-                    fields.append(prefix + ":row.available")
-                if "provider_instance_id" in target and not isinstance(target.get("available"), bool):
-                    fields.append(prefix + ":native.available")
-        raise RouteUnknownError(
-            pick_summary, route_summary,
-            "provider_turn outcome unknown: route capacity evidence incomplete; "
-            f"fields={','.join(fields) or 'invalid-policy-target'}; "
-            f"sources=agent-models-selected,agent-models-pick,model-routing.json; "
-            f"models_exit={route_result.returncode}; pick_exit={pick.returncode}; "
-            f"snapshot_complete={complete}")
-    evidence = ",".join(failures[:MAX_ACCEPTANCE_ROUTES + MAX_FALLBACK_ROUTES]) or "no-admitted-available-route"
-    error_type = ProviderTurnError if proven_failure else RouteUnavailableError
-    raise error_type(pick_summary, route_summary,
-                     f"provider_turn {'candidate_failed' if proven_failure else 'route_unavailable'}: {evidence}; candidate_state={diagnostics}; catalog={route_summary}")
+            passed = None
+        if (not isinstance(passed, dict) or passed.get("outcome") != "passed"
+                or passed.get("settled") is not True or passed.get("instance") != identity[0]
+                or passed.get("model") != identity[1]):
+            raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: exact settled proof is missing")
+        return route
+    category = candidate_error_category(proof)
+    summary = candidate_error_summary(proof)
+    failure = f"{route}:{category}-{summary}"
+    try:
+        result = json.loads(proof.stdout or "{}")
+    except (ValueError, TypeError):
+        result = {}
+    if not isinstance(result, dict) or result.get("settled") is not True:
+        raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: probe settlement not proven")
+    code = str((result.get("error") or {}).get("code") or "") if isinstance(result.get("error"), dict) else ""
+    capacity = code in ("quota", "model-unavailable", "route-unavailable", "rate_limit", "unavailable") or category == "route-unavailable"
+    if capacity:
+        # External availability is not a candidate regression.
+        raise RouteUnavailableError(route, route_summary, f"provider_turn route_unavailable: {failure}")
+    if not target["proven"] or code not in ("no-tool-call", "wrong-tool-result"):
+        raise RouteUnknownError(route, route_summary, "provider_turn outcome unknown: route failure is not attributable to the candidate")
+    raise ProviderTurnError(route, route_summary,
+                            f"provider_turn candidate_failed: {failure}; candidate_state={diagnostics}; route={route}")
 
-
-
-MAX_ACCEPTANCE_ROUTES = 3
-MAX_FALLBACK_ROUTES = 2
 
 def summarize_t3_rows(rows):
     summary = []
@@ -1448,14 +1265,7 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
 
 def safe_unknown_evidence(error):
     message = str(error)
-    route_fields = re.findall(r"sha256:[0-9a-f]{64}/sha256:[0-9a-f]{64}:(?:row_missing|row\.available|native\.available)", message)
-    if route_fields and "route capacity evidence incomplete" in message:
-        return ("route capacity evidence incomplete; fields=" + ",".join(route_fields[:64])
-                + "; sources=agent-models-selected,agent-models-pick,model-routing.json")
-    known = ("partial live model routing snapshot has no usable candidate",
-             "fallback probe limit reached", "primary probe limit reached",
-             "exact settled proof is missing", "probe settlement not proven",
-             "fallback fresh mapped capacity is missing or conflicting",
+    known = ("exact settled proof is missing", "probe settlement not proven",
              "route failure is not attributable to the candidate")
     for reason in known:
         if message == "provider_turn outcome unknown: " + reason:
