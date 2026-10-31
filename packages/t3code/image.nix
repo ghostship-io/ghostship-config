@@ -67,6 +67,9 @@ let
       # store hash, and without depending on the tooling repo.
       install -d usr/share
       ln -s ${t3codeBakedApp} usr/share/t3code-app
+      # One shared answer to "which app does this container serve". Readers run
+      # this inside the container instead of each deriving it differently.
+      install -Dm 0755 ${./served-identity.sh} usr/share/t3code/served-identity.sh
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
