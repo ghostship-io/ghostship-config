@@ -763,6 +763,22 @@ if [[ -e $STATE_DIR/receipts/$DEPLOYMENT_ID.json ]]; then
   [[ "$(jq -r '.image_id | sub("^sha256:"; "")' "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")" != "$stream_id" ]] \
     || { echo 'mismatched candidate was receipted' >&2; exit 1; }
 fi
+# A pre-existing receipt for this deployment is evidence, not scratch space: a
+# mismatched streamed load must leave it byte-for-byte as it was.
+jq -cn --arg d "$DEPLOYMENT_ID" --arg i "$stream_id" \
+  '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",applied:true}' \
+  > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+receipt_sum=$(sha256sum < "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")
+: > "$EVENTS"
+rm -f "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$(printf '%064d' 9)" bash "$fixture_writer" > "$tmp/stream-preserved.log" 2>&1
+preserved_rc=$?
+set -e
+[[ $preserved_rc == 77 ]]
+[[ "$(sha256sum < "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")" == "$receipt_sum" ]] \
+  || { echo 'a pre-existing receipt was destroyed by a mismatched load' >&2; exit 1; }
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 echo 'Streamed image proof: config-digest id before load, verified after load, mismatch refused.'
 
 # A missing updater lock must be created owned by the home owner and unreadable

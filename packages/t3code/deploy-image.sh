@@ -85,6 +85,15 @@ if [[ -n ${IMAGE_STREAM:-} ]]; then
   unset IMAGE_STREAM
   trap 'rm -f "$IMAGE_ARCHIVE"' EXIT
 fi
+# The receipt this attempt writes must not destroy a pre-existing one: a receipt
+# for an already-applied or serving deployment is evidence, not scratch space.
+receipt_path="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+receipt_before=absent
+receipt_backup="$STATE_DIR/.receipt-before-$DEPLOYMENT_ID.json"
+if [[ -f $receipt_path && ! -L $receipt_path ]]; then
+  receipt_before=present
+  cp "$receipt_path" "$receipt_backup" || fail 'existing receipt could not be preserved'
+fi
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -162,17 +171,11 @@ write_attempt_result() {
 chmod 0600 "$attempt_temporary"
 mv -f "$attempt_temporary" "$attempt_file"
 trap write_attempt_result EXIT
-# The image id is the sha256 of the image's config blob, which is known before
-# the image is loaded either way: from the archive, or by reading the streamed
-# docker-archive. Keeping it pre-load preserves the receipt ordering, so the
-# accepted alias cannot move before the id is established.
-if [[ -n ${IMAGE_STREAM:-} ]]; then
-  image_config=$("$IMAGE_STREAM" | tar -xOf - manifest.json | "$JQ_BIN" -er '.[0].Config')
-  image_id=$("$IMAGE_STREAM" | tar -xOf - "$image_config" | sha256sum | cut -d ' ' -f 1)
-else
-  image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
-  image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
-fi
+# The image id is the sha256 of the image's config blob, known before the load
+# from the archive. A streamed input was materialised to an archive before this
+# point, so there is exactly one derivation.
+image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
+image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
 secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
 
@@ -344,8 +347,13 @@ load_image() {
   [[ $loaded == "sha256:$image_id" ]] || {
     echo "Loaded image id does not match the pre-load id: expected sha256:$image_id, got ${loaded:-absent}" >&2
     # The receipt describes the archive, but the image that loaded is not that
-    # archive: void it before recording UNKNOWN so nothing can promote it.
-    rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+    # archive. Retire only what this attempt wrote: restore a pre-existing
+    # receipt, or remove the one this attempt created.
+    if [[ $receipt_before == present ]]; then
+      cp "$receipt_backup" "$receipt_path"
+    else
+      rm -f "$receipt_path"
+    fi
     "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"loaded image id differs from the streamed config digest"}' "$attempt_file" > "$attempt_temporary"
     chmod 0600 "$attempt_temporary"; mv -f "$attempt_temporary" "$attempt_file"
     exit 77
