@@ -37,6 +37,9 @@ DEPLOY_TIMEOUT_SECONDS=${DEPLOY_TIMEOUT_SECONDS:-1800}
 DEPLOY_PROBE_SLEEP=${DEPLOY_PROBE_SLEEP:-sleep}
 CURRENT_SYSTEM=${GHOSTSHIP_CURRENT_SYSTEM:-/run/current-system}
 SYSTEM_PROFILE=${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
+# The artifact identity may be a store symlink (environment.etc); the test
+# harness substitutes its own store root.
+IDENTITY_STORE_ROOT=${IDENTITY_STORE_ROOT:-/nix/store}
 
 mode=deploy
 flake=$repo_root
@@ -119,8 +122,20 @@ nix_build() {
 }
 
 read_identity() {
-  local file=$1
-  [[ -f $file && ! -L $file ]] || die "the built system has no deployment identity at $file"
+  local file=$1 target
+  # environment.etc renders the identity as a symlink into an immutable store
+  # path, not a regular file under the toplevel. Follow that link only when it
+  # stays inside the store; a link anywhere else is refused.
+  if [[ -L $file ]]; then
+    target=$(readlink -f "$file") || die "the deployment identity symlink is unresolvable: $file"
+    case $target in
+      "$IDENTITY_STORE_ROOT"/*) ;;
+      *) die "the deployment identity symlink leaves the store: $file -> $target" ;;
+    esac
+    [[ -f $target && ! -L $target ]] || die "the deployment identity symlink target is not a regular file: $target"
+    file=$target
+  fi
+  [[ -f $file ]] || die "the built system has no deployment identity at $1"
   deployment_id=$("$JQ_BIN" -er '.deployment_id // empty' "$file")
   agent_revision=$("$JQ_BIN" -er '.agent_revision // empty' "$file")
   tooling_path=$("$JQ_BIN" -er '.tooling_path // empty' "$file")
