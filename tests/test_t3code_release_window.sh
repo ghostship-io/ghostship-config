@@ -938,4 +938,3 @@ grep -q 'no exact known-good receipt' "$tmp/wrong-applied.log" || {
 printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
 
 echo 'Release window refusal and reopen fixture passed.'
-
