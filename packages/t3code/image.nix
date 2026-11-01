@@ -32,28 +32,10 @@ let
     sha256sum ${t3codeBakedSource} | cut -d' ' -f1 > $out/DIGEST
     chmod 0444 $out/VERSION $out/DIGEST
   '';
-  # The CLIs the container used to install over the network on first start.
-  # Pinned here so a fresh container never waits on npm, and described in a
-  # manifest the launcher reads instead of guessing at PATH.
-  t3codeAgentClis = [
-    { name = "codex"; package = pkgs.codex; binary = "codex"; }
-    { name = "claude-code"; package = pkgs.claude-code; binary = "claude"; }
-    { name = "opencode"; package = pkgs.opencode; binary = "opencode"; }
-    { name = "cursor-cli"; package = pkgs.cursor-cli; binary = "cursor-agent"; }
-    # antigravity is deliberately not baked: the agent launches its ACP archive
-    # (`agy_acp_server.par`) and updates it through the antigravity updater, and
-    # `pkgs.antigravity` is a GUI IDE, not that CLI.
-  ];
-  t3codeCliManifest = pkgs.writeText "t3code-baked-clis.json" (builtins.toJSON (
-    map (entry: {
-      inherit (entry) name binary;
-      version = entry.package.version;
-      path = "${entry.package}/bin/${entry.binary}";
-    }) t3codeAgentClis));
   t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
-  t3codeImageContents = t3codePackages ++ map (entry: entry.package) t3codeAgentClis ++ [
+  t3codeImageContents = t3codePackages ++ [
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
@@ -79,6 +61,11 @@ let
       chmod 0644 etc/ghostship/approved-free-workers.json
       # systemd does not inherit the image's PATH for its services. Managed
       # helpers need these commands before their own environment setup runs.
+      install -m 0644 ${./worker-dev-env.sh} etc/ghostship/worker-dev-env.sh
+      install -m 0644 ${./worker-dev-env.root} etc/ghostship/worker-dev-env.root
+      install -m 0644 ${./worker-dev-env.origins} etc/ghostship/worker-dev-env.origins
+      # Workers get their repository's flake devShell from the shell itself, so
+      # no per-command PATH prefixing, wrapping or hand-set markers are needed.
       for manager in system user; do
         cat > etc/systemd/$manager.conf <<'EOF'
       [Manager]
@@ -94,9 +81,6 @@ let
       # One shared answer to "which app does this container serve". Readers run
       # this inside the container instead of each deriving it differently.
       install -Dm 0755 ${./served-identity.sh} usr/share/t3code/served-identity.sh
-      # The launcher and the start-time gate read this instead of checking PATH:
-      # absolute store paths, with the version each entry was built at.
-      install -Dm 0644 ${t3codeCliManifest} usr/share/t3code-baked/clis.json
       mkdir -p lib lib64
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
@@ -393,6 +377,10 @@ let
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
+      # Provider session shells load their worktree's devShell. This is set on
+      # the worker lane only: host-PATH services and system hooks keep their own
+      # environment and do not inherit it.
+      Environment=BASH_ENV=/etc/ghostship/worker-dev-env.sh
       # Provider sessions inherit the route policy and the live Go coordinator
       # address, plus the path of the token file the Go CLI reads. No credential
       # value is passed: every worker in this cgroup can read the environment.

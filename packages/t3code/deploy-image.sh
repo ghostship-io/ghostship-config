@@ -1,4 +1,29 @@
 set -euo pipefail
+if ! declare -F receipt_checks_ok >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  . "$(dirname "${BASH_SOURCE[0]}")/receipt-checks.sh"
+fi
+
+publish_attestation() {
+  local payload="$1" directory="$STATE_DIR/attestations" temporary
+  [[ ! -L "$directory" ]] || { echo 'Attestation directory is a symlink' >&2; return 1; }
+  install -d -m 0755 "$directory"
+  [[ $(stat -c '%u' "$directory") == "$EUID" ]] || { echo 'Attestation directory has unexpected owner' >&2; return 1; }
+  chmod 0755 "$directory"
+  temporary=$(mktemp "$directory/.current.XXXXXXXX")
+  printf '%s\n' "$payload" > "$temporary"
+  chmod 0444 "$temporary"
+  sync -f "$temporary"
+  mv -f "$temporary" "$directory/current.json"
+  sync -f "$directory"
+}
+
+publish_unknown_attestation() {
+  local failed=false
+  if [[ -e "$STATE_DIR/failed-candidate" || -L "$STATE_DIR/failed-candidate" ]]; then failed=true; fi
+  publish_attestation "$("$JQ_BIN" -cn --argjson failed "$failed" \
+    '{schema:1,state:"unknown",failed_candidate:$failed}')"
+}
 
 if [[ ${1:-} == --list-manifest ]]; then
   : "${2:?usage: deploy-image.sh --list-manifest IMAGE_ARCHIVE}"
@@ -7,6 +32,15 @@ fi
 
 # shellcheck disable=SC1090
 source "${WINDOW_INTENT_HELPER:?}"
+# Every non-zero exit must say so; a silent exit 1 hid the failed step. The
+# attempt writer below replaces this trap, so it calls the same function.
+log_exit_rc() {
+  local rc=${1:-0}
+  if [ "$rc" -ne 0 ]; then
+    echo "deploy: exiting rc=$rc (see the last deploy step above)" >&2
+  fi
+}
+trap 'rc=$?; log_exit_rc "$rc"' EXIT
 announce_intent deploy
 [[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
@@ -20,6 +54,7 @@ if [[ ${1:-} == --invalidate-failure ]]; then
   install -d -m 0700 "$STATE_DIR"
   exec 9>"$STATE_DIR/deploy.lock"
   flock -x 9
+  publish_unknown_attestation
   failed_file="$STATE_DIR/failed-candidate"
   [[ -f "$failed_file" && ! -L "$failed_file" ]] || { echo 'No failed candidate marker to invalidate' >&2; exit 1; }
   marker=$(cat "$failed_file")
@@ -32,6 +67,7 @@ if [[ ${1:-} == --invalidate-failure ]]; then
     '{event:"invalidation_requested",at:$at,failed_key:$failed_key,reason:$reason}' >> "$audit"
   sync -f "$audit"
   rm "$failed_file"
+  publish_unknown_attestation
   echo 'Failed candidate marker invalidated; acceptance must run again.'
   exit 0
 fi
@@ -39,6 +75,16 @@ fi
 : "${STATE_DIR:?}"
 # Either an archive or a streamed image is required; a stream is preferred.
 if [[ -z ${IMAGE_STREAM:-} ]]; then : "${IMAGE_ARCHIVE:?}"; fi
+# A stream is one-shot: materialise it once, then use the archive path
+# everywhere (id derivation, load, acceptance) so no step reads it twice or
+# receives an empty archive. IMAGE_STREAMED keeps the post-load id check.
+if [[ -n ${IMAGE_STREAM:-} ]]; then
+  IMAGE_ARCHIVE="$STATE_DIR/image-stream.tar"
+  "$IMAGE_STREAM" > "$IMAGE_ARCHIVE" || fail 'image stream unreadable'
+  IMAGE_STREAMED=1
+  unset IMAGE_STREAM
+  trap 'rm -f "$IMAGE_ARCHIVE"' EXIT
+fi
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -58,8 +104,10 @@ if [[ -z ${IMAGE_STREAM:-} ]]; then : "${IMAGE_ARCHIVE:?}"; fi
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
+RESTART_DWELL_SECONDS=${RESTART_DWELL_SECONDS:-180}
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
+ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -80,6 +128,7 @@ health_wait_sleep() {
 install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
 flock -x 9
+publish_unknown_attestation
 
 desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
 desired_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
@@ -104,6 +153,7 @@ write_attempt_result() {
     chmod 0600 "$attempt_temporary"
     mv -f "$attempt_temporary" "$attempt_file"
   fi
+  log_exit_rc "$exit_code"
   return "$exit_code"
 }
 "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" \
@@ -123,8 +173,59 @@ else
   image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
   image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
 fi
-secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
+secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+
+# A receipt written before the digest identity carries only the inode. Its
+# content is unknown from the file, so accept it only when the live container
+# secret digest proves the same input; never rewrite an old receipt.
+secret_identity_ok() {
+  local file=$1 recorded live
+  recorded=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$file" 2>/dev/null || true)
+  if [[ -n "$recorded" ]]; then
+    [[ "$recorded" == "$secret_sha256" ]]
+    return
+  fi
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "$secret_sha256" ]]
+}
+
+# The desired and applied input lines use the secret content digest. An applied
+# line written before the change still names the inode; compare its other
+# inputs exactly and the secret by content so the first no-op deploy does not
+# restart T3.
+inputs_equal() {
+  local desired=$1 applied=$2 token d_agent="" d_secret="" d_inode="" d_tool="" a_agent="" a_secret="" a_inode="" a_tool="" live=""
+  for token in $desired; do
+    case "$token" in
+      agent=*) d_agent=${token#agent=};;
+      secret_sha256=*) d_secret=${token#secret_sha256=};;
+      secret_inode=*) d_inode=${token#secret_inode=};;
+      tooling=*) d_tool=${token#tooling=};;
+    esac
+  done
+  for token in $applied; do
+    case "$token" in
+      agent=*) a_agent=${token#agent=};;
+      secret_sha256=*) a_secret=${token#secret_sha256=};;
+      secret_inode=*) a_inode=${token#secret_inode=};;
+      tooling=*) a_tool=${token#tooling=};;
+    esac
+  done
+  [[ "$d_agent" == "$a_agent" && "$d_tool" == "$a_tool" ]] || return 1
+  if [[ -z "$d_secret" && -z "$a_secret" ]]; then
+    # Both lines predate the digest. The old exact-string rule still decides.
+    [[ "$desired" == "$applied" ]]
+    return
+  fi
+  if [[ -n "$d_secret" && -n "$a_secret" ]]; then
+    [[ "$d_secret" == "$a_secret" ]]
+    return
+  fi
+  [[ -n "$d_inode" || -n "$a_inode" ]] || return 1
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "${d_secret:-$a_secret}" ]]
+}
 
 receipt_matches_image() {
   "$JQ_BIN" -e \
@@ -132,17 +233,15 @@ receipt_matches_image() {
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
-    --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
      and (.candidate_name | startswith("t3code-candidate-"))
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
-     and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)
-     and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-           .checks.skills, .checks.desktop_transport] | all(. == true))' \
-    "$receipt" >/dev/null 2>&1
+     and (.agent_path == $tooling)' \
+    "$receipt" >/dev/null 2>&1 \
+    && receipt_checks_ok "$receipt" \
+    && secret_identity_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -153,14 +252,75 @@ any_receipt_matches_image() {
       '((.image_id | sub("^sha256:"; "")) == $image)
        and (.deployment_id | type == "string" and length > 0)
        and (.candidate_name | type == "string" and startswith("t3code-candidate-"))
-       and (.live_before != null and .live_before == .live_after)
-       and ([.checks.app_ready, .checks.provider_turn, .checks.agent_cli,
-             .checks.skills, .checks.desktop_transport] | all(. == true))' \
-      "$candidate" >/dev/null 2>&1; then
+       and (.live_before != null and .live_before == .live_after)' \
+      "$candidate" >/dev/null 2>&1 \
+      && receipt_checks_ok "$candidate"; then
       return 0
     fi
   done
   return 1
+}
+
+acquire_managed_locks() {
+  local tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
+  local refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
+  local t3_tree="$HOME_DIR/.local/share/t3code-tools/t3"
+  local t3_update_lock="$t3_tree/update.lock"
+  local t3_owner
+  [[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" ]] || {
+    echo 'Managed tool or refresh lock missing; candidate is not inspected' >&2; return 1;
+  }
+  # A host that has never promoted an in-container T3 app has no app tree, so
+  # there is no competing updater to serialize against and nothing for a receipt
+  # to be bound to. The tree is never created here; a tree that exists with a
+  # non-regular lock is refused, because flock on a symlink or directory can
+  # lock something other than what the updater locks.
+  if [[ -e "$t3_tree" || -L "$t3_tree" ]]; then
+    [[ -d "$t3_tree" && ! -L "$t3_tree" ]] || {
+      echo 'T3 app tree is not a directory; candidate is not inspected' >&2; return 1;
+    }
+    [[ ! -e "$t3_update_lock" || ( -f "$t3_update_lock" && ! -L "$t3_update_lock" ) ]] || {
+      echo 'T3 update lock is not a regular file; candidate is not inspected' >&2; return 1;
+    }
+  fi
+  exec 8<>"$tool_lock"
+  flock -x 8
+  exec 7<>"$refresh_lock"
+  flock -x 7
+  if [[ -d "$t3_tree" ]]; then
+    # The updater opens this file with O_CREAT, so creating it here is the same
+    # file the updater will lock. Create it owned by the home owner: the updater
+    # runs as that user and opens the lock for append, so a root-owned lock
+    # would fail every app update with EACCES.
+    if [[ ! -e "$t3_update_lock" ]]; then
+      t3_owner=$(stat -c '%u:%g' "$HOME_DIR") || {
+        echo 'T3 app owner unknown; candidate is not inspected' >&2; return 1;
+      }
+      [[ $t3_owner =~ ^[1-9][0-9]*:[0-9]+$ ]] || {
+        echo 'T3 app owner invalid; candidate is not inspected' >&2; return 1;
+      }
+      install -m 0600 -o "${t3_owner%%:*}" -g "${t3_owner##*:}" /dev/null "$t3_update_lock" || {
+        echo 'T3 update lock bootstrap failed; candidate is not inspected' >&2; return 1;
+      }
+    fi
+    exec 6>>"$t3_update_lock"
+    flock -x 6
+  fi
+}
+
+publish_pass_attestation() {
+  local fields container_id live_image started health receipt_hash
+  [[ ! -e "$STATE_DIR/failed-candidate" && ! -L "$STATE_DIR/failed-candidate" ]] || return 1
+  receipt_matches_image || return 1
+  fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}') || return 1
+  read -r container_id live_image rest <<< "$fields"
+  health=${rest##* }
+  [[ $container_id =~ ^[0-9a-f]{64}$ && ${live_image#sha256:} == "$image_id" && $health == healthy ]] || return 1
+  receipt_hash=$(sha256sum < "$receipt" | cut -d ' ' -f 1)
+  publish_attestation "$("$JQ_BIN" -cn --arg image "$image_id" --arg container "$container_id" \
+    --arg receipt "$DEPLOYMENT_ID" --arg receipt_hash "$receipt_hash" \
+    '{schema:1,state:"pass",image_id:$image,container_id:$container,receipt_id:$receipt,
+      receipt_sha256:$receipt_hash,failed_candidate:false}')"
 }
 
 promote_image_id() {
@@ -174,17 +334,18 @@ promote_image_id() {
 }
 
 load_image() {
-  if [[ -z ${IMAGE_STREAM:-} ]]; then
-    "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
-    return 0
-  fi
-  "$IMAGE_STREAM" | "$PODMAN_BIN" load
-  # The pre-load id must be the id podman computed. A mismatch is UNKNOWN: no
-  # alias promotion and no receipt, rather than silently trusting either value.
+  "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+  # For a streamed input the pre-load id came from the stream itself, so the id
+  # podman computed must agree. A mismatch is UNKNOWN: no alias promotion and no
+  # receipt, rather than silently trusting either value.
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] || return 0
   local loaded
   loaded=$("$PODMAN_BIN" image inspect "sha256:$image_id" --format '{{.Id}}' 2>/dev/null || true)
   [[ $loaded == "sha256:$image_id" ]] || {
     echo "Loaded image id does not match the pre-load id: expected sha256:$image_id, got ${loaded:-absent}" >&2
+    # The receipt describes the archive, but the image that loaded is not that
+    # archive: void it before recording UNKNOWN so nothing can promote it.
+    rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
     "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"loaded image id differs from the streamed config digest"}' "$attempt_file" > "$attempt_temporary"
     chmod 0600 "$attempt_temporary"; mv -f "$attempt_temporary" "$attempt_file"
     exit 77
@@ -196,8 +357,9 @@ promote_accepted_alias() {
   promote_image_id "sha256:$image_id"
 }
 
-if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]]; then
+if [[ "$applied" == "$DEPLOYMENT_ID" ]] && inputs_equal "$desired_inputs" "$applied_inputs"; then
   if receipt_matches_image; then
+    acquire_managed_locks
     accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
@@ -205,6 +367,13 @@ if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]
     else
       echo "T3 image, runtime inputs, and accepted image alias are already applied: $DEPLOYMENT_ID"
     fi
+    # A legacy applied line named the inode; record the digest form now so the
+    # identity does not stay ambiguous.
+    if [[ "$applied_inputs" != "$desired_inputs" ]]; then
+      printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
+      mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
+    fi
+    publish_pass_attestation
     exit 0
   fi
 fi
@@ -232,63 +401,9 @@ if [[ -z "$accepted_id" ]]; then
 fi
 
 failed_file="$STATE_DIR/failed-candidate"
-# Managed tool updates acquire the tool lock before the shared refresh lock.
-# Hold both while identifying and running the candidate, so a failed receipt is
-# bound to the launcher code it actually staged.
-#
-# The in-container T3 app updater (packages/t3code/update-t3.py) takes its own
-# lock at $HOME_DIR/.local/share/t3code-tools/t3/update.lock and, while holding
-# it, rewrites that tree's `current` link and writes activation.pending. A
-# candidate accepted without that lock could bind its receipt to an app tree the
-# updater changes immediately afterwards, and the restarted container would then
-# serve an app no receipt describes. Acquire it as the last of the three locks so
-# the two writers serialize instead of interleaving.
-tool_lock="$HOME_DIR/.local/state/t3code-tool-update/tool-update.lock"
-refresh_lock="$HOME_DIR/.local/state/t3code-shared-agents/refresh.lock"
-t3_tree="$HOME_DIR/.local/share/t3code-tools/t3"
-t3_update_lock="$t3_tree/update.lock"
-[[ -f "$tool_lock" && ! -L "$tool_lock" && -f "$refresh_lock" && ! -L "$refresh_lock" ]] || {
-  echo 'Managed tool or refresh lock missing; candidate is not inspected' >&2; exit 1;
-}
-# A host that has never promoted an in-container T3 app has no app tree, so
-# there is no competing updater to serialize against and nothing for a receipt
-# to be bound to. Do not create the tree here: the updater creates it itself,
-# and a deployment script must not fabricate updater state. A tree that exists
-# with a non-regular lock file is refused, because flock on a symlink or a
-# directory can lock something other than what the updater locks.
-if [[ -e "$t3_tree" || -L "$t3_tree" ]]; then
-  [[ -d "$t3_tree" && ! -L "$t3_tree" ]] || {
-    echo 'T3 app tree is not a directory; candidate is not inspected' >&2; exit 1;
-  }
-  [[ ! -e "$t3_update_lock" || ( -f "$t3_update_lock" && ! -L "$t3_update_lock" ) ]] || {
-    echo 'T3 update lock is not a regular file; candidate is not inspected' >&2; exit 1;
-  }
-fi
-exec 8<>"$tool_lock"
-flock -x 8
-exec 7<>"$refresh_lock"
-flock -x 7
-if [[ -d "$t3_tree" ]]; then
-  # The updater opens this file with O_CREAT, so creating it here is the same
-  # file the updater will lock, and holding it closes the create-then-lock race.
-  # Create it owned by the home owner, not by this root process: the updater
-  # runs as that user and opens the lock for append, so a root-owned 0600 or
-  # 0644 lock would fail every app update with EACCES until someone fixed the
-  # ownership by hand.
-  if [[ ! -e "$t3_update_lock" ]]; then
-    t3_owner=$(stat -c '%u:%g' "$HOME_DIR") || {
-      echo 'T3 app owner unknown; candidate is not inspected' >&2; exit 1;
-    }
-    [[ $t3_owner =~ ^[1-9][0-9]*:[0-9]+$ ]] || {
-      echo 'T3 app owner invalid; candidate is not inspected' >&2; exit 1;
-    }
-    install -m 0600 -o "${t3_owner%%:*}" -g "${t3_owner##*:}" /dev/null "$t3_update_lock" || {
-      echo 'T3 update lock bootstrap failed; candidate is not inspected' >&2; exit 1;
-    }
-  fi
-  exec 6>>"$t3_update_lock"
-  flock -x 6
-fi
+# Lock order matches managed maintenance: tool, refresh, then the T3 app
+# updater, whose lock is bootstrapped for its owner when the tree exists.
+acquire_managed_locks
 # Hash only the executable acceptance bundle and the candidate/tooling identity.
 # The bundle is copied as named files by t3codeDeploymentScripts; adding a
 # dependency requires updating that bundle and this manifest together. Paths
@@ -330,6 +445,7 @@ mark_candidate_failed() {
   printf '%s\n' "$failed_key" > "$temporary"
   chmod 0600 "$temporary"
   mv -f "$temporary" "$failed_file"
+  publish_unknown_attestation
 }
 
 candidate_args=(
@@ -343,6 +459,7 @@ candidate_args=(
   --provider-secrets-file "$PROVIDER_SECRETS_FILE"
   --tooling-path "$TOOLING_PATH"
   --agent-revision "$AGENT_REVISION"
+  --acceptance-route-file "$ACCEPTANCE_ROUTE_FILE"
   --candidate-home-target "$CANDIDATE_HOME_TARGET"
   --systemctl-bin "$SYSTEMCTL_BIN"
 )
@@ -430,13 +547,16 @@ container_identity() {
     printf '{}\n'
     return
   fi
-  read -r container_id image started health <<< "$fields"
+  # .State.StartedAt contains spaces; the health status is the final field, so
+  # split it from the end and keep the whole timestamp.
+  read -r container_id image rest <<< "$fields"
+  started=${rest% *}; health=${rest##* }
   "$JQ_BIN" -cn --arg id "$container_id" --arg image "$image" --arg started_at "$started" \
     --arg health "$health" \
     '{id:$id,image:$image,started_at:$started_at,health:$health}'
 }
 
-# record_applied AGENT_PATH SECRET_INODE marks this deployment and its inputs
+# record_applied AGENT_PATH SECRET_SHA256 marks this deployment and its inputs
 # applied, with what the running container verifiably uses.
 record_applied() {
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied.tmp"
@@ -444,10 +564,10 @@ record_applied() {
   printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
   mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
   "$JQ_BIN" -cn --arg deployment_id "$DEPLOYMENT_ID" --arg agent_revision "$AGENT_REVISION" \
-    --arg agent_path "$1" --arg provider_secret_inode "$2" \
+    --arg agent_path "$1" --arg provider_secret_sha256 "$2" \
     --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{deployment_id:$deployment_id,agent_revision:$agent_revision,agent_path:$agent_path,
-      provider_secret_inode:$provider_secret_inode,verified:true,verified_at:$verified_at}' \
+      provider_secret_sha256:$provider_secret_sha256,verified:true,verified_at:$verified_at}' \
     > "$STATE_DIR/deployed-inputs.json.tmp"
   chmod 0600 "$STATE_DIR/deployed-inputs.json.tmp"
   mv -f "$STATE_DIR/deployed-inputs.json.tmp" "$STATE_DIR/deployed-inputs.json"
@@ -458,14 +578,14 @@ pre=$(container_identity)
 # cannot restart a unit for a newer image using this image's receipt.
 current_desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
 current_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
-if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_inputs" ]]; then
+if [[ "$current_desired" != "$DEPLOYMENT_ID" ]] || ! inputs_equal "$desired_inputs" "$current_inputs"; then
   echo "T3 deployment request was superseded before restart; refusing stale image" >&2
   exit 0
 fi
 
 # A re-run of acceptance may find T3 already running exactly what it accepted:
-# every activation re-decrypts the provider secret to a new inode, which
-# changes the desired inputs without changing anything T3 uses. Restart only
+# every activation re-decrypts the provider secret to a new inode; the content
+# digest in desired inputs stays the same. Restart only
 # when the image, the agent or the secret content differs; a restart onto the
 # same inputs would only end every session. The digests stay in memory.
 pre_image=$(printf '%s' "$pre" | "$JQ_BIN" -r '.image // empty')
@@ -478,8 +598,8 @@ if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
     fi
-    running_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-    record_applied "$running_agent" "$running_secret_inode"
+    record_applied "$running_agent" "$running_secret"
+    publish_pass_attestation
     echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
     exit 0
   fi
@@ -492,6 +612,8 @@ promote_accepted_alias
 echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
+restart_dwell_started=$(health_wait_now)
+restart_dwell_deadline=$((restart_dwell_started + RESTART_DWELL_SECONDS))
 
 deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
 healthy=false
@@ -511,13 +633,42 @@ if [[ "$healthy" != true ]]; then
 fi
 
 live_agent=$("$PODMAN_BIN" exec t3code readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current")
-live_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret_inode" != "$secret_inode" ]]; then
+live_secret=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1)
+if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret" != "$secret_sha256" ]]; then
   echo "T3 restart did not load the accepted agent and provider inputs" >&2
   exit 1
 fi
 
+# Baseline once the health loop reports healthy: systemd-driven restarts create
+# a new container, so podman's RestartCount stays 0 and misses the 329 shape.
+# Id + StartedAt is the identity the ledger already uses.
+healthy_identity=$(container_identity)
+healthy_id=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.id // empty')
+healthy_started=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$healthy_id" || -z "$healthy_started" ]]; then
+  echo 'container identity unreadable at settle start' >&2
+  exit 1
+fi
+
+# One bounded dwell after this deploy's own restart, on the same clock as the
+# health wait. A different Id or StartedAt means T3 restarted again; exit 1
+# (never 75, which systemd would retry and restart T3 again) and do not record
+# applied.
+while (( $(health_wait_now) < restart_dwell_deadline )); do
+  health_wait_sleep 5
+done
 post=$(container_identity)
+post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
+post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$post_id" || -z "$post_started" ]]; then
+  echo 'container identity unreadable at settle end' >&2
+  exit 1
+fi
+if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
+  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (container identity changed)" >&2
+  exit 1
+fi
+
 post_image=$(printf '%s' "$post" | "$JQ_BIN" -r '.image // empty')
 if [[ "${post_image#sha256:}" != "$image_id" ]]; then
   echo "T3 container did not start the receipted image sha256:$image_id" >&2
@@ -533,7 +684,8 @@ install -d -m 0700 "$(dirname "$RESTART_LEDGER")"
 printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
-record_applied "$live_agent" "$live_secret_inode"
+record_applied "$live_agent" "$live_secret"
+publish_pass_attestation
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
 printf '%s\n' "action=candidate-accepted-restart deployment=$DEPLOYMENT_ID" >> "$AUDIT_LOG"
 chmod 0600 "$AUDIT_LOG"

@@ -45,6 +45,7 @@ class T3RoutePolicyTests(unittest.TestCase):
             "opencode/ollama-cloud/deepseek-v4.1-flash",
             "opencode/ollama-cloud/deepseek-v4.1-flash:1017",
             "opencode/opencode-go/deepseek-v4.1-flash",
+            "opencode-free/opencode/deepseek-v4.1-flash-free",
             "opencode/command-code/deepseek/deepseek-v4.1-flash",
             "opencode/literouter/deepseek-v4.1-flash-1017:full-context",
             "antigravity/gemini-3.8-flash",

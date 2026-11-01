@@ -5,13 +5,15 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/8660dce35d9fd81fce71df398c839906fc164477";
+    # Native-agent-only move for notes: ghostship-private-agent returns to 5b4e2f4e
+    # with the first accepted T3 deployment; this pin keeps the deployment id.
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/fd68eed10ed4ffdc1a0f0093a58a6ea05daa1d06";
     # Independently reviewed native connector increment; unrelated service
     # runtimes keep their existing release pin. This input drives only the
     # native private-integration runtime (lib/native-mcp.nix + connector/), so
     # it moves without the service clients and Python packages above.
     ghostship-native-agent = {
-      url = "github:ghostship-io/ghostship-agent/50987a72ca29ce8050d4871184269ba70e90cb1f";
+      url = "github:ghostship-io/ghostship-agent/fd68eed10ed4ffdc1a0f0093a58a6ea05daa1d06";
       flake = false;
     };
 
@@ -28,7 +30,7 @@
     # parses, rendered verbatim to /etc/ghostship/route-policy.json. It has its
     # own pin so an approval move does not move the runtime policy with it.
     ghostship-route-catalog = {
-      url = "github:ghostship-io/ghostship-agent/7bdbd28b16e16685bbb1da5f79286b750dac8ebb";
+      url = "github:ghostship-io/ghostship-agent/28bb5fc1e9824a24c1a4df9bc2bf45b8037f54e0";
       flake = false;
     };
 
@@ -177,7 +179,11 @@
           };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              # Agent work in this repository: Go tooling, git, and the scanner
+              # the repository's privacy hook runs on commit.
+              go_1_26
               git
+              gitleaks
               age
               bashInteractive
               coreutils

@@ -29,6 +29,8 @@ let
     cp ${../../packages/t3code/acceptance-launcher-key.py} "$out/acceptance-launcher-key.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/provider-turn-probe.py} "$out/provider-turn-probe.py"
+    cp ${../../packages/t3code/fixture-provider.py} "$out/fixture-provider.py"
+    cp ${../../packages/t3code/rehearsal-isolation.py} "$out/rehearsal-isolation.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
   '';
   t3codeSecretsFile = "/run/secrets/t3code.env";
@@ -76,6 +78,7 @@ let
     text = ''
       export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
       export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/deploy-image.sh}
     '';
   };
@@ -106,6 +109,7 @@ let
       export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
       export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
       export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+      export WINDOW_HOLDER_BIN=${lib.getExe t3codeWindowHolder}
       export PODMAN_BIN=${pkgs.podman}/bin/podman
       export JQ_BIN=${pkgs.jq}/bin/jq
       export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
@@ -114,14 +118,23 @@ let
       export COREUTILS_BIN=${pkgs.coreutils}/bin
       export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
       export BASH_BIN=${pkgs.bash}/bin/bash
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/release-window.sh}
     '';
   };
+  # The window holder writes its own PID, so it must be its own program. Inlined
+  # into the release-window unit, systemd's ExecStart expansion turned `$$` into
+  # `$`, so holder.ready recorded "$" instead of a PID. One shared definition, so
+  # the check below builds the same artifact the module installs.
+  t3codeWindowHolder = import ../../packages/t3code/window-holder.nix { inherit pkgs; };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
-    text = builtins.readFile ../../packages/t3code/receipt-self-check.sh;
+    text = ''
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-self-check.sh}
+    '';
   };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
@@ -184,16 +197,11 @@ in
     )
   );
 
-  # The Antigravity ACP archive is unfree, and three of the CLIs baked into the
-  # T3 image are too. Keep the exception scoped to exactly those packages.
+  # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
     pkg:
     builtins.elem (lib.getName pkg) [
       "antigravity-acp"
-      "claude-code"
-      "cursor-cli"
-      "antigravity"
-      "antigravity-ide"
     ];
 
   ghostship.agentHost.enable = true;
@@ -333,6 +341,8 @@ in
 
   environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
+  environment.etc."ghostship/t3code-acceptance-route.json".source =
+    ../../packages/t3code/acceptance-route.json;
 
   systemd.services.podman-t3code = {
     restartIfChanged = false;
