@@ -109,29 +109,36 @@ if [[ $1 == inspect && $2 == t3code ]]; then
       if (( now >= HEALTHY_AFTER_SECONDS )); then printf 'healthy\n'; else printf 'starting\n'; fi
       ;;
     '{{.Image}}') printf '%s\n' "$RUNNING_IMAGE_ID" ;;
-    '{{.RestartCount}}')
-      if [[ ${RESTART_COUNT_UNREADABLE:-0} == 1 ]]; then exit 1; fi
-      if [[ ${RESTART_COUNT_MODE:-constant} == rising ]]; then
-        n=0; [[ -r ${RESTART_COUNT_CALLS:-} ]] && n=$(cat "$RESTART_COUNT_CALLS")
-        n=$((n + 1)); printf '%s\n' "$n" > "$RESTART_COUNT_CALLS"
-        if (( n == 1 )); then printf '0\n'; else printf '1\n'; fi
-      else
-        printf '%s\n' "${RESTART_COUNT_VALUE:-0}"
-      fi
-      ;;
     '{{.State.Running}} {{.Image}}')
       [[ ${RUNNING_CONTAINER:-1} == 1 ]] || exit 1
       printf 'true %s\n' "$RUNNING_IMAGE_ID"
       ;;
     *)
+      identity_call=0
+      if [[ -n ${IDENTITY_CALLS:-} ]]; then
+        identity_call=$(cat "$IDENTITY_CALLS" 2>/dev/null || echo 0)
+      fi
+      identity_call=$((identity_call + 1))
+      [[ -z ${IDENTITY_CALLS:-} ]] || printf '%s\n' "$identity_call" > "$IDENTITY_CALLS"
+      if [[ ${IDENTITY_MODE:-stable} == slow ]] && (( $(cat "$HEALTH_CLOCK_FILE") < HEALTHY_AFTER_SECONDS )); then
+        exit 1
+      fi
+      if [[ ${IDENTITY_MODE:-stable} == empty && $identity_call -ge 3 ]]; then
+        exit 1
+      fi
+      id_field=$(printf '%064d' 1)
       started_field=started
+      if [[ ${IDENTITY_MODE:-stable} == restart && $identity_call -ge 3 ]]; then
+        id_field=$(printf '%064d' 2)
+        started_field=restarted
+      fi
       if [[ ${FIXTURE_SPACED_STARTED:-0} == 1 ]]; then
         started_field='2026-10-31 21:01:02.676622736 +0000 UTC'
       fi
       if [[ -r "$LIVE_IMAGE_FILE" ]]; then
-        printf '%064d %s %s healthy\n' 1 "$(cat "$LIVE_IMAGE_FILE")" "$started_field"
+        printf '%s %s %s healthy\n' "$id_field" "$(cat "$LIVE_IMAGE_FILE")" "$started_field"
       else
-        printf '%064d sha256:%s %s healthy\n' 1 "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" "$started_field"
+        printf '%s sha256:%s %s healthy\n' "$id_field" "$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -r '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)" "$started_field"
       fi
       ;;
   esac
@@ -209,7 +216,7 @@ export HEALTH_WAIT_BUDGET_SECONDS=390 HEALTH_WAIT_CLOCK_BIN="$tmp/bin/health-clo
 export HEALTH_WAIT_SLEEP_BIN="$tmp/bin/health-sleep" HEALTH_CLOCK_FILE="$tmp/health-clock"
 export HEALTHY_AFTER_SECONDS=0
 printf '0\n' > "$HEALTH_CLOCK_FILE"
-export LIVE_IMAGE_FILE="$tmp/live-image" LIVE_SECRET_FILE="$tmp/live-secret" RESTART_COUNT_CALLS="$tmp/restart-count-calls"
+export LIVE_IMAGE_FILE="$tmp/live-image" LIVE_SECRET_FILE="$tmp/live-secret" IDENTITY_CALLS="$tmp/identity-calls"
 printf 'provider=stale\n' > "$LIVE_SECRET_FILE"
 
 # Model the currently running image from the host before this guard existed.
@@ -737,41 +744,44 @@ grep -q 'deploy: exiting rc=1' "$tmp/post-trap.log" || { echo 'post-trap failure
 jq -e '.exit_code == 1' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >/dev/null || { echo 'post-trap attempt did not record rc=1' >&2; cat "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >&2; exit 1; }
 echo 'Post-trap failure proof: a step after the attempt trap records and logs deploy: exiting rc=1.'
 
-# Restart-count dwell: a restart after this deploy's own restart fails the
-# settle. The exit code must not be 75 (systemd would retry and restart T3),
-# nothing is recorded applied, and no second restart is issued. An unreadable
-# count is UNKNOWN and fails closed.
+# Container-identity dwell: systemd restarts create a new container, so
+# RestartCount stays 0; Id + StartedAt is the identity. A changed identity at
+# the dwell end fails (exit 1, not 75), records nothing applied and issues no
+# second restart. A stable identity passes; an empty one is UNKNOWN. A slow
+# container creation before healthy is not a failure.
 dwell_case() {
-  local id=$1 mode=$2
+  local id=$1 mode=$2 healthy_after=$3
   : > "$EVENTS"
-  export DEPLOYMENT_ID=$id
+  export DEPLOYMENT_ID=$id HEALTHY_AFTER_SECONDS=$healthy_after
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
   printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
   printf 'sha256:%s\n' "$(printf 'dwell-older-%s' "$id" | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
   printf '0\n' > "$HEALTH_CLOCK_FILE"
-  rm -f "$RESTART_COUNT_CALLS"
-  export RESTART_COUNT_MODE=$mode
-  if [[ $mode == unreadable ]]; then export RESTART_COUNT_UNREADABLE=1; else unset RESTART_COUNT_UNREADABLE; fi
+  rm -f "$IDENTITY_CALLS"
+  export IDENTITY_MODE=$mode
   set +e
   bash "$fixture_writer" > "$tmp/$id.log" 2>&1
   dwell_rc=$?
   set -e
-  unset RESTART_COUNT_MODE RESTART_COUNT_UNREADABLE
+  unset IDENTITY_MODE
 }
 applied_before=$(cat "$STATE_DIR/applied")
-dwell_case deployment-dwell-rising rising
-[[ $dwell_rc == 1 ]] || { echo "rising restart count exit=$dwell_rc, want 1 (never 75)" >&2; cat "$tmp/deployment-dwell-rising.log" >&2; exit 1; }
-[[ $(cat "$STATE_DIR/applied") == "$applied_before" ]] || { echo 'rising count recorded the deployment applied' >&2; exit 1; }
-[[ $(grep -c '^restart$' "$EVENTS") == 1 ]] || { echo 'rising count issued a second restart' >&2; cat "$EVENTS" >&2; exit 1; }
-grep -q 'restarted again during the 180s settle' "$tmp/deployment-dwell-rising.log"
-jq -e '.exit_code == 1' "$STATE_DIR/attempts/deployment-dwell-rising.json" >/dev/null
-dwell_case deployment-dwell-constant constant
-[[ $dwell_rc == 0 ]] || { echo "constant count exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-constant.log" >&2; exit 1; }
-[[ $(cat "$STATE_DIR/applied") == deployment-dwell-constant ]] || { echo 'constant count did not record applied' >&2; exit 1; }
-dwell_case deployment-dwell-unreadable unreadable
-[[ $dwell_rc == 1 ]] || { echo "unreadable count exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-unreadable.log" >&2; exit 1; }
-grep -q 'restart count unreadable' "$tmp/deployment-dwell-unreadable.log"
-[[ $(cat "$STATE_DIR/applied") == deployment-dwell-constant ]] || { echo 'unreadable count recorded applied' >&2; exit 1; }
-echo 'Restart-count dwell proof: rising count fails without rc 75 or a second restart; unreadable is UNKNOWN.'
+dwell_case deployment-dwell-restart restart 0
+[[ $dwell_rc == 1 ]] || { echo "changed identity exit=$dwell_rc, want 1 (never 75)" >&2; cat "$tmp/deployment-dwell-restart.log" >&2; exit 1; }
+[[ $(cat "$STATE_DIR/applied") == "$applied_before" ]] || { echo 'changed identity recorded the deployment applied' >&2; exit 1; }
+[[ $(grep -c '^restart$' "$EVENTS") == 1 ]] || { echo 'changed identity issued a second restart' >&2; cat "$EVENTS" >&2; exit 1; }
+grep -q 'restarted again during the 180s settle' "$tmp/deployment-dwell-restart.log"
+jq -e '.exit_code == 1' "$STATE_DIR/attempts/deployment-dwell-restart.json" >/dev/null
+dwell_case deployment-dwell-stable stable 130
+[[ $dwell_rc == 0 ]] || { echo "stable identity exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-stable.log" >&2; exit 1; }
+[[ $(cat "$STATE_DIR/applied") == deployment-dwell-stable ]] || { echo 'stable identity did not record applied' >&2; exit 1; }
+dwell_case deployment-dwell-empty empty 0
+[[ $dwell_rc == 1 ]] || { echo "empty identity exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-empty.log" >&2; exit 1; }
+grep -q 'container identity unreadable at settle end' "$tmp/deployment-dwell-empty.log"
+[[ $(cat "$STATE_DIR/applied") == deployment-dwell-stable ]] || { echo 'empty identity recorded applied' >&2; exit 1; }
+dwell_case deployment-dwell-slow slow 30
+[[ $dwell_rc == 0 ]] || { echo "slow creation exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-slow.log" >&2; exit 1; }
+[[ $(cat "$STATE_DIR/applied") == deployment-dwell-slow ]] || { echo 'slow creation did not record applied' >&2; exit 1; }
+echo 'Container-identity dwell proof: changed identity fails without rc 75 or a second restart; stable and slow-create pass; empty is UNKNOWN.'
 
 echo 'Deploy-image fixture passed.'

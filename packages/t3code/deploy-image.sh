@@ -114,22 +114,6 @@ health_wait_sleep() {
   fi
 }
 
-# The container restart count is the host-visible identity of the T3 restarts
-# the 329 evidence counts. An unreadable count is UNKNOWN and fails closed.
-restart_count() {
-  local value
-  value=$("$PODMAN_BIN" inspect t3code --format '{{.RestartCount}}' 2>/dev/null) || {
-    echo 'restart count unreadable' >&2
-    return 1
-  }
-  value=${value//[[:space:]]/}
-  [[ "$value" =~ ^[0-9]+$ ]] || {
-    echo 'restart count unreadable' >&2
-    return 1
-  }
-  printf '%s\n' "$value"
-}
-
 install -d -m 0700 "$STATE_DIR" "$STATE_DIR/receipts"
 exec 9>"$STATE_DIR/deploy.lock"
 flock -x 9
@@ -590,7 +574,6 @@ echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCE
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
 restart_dwell_started=$(health_wait_now)
-if ! restart_count_before=$(restart_count); then exit 1; fi
 restart_dwell_deadline=$((restart_dwell_started + RESTART_DWELL_SECONDS))
 
 deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
@@ -617,19 +600,36 @@ if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret" != "$secret_sha256" ]];
   exit 1
 fi
 
-# One bounded dwell after this deploy's own restart, on the same clock as the
-# health wait. A further restart means the settle did not hold; exit 1 (never
-# 75, which systemd would retry and restart T3 again) and do not record applied.
-while (( $(health_wait_now) < restart_dwell_deadline )); do
-  health_wait_sleep 5
-done
-if ! restart_count_after=$(restart_count); then exit 1; fi
-if (( restart_count_after > restart_count_before )); then
-  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (RestartCount $restart_count_before -> $restart_count_after)" >&2
+# Baseline once the health loop reports healthy: systemd-driven restarts create
+# a new container, so podman's RestartCount stays 0 and misses the 329 shape.
+# Id + StartedAt is the identity the ledger already uses.
+healthy_identity=$(container_identity)
+healthy_id=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.id // empty')
+healthy_started=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$healthy_id" || -z "$healthy_started" ]]; then
+  echo 'container identity unreadable at settle start' >&2
   exit 1
 fi
 
+# One bounded dwell after this deploy's own restart, on the same clock as the
+# health wait. A different Id or StartedAt means T3 restarted again; exit 1
+# (never 75, which systemd would retry and restart T3 again) and do not record
+# applied.
+while (( $(health_wait_now) < restart_dwell_deadline )); do
+  health_wait_sleep 5
+done
 post=$(container_identity)
+post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
+post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$post_id" || -z "$post_started" ]]; then
+  echo 'container identity unreadable at settle end' >&2
+  exit 1
+fi
+if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
+  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (container identity changed)" >&2
+  exit 1
+fi
+
 post_image=$(printf '%s' "$post" | "$JQ_BIN" -r '.image // empty')
 if [[ "${post_image#sha256:}" != "$image_id" ]]; then
   echo "T3 container did not start the receipted image sha256:$image_id" >&2
