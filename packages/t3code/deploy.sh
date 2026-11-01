@@ -275,7 +275,7 @@ read_applied() {
   line=$(running_container)
   read -r applied_running applied_running_image applied_health <<< "$line"
   [[ $applied_running == true ]] || { applied_reason='the T3 container is not running'; return 1; }
-  [[ $applied_running_image == "$applied_image" ]] \
+  [[ ${applied_running_image#sha256:} == "${applied_image#sha256:}" ]] \
     || { applied_reason="the running container is ${applied_running_image:-unknown}, not the deployed image $applied_image"; return 1; }
   [[ $applied_health == healthy ]] \
     || { applied_reason="the T3 container health is ${applied_health:-unknown}"; return 1; }
