@@ -145,6 +145,9 @@ in
       acceptTerms = true;
       certs.${cfg.hostname} = {
         dnsProvider = "cloudflare";
+        # The host routes *.mesh.ghostship.io to WARP's private resolver,
+        # which refuses challenge/SOA names; ACME needs public DNS here.
+        dnsResolver = "1.1.1.1:53";
         credentialFiles.CF_DNS_API_TOKEN_FILE = "/var/lib/ghostship-mesh/cloudflare-dns-token";
         webroot = null;
       };
