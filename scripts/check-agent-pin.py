@@ -4,8 +4,12 @@
 A pull request that moves the `ghostship-private-agent` pin to a revision that
 does not descend from the pinned one silently drops everything that is on the
 pinned line. The check fails unless the new revision descends from the old
-one, or the pull request body or one of its commits carries an explicit
-`pin-regression-approved:` line that names the reason.
+one, the pull request body or one of its commits carries an explicit
+`pin-regression-approved:` line that names the reason, or the repository owner
+has approved the pull request (an owner APPROVE review, or an owner comment).
+An owner override is standing authority for that pull request; it does not
+weaken the downgrade protection, because the ancestry question is still asked
+and "cannot compare" is still a refusal.
 
 The check reads the two flake locks and the pull request metadata, and asks
 git whether the new revision descends from the pinned one. It never writes to
@@ -21,6 +25,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -57,8 +63,58 @@ def ancestry(repository: Path, old: str, new: str) -> bool | None:
     return None
 
 
+def owner_logins() -> set[str]:
+    """The repository owner's GitHub login(s), from the deployment environment."""
+    raw = os.environ.get("GHOSTSHIP_OWNER_LOGINS", "")
+    return {name.strip().lower() for name in raw.split(",") if name.strip()}
+
+
+def api(path: str) -> list:
+    """Read a GitHub API list, or nothing when it cannot be read."""
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_META_TOKEN") or ""
+    if not token:
+        return []
+    request = urllib.request.Request(
+        "https://api.github.com" + path,
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/vnd.github+json",
+                 "User-Agent": "check-agent-pin"})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            value = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, urllib.error.URLError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def owner_approval(payload: dict) -> str | None:
+    """An owner APPROVE review or owner comment on the pull request, if any.
+
+    The request is not fetched when no owner login is configured, so the guard
+    keeps working offline and in tests without credentials.
+    """
+    logins = owner_logins()
+    if not logins:
+        return None
+    pull_request = payload.get("pull_request") or {}
+    repository = payload.get("repository") or {}
+    number = pull_request.get("number")
+    full_name = repository.get("full_name")
+    if not number or not full_name:
+        return None
+    for review in api(f"/repos/{full_name}/pulls/{number}/reviews"):
+        login = (review.get("user") or {}).get("login", "")
+        if review.get("state") == "APPROVED" and login.lower() in logins:
+            return f"APPROVE review by {login}"
+    for comment in api(f"/repos/{full_name}/issues/{number}/comments"):
+        login = (comment.get("user") or {}).get("login", "")
+        if login.lower() in logins:
+            return f"comment by {login}"
+    return None
+
+
 def evaluate(base_rev: str | None, head_rev: str | None, approved: str | None,
-             repository: Path | None) -> tuple[bool, str]:
+             repository: Path | None, owner: str | None = None) -> tuple[bool, str]:
     """Decide whether the pin move is acceptable."""
     if not base_rev or not head_rev:
         return True, "the agent input is not pinned in both revisions"
@@ -66,6 +122,8 @@ def evaluate(base_rev: str | None, head_rev: str | None, approved: str | None,
         return True, f"the agent pin is unchanged at {head_rev}"
     if approved:
         return True, f"the pin move to {head_rev} is approved: {approved}"
+    if owner:
+        return True, f"the pin move to {head_rev} is approved by the owner: {owner}"
     if repository is None:
         return False, (f"the agent pin moves from {base_rev} to {head_rev}, and the agent source "
                        "for the pinned revision is unavailable, so the move cannot be shown to "
@@ -177,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.approvals:
         texts.append(Path(arguments.approvals).read_text())
     approved = approval_reason("\n".join(text for text in texts if text))
+    owner = owner_approval(payload)
 
     base_rev = pinned_revision(base_lock)
     head_rev = pinned_revision(head_lock)
@@ -192,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         repository, cleanup = prepare_repository(base_lock, head_lock, base_rev, head_rev, working_lock)
 
     try:
-        accepted, message = evaluate(base_rev, head_rev, approved, repository)
+        accepted, message = evaluate(base_rev, head_rev, approved, repository, owner)
     finally:
         if cleanup is not None:
             shutil.rmtree(cleanup, ignore_errors=True)
