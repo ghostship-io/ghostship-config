@@ -203,6 +203,15 @@ test_artifact() {
       || die 'the unit does not name the built deployment id'
     grep -Fq "IMAGE_ARCHIVE=$image_archive" "$unit_file" \
       || die 'the unit does not name the built image archive'
+    # The tooling and the image must come from the built system, not from a
+    # stale store path: a mixed old-system/new-tools state is refused here,
+    # before any effect.
+    local required
+    for required in "$tooling_path" "$image_archive"; do
+      "$NIX_STORE_BIN" -qR "$build" | grep -qxF "$required" \
+        || die "the built system does not contain $required (a mixed old-system/new-tools state)"
+    done
+    echo 'deploy: tooling and image belong to the built system'
     test_baked_identity
     return 0
   fi
@@ -397,8 +406,35 @@ if [[ $mode == verify-only ]]; then
   exit 0
 fi
 
+# The generation link below the current one. Deployments record their own image
+# archive, so rollback can refuse before the switch when that archive is gone.
+previous_generation() {
+  local link
+  link=$(
+    for candidate in "$SYSTEM_PROFILE"-*-link; do
+      [[ -e $candidate ]] || continue
+      printf '%s\n' "$candidate"
+    done | sort -V | tail -n 2 | head -n 1
+  )
+  [[ -n $link ]] || return 1
+  readlink -f "$link"
+}
+
 if [[ $mode == rollback ]]; then
   phase 'ROLLBACK the host system generation'
+  previous=$(previous_generation) || die 'there is no previous system generation to roll back to'
+  [[ $previous != "$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)" ]] \
+    || die 'the previous generation is the running system; nothing to roll back to'
+  previous_identity=$previous/etc/ghostship/t3code-deploy-identity.json
+  previous_archive=''
+  if [[ -e $previous_identity || -L $previous_identity ]]; then
+    previous_archive=$("$JQ_BIN" -r '.image_archive // empty' "$previous_identity" 2>/dev/null || true)
+  fi
+  # The old generation's unit loads its own archive. If that archive has been
+  # collected, the container could not return to the old image, so refuse
+  # before the system switch rather than leave the system and T3 disagreeing.
+  [[ -z $previous_archive || -d $previous_archive ]] \
+    || die "the previous generation's image archive is gone: $previous_archive; refusing to switch"
   "$NIXOS_REBUILD_BIN" --rollback switch
   build=$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)
   [[ -n $build && -x $build/bin/switch-to-configuration ]] \

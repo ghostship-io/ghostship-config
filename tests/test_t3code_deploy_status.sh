@@ -16,12 +16,12 @@ digest=$(printf 'a%.0s' {1..64})
 tooling=/nix/store/t3code-tools
 
 receipt() {
-  local dir=$1 secret_field=$2 secret_value=$3 checks=${4:-true}
+  local dir=$1 secret_field=$2 secret_value=$3 broken=${4:-false}
   "$JQ_BIN" -n --arg d "$id" --arg i "$image" --arg p "$tooling" \
-    --arg field "$secret_field" --arg value "$secret_value" --argjson checks "$checks" \
-    '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",
-      agent_revision:"agent-rev",agent_path:$p,live_before:{id:"live"},live_after:{id:"live"},
-      checks:{app_ready:true,provider_turn:$checks,agent_cli:true,skills:true,desktop_cli:true},
+    --arg field "$secret_field" --arg value "$secret_value" --argjson broken "$broken" \
+    '{schema:2,deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",
+      agent_revision:(if $broken then "" else "agent-rev" end),agent_path:$p,
+      live_before:{id:"live",image:$i},live_after:{id:"live",image:$i},verified:true,
       ($field):$value}'
 }
 
@@ -73,9 +73,9 @@ run_status "$tmp/split"
 [[ $rc == 1 ]]
 "$JQ_BIN" -e '.state == "mismatch" and .desired != .applied' <<<"$out" >/dev/null
 
-# 4. Failed receipt checks.
+# 4. A receipt that fails the mechanical predicate.
 cp -R "$tmp/digest" "$tmp/checks"
-receipt "$tmp/checks" provider_secret_sha256 "$digest" false > "$tmp/checks/receipts/$id.json"
+receipt "$tmp/checks" provider_secret_sha256 "$digest" true > "$tmp/checks/receipts/$id.json"
 run_status "$tmp/checks"
 [[ $rc == 1 ]]
 
@@ -104,4 +104,4 @@ run_status "$tmp/unreadable"
 [[ $rc == 77 ]]
 chmod 600 "$tmp/unreadable/applied-inputs"
 
-echo 'Deploy-status fixture passed: coherent digest and legacy tuples pass; mismatch and failed checks fail; missing, malformed and unreadable are UNKNOWN.'
+echo 'Deploy-status fixture passed: coherent digest and legacy tuples pass; mismatch and a failed mechanical receipt fail; missing, malformed and unreadable are UNKNOWN.'

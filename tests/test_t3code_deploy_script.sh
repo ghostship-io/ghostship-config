@@ -13,6 +13,7 @@ deploy="$root/packages/t3code/deploy.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf 'provider=fixture\n' > "$tmp/provider.env"
+mkdir -p "$tmp/tooling"
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
 mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/image" "$tmp/state" "$tmp/calls" "$tmp/systemd"
 
@@ -70,7 +71,7 @@ SH
 cat > "$tmp/bin/nix-store" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$tmp/store/identity.json" "$tmp/store/layered-baked-t3code-baked-app"
+printf '%s\n' "$tmp/store/identity.json" "$tmp/store/layered-baked-t3code-baked-app" "$tmp/tooling" "$tmp/image"
 SH
 cat > "$tmp/bin/nix-env" <<'SH'
 #!/usr/bin/env bash
@@ -124,6 +125,7 @@ cat > "$tmp/bin/nixos-rebuild" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ $1 == --rollback && $2 == switch ]] || { echo "unexpected nixos-rebuild: $*" >&2; exit 1; }
+printf 'rollback\n' >> "$CALLS/nixos-rebuild"
 ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_SYSTEM_PROFILE:?}"
 ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_CURRENT_SYSTEM:?}"
 SH
@@ -340,6 +342,8 @@ jq -n --arg d "$previous_id" --arg i "$tmp/image" --arg s "$tmp/state" --arg p "
   > "$previous/etc/ghostship/t3code-deploy-identity.json"
 printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/image" \
   > "$previous/etc/systemd/system/ghostship-t3code-deploy.service"
+ln -sfn "$previous" "$tmp/system-profile-1-link"
+ln -sfn "$build" "$tmp/system-profile-2-link"
 export PREVIOUS_SYSTEM=$previous STUB_DEPLOYMENT=$previous_id STUB_IMAGE="sha256:$previous_image"
 export PODMAN_IMAGE="sha256:$previous_image"
 run --rollback
@@ -350,5 +354,27 @@ run --rollback
 [[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'rollback did not start the deployer once'
 echo 'Rollback proof: the previous generation is switched and its deployment reconciled and verified.'
 export STUB_DEPLOYMENT=$deployment_id STUB_IMAGE="sha256:$image_id" PODMAN_IMAGE="sha256:$image_id"
+
+# --- 13. rollback refuses before the switch when the old image is gone --------
+reset_calls
+previous=$tmp/pruned-system
+mkdir -p "$previous/bin" "$previous/etc/ghostship" "$previous/etc/systemd/system"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$previous/bin/switch-to-configuration"
+chmod +x "$previous/bin/switch-to-configuration"
+jq -n --arg d "$previous_id" --arg i "$tmp/pruned-image.tar.gz" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,
+    provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
+  > "$previous/etc/ghostship/t3code-deploy-identity.json"
+printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/pruned-image.tar.gz" \
+  > "$previous/etc/systemd/system/ghostship-t3code-deploy.service"
+ln -sfn "$previous" "$tmp/system-profile-1-link"
+ln -sfn "$build" "$tmp/system-profile-2-link"
+export PREVIOUS_SYSTEM=$previous
+run --rollback
+[[ $rc != 0 ]] || fail 'rollback switched to a generation whose image archive is gone'
+grep -q "image archive is gone" "$tmp/out.log" || fail 'the missing archive was not named'
+[[ ! -e $CALLS/nixos-rebuild ]] || fail 'rollback switched the system before refusing'
+echo 'Rollback guard proof: a pruned previous image is refused before the system switch.'
 
 echo 'Deploy script fixture passed.'

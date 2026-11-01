@@ -65,7 +65,7 @@ if [[ ${1:-} == --invalidate-failure ]]; then
   sync -f "$audit"
   rm "$failed_file"
   publish_unknown_attestation
-  echo 'Failed candidate marker invalidated; acceptance must run again.'
+  echo 'Failed candidate marker invalidated; the next deploy runs the mechanical checks again.'
   exit 0
 fi
 
@@ -97,12 +97,8 @@ cleanup_attempt_evidence() {
 trap cleanup_attempt_evidence EXIT
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
-: "${CANDIDATE_ACCEPTANCE:?}"
 : "${PODMAN_BIN:?}"
 : "${SYSTEMCTL_BIN:?}"
-: "${CANDIDATE_SOCKET:?}"
-: "${CANDIDATE_UID:?}"
-: "${CANDIDATE_RUNTIME_DIR:?}"
 : "${CANDIDATE_HOME_TARGET:?}"
 : "${PROVIDER_SECRETS_FILE:?}"
 : "${TOOLING_PATH:?}"
@@ -116,7 +112,6 @@ trap cleanup_attempt_evidence EXIT
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
-ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
 
 health_wait_now() {
   if [[ -n ${HEALTH_WAIT_CLOCK_BIN:-} ]]; then
@@ -239,7 +234,7 @@ receipt_matches_image() {
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
      and (.candidate_name | startswith("t3code-candidate-"))
-     and (.live_before != null) and (.live_before == .live_after)
+     and (.live_after != null) and (.live_after.image == "sha256:" + $image)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)' \
     "$receipt" >/dev/null 2>&1 \
@@ -412,141 +407,39 @@ failed_file="$STATE_DIR/failed-candidate"
 # Lock order matches managed maintenance: tool, refresh, then the T3 app
 # updater, whose lock is bootstrapped for its owner when the tree exists.
 acquire_managed_locks
-# Hash only the executable acceptance bundle and the candidate/tooling identity.
-# The bundle is copied as named files by t3codeDeploymentScripts; adding a
-# dependency requires updating that bundle and this manifest together. Paths
-# within the bundle do not affect identity, and unrelated files are excluded.
-acceptance_dir=$(dirname "$CANDIDATE_ACCEPTANCE")
-launcher_id=$("$PYTHON_BIN" "$acceptance_dir/acceptance-launcher-key.py" --home "$HOME_DIR" --container-home "$CANDIDATE_HOME_TARGET")
-[[ $launcher_id =~ ^[0-9a-f]{64}$ ]] || { echo 'Managed launcher identity unavailable' >&2; exit 1; }
-policy_identity() {
-  for file in "$ROUTE_POLICY_FILE" "$APPROVED_FREE_FILE"; do
-    [[ -f "$file" && -r "$file" ]] || { echo 'Acceptance policy input missing or unreadable' >&2; return 1; }
-    sha256sum < "$file" || return 1
-  done | sha256sum | cut -d ' ' -f 1
+
+# --- activation compatibility checks -----------------------------------------
+# Only mechanical checks run in activation. Behavioural suites (the candidate
+# container, provider turn, skills, desktop) are not part of a deploy: they are
+# fast-and-relevant (TEST) or an explicit proportional suite (just acceptance).
+#
+# 1. The image id is the artifact identity. load_image derived it from the
+#    archive (and verified it against the stream when one was supplied) before
+#    the load, which prevents running an unbuilt or substituted image.
+# 2. The provider secret digest is present. Without it the container starts
+#    with no provider inputs and cannot reach a provider.
+[[ $secret_sha256 =~ ^[0-9a-f]{64}$ ]] \
+  || { echo 'the provider secret digest is missing or malformed; refusing to activate' >&2; exit 1; }
+# 3. The deployment tooling is present. A missing tooling path would start a
+#    container whose agents and skills are absent.
+[[ -d $TOOLING_PATH ]] \
+  || { echo "the deployment tooling is missing: $TOOLING_PATH; refusing to activate" >&2; exit 1; }
+# 4. The state schema is compatible. An older deployer must not write into a
+#    newer state layout.
+STATE_SCHEMA=2
+state_schema() {
+  local file="$STATE_DIR/schema" value
+  if [[ -e $file || -L $file ]]; then
+    [[ -f $file && ! -L $file ]] || { echo 'the deployment state schema marker is not a regular file; refusing to activate' >&2; return 1; }
+    value=$(cat "$file")
+    [[ $value == "$STATE_SCHEMA" ]] \
+      || { echo "the deployment state schema is $value, this deployer writes $STATE_SCHEMA; refusing to activate" >&2; return 1; }
+  else
+    printf '%s\n' "$STATE_SCHEMA" > "$STATE_DIR/schema.tmp"
+    mv -f "$STATE_DIR/schema.tmp" "$STATE_DIR/schema"
+  fi
 }
-policy_id=$(policy_identity)
-acceptance_id=$(
-  {
-    printf 'candidate-acceptance-v4\nimage=%s\nagent=%s\ntooling=%s\npython=%s\nlaunchers=%s\npolicy=%s\n' "$image_id" "$AGENT_REVISION" "$TOOLING_PATH" "$PYTHON_BIN" "$launcher_id" "$policy_id"
-    for file in "$CANDIDATE_ACCEPTANCE" "$acceptance_dir/acceptance-launcher-key.py" "$acceptance_dir/hardening-probe.py" "$acceptance_dir/provider-turn-probe.py" "$acceptance_dir/runtime-caps.json"; do
-      [[ -f "$file" && -r "$file" ]] || { echo 'Acceptance input missing or unreadable' >&2; exit 1; }
-      sha256sum < "$file" || exit 1
-    done
-  } | sha256sum | cut -d ' ' -f 1
-)
-failed_key="$DEPLOYMENT_ID $acceptance_id"
-if [[ -r "$failed_file" && "$(cat "$failed_file")" == "$failed_key" ]]; then
-  echo "Candidate acceptance already failed for $DEPLOYMENT_ID; image remains blocked" >&2
-  exit 0
-fi
-
-# A precondition miss (exit 75) is retried by systemd (RestartForceExitStatus=75)
-# after RestartSec; this counter bounds the retries for one image and acceptance
-# code. The last attempt exits 1, which stops the retries and leaves the image
-# retryable by a later run.
-precondition_file="$STATE_DIR/precondition-attempts"
-precondition_attempts=${PRECONDITION_ATTEMPTS:-6}
-
-mark_candidate_failed() {
-  local temporary="$failed_file.tmp"
-  printf '%s\n' "$failed_key" > "$temporary"
-  chmod 0600 "$temporary"
-  mv -f "$temporary" "$failed_file"
-  publish_unknown_attestation
-}
-
-candidate_args=(
-  --state-dir "$STATE_DIR"
-  --image-archive "$IMAGE_ARCHIVE"
-  --podman-bin "$PODMAN_BIN"
-  --candidate-socket "$CANDIDATE_SOCKET"
-  --home-dir "$HOME_DIR"
-  --candidate-runtime-dir "$CANDIDATE_RUNTIME_DIR"
-  --candidate-uid "$CANDIDATE_UID"
-  --provider-secrets-file "$PROVIDER_SECRETS_FILE"
-  --tooling-path "$TOOLING_PATH"
-  --agent-revision "$AGENT_REVISION"
-  --acceptance-route-file "$ACCEPTANCE_ROUTE_FILE"
-  --candidate-home-target "$CANDIDATE_HOME_TARGET"
-  --systemctl-bin "$SYSTEMCTL_BIN"
-)
-candidate_args+=(--volume "$ROUTE_POLICY_FILE:/etc/ghostship/route-policy.json:ro")
-candidate_args+=(--volume "$APPROVED_FREE_FILE:/etc/ghostship/approved-free-workers.json:ro")
-candidate_args+=(--volume /nix/store:/nix/store:O)
-
-acceptance_status=0
-"$PYTHON_BIN" "$CANDIDATE_ACCEPTANCE" "${candidate_args[@]}" || acceptance_status=$?
-# Refuse to bind an uncertain result to a changed launcher even if a writer did
-# not honor the managed locks. This never treats a failed run as a PASS.
-if ! launcher_after=$("$PYTHON_BIN" "$acceptance_dir/acceptance-launcher-key.py" --home "$HOME_DIR" --container-home "$CANDIDATE_HOME_TARGET") || [[ "$launcher_after" != "$launcher_id" ]]; then
-  echo 'Managed launcher changed during acceptance; image stays retryable' >&2
-  rm -f "$receipt"
-  acceptance_status=75
-fi
-if ! policy_after=$(policy_identity) || [[ "$policy_after" != "$policy_id" ]]; then
-  echo 'Acceptance policy changed during acceptance; image stays retryable' >&2
-  rm -f "$receipt"
-  acceptance_status=75
-fi
-if [[ $acceptance_status == 76 || $acceptance_status == 77 ]]; then
-  rm -f "$precondition_file"
-  outcome=route_unavailable
-  [[ $acceptance_status != 77 ]] || outcome=route_unknown
-  if ! "$JQ_BIN" -e --arg outcome "$outcome" '.outcome == $outcome and (.provider_turn.routes | type == "string")' "$attempt_file" >/dev/null 2>&1; then
-    echo 'Candidate route outcome lacks recorded evidence; inspect before retry' >&2
-    exit 77
-  fi
-  echo "Candidate acceptance $outcome; image not marked failed" >&2
-  exit "$acceptance_status"
-fi
-# 75: a host precondition failed before the candidate ran; the image is not at
-# fault and the next run re-runs full acceptance.
-if [[ $acceptance_status == 75 ]]; then
-  attempt=1
-  previous_deployment="" previous_acceptance="" previous_attempt=""
-  if [[ -r "$precondition_file" ]]; then
-    read -r previous_deployment previous_acceptance previous_attempt < "$precondition_file" || true
-  fi
-  if [[ "${previous_deployment:-} ${previous_acceptance:-}" == "$failed_key" && ${previous_attempt:-} =~ ^[0-9]+$ ]]; then
-    attempt=$((previous_attempt + 1))
-  fi
-  if (( attempt >= precondition_attempts )); then
-    rm -f "$precondition_file"
-    echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID after $attempt attempts; image stays retryable" >&2
-    exit 1
-  fi
-  printf '%s %s\n' "$failed_key" "$attempt" > "$precondition_file.tmp"
-  mv -f "$precondition_file.tmp" "$precondition_file"
-  echo "Candidate acceptance precondition not met for $DEPLOYMENT_ID (attempt $attempt of $precondition_attempts); image stays retryable and is retried" >&2
-  exit 75
-fi
-rm -f "$precondition_file"
-if [[ $acceptance_status == 78 ]]; then
-  mark_candidate_failed
-  echo "Candidate acceptance FAILED for $DEPLOYMENT_ID; image will not be queued" >&2
-  exit 1
-fi
-if [[ $acceptance_status != 0 ]]; then
-  # An unclassified failure has not been attributed to a proven-working route.
-  # Keep the candidate retry decision with the operator, not the failed marker.
-  "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"unclassified acceptance failure"}' "$attempt_file" > "$attempt_temporary"
-  chmod 0600 "$attempt_temporary"
-  mv -f "$attempt_temporary" "$attempt_file"
-  echo "Candidate acceptance outcome unknown for $DEPLOYMENT_ID; image not marked failed" >&2
-  exit 77
-fi
-
-if ! receipt_matches_image; then
-  "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"exact-image receipt missing or invalid"}' "$attempt_file" > "$attempt_temporary"
-  chmod 0600 "$attempt_temporary"
-  mv -f "$attempt_temporary" "$attempt_file"
-  echo "Candidate acceptance receipt did not approve this exact image: $DEPLOYMENT_ID" >&2
-  exit 77
-fi
-
-rm -f "$failed_file"
-echo "Candidate acceptance PASS deployment=$DEPLOYMENT_ID image=$image_id receipt=$receipt"
+state_schema
 
 container_identity() {
   local fields
@@ -708,6 +601,23 @@ install -d -m 0700 "$(dirname "$RESTART_LEDGER")"
 printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
+# The receipt is mechanical: what was deployed, from which artifact, with which
+# inputs, and what the container looked like before and after the restart. It
+# records no behavioural PASS, because no behavioural suite runs in activation.
+write_receipt() {
+  local temporary="$receipt.tmp"
+  "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" --arg image "sha256:$image_id" \
+    --arg candidate "t3code-candidate-$image_id" --arg agent "$AGENT_REVISION" \
+    --arg tooling "$TOOLING_PATH" --arg secret "$secret_sha256" \
+    --argjson before "$pre" --argjson after "$post" --arg at "$(date -u +%FT%TZ)" \
+    --argjson schema "$STATE_SCHEMA" \
+    '{schema:$schema,deployment_id:$deployment,image_id:$image,candidate_name:$candidate,
+      agent_revision:$agent,agent_path:$tooling,provider_secret_sha256:$secret,
+      live_before:$before,live_after:$after,verified:true,verified_at:$at}' > "$temporary"
+  chmod 0600 "$temporary"
+  mv -f "$temporary" "$receipt"
+}
+write_receipt
 record_applied "$live_agent" "$live_secret"
 publish_pass_attestation
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
