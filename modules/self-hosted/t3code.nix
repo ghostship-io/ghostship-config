@@ -13,9 +13,7 @@
 let
   t3codeHome = "/srv/apps/t3code/home";
   hardened = config.ghostship.t3code.hardening.enable;
-  t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
-  t3codeWindowConfigFile = pkgs.writeText "t3code-release-window-dir" "${t3codeDeploymentState}/release-window\n";
   t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -91,8 +89,7 @@ let
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
     text = ''
-      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
-      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
       ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
       ${builtins.readFile ../../packages/t3code/deploy-image.sh}
     '';
@@ -105,43 +102,6 @@ let
       exec ${lib.getExe t3codeImmediateDeploy} --invalidate-failure "$@"
     '';
   };
-  t3codeActivateDeployment = pkgs.writeShellApplication {
-    name = "ghostship-t3code-activate-deployment";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-    text = ''
-      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
-      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
-      ${builtins.readFile ../../packages/t3code/activate-deployment.sh}
-    '';
-  };
-  t3codeReleaseWindow = pkgs.writeShellApplication {
-    name = "ghostship-t3code-release-window";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
-    text = ''
-      export WINDOW_CONFIG=${t3codeWindowConfigFile}
-      export WINDOW_BOOTSTRAP=${../../packages/t3code/window-bootstrap.sh}
-      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
-      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
-      export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
-      export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
-      export WINDOW_HOLDER_BIN=${lib.getExe t3codeWindowHolder}
-      export PODMAN_BIN=${pkgs.podman}/bin/podman
-      export JQ_BIN=${pkgs.jq}/bin/jq
-      export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
-      # The window holder runs under the systemd manager, which does not inherit
-      # this script's PATH, so every command it uses must be an absolute path.
-      export COREUTILS_BIN=${pkgs.coreutils}/bin
-      export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
-      export BASH_BIN=${pkgs.bash}/bin/bash
-      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
-      ${builtins.readFile ../../packages/t3code/release-window.sh}
-    '';
-  };
-  # The window holder writes its own PID, so it must be its own program. Inlined
-  # into the release-window unit, systemd's ExecStart expansion turned `$$` into
-  # `$`, so holder.ready recorded "$" instead of a PID. One shared definition, so
-  # the check below builds the same artifact the module installs.
-  t3codeWindowHolder = import ../../packages/t3code/window-holder.nix { inherit pkgs; };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
@@ -180,7 +140,7 @@ in
 {
   imports = [ ./t3code-recovery.nix ];
 
-  environment.systemPackages = [ t3codeInvalidateFailure t3codeReleaseWindow ];
+  environment.systemPackages = [ t3codeInvalidateFailure ];
 
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {
@@ -337,16 +297,12 @@ in
     };
   };
 
-  environment.etc."ghostship/t3code-release-window-dir".text = "${t3codeDeploymentState}/release-window\n";
-
   ghostship.t3codePodman.enable = true;
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
     "d /var/lib/t3code-restarts 0700 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
-    "d ${t3codeDeploymentState}/release-window 0700 root root -"
-    "f ${t3codeDeploymentState}/release-window/window.lock 0600 root root -"
     "d ${t3codeTmp} 1777 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
@@ -366,6 +322,7 @@ in
     agent_revision = t3codeAgentRevision;
     tooling_path = toString tooling;
     image_archive = toString t3codeImage;
+    provider_secrets_file = t3codeSecrets;
     tree = self.dirtyRev or self.rev or "unknown";
     dirty = self ? dirtyRev;
     # A dirty pinned input is as unfit for a host as a dirty tree: the artifact
@@ -470,23 +427,6 @@ in
     '';
   };
 
-  system.activationScripts.t3code-deployment = {
-    deps = [ "etc" ];
-    text = ''
-      WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig} \
-        WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh} \
-        ${pkgs.bash}/bin/bash ${../../packages/t3code/window-bootstrap.sh} || exit 1
-      STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
-        DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
-        AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \
-        TOOLING_PATH=${lib.escapeShellArg (toString tooling)} \
-        PROVIDER_SECRETS_FILE=${lib.escapeShellArg t3codeSecrets} \
-        SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl \
-        ${lib.getExe t3codeActivateDeployment}
-    '';
-    supportsDryActivation = false;
-  };
-
   systemd.services.ghostship-t3code-deploy = {
     description = "Accept and deploy a changed T3 Code image immediately";
     after = [ "podman.service" ];
@@ -518,12 +458,9 @@ in
       Type = "oneshot";
       ExecStart = lib.getExe t3codeImmediateDeploy;
       TimeoutStartSec = "25m";
-      # deploy-image.sh exits 75 when a host precondition (the live routing
-      # snapshot) is unmet before the candidate runs; retry it, bounded by the
-      # script's attempt counter. Six attempts 2 minutes apart fit the deploy
-      # run's 25-minute receipt wait; a switch's start supersedes the wait.
-      RestartForceExitStatus = "75";
-      RestartSec = "120";
+      # No automatic retry: deploy.sh starts the deployer, reads its result and
+      # reports it. A precondition miss (exit 75) is an explicit rerun, not a
+      # two-minute background sleep that could replay an uncertain effect.
     };
   };
 

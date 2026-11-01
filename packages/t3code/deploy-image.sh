@@ -30,8 +30,6 @@ if [[ ${1:-} == --list-manifest ]]; then
   exec tar -xOf "$2" manifest.json
 fi
 
-# shellcheck disable=SC1090
-source "${WINDOW_INTENT_HELPER:?}"
 # Every non-zero exit must say so; a silent exit 1 hid the failed step. The
 # attempt writer below replaces this trap, so it calls the same function.
 log_exit_rc() {
@@ -41,7 +39,6 @@ log_exit_rc() {
   fi
 }
 trap 'rc=$?; log_exit_rc "$rc"' EXIT
-announce_intent deploy
 [[ ! -e ${STATE_DIR:?}/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || { echo 'release recovery UNKNOWN: writer stopped for investigation' >&2; exit 77; }
 
 if [[ ${1:-} == --invalidate-failure ]]; then

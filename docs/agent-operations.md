@@ -151,91 +151,26 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
 - For prompt-driven remote work, start the command in detached tmux and drive it
   with `capture-pane` plus `send-keys`. Do not use blocking top-level SSH TTY
   sessions for agent workflows.
-- Deploy merged configuration with `agent deploy run`. Use `--agent-rev REV`
-  to pin and deploy a changed agent revision. The command serializes switches,
-  builds the committed revision, checks dry-activation, records the generation
-  and verifies live health. It accepts the target T3 candidate image before the
-  switch; a passing exact-image receipt permits the immediate restart.
-- Retire per-release copied T3 window executors. For the transition from an
-  expired legacy holder with its existing recovery inhibit still present, use
-  the release-window binary built in the reviewed candidate closure, before
-  that closure is installed. Set `RELEASE_WINDOW` to that binary. Set
-  `LEGACY_DIR`, `LEGACY_UNIT`, `PODMAN_TARGET`, `WINDOW_UNIT`, `HOLD_FILE`,
-  `LOCK_CANDIDATE`, `LOCK_HARDENING`, `PROFILE`, `WINDOW_SECONDS`, `HOME_DIR`,
-  `CANDIDATE_HOME_TARGET`, and `ACCEPTED_IMAGE_REF` from host configuration.
-  With a unique window ID, the executor runs:
-
-  ```sh
-  "$RELEASE_WINDOW" preflight --adopt-inhibit
-  "$RELEASE_WINDOW" start --adopt-inhibit "$WINDOW_ID"
-  "$RELEASE_WINDOW" switch -- nixos-rebuild switch --flake "$CONFIG_FLAKE" --no-write-lock-file
-  ```
-
-  Preflight is read-only. Adoption requires the expired legacy holder, its
-  intact window evidence, and free writer locks; it preserves the existing
-  inhibit. It does not assert that the legacy window had no effects. Do not
-  run the legacy `window-end` to clear the inhibit. A failed or unknown check
-  is a stop for investigation, not permission to force a lock or invent a
-  result.
-
-  If start fails before its holder is ready, `"$RELEASE_WINDOW" cancel-start`
-  cancels only an unchanged, intent-free incomplete start and preserves an
-  adopted inhibit. Investigate any refusal.
-
-  For a forward PASS, set `EXPECTED_DEPLOYMENT`, `EXPECTED_IMAGE`,
-  `EXPECTED_AGENT_REVISION`, `EXPECTED_TOOLING_PATH`, `PROVIDER_SECRETS_FILE`,
-  `CURRENT_SYSTEM`, and `EXPECTED_SYSTEM` to the approved candidate values.
-  `"$RELEASE_WINDOW" post` verifies the existing exact-image receipt, completed
-  attempt, installed system, live image and inputs. After PASS,
-  `"$RELEASE_WINDOW" end-post "$WINDOW_ID"` repeats those checks before
-  releasing the window. It can be retried with the window ID after a lost
-  acknowledgement.
-
-  When the serving T3 has not changed and its image and inputs match an
-  existing exact receipt, `"$RELEASE_WINDOW" rollback "$WINDOW_ID"` restores
-  the accepted alias if necessary and releases without restarting T3 or
-  requesting another provider turn. If T3's container was fully stopped during
-  the attempt, `rollback` verifies the exact receipt for the known-good image,
-  restores the accepted alias, starts `podman-t3code.service`, verifies live
-  health and receipt inputs, and releases the window without requiring a fresh
-  provider turn or moving to an unreceipted image. It records the actual desired
-  and applied IDs; it does not claim to revert the system generation or
-  reconcile a split deployment. A definitive failed-candidate marker remains in
-  place until the existing audited invalidation procedure is explicitly
-  invoked.
-
-  If no exact known-good receipt exists, `"$RELEASE_WINDOW" end-unknown`
-  records UNKNOWN and the observed desired, applied and absent-receipt state,
-  releases the window locks, retains the recovery inhibit, and exits 77. It
-  prints the investigation command. After an exact matching serving receipt is
-  available, `"$RELEASE_WINDOW" resolve-unknown` rechecks the receipt and alias,
-  starts `podman-t3code.service` if the container was stopped, verifies healthy
-  serving readback, and clears the existing inhibit. Until then, a T3 crash does
-  not auto-recover and its agents die with it: the legacy recovery inhibit
-  blocks all recovery actions, not just moves to an unreceipted image.
-  Independent update timers require separate installed verification. Do not use
-  a no-activation end for an adopted legacy window or treat holder expiry as a
-  successful end.
-
-  If the candidate was restarted with its exact receipt but the runtime then
-  fails or its attempt remains unknown, `"$RELEASE_WINDOW" end-receipted-failure`
-  records that distinct UNKNOWN and exits 77 with the inhibit retained; after
-  investigation and a healthy exact-receipt readback (including container
-  recovery if stopped), use `resolve-unknown`.
-- The hand-placed `/root/tools-332-fallback` starter tree and its
-  `tools-332-fallback-window` unit are no longer used. They were a temporary
-  bootstrap for the release-window transition: an untracked, host-specific copy
-  of a per-release executor that identified competing writers by script name.
-  The next release that installs the #716/#721 tooling supersedes them with the
-  tracked, config-driven `release-window` binary in the candidate closure, which
-  keys on the real window lock, deployment lock and podman target instead. After
-  that release, do not re-create the fallback tree, do not start its window
-  unit, and do not copy a new per-release executor into it. If `release-window`
-  is unavailable on a host that is not yet on the #716/#721 tooling, that is a
-  stop to investigate, not a reason to reintroduce the fallback path.
-  A stale fallback tree left on disk is inert: nothing in the tracked
-  configuration refers to it, and the tooling pointer is owned by
-  `packages/t3code/tooling-pointer.sh` rather than by the fallback directory.
+- Deploy merged configuration from a working checkout with `just deploy`
+  (`packages/t3code/deploy.sh`): it builds one system artifact, tests that same
+  artifact, records the system generation, switches to it, runs
+  `ghostship-t3code-deploy.service` from the now-current system and verifies the
+  deployed and running identity. `just build` builds without deploying,
+  `just test` builds and tests the deployment closure only (the CI path), and
+  `just verify` is the read-only check to run before any retry. No release ID,
+  approval token or review round is passed in; the identity is read from the
+  built system, and the artifact records the tree hash and whether the tree or a
+  pinned input was dirty.
+- If an attempt has no recorded outcome, that is UNKNOWN: run `just verify`,
+  read the attempt record and the journal, and rerun `just deploy` only once the
+  running identity is known. A T3 failure exits for that step, names it, and
+  touches nothing else on the host; there is no fleet-wide hold.
+- `just rollback` is the standard `nixos-rebuild --rollback switch`, runnable
+  from a plain host shell with T3 and the agents down. The hand-placed
+  `/root/tools-332-fallback` starter tree and its `tools-332-fallback-window`
+  unit stay retired: nothing in the tracked configuration refers to them, and
+  the tooling pointer is owned by `packages/t3code/tooling-pointer.sh`. Do not
+  re-create the fallback tree or copy a per-release executor into it.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
@@ -310,8 +245,8 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   than estimating it as if it were measured.
 
 - `checks.<system>.config-tests` is the single derivation that runs the T3
-  deployment shell proofs, including `tests/test_t3code_release_window.sh` and
-  `tests/test_t3code_window_lock.sh`. Keep every `tests/test_t3code_*.sh`
+  deployment shell proofs, including `tests/test_t3code_deploy_image.sh` and
+  `tests/test_t3code_deploy_script.sh`. Keep every `tests/test_t3code_*.sh`
   script wired into that derivation; an unwired script is unverified script.
   Config CI currently builds `config-tests` only for `x86_64-linux` (the
   `integration` job in `.github/workflows/ci.yml`), while the production host is

@@ -16,7 +16,6 @@
 # Field names and the accepted-receipt predicate are the ones the deploy path
 # and the release window already use:
 #   deploy-image.sh:155,164-171   receipt identity and provider secret
-#   release-window.sh:321-338     receipt selection (same fields)
 #   receipt-checks.sh             the only accepted-receipt predicate
 set -eu
 

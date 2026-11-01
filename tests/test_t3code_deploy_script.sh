@@ -12,6 +12,7 @@ deploy="$root/packages/t3code/deploy.sh"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+printf 'provider=fixture\n' > "$tmp/provider.env"
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
 mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/image" "$tmp/state" "$tmp/calls" "$tmp/systemd"
 
@@ -38,7 +39,8 @@ EOF
 cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
- "image_archive":"$image","tree":"test-rev","dirty":false,"agent_dirty":false}
+ "image_archive":"$image","provider_secrets_file":"$tmp/provider.env",
+ "tree":"test-rev","dirty":false,"agent_dirty":false}
 EOF
 
 # The fast closure: the same identity, the image metadata root, and the
@@ -133,9 +135,6 @@ export STUB_DEPLOYMENT=$deployment_id
 export STUB_IMAGE="sha256:$image_id"
 export PODMAN_IMAGE="sha256:$image_id"
 export SYSTEMD=$tmp/systemd
-export DEPLOY_PROBE_SLEEP=$tmp/bin/probe-sleep
-export DEPLOY_PROBE_INTERVAL=1
-export DEPLOY_TIMEOUT_SECONDS=30
 export NIX_BIN=$tmp/bin/nix NIX_STORE_BIN=$tmp/bin/nix-store JQ_BIN=jq
 export SYSTEMCTL_BIN=$tmp/bin/systemctl PODMAN_BIN=$tmp/bin/podman
 export HOSTNAME_BIN=$tmp/bin/hostname FLOCK_BIN=flock
@@ -198,6 +197,8 @@ run --flake "$root" --system chill-penguin
 [[ $(readlink -f "$GHOSTSHIP_CURRENT_SYSTEM") == "$build" ]] || fail 'the running system is not the build'
 [[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'the deployer was not started exactly once'
 grep -q 'system.build.toplevel' "$CALLS/nix" || fail 'the full deploy did not build the host toplevel'
+[[ "$(cat "$tmp/state/desired")" == "$deployment_id" ]] || fail 'the deployment request was not recorded'
+grep -q "agent=agent-rev" "$tmp/state/desired-inputs" || fail 'the deployment inputs were not recorded'
 grep -q 'switch switch' "$CALLS/switch" || fail 'the built switch-to-configuration was not used'
 grep -q 'complete for ' "$tmp/out.log" || fail 'the deploy did not report completion'
 echo 'Deploy proof: profile set, built switch used, deployer started once, verified.'
@@ -205,13 +206,11 @@ echo 'Deploy proof: profile set, built switch used, deployer started once, verif
 # --- 4. an activation-started deployer is not started again ------------------
 reset_calls
 jq -cn --arg id "$deployment_id" '{deployment_id:$id,exit_code:0}' > "$tmp/state/attempts/$deployment_id.json"
-printf 'activating\n' > "$SYSTEMD/active"
 run --flake "$root" --system chill-penguin
 [[ $rc == 0 ]] || fail "already-applied deploy exited $rc"
 [[ ! -e $CALLS/systemctl ]] || fail 'the already-applied path started the deployer again'
 grep -q 'already applied' "$tmp/out.log" || fail 'the already-applied path did not say so'
-[[ -s $CALLS/probe ]] || fail 'the in-flight activation start was not observed'
-echo 'Already-applied proof: the in-flight activation start is awaited, no second start.'
+echo 'Already-applied proof: a recorded success is not replayed.'
 
 # --- 5. a switch that does not become the running system is a refusal --------
 reset_calls

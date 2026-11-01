@@ -30,11 +30,6 @@ FLOCK_BIN=${FLOCK_BIN:-flock}
 HOSTNAME_BIN=${HOSTNAME_BIN:-hostname}
 ACTIVATE_HOST=${ACTIVATE_HOST:-$repo_root/scripts/activate-host}
 DEPLOY_STATUS=${DEPLOY_STATUS:-$script_dir/deploy-status.sh}
-# Bounded readiness probe, never a fixed dwell: the interval only spaces
-# observations and the deadline bounds the whole wait.
-DEPLOY_PROBE_INTERVAL=${DEPLOY_PROBE_INTERVAL:-2}
-DEPLOY_TIMEOUT_SECONDS=${DEPLOY_TIMEOUT_SECONDS:-1800}
-DEPLOY_PROBE_SLEEP=${DEPLOY_PROBE_SLEEP:-sleep}
 CURRENT_SYSTEM=${GHOSTSHIP_CURRENT_SYSTEM:-/run/current-system}
 SYSTEM_PROFILE=${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
 
@@ -131,6 +126,8 @@ read_identity() {
   identity_tree=$("$JQ_BIN" -r '.tree // "unknown"' "$file")
   identity_dirty=$("$JQ_BIN" -r '.dirty // false' "$file")
   identity_agent_dirty=$("$JQ_BIN" -r '.agent_dirty // false' "$file")
+  provider_secrets_file=$("$JQ_BIN" -er '.provider_secrets_file // empty' "$file")
+  [[ -n $provider_secrets_file ]] || die 'the built identity names no provider secret file'
   [[ $deployment_id =~ ^[0-9a-f]{64}$ ]] || die 'the built identity has no deployment id'
   [[ -n $agent_revision && -n $tooling_path && -n $image_archive ]] || die 'the built identity is incomplete'
   [[ -n $identity_state && -n $identity_unit ]] || die 'the built identity names no state directory or unit'
@@ -289,10 +286,6 @@ assert_current_build() {
   [[ $profile == "$build" ]] || die "the system profile is ${profile:-unknown}, not the build $build"
 }
 
-unit_state() {
-  "$SYSTEMCTL_BIN" show -p ActiveState --value "$identity_unit" 2>/dev/null || true
-}
-
 unit_result() {
   "$SYSTEMCTL_BIN" show -p Result --value "$identity_unit" 2>/dev/null || true
 }
@@ -301,14 +294,23 @@ attempt_file() {
   printf '%s/attempts/%s.json\n' "$state_dir" "$deployment_id"
 }
 
-wait_for_running_unit() {
-  # An activation hook starts the deployer asynchronously on a switch. Wait for
-  # that start instead of issuing a second one.
-  local deadline=$((SECONDS + DEPLOY_TIMEOUT_SECONDS))
-  while [[ $(unit_state) == activating ]]; do
-    (( SECONDS < deadline )) || die "the deployer did not finish within ${DEPLOY_TIMEOUT_SECONDS}s"
-    "$DEPLOY_PROBE_SLEEP" "$DEPLOY_PROBE_INTERVAL"
-  done
+# Record the request under the deployer's own lock: one writer, and the deployer
+# can never read a half-written request. The lock is released before the start,
+# because the deployer holds it for the whole deployment.
+write_desired() {
+  phase 'RECORD the deployment request'
+  install -d -m 0700 "$state_dir"
+  exec 7>"$state_dir/deploy.lock"
+  "$FLOCK_BIN" -x 7
+  printf '%s\n' "$deployment_id" > "$state_dir/desired.tmp"
+  mv -f "$state_dir/desired.tmp" "$state_dir/desired"
+  local secret_sha256
+  secret_sha256=$(sha256sum "$provider_secrets_file" | cut -d ' ' -f 1)
+  printf 'agent=%s secret_sha256=%s tooling=%s\n' \
+    "$agent_revision" "$secret_sha256" "$tooling_path" > "$state_dir/desired-inputs.tmp"
+  mv -f "$state_dir/desired-inputs.tmp" "$state_dir/desired-inputs"
+  rm -f "$state_dir/restart.pending" "$state_dir/restart.pending.tmp"
+  exec 7>&-
 }
 
 # reconcile_attempt returns 0 when this deployment is already applied, 1 when a
@@ -342,11 +344,11 @@ deploy_artifact() {
   "$ACTIVATE_HOST" --toplevel "$build"
   assert_current_build
 
-  wait_for_running_unit
   if reconcile_attempt "$(attempt_file)"; then
     verify_running
     return 0
   fi
+  write_desired
   echo "deploy: starting $identity_unit from $build"
   "$SYSTEMCTL_BIN" start "$identity_unit"
   local result
