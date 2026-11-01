@@ -167,6 +167,9 @@
               python3Packages.requests
               ripgrep
               jq
+              # `just` is the release/deployment entry point; it must be on PATH
+              # with no activation or per-command install.
+              just
               curl
               nodejs_24
               util-linux
@@ -190,6 +193,8 @@
               curl
               direnv
               gh
+              # The same release/deployment entry point workers and CI use.
+              just
               nix
               openssh
               gnugrep

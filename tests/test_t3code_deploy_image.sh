@@ -819,11 +819,13 @@ grep -q 'deploy: exiting rc=1' "$tmp/post-trap.log" || { echo 'post-trap failure
 jq -e '.exit_code == 1' "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >/dev/null || { echo 'post-trap attempt did not record rc=1' >&2; cat "$STATE_DIR/attempts/$DEPLOYMENT_ID.json" >&2; exit 1; }
 echo 'Post-trap failure proof: a step after the attempt trap records and logs deploy: exiting rc=1.'
 
-# Container-identity dwell: systemd restarts create a new container, so
-# RestartCount stays 0; Id + StartedAt is the identity. A changed identity at
-# the dwell end fails (exit 1, not 75), records nothing applied and issues no
-# second restart. A stable identity passes; an empty one is UNKNOWN. A slow
-# container creation before healthy is not a failure.
+# Container identity after the restart: systemd restarts create a new
+# container, so RestartCount stays 0; Id + StartedAt is the identity. A changed
+# identity at the readiness probe fails (exit 1, not 75), records nothing
+# applied and issues no second restart. A stable identity passes; an empty one
+# is UNKNOWN. A slow container creation before healthy is not a failure. The
+# stable case also proves there is no fixed dwell left: the readiness clock
+# must not advance past the health wait (the old 180s settle added 180).
 dwell_case() {
   local id=$1 mode=$2 healthy_after=$3
   : > "$EVENTS"
@@ -845,18 +847,21 @@ dwell_case deployment-dwell-restart restart 0
 [[ $dwell_rc == 1 ]] || { echo "changed identity exit=$dwell_rc, want 1 (never 75)" >&2; cat "$tmp/deployment-dwell-restart.log" >&2; exit 1; }
 [[ $(cat "$STATE_DIR/applied") == "$applied_before" ]] || { echo 'changed identity recorded the deployment applied' >&2; exit 1; }
 [[ $(grep -c '^restart$' "$EVENTS") == 1 ]] || { echo 'changed identity issued a second restart' >&2; cat "$EVENTS" >&2; exit 1; }
-grep -q 'restarted again during the 180s settle' "$tmp/deployment-dwell-restart.log"
+grep -q 'restarted again during the readiness probe' "$tmp/deployment-dwell-restart.log"
 jq -e '.exit_code == 1' "$STATE_DIR/attempts/deployment-dwell-restart.json" >/dev/null
 dwell_case deployment-dwell-stable stable 130
 [[ $dwell_rc == 0 ]] || { echo "stable identity exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-stable.log" >&2; exit 1; }
 [[ $(cat "$STATE_DIR/applied") == deployment-dwell-stable ]] || { echo 'stable identity did not record applied' >&2; exit 1; }
+# No fixed dwell: the old 180s settle pushed the readiness clock to >= 310.
+dwell_clock=$(cat "$HEALTH_CLOCK_FILE")
+(( dwell_clock <= 140 )) || { echo "readiness clock advanced to $dwell_clock: a fixed dwell is back" >&2; exit 1; }
 dwell_case deployment-dwell-empty empty 0
 [[ $dwell_rc == 1 ]] || { echo "empty identity exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-empty.log" >&2; exit 1; }
-grep -q 'container identity unreadable at settle end' "$tmp/deployment-dwell-empty.log"
+grep -q 'container identity unreadable at settle' "$tmp/deployment-dwell-empty.log"
 [[ $(cat "$STATE_DIR/applied") == deployment-dwell-stable ]] || { echo 'empty identity recorded applied' >&2; exit 1; }
 dwell_case deployment-dwell-slow slow 30
 [[ $dwell_rc == 0 ]] || { echo "slow creation exit=$dwell_rc" >&2; cat "$tmp/deployment-dwell-slow.log" >&2; exit 1; }
 [[ $(cat "$STATE_DIR/applied") == deployment-dwell-slow ]] || { echo 'slow creation did not record applied' >&2; exit 1; }
-echo 'Container-identity dwell proof: changed identity fails without rc 75 or a second restart; stable and slow-create pass; empty is UNKNOWN.'
+echo 'Container-identity probe proof: changed identity fails without rc 75 or a second restart; stable and slow-create pass without a fixed dwell; empty is UNKNOWN.'
 
 echo 'Deploy-image fixture passed.'

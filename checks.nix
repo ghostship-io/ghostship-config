@@ -165,6 +165,49 @@ in
     (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { })
     .tests.native-loader;
   podman-ipam = import ./packages/podman-network/regression.nix { pkgs = securityPkgs; };
+  # The fast T3 deployment closure: what a T3-only change needs to build, and
+  # what the PR gate builds. It holds the deployment identity the deployer
+  # reads from the system, the image's baked VERSION/DIGEST read back through
+  # the image's own selector, and the assertion that the deploy unit is wired
+  # to the same identity. Building the archive or the toplevel is not needed:
+  # neither is an input to a deployment identity or a host switch decision.
+  t3code-deploy-closure =
+    let
+      t3Image = import ./packages/t3code/image.nix { inherit pkgs; };
+      identity = t3codeConfig.environment.etc."ghostship/t3code-deploy-identity.json".source;
+      unitEnv = t3codeDeploy.environment;
+    in
+    pkgs.runCommand "ghostship-t3code-deploy-closure"
+      {
+        nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.jq ];
+      }
+      ''
+        mkdir -p $out
+        install -Dm 0644 ${identity} $out/deploy-identity.json
+        ln -s ${t3Image.metadata} $out/image
+        jq -e '
+          (.deployment_id | test("^[0-9a-f]{64}$"))
+          and (.image_archive | type == "string" and length > 0)
+          and (.agent_revision | type == "string" and length > 0)
+          and (.tooling_path | type == "string" and length > 0)
+          and (.state_dir | type == "string" and length > 0)
+          and (.unit == "ghostship-t3code-deploy.service")
+          and (.tree | type == "string" and length > 0)
+          and (.dirty | type == "boolean")
+          and (.agent_dirty | type == "boolean")
+        ' $out/deploy-identity.json >/dev/null
+        # The unit and the identity file are generated from the same values; a
+        # deployment would otherwise run something other than what was tested.
+        test "$(jq -r .deployment_id $out/deploy-identity.json)" = ${pkgs.lib.escapeShellArg unitEnv.DEPLOYMENT_ID}
+        test "$(jq -r .image_archive $out/deploy-identity.json)" = ${pkgs.lib.escapeShellArg unitEnv.IMAGE_ARCHIVE}
+        test "$(jq -r .agent_revision $out/deploy-identity.json)" = ${pkgs.lib.escapeShellArg unitEnv.AGENT_REVISION}
+        test "$(jq -r .tooling_path $out/deploy-identity.json)" = ${pkgs.lib.escapeShellArg unitEnv.TOOLING_PATH}
+        grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' $out/image/usr/share/t3code-app/VERSION
+        grep -Eq '^[0-9a-f]{64}$' $out/image/usr/share/t3code-app/DIGEST
+        $out/image/usr/share/t3code/served-identity.sh --root $out/image > $out/served-identity.json
+        test "$(jq -r .baked.version $out/served-identity.json)" = "$(cat $out/image/usr/share/t3code-app/VERSION)"
+        touch $out/ok
+      '';
   # The release-window holder must be proved as the *generated* wrapper, not as
   # the repository text: `$$` once reached the built script as `$`, which two
   # live releases discovered and no source-level test could.
@@ -351,6 +394,10 @@ in
         cd source
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
+        bash tests/test_t3code_deploy_script.sh
+        # #804 shipped this proof without wiring it; the wiring guard refuses
+        # an unwired T3 deployment proof.
+        bash tests/test_t3code_deploy_status.sh
         bash tests/test_t3code_release_window.sh
         bash tests/test_t3code_unknown_ending.sh
         bash tests/test_t3code_worker_dev_env.sh
