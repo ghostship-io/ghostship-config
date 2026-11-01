@@ -12,14 +12,21 @@ in
   ];
 
   # Apple Silicon support - handled by nixos-apple-silicon
-  # The pinned nixos-apple-silicon strips buildUBoot's DTC= flag, so U-Boot
-  # falls back to its in-tree dtc, which fails against dtc 1.8 checks. Upstream
-  # 54795b29 (issue #557) removed the filter; drop this once the input has it.
+  # The pinned nixos-apple-silicon builds U-Boot 2025.10 with its in-tree dtc
+  # (it filters buildUBoot's DTC=). Newer nixpkgs rewrites the dtc warning
+  # flags for dtc 1.8, which that in-tree dtc rejects, while dtc 1.8 cannot
+  # parse this U-Boot's device trees. Restore the original flag so the
+  # bootloader builds as before. Drop once the input carries U-Boot 2026.07+.
   nixpkgs.overlays = [
     (lib.mkAfter (
-      final: prev: {
+      _final: prev: {
         uboot-asahi = prev.uboot-asahi.overrideAttrs (old: {
-          makeFlags = [ "DTC=${lib.getExe final.buildPackages.dtc}" ] ++ old.makeFlags;
+          postPatch = (old.postPatch or "") + ''
+            for f in scripts/Makefile.lib dts/upstream/Makefile; do
+              [ -e "$f" ] || continue
+              substituteInPlace "$f" --replace-quiet -Eno-node_name_not_empty -Wno-graph_child_address
+            done
+          '';
         });
       }
     ))
