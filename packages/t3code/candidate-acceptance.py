@@ -2017,8 +2017,9 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                 "image_id": image_id,
                 "agent_revision": expected_agent_revision,
                 "agent_path": agent_path,
-                "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)
-                                          if provider_secrets_file else None),
+                "provider_secret_sha256": (hashlib.sha256(
+                    Path(provider_secrets_file).read_bytes()).hexdigest()
+                    if provider_secrets_file else None),
                 "candidate_name": name,
                 "candidate_toolchain": staged_toolchain,
                 "live_before": before,
