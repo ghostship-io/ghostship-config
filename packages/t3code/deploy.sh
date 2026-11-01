@@ -130,6 +130,7 @@ read_identity() {
   identity_unit=$("$JQ_BIN" -er '.unit // empty' "$file")
   identity_tree=$("$JQ_BIN" -r '.tree // "unknown"' "$file")
   identity_dirty=$("$JQ_BIN" -r '.dirty // false' "$file")
+  identity_agent_dirty=$("$JQ_BIN" -r '.agent_dirty // false' "$file")
   [[ $deployment_id =~ ^[0-9a-f]{64}$ ]] || die 'the built identity has no deployment id'
   [[ -n $agent_revision && -n $tooling_path && -n $image_archive ]] || die 'the built identity is incomplete'
   [[ -n $identity_state && -n $identity_unit ]] || die 'the built identity names no state directory or unit'
@@ -272,8 +273,11 @@ verify_deployable() {
   [[ -n $expected_host ]] || die 'cannot read this host name; pass --host'
   [[ $identity_host == "$expected_host" ]] \
     || die "the artifact is for $identity_host, this host is $expected_host"
-  if [[ $identity_dirty == true && $allow_dirty != 1 ]]; then
-    die "the artifact was built from a dirty checkout at $identity_tree; commit it or pass --allow-dirty"
+  if [[ $allow_dirty != 1 ]]; then
+    [[ $identity_dirty != true ]] \
+      || die "the artifact was built from a dirty checkout at $identity_tree; commit it or pass --allow-dirty"
+    [[ $identity_agent_dirty != true ]] \
+      || die "the artifact pins a dirty agent input at $agent_revision; pin a clean revision or pass --allow-dirty"
   fi
 }
 

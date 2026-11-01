@@ -38,7 +38,7 @@ EOF
 cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
- "image_archive":"$image","tree":"test-rev","dirty":false}
+ "image_archive":"$image","tree":"test-rev","dirty":false,"agent_dirty":false}
 EOF
 
 # The fast closure: the same identity, the image metadata root, and the
@@ -266,5 +266,22 @@ cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/identity.restore"
 jq '.dirty = false' "$tmp/identity.restore" > "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
 echo 'Dirty proof: a dirty-checkout artifact is refused before any effect; --allow-dirty deploys it.'
+
+# --- 10. a dirty pinned input is refused the same way ------------------------
+reset_calls
+jq '.dirty = false | .agent_dirty = true | .agent_revision = "deadbeef-dirty"' \
+  "$build/etc/ghostship/t3code-deploy-identity.json" > "$tmp/identity.agent-dirty"
+cp "$tmp/identity.agent-dirty" "$build/etc/ghostship/t3code-deploy-identity.json"
+run --flake "$root" --system chill-penguin
+[[ $rc != 0 ]] || fail 'an artifact with a dirty pinned input was deployed'
+grep -q 'pins a dirty agent input' "$tmp/out.log" || fail 'the dirty pinned input was not named'
+[[ ! -e $CALLS/switch ]] || fail 'an artifact with a dirty pinned input was switched to'
+run --flake "$root" --system chill-penguin --allow-dirty
+[[ $rc == 0 ]] || fail "--allow-dirty with a dirty pin exited $rc"
+jq '.dirty = false | .agent_dirty = false | .agent_revision = "agent-rev"' \
+  "$build/etc/ghostship/t3code-deploy-identity.json" > "$tmp/identity.clean"
+cp "$tmp/identity.clean" "$build/etc/ghostship/t3code-deploy-identity.json"
+cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
+echo 'Dirty-pin proof: a dirty pinned input is refused before any effect; --allow-dirty deploys it.'
 
 echo 'Deploy script fixture passed.'

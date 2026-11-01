@@ -194,6 +194,7 @@ in
           and (.unit == "ghostship-t3code-deploy.service")
           and (.tree | type == "string" and length > 0)
           and (.dirty | type == "boolean")
+          and (.agent_dirty | type == "boolean")
         ' $out/deploy-identity.json >/dev/null
         # The unit and the identity file are generated from the same values; a
         # deployment would otherwise run something other than what was tested.

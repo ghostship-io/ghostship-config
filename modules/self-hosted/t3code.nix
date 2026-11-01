@@ -69,15 +69,18 @@ let
   t3codeImage = runtimeImage.image;
   t3codeImageArgs = runtimeImage.imageArgs;
   t3codeImageContents = runtimeImage.contents;
-  # CI and the release executor pin a clean revision. A dirty dev checkout of
-  # the input has no `rev`, so record its dirty revision instead; that keeps
-  # dev and test builds evaluating without weakening a pinned release.
+  # CI and the release executor pin a clean revision, which always has a `rev`.
+  # A dirty dev checkout of the input has none, so record its dirty revision
+  # instead; that keeps dev and test builds evaluating without pretending a
+  # dirty input is a pinned release. `agentDirty` carries the same fact to the
+  # deployer, which refuses to put it on a host.
+  t3codeAgentPin = inputs.ghostship-private-agent;
+  t3codeAgentPinClean = (t3codeAgentPin.rev or null) != null;
   t3codeAgentRevision =
-    let pin = inputs.ghostship-private-agent;
-    in
-    if (pin.rev or null) != null then pin.rev
-    else if (pin.dirtyRev or null) != null then pin.dirtyRev
+    if t3codeAgentPinClean then t3codeAgentPin.rev
+    else if (t3codeAgentPin.dirtyRev or null) != null then t3codeAgentPin.dirtyRev
     else "unknown";
+  t3codeAgentDirty = !t3codeAgentPinClean;
   t3codeDeploymentId = builtins.hashString "sha256" (builtins.toJSON {
     image = runtimeImage.deploymentId;
     agent = t3codeAgentRevision;
@@ -365,6 +368,9 @@ in
     image_archive = toString t3codeImage;
     tree = self.dirtyRev or self.rev or "unknown";
     dirty = self ? dirtyRev;
+    # A dirty pinned input is as unfit for a host as a dirty tree: the artifact
+    # records what it was built from instead of pretending it is a release.
+    agent_dirty = t3codeAgentDirty;
   };
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
   environment.etc."ghostship/t3code-acceptance-route.json".source =
