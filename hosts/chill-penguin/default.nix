@@ -86,7 +86,10 @@ in
   # the running 6.19 kernel lacks the fixes. Deny autoload and explicit modprobe
   # until a patched kernel runs. This is containment, not a patched kernel:
   # privileged direct insmod and an already-loaded module stay outside it.
-  boot.blacklistedKernelModules = [ "algif_aead" "ebt_snat" ];
+  boot.blacklistedKernelModules = [
+    "algif_aead"
+    "ebt_snat"
+  ];
   boot.extraModprobeConfig = ''
     install algif_aead ${pkgs.coreutils}/bin/false
     install ebt_snat ${pkgs.coreutils}/bin/false

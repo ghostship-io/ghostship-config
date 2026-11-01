@@ -62,7 +62,9 @@ assert pkgs.nix.src != pkgs.nixVersions.latest.src;
 # On an input that already ships a fixed 6.x release the upstream tree is used.
 assert
   podmanFixed.upstreamFixed
-  || pkgs.podman.src != flake.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.podman.src;
+  ||
+    pkgs.podman.src
+    != flake.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.podman.src;
 
 # The Podman helper wrapper and the security inputs survive the version bump.
 assert pkgs.podman.passthru.helpersBin != null;
