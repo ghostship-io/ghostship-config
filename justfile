@@ -23,11 +23,17 @@ deploy *ARGS:
 verify *ARGS:
     ./packages/t3code/deploy.sh --verify-only {{ARGS}}
 
-# Roll the host back to its previous system generation. Standard nixos-rebuild
-# rollback: it sets the profile and switches, so it works from a plain shell
-# with T3 and the agents down.
+# Roll the host back to its previous system generation and return T3 to the
+# deployment recorded in that generation. The script switches the system, then
+# reconciles the T3 deployment to the now-current system, so the system and the
+# running image cannot disagree. Works with T3 down.
 rollback *ARGS:
-    nixos-rebuild --rollback switch {{ARGS}}
+    ./packages/t3code/deploy.sh --rollback {{ARGS}}
+
+# The behavioural candidate suite, run explicitly and never from deploy or
+# verify: it starts a candidate container and needs a live provider route.
+acceptance *ARGS:
+    python3 ./packages/t3code/candidate-acceptance.py {{ARGS}}
 
 # Quick integration checks: the same commands the manual-on-main CI job runs.
 # They use the host's existing podman and AppArmor parser, start no long-lived

@@ -27,6 +27,7 @@ JQ_BIN=${JQ_BIN:-jq}
 SYSTEMCTL_BIN=${SYSTEMCTL_BIN:-systemctl}
 PODMAN_BIN=${PODMAN_BIN:-podman}
 FLOCK_BIN=${FLOCK_BIN:-flock}
+NIXOS_REBUILD_BIN=${NIXOS_REBUILD_BIN:-nixos-rebuild}
 HOSTNAME_BIN=${HOSTNAME_BIN:-hostname}
 ACTIVATE_HOST=${ACTIVATE_HOST:-$repo_root/scripts/activate-host}
 DEPLOY_STATUS=${DEPLOY_STATUS:-$script_dir/deploy-status.sh}
@@ -52,6 +53,7 @@ Usage: deploy.sh [OPTIONS]
   --no-deploy            build and test the artifact, do not touch the host
   --build-only           build the artifact and print its identity
   --verify-only          read-only deployed and running identity check
+  --rollback             switch to the previous generation and return T3 to it
   --allow-dirty          deploy an artifact built from a dirty checkout
   --flake REF            checkout or flake reference to build (default: this checkout)
   --system NAME          nixosConfigurations attribute (default: this host name)
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --build-only) mode=build; shift ;;
     --allow-dirty) allow_dirty=1; shift ;;
     --verify-only) mode=verify-only; shift ;;
+    --rollback) mode=rollback; shift ;;
     --flake) flake=${2:?--flake needs a reference}; shift 2 ;;
     --system) system=${2:?--system needs a name}; shift 2 ;;
     --host) host=${2:?--host needs a name}; shift 2 ;;
@@ -271,11 +274,25 @@ read_applied() {
   return 0
 }
 
+# The installed system records what it wants in its own identity file. A plain
+# `nixos-rebuild switch` or a system-only rollback changes this without touching
+# the T3 deployment state, so VERIFY has to name that divergence instead of
+# reporting the old coherent tuple.
+installed_deployment() {
+  "$JQ_BIN" -r '.deployment_id // empty' \
+    "$CURRENT_SYSTEM/etc/ghostship/t3code-deploy-identity.json" 2>/dev/null || true
+}
+
 verify_running() {
   deployment_id=${deployment_id:-}
   phase 'VERIFY the deployed and running identity'
   if ! read_applied; then
     die "${applied_reason:-the deployed identity is not verifiable}"
+  fi
+  local installed
+  installed=$(installed_deployment)
+  if [[ -n $installed && $installed != "$applied_deployment" ]]; then
+    die "the installed system wants $installed but the applied deployment is $applied_deployment; run just deploy to deploy the installed system"
   fi
   if [[ -n $deployment_id && $applied_deployment != "$deployment_id" ]]; then
     die "the deployed identity $applied_deployment is not the built deployment $deployment_id"
@@ -377,6 +394,29 @@ deploy_artifact() {
 
 if [[ $mode == verify-only ]]; then
   verify_running
+  exit 0
+fi
+
+if [[ $mode == rollback ]]; then
+  phase 'ROLLBACK the host system generation'
+  "$NIXOS_REBUILD_BIN" --rollback switch
+  build=$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)
+  [[ -n $build && -x $build/bin/switch-to-configuration ]] \
+    || die "the previous generation is not a built system: ${build:-unknown}"
+  read_identity "$build/etc/ghostship/t3code-deploy-identity.json"
+  (( state_given == 1 )) || state_dir=$identity_state
+  echo "deploy: rolled back system $build, deployment $deployment_id"
+  assert_current_build
+  install -d -m 0700 "$state_dir"
+  if reconcile_attempt "$(attempt_file)"; then
+    verify_running
+    exit 0
+  fi
+  write_desired
+  "$SYSTEMCTL_BIN" start "$identity_unit"
+  [[ $(unit_result) == success ]] || die "the deployer unit reported Result=$(unit_result)"
+  verify_running
+  echo "deploy: rollback complete for $deployment_id"
   exit 0
 fi
 

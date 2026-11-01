@@ -120,6 +120,13 @@ set -euo pipefail
 [[ ${DEPLOY_STATUS_STATE:-coherent} == coherent ]] || { echo '{"state":"unknown"}'; exit 77; }
 printf '{"state":"coherent","deployment":"%s","image":"%s"}\n' "${STUB_DEPLOYMENT:?}" "${STUB_IMAGE:?}"
 SH
+cat > "$tmp/bin/nixos-rebuild" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $1 == --rollback && $2 == switch ]] || { echo "unexpected nixos-rebuild: $*" >&2; exit 1; }
+ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_SYSTEM_PROFILE:?}"
+ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_CURRENT_SYSTEM:?}"
+SH
 cat > "$tmp/bin/probe-sleep" <<'SH'
 #!/usr/bin/env bash
 printf 'probe-sleep %s\n' "$1" >> "$CALLS/probe"
@@ -138,7 +145,7 @@ export SYSTEMD=$tmp/systemd
 export NIX_BIN=$tmp/bin/nix NIX_STORE_BIN=$tmp/bin/nix-store JQ_BIN=jq
 export IDENTITY_STORE_ROOT=$tmp/store
 export SYSTEMCTL_BIN=$tmp/bin/systemctl PODMAN_BIN=$tmp/bin/podman
-export HOSTNAME_BIN=$tmp/bin/hostname FLOCK_BIN=flock
+export HOSTNAME_BIN=$tmp/bin/hostname FLOCK_BIN=flock NIXOS_REBUILD_BIN=$tmp/bin/nixos-rebuild
 export PATH="$tmp/bin:$PATH"
 export HOME=$tmp/home
 mkdir -p "$HOME"
@@ -305,5 +312,43 @@ jq '.dirty = false | .agent_dirty = false | .agent_revision = "agent-rev"' \
 cp "$tmp/identity.clean" "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
 echo 'Dirty-pin proof: a dirty pinned input is refused before any effect; --allow-dirty deploys it.'
+
+# --- 11. the installed system and the applied deployment must agree ----------
+reset_calls
+mkdir -p "$GHOSTSHIP_CURRENT_SYSTEM/etc/ghostship"
+jq '.deployment_id = "9999999999999999999999999999999999999999999999999999999999999999"' \
+  "$build/etc/ghostship/t3code-deploy-identity.json" \
+  > "$GHOSTSHIP_CURRENT_SYSTEM/etc/ghostship/t3code-deploy-identity.json"
+run --verify-only --state "$tmp/state"
+[[ $rc != 0 ]] || fail 'a plain switch that changed the installed system was reported coherent'
+grep -q 'run just deploy' "$tmp/out.log" || fail 'the installed/applied divergence was not named'
+rm -rf "$GHOSTSHIP_CURRENT_SYSTEM"
+echo 'Installed-system proof: a system change outside deploy.sh is named, not reported as the old tuple.'
+
+# --- 12. rollback returns the system and the T3 deployment together ----------
+reset_calls
+previous=$tmp/previous-system
+mkdir -p "$previous/bin" "$previous/etc/ghostship" "$previous/etc/systemd/system"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$previous/bin/switch-to-configuration"
+chmod +x "$previous/bin/switch-to-configuration"
+previous_id=$(printf 'previous-artifact' | sha256sum | cut -d ' ' -f 1)
+previous_image=$(printf 'previous-image' | sha256sum | cut -d ' ' -f 1)
+jq -n --arg d "$previous_id" --arg i "$tmp/image" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,
+    provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
+  > "$previous/etc/ghostship/t3code-deploy-identity.json"
+printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/image" \
+  > "$previous/etc/systemd/system/ghostship-t3code-deploy.service"
+export PREVIOUS_SYSTEM=$previous STUB_DEPLOYMENT=$previous_id STUB_IMAGE="sha256:$previous_image"
+export PODMAN_IMAGE="sha256:$previous_image"
+run --rollback
+[[ $rc == 0 ]] || fail "rollback exited $rc"
+[[ $(readlink -f "$GHOSTSHIP_CURRENT_SYSTEM") == "$previous" ]] || fail 'rollback did not switch the system'
+[[ "$(readlink -f "$GHOSTSHIP_SYSTEM_PROFILE")" == "$previous" ]] || fail 'rollback did not record the generation'
+[[ "$(cat "$tmp/state/desired")" == "$previous_id" ]] || fail 'rollback did not request the previous deployment'
+[[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'rollback did not start the deployer once'
+echo 'Rollback proof: the previous generation is switched and its deployment reconciled and verified.'
+export STUB_DEPLOYMENT=$deployment_id STUB_IMAGE="sha256:$image_id" PODMAN_IMAGE="sha256:$image_id"
 
 echo 'Deploy script fixture passed.'
