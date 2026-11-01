@@ -12,6 +12,18 @@ in
   ];
 
   # Apple Silicon support - handled by nixos-apple-silicon
+  # The pinned nixos-apple-silicon strips buildUBoot's DTC= flag, so U-Boot
+  # falls back to its in-tree dtc, which fails against dtc 1.8 checks. Upstream
+  # 54795b29 (issue #557) removed the filter; drop this once the input has it.
+  nixpkgs.overlays = [
+    (lib.mkAfter (
+      final: prev: {
+        uboot-asahi = prev.uboot-asahi.overrideAttrs (old: {
+          makeFlags = [ "DTC=${lib.getExe final.buildPackages.dtc}" ] ++ old.makeFlags;
+        });
+      }
+    ))
+  ];
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   # The Console OAuth cutover needs the owner at the provider console
