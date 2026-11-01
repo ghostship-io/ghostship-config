@@ -56,10 +56,12 @@ in
       alwaysKeepRunning = true;
       resolveLocalQueries = lib.mkIf (config.ghostship.host.roles.wsl or false) false;
       settings = {
+        # resolvconf writes dnsmasq-conf.conf only when dnsmasq resolves local
+        # queries; WSL takes its upstreams from resolv-file instead.
         conf-file = [
           "${./mesh-dns.conf}"
-          "/etc/dnsmasq-conf.conf"
-        ];
+        ]
+        ++ lib.optional (!(config.ghostship.host.roles.wsl or false)) "/etc/dnsmasq-conf.conf";
         resolv-file = lib.mkIf (config.ghostship.host.roles.wsl or false) "/mnt/wsl/resolv.conf";
       };
     };
