@@ -31,6 +31,7 @@ cat > "$build/bin/switch-to-configuration" <<'SH'
 set -euo pipefail
 printf 'switch %s\n' "$*" >> "$CALLS/switch"
 ln -sfn "${FAKE_SWITCH_TARGET:?}" "${GHOSTSHIP_CURRENT_SYSTEM:?}"
+exit "${FAKE_SWITCH_RC:-0}"
 SH
 chmod +x "$build/bin/switch-to-configuration"
 cat > "$build/etc/systemd/system/ghostship-t3code-deploy.service" <<EOF
@@ -101,6 +102,12 @@ case "$1" in
     printf 'start %s\n' "$2" >> "$CALLS/systemctl"
     printf '%s\n' "${SYSTEMCTL_START_RESULT:-success}" > "$SYSTEMD/result"
     printf 'inactive\n' > "$SYSTEMD/active"
+    ;;
+  list-units)
+    [[ ${2:-} == --state=failed ]] || { echo "unexpected systemctl list-units: $*" >&2; exit 1; }
+    for failed_unit in ${FAILED_UNITS:-}; do
+      printf '%s loaded failed failed\n' "$failed_unit"
+    done
     ;;
   *) echo "unexpected systemctl invocation: $*" >&2; exit 1 ;;
 esac
@@ -239,6 +246,28 @@ grep -q 'system.build.toplevel' "$CALLS/nix" || fail 'the full deploy did not bu
 grep -q 'switch switch' "$CALLS/switch" || fail 'the built switch-to-configuration was not used'
 grep -q 'complete for ' "$tmp/out.log" || fail 'the deploy did not report completion'
 echo 'Deploy proof: profile set, built switch used, deployer started once, verified.'
+
+# --- 3b. switch rc 4 with only non-T3 failures warns and continues -----------
+reset_calls
+export FAKE_SWITCH_RC=4 FAILED_UNITS="romm.service grimmory.service"
+run --flake "$root" --system chill-penguin
+[[ $rc == 0 ]] || fail "rc-4 non-T3 activation aborted the deploy"
+grep -q 'failed non-T3 units: romm.service grimmory.service' "$tmp/out.log" \
+  || fail 'the failed non-T3 units were not named'
+[[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'the deploy did not continue to the unit'
+grep -q 'complete for ' "$tmp/out.log" || fail 'the rc-4 deploy did not complete'
+echo 'rc-4 proof: unrelated unit failures warn and the T3 deploy completes.'
+
+# --- 3c. switch rc 4 with a T3 unit failure is fatal -------------------------
+reset_calls
+export FAKE_SWITCH_RC=4 FAILED_UNITS="podman-t3code.service"
+run --flake "$root" --system chill-penguin
+[[ $rc != 0 ]] || fail 'a T3 unit failure during activation was accepted'
+grep -q 'T3 units failed during activation: podman-t3code.service' "$tmp/out.log" \
+  || fail 'the T3 unit failure was not named'
+[[ ! -e $CALLS/systemctl ]] || fail 'a T3-failed activation started the deployer'
+unset FAKE_SWITCH_RC FAILED_UNITS
+echo 'rc-4 T3 proof: a T3 unit failure stops before the deployer.'
 
 # --- 4. an activation-started deployer is not started again ------------------
 reset_calls
