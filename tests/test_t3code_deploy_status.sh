@@ -55,7 +55,7 @@ coherent "$tmp/digest" provider_secret_sha256 "$digest" secret_sha256 "$digest"
 run_status "$tmp/digest"
 [[ $rc == 0 ]]
 "$JQ_BIN" -e --arg d "$id" --arg s "$digest" \
-  '.state == "coherent" and .deployment == $d and .secret_evidence == "digest" and .secret_sha256 == $s' <<<"$out" >/dev/null
+  '.state == "coherent" and .deployment == $d and .secret_evidence == "digest" and .secret_sha256 == $s and .receipt_format == "mechanical"' <<<"$out" >/dev/null
 
 # 2. Coherent legacy tuple: inode-only receipts and applied input, with the
 # host and container inodes deliberately different.
@@ -126,7 +126,7 @@ printf 'agent=agent-rev secret_sha256=%s tooling=%s\n' "$digest" "$tooling" > "$
 run_status "$legacy_state"
 [[ $rc == 0 ]]
 "$JQ_BIN" -e --arg i "$image" --arg s "$digest" \
-  '.state == "coherent" and .image == $i and .secret_evidence == "digest" and .secret_sha256 == $s' <<<"$out" >/dev/null
+  '.state == "coherent" and .image == $i and .secret_evidence == "digest" and .secret_sha256 == $s and .receipt_format == "pre-schema"' <<<"$out" >/dev/null
 
 # 9b. The same legacy receipt with a different applied tooling is refused.
 cp -R "$legacy_state" "$tmp/applied-legacy-mismatch"

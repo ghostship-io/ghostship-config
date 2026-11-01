@@ -83,6 +83,7 @@ case $candidate in t3code-candidate-*) ;; *) mismatch 'receipt candidate name is
 # receipted one.
 [ -n "$live_after" ] || mismatch 'receipt live identity is missing'
 receipt_schema=$("$JQ_BIN" -r '.schema // empty' "$receipt")
+if [ -z "$receipt_schema" ]; then receipt_format=pre-schema; else receipt_format=mechanical; fi
 recorded_image=$(printf '%s\n' "$live_after" | "$JQ_BIN" -r 'if type == "object" then .image // empty else empty end' 2>/dev/null || true)
 if [ -z "$recorded_image" ] && [ -z "$receipt_schema" ]; then
   # Pre-schema receipts recorded the live tuple as an array and kept the image
@@ -132,6 +133,8 @@ fi
   --arg agent "$receipt_agent" --arg tooling "$receipt_path" \
   --arg secret_sha256 "$secret_sha256" --arg secret_evidence "$secret_evidence" \
   --arg receipt "receipts/$id.json" --arg desired "$desired" --arg applied "$applied" \
+  --arg receipt_format "$receipt_format" \
   '{state:"coherent",deployment:$deployment,image:$image,agent_revision:$agent,
     tooling:$tooling,secret_sha256:(if $secret_sha256 == "null" then null else $secret_sha256 end),
-    secret_evidence:$secret_evidence,receipt:$receipt,desired:$desired,applied:$applied}'
+    secret_evidence:$secret_evidence,receipt_format:$receipt_format,receipt:$receipt,
+    desired:$desired,applied:$applied}'

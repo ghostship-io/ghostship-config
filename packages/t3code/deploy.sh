@@ -267,6 +267,7 @@ read_applied() {
   local status line
   applied_reason=''
   status=$(deploy_status_output) || { applied_reason='deploy-status reports no coherent tuple'; return 1; }
+  applied_status=$status
   applied_deployment=$("$JQ_BIN" -r '.deployment // empty' <<< "$status")
   applied_image=$("$JQ_BIN" -r '.image // empty' <<< "$status")
   [[ -n $applied_deployment && -n $applied_image ]] \
@@ -303,6 +304,9 @@ verify_running() {
   fi
   if [[ -n $deployment_id && $applied_deployment != "$deployment_id" ]]; then
     die "the deployed identity $applied_deployment is not the built deployment $deployment_id"
+  fi
+  if [[ $("$JQ_BIN" -r '.receipt_format // empty' <<< "${applied_status:-}") == pre-schema ]]; then
+    echo 'deploy: note: receipt predates the mechanical schema (legacy); the next deploy replaces it' >&2
   fi
   echo "deploy: deployment $applied_deployment serves $applied_image and is healthy"
 }
