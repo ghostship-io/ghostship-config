@@ -192,6 +192,11 @@ inputs_equal() {
     esac
   done
   [[ "$d_agent" == "$a_agent" && "$d_tool" == "$a_tool" ]] || return 1
+  if [[ -z "$d_secret" && -z "$a_secret" ]]; then
+    # Both lines predate the digest. The old exact-string rule still decides.
+    [[ "$desired" == "$applied" ]]
+    return
+  fi
   if [[ -n "$d_secret" && -n "$a_secret" ]]; then
     [[ "$d_secret" == "$a_secret" ]]
     return

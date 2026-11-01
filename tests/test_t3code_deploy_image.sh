@@ -658,6 +658,20 @@ printf '0\n' > "$HEALTH_CLOCK_FILE"
 bash "$fixture_writer" > "$tmp/deployment-legacy.log" 2>&1
 grep -q 'already applied' "$tmp/deployment-legacy.log"
 grep -q 'secret_sha256=' "$STATE_DIR/applied-inputs"
+# Both lines may still be legacy. Exact equality stays a no-op: no digest is
+# present, so the old string rule decides and nothing restarts.
+export DEPLOYMENT_ID=deployment-both-legacy
+both_legacy="agent=agent-rev secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE") tooling=$TOOLING_PATH"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf '%s\n' "$both_legacy" > "$STATE_DIR/applied-inputs"
+printf '%s\n' "$both_legacy" > "$STATE_DIR/desired-inputs"
+jq -n --arg d "$DEPLOYMENT_ID" --arg i "$legacy_image" --arg p "$TOOLING_PATH" --arg s "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"agent-rev",agent_path:$p,provider_secret_sha256:$s,live_before:{id:"live"},live_after:{id:"live"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+: > "$EVENTS"
+printf '0\n' > "$HEALTH_CLOCK_FILE"
+bash "$fixture_writer" > "$tmp/deployment-both-legacy.log" 2>&1
+grep -q 'already applied' "$tmp/deployment-both-legacy.log"
+! grep -q '^restart$' "$EVENTS"
 printf 'sha256:%s\n' "$(printf 'older-image' | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
 unchanged_run deployment-new-image
 [[ $(grep -c '^restart$' "$EVENTS") == 1 ]]
