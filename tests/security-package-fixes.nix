@@ -17,7 +17,11 @@ let
 
   # The upstream release that carries the fix for each advisory.
   nixFixedVersion = "2.34.9";
-  podmanFixedVersion = "5.8.8";
+  podmanFixed = import ../packages/security-fixes/podman-5.8.8.nix {
+    inherit pkgs;
+    prev = flake.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+  };
+  podmanFixedVersion = podmanFixed.version;
 in
 # The Nix the host installs and the nix-daemon runs.
 assert config.nix.package.version == nixFixedVersion;
@@ -55,7 +59,10 @@ assert pkgs.podman.version == podmanFixedVersion;
 # The pinned builds come from the upstream release trees, not from a rebuilt
 # tree that only carries the version string.
 assert pkgs.nix.src != pkgs.nixVersions.latest.src;
-assert pkgs.podman.src != flake.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.podman.src;
+# On an input that already ships a fixed 6.x release the upstream tree is used.
+assert
+  podmanFixed.upstreamFixed
+  || pkgs.podman.src != flake.inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.podman.src;
 
 # The Podman helper wrapper and the security inputs survive the version bump.
 assert pkgs.podman.passthru.helpersBin != null;
