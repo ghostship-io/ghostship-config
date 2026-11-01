@@ -3,6 +3,10 @@
   lib,
   pkgs,
   inputs,
+  # The flake's own identity. A dirty checkout records its dirty revision and
+  # a dirty flag, so a deployment can refuse to run uncommitted source on the
+  # host instead of silently shipping it.
+  self ? { },
   ...
 }:
 
@@ -351,6 +355,8 @@ in
     agent_revision = t3codeAgentRevision;
     tooling_path = toString tooling;
     image_archive = toString t3codeImage;
+    tree = self.dirtyRev or self.rev or "unknown";
+    dirty = self ? dirtyRev;
   };
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
   environment.etc."ghostship/t3code-acceptance-route.json".source =

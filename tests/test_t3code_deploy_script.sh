@@ -38,8 +38,15 @@ EOF
 cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
- "image_archive":"$image"}
+ "image_archive":"$image","tree":"test-rev","dirty":false}
 EOF
+
+# The fast closure: the same identity, the image metadata root, and the
+# image's own served-identity selector.
+mkdir -p "$tmp/closure/image/usr/share/t3code" "$tmp/closure/image/home/t3code"
+cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
+ln -s "$baked" "$tmp/closure/image/usr/share/t3code-app"
+cp "$root/packages/t3code/served-identity.sh" "$tmp/closure/image/usr/share/t3code/served-identity.sh"
 
 # --- stubs -------------------------------------------------------------------
 cat > "$tmp/bin/nix" <<'SH'
@@ -50,6 +57,7 @@ case "$1" in
   eval) printf 'aarch64-linux\n' ;;
   build)
     case "${!#}" in
+      *t3code-deploy-closure) printf '%s\n' "$tmp/closure" ;;
       *deployment-wrappers) printf '%s\n' "$tmp/wrappers" ;;
       *) printf '%s\n' "$tmp/build" ;;
     esac
@@ -161,6 +169,8 @@ reset_calls
 run --no-deploy --flake "$root" --system chill-penguin
 [[ $rc == 0 ]] || fail "--no-deploy exited $rc"
 [[ -s $CALLS/nix ]] || fail '--no-deploy did not build'
+grep -q 't3code-deploy-closure' "$CALLS/nix" || fail '--no-deploy did not build the deployment closure'
+grep -q 'system.build.toplevel' "$CALLS/nix" && fail '--no-deploy built the whole host toplevel'
 grep -q 'deployment-wrappers' "$CALLS/nix" || fail '--no-deploy did not test the deployment wrappers'
 grep -q 'baked app 0.1.5' "$tmp/out.log" || fail '--no-deploy did not test the baked identity'
 [[ ! -e $CALLS/systemctl ]] || fail '--no-deploy started or inspected a unit'
@@ -187,6 +197,7 @@ run --flake "$root" --system chill-penguin
 [[ $(readlink -f "$GHOSTSHIP_SYSTEM_PROFILE") == "$build" ]] || fail 'the system profile was not set to the build'
 [[ $(readlink -f "$GHOSTSHIP_CURRENT_SYSTEM") == "$build" ]] || fail 'the running system is not the build'
 [[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'the deployer was not started exactly once'
+grep -q 'system.build.toplevel' "$CALLS/nix" || fail 'the full deploy did not build the host toplevel'
 grep -q 'switch switch' "$CALLS/switch" || fail 'the built switch-to-configuration was not used'
 grep -q 'complete for ' "$tmp/out.log" || fail 'the deploy did not report completion'
 echo 'Deploy proof: profile set, built switch used, deployer started once, verified.'
@@ -238,5 +249,22 @@ run --flake "$root" --system chill-penguin --host other-host
 grep -q 'the artifact is for test-host' "$tmp/out.log" || fail 'the host mismatch was not named'
 [[ ! -e $CALLS/switch ]] || fail 'a foreign artifact was switched to'
 echo 'Host proof: an artifact built for another host is refused before any effect.'
+
+# --- 9. a dirty-checkout artifact is refused unless explicitly allowed -------
+reset_calls
+jq '.dirty = true' "$build/etc/ghostship/t3code-deploy-identity.json" > "$tmp/identity.dirty"
+cp "$tmp/identity.dirty" "$build/etc/ghostship/t3code-deploy-identity.json"
+run --flake "$root" --system chill-penguin
+[[ $rc != 0 ]] || fail 'a dirty-checkout artifact was deployed'
+grep -q 'dirty checkout' "$tmp/out.log" || fail 'the dirty artifact was not named'
+[[ ! -e $CALLS/switch ]] || fail 'a dirty-checkout artifact was switched to'
+# The explicit flag is the only way through, and it still deploys the artifact.
+run --flake "$root" --system chill-penguin --allow-dirty
+[[ $rc == 0 ]] || fail "--allow-dirty exited $rc"
+grep -q 'dirty true' "$tmp/out.log" || fail 'the dirty flag was not recorded'
+cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/identity.restore"
+jq '.dirty = false' "$tmp/identity.restore" > "$build/etc/ghostship/t3code-deploy-identity.json"
+cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
+echo 'Dirty proof: a dirty-checkout artifact is refused before any effect; --allow-dirty deploys it.'
 
 echo 'Deploy script fixture passed.'

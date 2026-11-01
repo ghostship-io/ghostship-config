@@ -72,6 +72,9 @@ in
     # Essential CLI tools
     coreutils
     git
+    # `just` is the release/deployment entry point on the host as well as in the
+    # worker image, the dev shell and CI, so recovery works from a plain shell.
+    just
     neovim
     curl
     wget

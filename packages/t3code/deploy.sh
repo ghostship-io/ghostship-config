@@ -40,6 +40,7 @@ SYSTEM_PROFILE=${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
 
 mode=deploy
 flake=$repo_root
+allow_dirty=0
 system=${DEPLOY_SYSTEM:-}
 host=${DEPLOY_HOST:-}
 state_dir=/var/lib/ghostship/t3code-deployment
@@ -53,6 +54,7 @@ Usage: deploy.sh [OPTIONS]
   --no-deploy            build and test the artifact, do not touch the host
   --build-only           build the artifact and print its identity
   --verify-only          read-only deployed and running identity check
+  --allow-dirty          deploy an artifact built from a dirty checkout
   --flake REF            checkout or flake reference to build (default: this checkout)
   --system NAME          nixosConfigurations attribute (default: this host name)
   --host NAME            host name the artifact must name (default: this host name)
@@ -67,11 +69,14 @@ EOF
 }
 
 die() {
-  echo "deploy: $*" >&2
+  # Name the step, so a T3 failure says which step failed and nothing else is
+  # implied to be at risk.
+  echo "deploy: [${phase_name:-start}] $*" >&2
   exit 1
 }
 
 phase() {
+  phase_name=$1
   printf '\n==> %s\n' "$*"
 }
 
@@ -79,6 +84,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --no-deploy) mode=no-deploy; shift ;;
     --build-only) mode=build; shift ;;
+    --allow-dirty) allow_dirty=1; shift ;;
     --verify-only) mode=verify-only; shift ;;
     --flake) flake=${2:?--flake needs a reference}; shift 2 ;;
     --system) system=${2:?--system needs a name}; shift 2 ;;
@@ -103,9 +109,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# nix build ARGS... prints the built store path and nothing else.
+# nix build ARGS... prints the built store path and nothing else. NIX_BUILD_LOGS=1
+# adds the build log so CI can show which derivations were built, fetched or
+# reused instead of only the final path.
 nix_build() {
-  "$NIX_BIN" build --no-link --print-out-paths --impure "${override_inputs[@]}" "$@"
+  local logs=()
+  [[ ${NIX_BUILD_LOGS:-0} == 1 ]] && logs=(--print-build-logs)
+  "$NIX_BIN" build --no-link --print-out-paths --impure "${logs[@]}" "${override_inputs[@]}" "$@"
 }
 
 read_identity() {
@@ -118,52 +128,84 @@ read_identity() {
   identity_state=$("$JQ_BIN" -er '.state_dir // empty' "$file")
   identity_host=$("$JQ_BIN" -er '.host // empty' "$file")
   identity_unit=$("$JQ_BIN" -er '.unit // empty' "$file")
+  identity_tree=$("$JQ_BIN" -r '.tree // "unknown"' "$file")
+  identity_dirty=$("$JQ_BIN" -r '.dirty // false' "$file")
   [[ $deployment_id =~ ^[0-9a-f]{64}$ ]] || die 'the built identity has no deployment id'
   [[ -n $agent_revision && -n $tooling_path && -n $image_archive ]] || die 'the built identity is incomplete'
-  [[ -d $image_archive ]] || die "the built image archive is missing: $image_archive"
   [[ -n $identity_state && -n $identity_unit ]] || die 'the built identity names no state directory or unit'
 }
 
-build_artifact() {
-  phase "BUILD $flake#nixosConfigurations.$system"
+resolve_nix_system() {
+  nix_system=$("$NIX_BIN" eval --raw --impure --expr builtins.currentSystem)
+}
+
+# The fast path: the T3 deployment closure only (identity JSON, image metadata
+# and the deploy unit's wiring). The archive and the host toplevel are not
+# inputs to a deployment identity, so a pull request does not build them.
+build_closure() {
   [[ -n $system ]] || die 'no --system and no host name to build'
+  phase "BUILD the T3 deployment closure for $system"
+  closure=$(nix_build "$flake#checks.$nix_system.t3code-deploy-closure")
+  [[ -n $closure ]] || die 'the deployment closure did not build'
+  read_identity "$closure/deploy-identity.json"
+  (( state_given == 1 )) || state_dir=$identity_state
+  echo "deploy: deployment closure $closure"
+  echo "deploy: deployment $deployment_id agent $agent_revision tree $identity_tree dirty $identity_dirty"
+}
+
+# The full path: the host system generation a switch activates. A T3-only
+# change reuses everything else in it from the cache.
+build_artifact() {
+  [[ -n $system ]] || die 'no --system and no host name to build'
+  phase "BUILD $flake#nixosConfigurations.$system"
   build=$(nix_build "$flake#nixosConfigurations.$system.config.system.build.toplevel")
   [[ -n $build && -x $build/bin/switch-to-configuration ]] \
     || die "the build produced no system generation: ${build:-<none>}"
   read_identity "$build/etc/ghostship/t3code-deploy-identity.json"
-  # An unset --state follows the artifact, so this script and the unit can
-  # never disagree about which state directory the deployment writes.
   (( state_given == 1 )) || state_dir=$identity_state
   echo "deploy: artifact $build"
-  echo "deploy: deployment $deployment_id agent $agent_revision"
+  echo "deploy: deployment $deployment_id agent $agent_revision tree $identity_tree dirty $identity_dirty"
 }
 
 test_artifact() {
-  phase 'TEST the built artifact'
-  local unit_file=$build/etc/systemd/system/$identity_unit
-  [[ -f $unit_file ]] || die "the built system has no $identity_unit"
-  # The unit and the identity file are generated from the same values; if they
-  # ever disagree the deployment would not run what was tested.
-  grep -Fq "DEPLOYMENT_ID=$deployment_id" "$unit_file" \
-    || die 'the unit does not name the built deployment id'
-  grep -Fq "IMAGE_ARCHIVE=$image_archive" "$unit_file" \
-    || die 'the unit does not name the built image archive'
-
+  phase 'TEST the deployment artifact'
   # #801/#1747: build the deployment wrappers the host installs. Their build
-  # runs shellcheck over every generated wrapper, so this tests the same
-  # artifact instead of keeping a second copy of the checks.
-  local nix_system
-  nix_system=$("$NIX_BIN" eval --raw --impure --expr builtins.currentSystem)
+  # runs shellcheck over every generated wrapper, so this tests the artifact
+  # instead of keeping a second copy of the checks.
   nix_build "$flake#checks.$nix_system.deployment-wrappers" >/dev/null
   echo 'deploy: deployment wrappers built and shellchecked'
 
-  test_baked_identity
+  if [[ $mode == deploy || $mode == build ]]; then
+    local unit_file=$build/etc/systemd/system/$identity_unit
+    [[ -f $unit_file ]] || die "the built system has no $identity_unit"
+    # The unit and the identity file are generated from the same values; if
+    # they ever disagree the deployment would not run what was tested.
+    grep -Fq "DEPLOYMENT_ID=$deployment_id" "$unit_file" \
+      || die 'the unit does not name the built deployment id'
+    grep -Fq "IMAGE_ARCHIVE=$image_archive" "$unit_file" \
+      || die 'the unit does not name the built image archive'
+    test_baked_identity
+    return 0
+  fi
+  test_closure_metadata
+}
+
+test_closure_metadata() {
+  # The closure check already asserted the identity and the unit wiring and
+  # read the baked version through served-identity.sh; run the same selector
+  # again here so the fast path prints what it proved.
+  local served
+  served=$(T3CODE_HOME_PREFIX=$closure/image/home/t3code \
+    "$closure/image/usr/share/t3code/served-identity.sh" --root "$closure/image") \
+    || die 'served-identity refused the image metadata'
+  echo "deploy: baked app $("$JQ_BIN" -r '.baked.version' <<< "$served") is the image's served identity"
 }
 
 test_baked_identity() {
   # The baked app is a store path the image archive references. Read the real
   # VERSION/DIGEST through the image's own selector, not a copy of its rules.
   local baked version digest root served
+  [[ -d $image_archive ]] || die "the built image archive is missing: $image_archive"
   baked=$("$NIX_STORE_BIN" -qR "$image_archive" | grep -E -- '-t3code-baked-app$' | head -n 1 || true)
   [[ -n $baked ]] || die 'the image archive does not reference the baked T3 app'
   version=$(tr -d '[:space:]' < "$baked/VERSION")
@@ -225,11 +267,14 @@ verify_running() {
   echo "deploy: deployment $applied_deployment serves $applied_image and is healthy"
 }
 
-verify_identity_file() {
+verify_deployable() {
   local expected_host=${host:-$($HOSTNAME_BIN -s 2>/dev/null || true)}
   [[ -n $expected_host ]] || die 'cannot read this host name; pass --host'
   [[ $identity_host == "$expected_host" ]] \
     || die "the artifact is for $identity_host, this host is $expected_host"
+  if [[ $identity_dirty == true && $allow_dirty != 1 ]]; then
+    die "the artifact was built from a dirty checkout at $identity_tree; commit it or pass --allow-dirty"
+  fi
 }
 
 assert_current_build() {
@@ -281,7 +326,7 @@ reconcile_attempt() {
 }
 
 deploy_artifact() {
-  verify_identity_file
+  verify_deployable
   phase 'DEPLOY the built artifact'
   install -d -m 0700 "$state_dir"
   # One writer for the switch. The deployer's own lock cannot be held across
@@ -312,13 +357,18 @@ if [[ $mode == verify-only ]]; then
 fi
 
 [[ -n $system ]] || system=$($HOSTNAME_BIN -s 2>/dev/null || true)
-build_artifact
+resolve_nix_system
+if [[ $mode == no-deploy ]]; then
+  build_closure
+else
+  build_artifact
+fi
 if [[ $mode == build ]]; then
   exit 0
 fi
 test_artifact
 if [[ $mode == no-deploy ]]; then
-  echo 'deploy: artifact built and tested; deployment skipped'
+  echo 'deploy: deployment closure built and tested; deployment skipped'
   exit 0
 fi
 deploy_artifact

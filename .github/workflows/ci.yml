@@ -56,7 +56,7 @@ jobs:
           # The runner is not a nixosConfiguration, so name the host explicitly.
           # The elapsed time is printed so the fast-lane budget stays measured.
           just_started=$(date +%s)
-          nix develop .#ci "${args[@]}" --no-write-lock-file -c \
+          NIX_BUILD_LOGS=1 nix develop .#ci "${args[@]}" --no-write-lock-file -c \
             just test --system chill-penguin --override-file "$overrides"
           echo "deploy-artifact seconds=$(( $(date +%s) - just_started ))"
       - name: Check the isolated-service evidence script

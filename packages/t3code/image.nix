@@ -786,11 +786,21 @@ let
   # the baked agent CLIs, then the T3 app, then this image's own config and
   # units, so a T3 version bump leaves the CLI layers untouched.
   t3codeImageStream = pkgs.dockerTools.streamLayeredImage imageArgs;
+  # Metadata-only view of the image, laid out like the image root: the baked
+  # app identity and the one selector that reads it, without building or
+  # recompressing the archive. The fast deployment closure builds this on every
+  # pull request; the archive itself is built only when a host switches.
+  t3codeImageMetadata = pkgs.runCommand "t3code-image-metadata" { } ''
+    mkdir -p $out/usr/share
+    ln -s ${t3codeBakedApp} $out/usr/share/t3code-app
+    install -Dm 0755 ${./served-identity.sh} $out/usr/share/t3code/served-identity.sh
+  '';
   t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
 
 in {
   inherit imageArgs;
   image = t3codeImage;
+  metadata = t3codeImageMetadata;
   stream = t3codeImageStream;
   contents = t3codeImageContents;
   deploymentId = t3codeDeploymentId;
