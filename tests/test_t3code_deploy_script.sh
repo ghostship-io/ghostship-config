@@ -152,7 +152,8 @@ export FAKE_SWITCH_TARGET=$build
 export DEPLOY_STATUS=$tmp/bin/deploy-status
 export STUB_DEPLOYMENT=$deployment_id
 export STUB_IMAGE="sha256:$image_id"
-export PODMAN_IMAGE="sha256:$image_id"
+# podman inspect reports the image id without the sha256: prefix, as on the host.
+export PODMAN_IMAGE=$image_id
 export SYSTEMD=$tmp/systemd
 export NIX_BIN=$tmp/bin/nix NIX_STORE_BIN=$tmp/bin/nix-store JQ_BIN=jq
 export IDENTITY_STORE_ROOT=$tmp/store
@@ -240,7 +241,8 @@ other_image="sha256:$(printf 'other' | sha256sum | cut -d ' ' -f 1)"
 export PODMAN_IMAGE=$other_image
 run --verify-only --state "$tmp/state"
 [[ $rc != 0 ]] || fail '--verify-only accepted a different running image'
-export PODMAN_IMAGE="sha256:$image_id"
+# podman inspect reports the image id without the sha256: prefix, as on the host.
+export PODMAN_IMAGE=$image_id
 echo 'Verify proof: coherent tuple passes; a different running image fails.'
 
 # --- 3. a full deploy records the generation and starts the unit -------------
@@ -398,7 +400,7 @@ run --rollback
 [[ "$(cat "$tmp/state/desired")" == "$previous_id" ]] || fail 'rollback did not request the previous deployment'
 [[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'rollback did not start the deployer once'
 echo 'Rollback proof: the previous generation is switched and its deployment reconciled and verified.'
-export STUB_DEPLOYMENT=$deployment_id STUB_IMAGE="sha256:$image_id" PODMAN_IMAGE="sha256:$image_id"
+export STUB_DEPLOYMENT=$deployment_id STUB_IMAGE="sha256:$image_id" PODMAN_IMAGE=$image_id
 
 # --- 13. rollback refuses before the switch when the old image is gone --------
 reset_calls

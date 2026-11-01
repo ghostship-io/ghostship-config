@@ -119,7 +119,8 @@ export HOME_DIR="$tmp/home" CANDIDATE_HOME_TARGET=/candidate-home PODMAN_BIN="$t
 export SYSTEMCTL_BIN="$tmp/bin/systemctl" PROVIDER_SECRETS_FILE="$tmp/provider.env"
 export TOOLING_PATH="$tmp/tooling" AGENT_REVISION=agent-rev PYTHON_BIN=/bin/false
 export JQ_BIN=jq RESTART_LEDGER="$tmp/ledger.jsonl" AUDIT_LOG="$tmp/audit.log"
-export EVENTS="$tmp/events" LIVE_IMAGE_FILE="$tmp/live-image" DEPLOYED_IMAGE="sha256:$image_id" IDENTITY_CALLS="$tmp/identity-calls"
+# podman inspect reports the image id without the sha256: prefix, as on the host.
+export EVENTS="$tmp/events" LIVE_IMAGE_FILE="$tmp/live-image" DEPLOYED_IMAGE="$image_id" IDENTITY_CALLS="$tmp/identity-calls"
 export HEALTH_WAIT_BUDGET_SECONDS=390 HEALTH_WAIT_CLOCK_BIN="$tmp/bin/health-clock"
 export HEALTH_WAIT_SLEEP_BIN="$tmp/bin/health-sleep" HEALTH_CLOCK_FILE="$tmp/health-clock"
 export HEALTHY_AFTER_SECONDS=0
@@ -164,12 +165,12 @@ run
 [[ $(grep -c '^podman-t3code.service$' "$tmp/events") == 1 ]] || fail 'T3 was not restarted exactly once'
 receipt="$tmp/state/receipts/deployment-1.json"
 [[ -f $receipt ]] || fail 'no receipt was written'
-jq -e --arg id "sha256:$image_id" --arg s "$secret_sha" '
+jq -e --arg id "sha256:$image_id" --arg image "$image_id" --arg s "$secret_sha" '
   .schema == 2 and .deployment_id == "deployment-1" and .image_id == $id
   and (.candidate_name | startswith("t3code-candidate-"))
   and .agent_revision == "agent-rev" and .agent_path == "'"$tmp/tooling"'"
   and .provider_secret_sha256 == $s and .verified == true
-  and .live_after.image == $id and .live_before != null
+  and ((.live_after.image | sub("^sha256:"; "")) == $image) and .live_before != null
   and (.checks == null)
 ' "$receipt" >/dev/null || fail 'the receipt is not mechanical'
 . "$root/packages/t3code/receipt-checks.sh"

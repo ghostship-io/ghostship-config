@@ -234,7 +234,8 @@ receipt_matches_image() {
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
      and (.candidate_name | startswith("t3code-candidate-"))
-     and (.live_after != null) and (.live_after.image == "sha256:" + $image)
+     and (.live_after != null)
+     and ((.live_after.image | sub("^sha256:"; "")) == $image)
      and (.agent_revision == $agent)
      and (.agent_path == $tooling)' \
     "$receipt" >/dev/null 2>&1 \
