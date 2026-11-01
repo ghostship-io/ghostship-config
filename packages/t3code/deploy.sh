@@ -133,6 +133,9 @@ read_identity() {
       *) die "the deployment identity symlink leaves the store: $file -> $target" ;;
     esac
     [[ -f $target && ! -L $target ]] || die "the deployment identity symlink target is not a regular file: $target"
+    [[ -n ${build:-} ]] || die "the deployment identity symlink has no built system to check: $file"
+    "$NIX_STORE_BIN" -qR "$build" 2>/dev/null | grep -qxF "$target" \
+      || die "the deployment identity symlink target is not in the built system's closure: $target"
     file=$target
   fi
   [[ -f $file ]] || die "the built system has no deployment identity at $1"

@@ -68,7 +68,7 @@ SH
 cat > "$tmp/bin/nix-store" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$tmp/store/layered-baked-t3code-baked-app"
+printf '%s\n' "$tmp/store/identity.json" "$tmp/store/layered-baked-t3code-baked-app"
 SH
 cat > "$tmp/bin/nix-env" <<'SH'
 #!/usr/bin/env bash
@@ -192,9 +192,13 @@ ln -sfn "$tmp/outside.json" "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$tmp/store/identity.json" "$tmp/outside.json"
 run --build-only --flake "$root" --system chill-penguin
 [[ $rc != 0 ]] || fail "an identity symlink outside the store was accepted"
+cp "$tmp/store/identity.json" "$tmp/store/not-in-closure.json"
+ln -sfn "$tmp/store/not-in-closure.json" "$build/etc/ghostship/t3code-deploy-identity.json"
+run --build-only --flake "$root" --system chill-penguin
+[[ $rc != 0 ]] || fail "an identity symlink outside the built closure was accepted"
 rm -f "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$tmp/store/identity.json" "$build/etc/ghostship/t3code-deploy-identity.json"
-echo 'Symlink proof: store identity read; outside-store identity refused.'
+echo 'Symlink proof: closure store identity read; outside-store and outside-closure identities refused.'
 
 # --- 2. verify-only reports the deployed and running identity ----------------
 reset_calls
