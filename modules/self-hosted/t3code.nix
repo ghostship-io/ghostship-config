@@ -69,7 +69,15 @@ let
   t3codeImage = runtimeImage.image;
   t3codeImageArgs = runtimeImage.imageArgs;
   t3codeImageContents = runtimeImage.contents;
-  t3codeAgentRevision = inputs.ghostship-private-agent.rev;
+  # CI and the release executor pin a clean revision. A dirty dev checkout of
+  # the input has no `rev`, so record its dirty revision instead; that keeps
+  # dev and test builds evaluating without weakening a pinned release.
+  t3codeAgentRevision =
+    let pin = inputs.ghostship-private-agent;
+    in
+    if (pin.rev or null) != null then pin.rev
+    else if (pin.dirtyRev or null) != null then pin.dirtyRev
+    else "unknown";
   t3codeDeploymentId = builtins.hashString "sha256" (builtins.toJSON {
     image = runtimeImage.deploymentId;
     agent = t3codeAgentRevision;
