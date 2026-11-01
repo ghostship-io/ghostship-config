@@ -45,6 +45,10 @@ jobs:
             args+=(--override-input "$name" "$url")
           done < "$overrides"
           nix develop .#ci "${args[@]}" --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"
+          # Build the deployment wrappers the host installs (#1747). The PR
+          # runner is ARM64 like the host, and the check re-instantiates the
+          # wrappers with the check's pkgs, so this is a native build.
+          nix build -L "${args[@]}" --no-write-lock-file .#checks.aarch64-linux.deployment-wrappers
       - name: Check the isolated-service evidence script
         run: |
           nix develop .#ci --no-write-lock-file -c shellcheck -s bash -e SC1091 modules/self-hosted/agent-memory-evidence.sh
