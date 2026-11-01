@@ -25,6 +25,7 @@
 # patch references, the regression proofs and the activation impact.
 {
   config,
+  lib,
   pkgs,
   ...
 }:
@@ -65,10 +66,14 @@ in
       '';
     }
     {
-      assertion = config.virtualisation.podman.package.version == "5.8.8";
+      assertion =
+        let
+          v = config.virtualisation.podman.package.version;
+        in
+        v == "5.8.8" || lib.versionAtLeast v "6.1.3";
       message = ''
-        virtualisation.podman.package must resolve to the security-fixed
-        Podman 5.8.8 (CVE-2026-94603) but resolves to
+        virtualisation.podman.package must resolve to a security-fixed
+        Podman (5.8.8 or >= 6.1.3, CVE-2026-94603) but resolves to
         ${config.virtualisation.podman.package.version}.
       '';
     }
@@ -78,7 +83,7 @@ in
       # still be the pinned source, not a rebuild of the vulnerable release.
       assertion = config.virtualisation.podman.package.src == pkgs.podman.src;
       message = ''
-        virtualisation.podman.package lost the pinned Podman 5.8.8 source
+        virtualisation.podman.package lost the security-fixed Podman source
         when the NixOS podman module applied its helper overrides.
       '';
     }

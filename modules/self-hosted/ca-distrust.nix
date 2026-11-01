@@ -65,7 +65,9 @@ let
   ];
 in
 {
-  security.pki.caCertificateBlacklist = roots;
+  # nixpkgs' cacert (NSS 3.131) already removed the emSign root, and the
+  # blocklist rejects names absent from the store; images still ship both.
+  security.pki.caCertificateBlacklist = lib.remove "emSign ECC Root CA - G3" roots;
 
   virtualisation.oci-containers.containers = lib.mkMerge [
     (lib.genAttrs containers (_: {

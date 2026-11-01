@@ -16,6 +16,11 @@ in
       default = [ ];
       description = "Additional nixos-rebuild flags for this host's automatic upgrade.";
     };
+    githubCredentialFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Root-only Nix access-token configuration for private flake inputs.";
+    };
   };
 
   config = lib.mkMerge [
@@ -26,6 +31,8 @@ in
         flake = "git+https://github.com/ghostship-io/ghostship-config.git?ref=main";
         # Deploy the tested committed lock; CI proposes coordinated input updates.
         flags = [ "--no-write-lock-file" ] ++ cfg.extraFlags;
+        # Flake deployments must not first update obsolete root channels.
+        upgrade = false;
         dates = "04:00";
         randomizedDelaySec = "45min";
         # Catch up after the host was off or rebooted during the window.
@@ -34,6 +41,10 @@ in
       };
 
       systemd.services.nixos-upgrade = {
+        serviceConfig.LoadCredential = lib.mkIf (cfg.githubCredentialFile != null) [
+          "github-nix.conf:${cfg.githubCredentialFile}"
+        ];
+        environment.NIX_USER_CONF_FILES = lib.mkIf (cfg.githubCredentialFile != null) "%d/github-nix.conf";
         # Keep the backup lock for the entire build and switch, rather than
         # releasing it in a separate pre-start process.
         script = lib.mkBefore ''

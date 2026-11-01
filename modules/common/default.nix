@@ -7,6 +7,7 @@ in
   imports = [
     ./host-roles.nix
     ./automation.nix
+    ./mesh.nix
     ./user-nixos.nix
     ./users.nix
     ./secrets.nix

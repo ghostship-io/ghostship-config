@@ -12,6 +12,25 @@ in
   ];
 
   # Apple Silicon support - handled by nixos-apple-silicon
+  # The pinned nixos-apple-silicon builds U-Boot 2025.10 with its in-tree dtc
+  # (it filters buildUBoot's DTC=). Newer nixpkgs rewrites the dtc warning
+  # flags for dtc 1.8, which that in-tree dtc rejects, while dtc 1.8 cannot
+  # parse this U-Boot's device trees. Restore the original flag so the
+  # bootloader builds as before. Drop once the input carries U-Boot 2026.07+.
+  nixpkgs.overlays = [
+    (lib.mkAfter (
+      _final: prev: {
+        uboot-asahi = prev.uboot-asahi.overrideAttrs (old: {
+          postPatch = (old.postPatch or "") + ''
+            for f in scripts/Makefile.lib dts/upstream/Makefile; do
+              [ -e "$f" ] || continue
+              substituteInPlace "$f" --replace-quiet -Eno-node_name_not_empty -Wno-graph_child_address
+            done
+          '';
+        });
+      }
+    ))
+  ];
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   # The Console OAuth cutover needs the owner at the provider console
@@ -47,6 +66,9 @@ in
 
   # Network
   networking.hostName = "chill-penguin";
+  ghostship.mesh.enable = true;
+  ghostship.mesh.t3Upstream = "http://t3code:3773";
+  ghostship.mesh.resolver = [ "10.89.0.1" ];
   networking.networkmanager.enable = true;
   # The staged development engine may reach public IPv4 only through this NIC.
   ghostship.t3codePodman.egressInterface = "end0";
@@ -71,7 +93,10 @@ in
   # the running 6.19 kernel lacks the fixes. Deny autoload and explicit modprobe
   # until a patched kernel runs. This is containment, not a patched kernel:
   # privileged direct insmod and an already-loaded module stay outside it.
-  boot.blacklistedKernelModules = [ "algif_aead" "ebt_snat" ];
+  boot.blacklistedKernelModules = [
+    "algif_aead"
+    "ebt_snat"
+  ];
   boot.extraModprobeConfig = ''
     install algif_aead ${pkgs.coreutils}/bin/false
     install ebt_snat ${pkgs.coreutils}/bin/false

@@ -23,6 +23,7 @@ SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-native-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-agent-policy': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
+    'ghostship-engineering-skills': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-route-catalog': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
 }
 

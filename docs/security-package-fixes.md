@@ -19,6 +19,13 @@ not do, and what remains unverified.
 | Nix | 2.34.9 | 2.34.8 | Nix and Lix security advisory, October 2026 |
 | Podman | 5.8.8 | 5.8.6 | GHSA-2cvf-wqm6-wr9g / CVE-2026-94603 |
 
+Once the nixpkgs input ships Podman 6.1.3 or newer (fixed upstream; 6.0.0
+also fixes GHSA-4hq8-gpf5-8p68), the overlay uses that release with the IPAM
+cursor patch instead of the 5.8.8 pin. Podman 6 aborts without a cgroup2
+`/sys/fs/cgroup`, which the Nix build sandbox lacks, so on that path run the
+`podmanRejectsCheckpointImage` build command on the target host against a
+throwaway storage root before activation.
+
 Nix, upstream advisory
 <https://discourse.nixos.org/t/security-advisory-for-nix-and-lix-october-2026/80547>:
 

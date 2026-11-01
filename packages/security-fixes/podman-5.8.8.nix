@@ -37,11 +37,23 @@ let
   # binary wrapper, the AppArmor, seccomp and SELinux inputs, the
   # extraPackages and extraRuntimes overrides used by the NixOS podman module
   # and the systemd unit files are all inherited unchanged.
-  package = prev.podman.overrideAttrs (old: {
-    inherit version src;
-    patches = (old.patches or [ ]) ++ [ ../podman-network/clamp-cursor.patch ];
-  });
+  # Podman 6.1.3 carries the same fix (and 6.0.0 the GHSA-4hq8 fix). Once the
+  # nixpkgs input ships such a release, use it instead of the 5.8 pin; the
+  # 5.8.8 tree no longer builds against the 6.x expression's patches.
+  upstreamFixed = prev.lib.versionAtLeast prev.podman.version "6.1.3";
+
+  package =
+    if upstreamFixed then
+      prev.podman.overrideAttrs (old: {
+        patches = (old.patches or [ ]) ++ [ ../podman-network/clamp-cursor.patch ];
+      })
+    else
+      prev.podman.overrideAttrs (old: {
+        inherit version src;
+        patches = (old.patches or [ ]) ++ [ ../podman-network/clamp-cursor.patch ];
+      });
 in
 {
-  inherit version src package;
+  inherit upstreamFixed package;
+  inherit (package) version src;
 }
