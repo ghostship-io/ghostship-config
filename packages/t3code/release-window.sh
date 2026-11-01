@@ -303,9 +303,22 @@ JQ
     printf 'unknown\n'
   fi
 }
+# A receipt written before the digest identity carries only the inode. Accept
+# it for recovery only when the live container content matches the host secret;
+# the window record marks that weaker evidence explicitly.
+secret_receipt_matches() {
+  local file=$1 live=$2 host=$3 recorded
+  recorded=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$file" 2>/dev/null || true)
+  if [[ -n $recorded ]]; then
+    [[ $recorded == "$live" ]]
+  else
+    [[ $live == "$host" ]]
+  fi
+}
+
 known_good_receipt() {
-  : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_tooling=""
+  : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}" "${PROVIDER_SECRETS_FILE:?}"
+  local cid image started tooling secret host_secret receipt wanted="${2:-}" mode="${3:-}" declared_tooling=""
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
   # Bind the receipt to the deployment that is actually applied. The
@@ -318,8 +331,9 @@ known_good_receipt() {
     [[ $wanted =~ ^[0-9a-f]{64}$ ]] || return 2
   fi
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
-  inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || return 2
-  [[ -n $tooling && $inode =~ ^[0-9]+$ ]] || return 2
+  secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || return 2
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || return 2
+  [[ -n $tooling && $secret =~ ^[0-9a-f]{64}$ && $host_secret =~ ^[0-9a-f]{64}$ ]] || return 2
   if [[ $mode == advanced ]]; then
     read -r _ declared_tooling < <(declared_target) || return 2
   fi
@@ -329,15 +343,15 @@ known_good_receipt() {
   for receipt in "$STATE_DIR"/receipts/*.json; do
     [[ -f $receipt && ! -L $receipt && -r $receipt ]] || return 2
     # shellcheck disable=SC2016
-    if "$JQ_BIN" -e --arg i "$image" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
+    if "$JQ_BIN" -e --arg i "$image" --arg p "$tooling" --arg wanted "$wanted" \
       --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
       (.image_id | sub("^sha256:"; "")) == $i and
       (.deployment_id | type == "string" and length > 0) and .deployment_id == $wanted and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and
-      .provider_secret_inode == $s and
       (.agent_path == $p or ($adv == "1" and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
-      && receipt_checks_ok "$receipt"; then
+      && receipt_checks_ok "$receipt" \
+      && secret_receipt_matches "$receipt" "$secret" "$host_secret"; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -377,12 +391,15 @@ require_matching_receipt_and_alias() {
   restore_alias_to_image "$image"
 }
 record_known_good() {
-  local destination=$1 hash desired applied
+  local destination=$1 hash desired applied digest evidence
   hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
   desired=$(cat "$STATE_DIR/desired"); applied=$(cat "$STATE_DIR/applied")
+  digest=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$matched_receipt" 2>/dev/null || true)
+  if [[ -n $digest ]]; then evidence="receipt-digest"; else evidence="legacy-content-consistent"; fi
   # shellcheck disable=SC2016
-  "$JQ_BIN" -cn --arg desired "$desired" --arg applied "$applied" --arg receipt "$(basename "$matched_receipt")" --arg hash "$hash" --arg at "$(date -u +%FT%TZ)" \
-    '{state:"KNOWN_GOOD_SERVING",desired:$desired,applied:$applied,receipt:$receipt,receipt_sha256:$hash,at:$at}' > "$destination.tmp"
+  "$JQ_BIN" -cn --arg desired "$desired" --arg applied "$applied" --arg receipt "$(basename "$matched_receipt")" --arg hash "$hash" --arg digest "$digest" --arg evidence "$evidence" --arg at "$(date -u +%FT%TZ)" \
+    '{state:"KNOWN_GOOD_SERVING",desired:$desired,applied:$applied,receipt:$receipt,receipt_sha256:$hash,
+      provider_secret_sha256:(if $digest == "" then null else $digest end),secret_evidence:$evidence,at:$at}' > "$destination.tmp"
   chmod 0600 "$destination.tmp"; sync -f "$destination.tmp"; mv "$destination.tmp" "$destination"; sync -f "$(dirname "$destination")"
 }
 post_verify() {
@@ -396,19 +413,22 @@ post_verify() {
   [[ ! -e $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed candidate exists'
   [[ $(cat "$STATE_DIR/applied") == "$EXPECTED_DEPLOYMENT" && $(cat "$STATE_DIR/desired") == "$EXPECTED_DEPLOYMENT" ]] || fail 'deployment state not reconciled'
   [[ $(readlink -f "$CURRENT_SYSTEM") == "$EXPECTED_SYSTEM" && $(readlink -f "$PROFILE") == "$EXPECTED_SYSTEM" ]] || fail 'system generation not reconciled'
-  local allow=${1:-} receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" inode image switch_at switch_ms host_secret live_secret
+  local allow=${1:-} receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" secret image switch_at switch_ms host_secret live_secret
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
-  inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'provider secret identity unknown'
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || fail 'provider secret content unknown'
+  live_secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || fail 'live secret content unknown'
+  [[ $host_secret =~ ^[0-9a-f]{64}$ && $live_secret =~ ^[0-9a-f]{64}$ ]] || fail 'provider secret content unknown'
   # shellcheck disable=SC2016
   if ! {
-    "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '
+    "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" '
       .deployment_id == $d and (.image_id | sub("^sha256:"; "")) == $i and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and .agent_revision == $a and
-      .agent_path == $p and .provider_secret_inode == $s' "$receipt" >/dev/null &&
-    receipt_checks_ok "$receipt"
+      .agent_path == $p' "$receipt" >/dev/null &&
+    receipt_checks_ok "$receipt" &&
+    secret_receipt_matches "$receipt" "$live_secret" "$host_secret"
   }; then
     fail 'exact-image receipt invalid'
   fi
@@ -422,9 +442,6 @@ post_verify() {
   "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'server inactive'
   "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'server unresponsive'
   [[ $("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") == "$EXPECTED_TOOLING_PATH" ]] || fail 'live tooling differs from receipt'
-  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE") || fail 'provider secret content unknown'
-  live_secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env) || fail 'live secret content unknown'
-  host_secret=${host_secret%% *}; live_secret=${live_secret%% *}
   [[ $host_secret =~ ^[0-9a-f]{64}$ && $live_secret == "$host_secret" ]] || fail 'live secret differs from receipt inputs'
   lock_managed_tools
   no_pending_restart "$allow"
@@ -1145,11 +1162,11 @@ case ${1:-} in
   [[ $image =~ ^[0-9a-f]{64}$ ]] || fail 'serving image unknown'
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || fail 'live tooling unknown'
   revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || fail 'live agent revision unknown'
-  inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || fail 'live secret identity unknown'
+  secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || fail 'live secret content unknown'
   status=0; known=$(known_good_receipt "$image") || status=$?
   [[ $status == 1 ]] || fail 'an exact accepted receipt describes the serving identity; use post or resolve-unknown'
   : "$known"
-  host_inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'host secret identity unknown'
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || fail 'host secret content unknown'
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   attempt="$STATE_DIR/attempts/$expected.json"
@@ -1185,7 +1202,7 @@ case ${1:-} in
   if not_reused_path=$(receipt_for_image "$image"); then
     # shellcheck disable=SC2016
     not_reused=$("$JQ_BIN" -c --arg file "$not_reused_path" '{
-      deployment_id, agent_revision, agent_path, provider_secret_inode,
+      deployment_id, agent_revision, agent_path, provider_secret_sha256,
       receipt_file: ($file | split("/") | last)}' "$not_reused_path") || fail 'unreceipted carrying receipt unreadable'
   fi
   # Classify every failed unit by its FIRST failure in this boot. A unit that
@@ -1221,12 +1238,12 @@ case ${1:-} in
       | "$JQ_BIN" -c --arg u "$unit" --arg f "$first" --arg l "$last" --arg c "$class" \
         '. + [{unit:$u, first:$f, last:$l, class:$c}]') || fail 'failed-unit record unreadable'
   done
-  inode_match=false
-  [[ $inode == "$host_inode" ]] && inode_match=true
+  secret_match=false
+  [[ $secret == "$host_secret" ]] && secret_match=true
   # shellcheck disable=SC2016
   "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg a "$applied" \
-    --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg inode "$inode" \
-    --arg host_inode "$host_inode" --argjson inode_match "$inode_match" \
+    --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg secret "$secret" \
+    --arg host_secret "$host_secret" --argjson secret_match "$secret_match" \
     --arg switch_result "$switch_result" --arg la "$activation_start" --arg lb "$activation_end" \
     --arg at "$(date -u +%FT%TZ)" --arg failed "$failed_hash" \
     --argjson attempt "$attempt_json" --argjson not_reused "$not_reused" \
@@ -1234,8 +1251,8 @@ case ${1:-} in
     --argjson receipt_applied "$receipt_applied" '
     {state:"closed_unaccepted", window:$id, deployment_id:$d, applied:$a,
      attempt:$attempt, serving:{image:$image, agent_revision:$rev,
-       tooling_path:$tool, provider_secret_inode:$inode},
-     provider_secret_inode_host:$host_inode, provider_secret_inode_match:$inode_match,
+       tooling_path:$tool, provider_secret_sha256:$secret},
+     provider_secret_sha256_host:$host_secret, provider_secret_sha256_match:$secret_match,
      serving_receipt:"absent", receipt_not_reused:$not_reused,
      expected_receipt:$expected_receipt, receipt_applied:$receipt_applied,
      failed_marker_sha256:$failed, switch_result:$switch_result,

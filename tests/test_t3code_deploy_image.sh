@@ -38,9 +38,9 @@ tar -cf "$tmp/image.tar" -C "$tmp" manifest.json config.json
 printf 'provider=fixture\n' > "$tmp/provider.env"
 mkdir -p "$tmp/tooling"
 printf 'old\n' > "$tmp/state/applied"
-printf 'agent=old secret_inode=old\n' > "$tmp/state/applied-inputs"
+printf 'agent=old secret_sha256=old\n' > "$tmp/state/applied-inputs"
 printf '%s\n' 'deployment-1' > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 : > "$tmp/events"
 
 cat > "$tmp/bin/python" <<'SH'
@@ -84,7 +84,7 @@ fi
 printf '%s\n' candidate-accepted >> "$EVENTS"
 if [[ -n ${SUPERSEDE_TO:-} ]]; then
   printf '%s\n' "$SUPERSEDE_TO" > "$STATE_DIR/desired"
-  printf '%s\n' 'agent=new secret_inode=new' > "$STATE_DIR/desired-inputs"
+  printf '%s\n' 'agent=new secret_sha256=new' > "$STATE_DIR/desired-inputs"
 fi
 config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
@@ -92,9 +92,9 @@ if [[ ${RECEIPT_MISSING:-0} == 1 ]]; then exit 0; fi
 if [[ ${RECEIPT_IMAGE_MISMATCH:-0} == 1 ]]; then image=unreceipted-image; fi
 jq -cn \
   --arg deployment "$DEPLOYMENT_ID" --arg image "$image" --arg agent "$AGENT_REVISION" \
-  --arg tooling "$TOOLING_PATH" --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
+  --arg tooling "$TOOLING_PATH" --arg secret_sha256 "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-fixture",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
+    agent_revision:$agent,agent_path:$tooling,provider_secret_sha256:$secret_sha256,
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
@@ -155,6 +155,7 @@ if [[ $1 == restart && $2 == podman-t3code.service ]]; then
   fi
   printf '%s\n' restart >> "$EVENTS"
   rm -f "$LIVE_IMAGE_FILE"
+  cp "$PROVIDER_SECRETS_FILE" "$LIVE_SECRET_FILE"
 elif [[ $1 == is-active ]]; then
   exit 0
 fi
@@ -256,8 +257,9 @@ saved_events=$EVENTS
 EVENTS="$tmp/health-events"
 : > "$EVENTS"
 export DEPLOYMENT_ID=deployment-slow-healthy HEALTHY_AFTER_SECONDS=130
+printf 'sha256:%s\n' "$(printf 'health-older-image' | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
 printf '0\n' > "$HEALTH_CLOCK_FILE"
 bash "$fixture_writer" > "$tmp/slow-healthy.log"
 [[ $(cat "$STATE_DIR/applied") == "$DEPLOYMENT_ID" ]]
@@ -267,8 +269,9 @@ bash "$fixture_writer" > "$tmp/slow-healthy.log"
 # A real timeout stays non-zero and cannot advance either applied marker.
 export DEPLOYMENT_ID=deployment-never-healthy HEALTHY_AFTER_SECONDS=999
 export HEALTH_WAIT_BUDGET_SECONDS=20
+printf 'sha256:%s\n' "$(printf 'never-healthy-image' | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
 applied_before=$(cat "$STATE_DIR/applied")
 applied_inputs_before=$(cat "$STATE_DIR/applied-inputs")
 printf '0\n' > "$HEALTH_CLOCK_FILE"
@@ -485,7 +488,7 @@ EVENTS=$saved_events
 # restart-path invariant: no receipt, no tag, no restart.
 export DEPLOYMENT_ID=deployment-absent CANDIDATE_FAIL=0 RECEIPT_MISSING=1 RECEIPT_IMAGE_MISMATCH=0
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 set +e
 bash "$fixture_writer" > "$tmp/absent.log" 2>&1
 absent_status=$?
@@ -503,7 +506,7 @@ export DEPLOYMENT_ID=deployment-closed RECEIPT_MISSING=1 RECEIPT_IMAGE_MISMATCH=
 saved_closed_events=$EVENTS; EVENTS="$tmp/closed-events"; : > "$EVENTS"
 saved_applied=$(cat "$tmp/state/applied"); saved_applied_inputs=$(cat "$tmp/state/applied-inputs")
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/applied"
 cp "$tmp/state/desired-inputs" "$tmp/state/applied-inputs"
 printf '{"state":"closed_unaccepted","deployment_id":"%s"}\n' "$DEPLOYMENT_ID" > "$tmp/state/closed-unaccepted.json"
@@ -522,7 +525,7 @@ EVENTS=$saved_closed_events
 # A mismatched receipt is also rejected before the accepted alias can move.
 export DEPLOYMENT_ID=deployment-mismatch RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=1
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 set +e
 bash "$fixture_writer" > "$tmp/mismatch.log" 2>&1
 mismatch_status=$?
@@ -537,7 +540,7 @@ grep -q 'receipt did not approve this exact image' "$tmp/mismatch.log"
 # this guard also fails safely if an out-of-band writer changes desired.
 export DEPLOYMENT_ID=deployment-3 SUPERSEDE_TO=deployment-4 CANDIDATE_FAIL=0 RECEIPT_IMAGE_MISMATCH=0
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 set +e
 bash "$fixture_writer" > "$tmp/superseded.log" 2>&1
 superseded_status=$?
@@ -553,16 +556,16 @@ grep -q 'superseded before restart; refusing stale image' "$tmp/superseded.log"
 # or restarting the existing service.
 export DEPLOYMENT_ID=deployment-repair
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$tmp/state/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$tmp/state/desired-inputs"
 cp "$tmp/state/desired-inputs" "$tmp/state/applied-inputs"
 printf '%s\n' "$DEPLOYMENT_ID" > "$tmp/state/applied"
 config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config')
 repair_image=$(tar -xOf "$IMAGE_ARCHIVE" "$config" | sha256sum | cut -d ' ' -f 1)
 jq -cn --arg deployment "$DEPLOYMENT_ID" --arg image "$repair_image" \
   --arg agent "$AGENT_REVISION" --arg tooling "$TOOLING_PATH" \
-  --arg secret_inode "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" \
+  --arg secret_sha256 "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" \
   '{deployment_id:$deployment,image_id:$image,candidate_name:"t3code-candidate-existing",
-    agent_revision:$agent,agent_path:$tooling,provider_secret_inode:$secret_inode,
+    agent_revision:$agent,agent_path:$tooling,provider_secret_sha256:$secret_sha256,
     live_before:{id:"production"},live_after:{id:"production"},
     checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/$DEPLOYMENT_ID.json"
@@ -585,7 +588,7 @@ export RUNNING_IMAGE_ID="sha256:$(printf 'unreceipted-running-image' | sha256sum
 export RUNNING_CONTAINER=1 ALARM_LOG="$tmp/bootstrap-alarms.log" EVENTS="$tmp/bootstrap-events"
 : > "$EVENTS"
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
 set +e
 bash "$fixture_writer" > "$tmp/bootstrap.log" 2>&1
 bootstrap_status=$?
@@ -605,7 +608,7 @@ export ACCEPTED_POINTER_FILE="$empty_state/accepted-image" RUNNING_CONTAINER=0
 export ALARM_LOG="$tmp/empty-alarms.log" EVENTS="$tmp/empty-events"
 : > "$EVENTS"
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
 set +e
 bash "$fixture_writer" > "$tmp/no-running.log" 2>&1
 no_running_status=$?
@@ -616,7 +619,7 @@ grep -q 'no T3 container is running and no accepted alias exists' "$tmp/no-runni
 [[ ! -s "$EVENTS" ]]
 
 # A re-run of acceptance for the image T3 already runs, with the same agent
-# and provider secret content (only the secret's inode is new after a switch),
+# and provider secret content (only the secret's inode is new after a switch, while its digest stays the same),
 # records the PASS and does not restart T3. A changed image, or changed secret
 # content, still restarts once after PASS (#667).
 export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
@@ -629,7 +632,7 @@ unchanged_run() {
   : > "$EVENTS"
   export DEPLOYMENT_ID=$1
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-  printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" > "$STATE_DIR/desired-inputs"
+  printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
   printf '0\n' > "$HEALTH_CLOCK_FILE"
   bash "$fixture_writer" > "$tmp/$1.log" 2>&1
   [[ $(cat "$STATE_DIR/applied") == "$1" ]]
@@ -641,6 +644,34 @@ grep -q 'PASS recorded, no restart' "$tmp/deployment-unchanged.log"
 ! grep -q restart "$EVENTS"
 [[ $(wc -l < "$tmp/ledger.jsonl") == "$ledger_before" ]]
 [[ $(jq -r .deployment_id "$STATE_DIR/deployed-inputs.json") == deployment-unchanged ]]
+# Legacy applied inputs and a legacy receipt still take the applied fast path
+# and are upgraded to the digest form without a restart.
+cp "$PROVIDER_SECRETS_FILE" "$LIVE_SECRET_FILE"
+export DEPLOYMENT_ID=deployment-legacy
+legacy_image=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | jq -er '.[0].Config' | xargs -I{} tar -xOf "$IMAGE_ARCHIVE" {} | sha256sum | cut -d ' ' -f 1)
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_inode=%s tooling=%s\n' "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" "$TOOLING_PATH" > "$STATE_DIR/applied-inputs"
+printf 'agent=agent-rev secret_sha256=%s tooling=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" "$TOOLING_PATH" > "$STATE_DIR/desired-inputs"
+jq -n --arg d "$DEPLOYMENT_ID" --arg i "$legacy_image" --arg p "$TOOLING_PATH" --arg ino "$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"agent-rev",agent_path:$p,provider_secret_inode:$ino,live_before:{id:"live"},live_after:{id:"live"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+printf '0\n' > "$HEALTH_CLOCK_FILE"
+bash "$fixture_writer" > "$tmp/deployment-legacy.log" 2>&1
+grep -q 'already applied' "$tmp/deployment-legacy.log"
+grep -q 'secret_sha256=' "$STATE_DIR/applied-inputs"
+# Both lines may still be legacy. Exact equality stays a no-op: no digest is
+# present, so the old string rule decides and nothing restarts.
+export DEPLOYMENT_ID=deployment-both-legacy
+both_legacy="agent=agent-rev secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE") tooling=$TOOLING_PATH"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied"
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf '%s\n' "$both_legacy" > "$STATE_DIR/applied-inputs"
+printf '%s\n' "$both_legacy" > "$STATE_DIR/desired-inputs"
+jq -n --arg d "$DEPLOYMENT_ID" --arg i "$legacy_image" --arg p "$TOOLING_PATH" --arg s "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"agent-rev",agent_path:$p,provider_secret_sha256:$s,live_before:{id:"live"},live_after:{id:"live"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+: > "$EVENTS"
+printf '0\n' > "$HEALTH_CLOCK_FILE"
+bash "$fixture_writer" > "$tmp/deployment-both-legacy.log" 2>&1
+grep -q 'already applied' "$tmp/deployment-both-legacy.log"
+! grep -q '^restart$' "$EVENTS"
 printf 'sha256:%s\n' "$(printf 'older-image' | sha256sum | cut -d ' ' -f 1)" > "$LIVE_IMAGE_FILE"
 unchanged_run deployment-new-image
 [[ $(grep -c '^restart$' "$EVENTS") == 1 ]]
@@ -687,7 +718,7 @@ bash "$fixture_writer" > "$tmp/t3-bootstrap-lock.log" 2>&1 || { echo 'bootstrap 
 # must emit the rc line.
 export DEPLOYMENT_ID=deployment-post-trap
 printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
-printf 'agent=agent-rev secret_inode=%s\n' "$(stat -Lc '%i' "$tmp/provider.env")" > "$STATE_DIR/desired-inputs"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$tmp/provider.env" | cut -d ' ' -f1)" > "$STATE_DIR/desired-inputs"
 rm -f "$tmp/missing-provider.env"
 post_trap_status=0
 PROVIDER_SECRETS_FILE="$tmp/missing-provider.env" bash "$fixture_writer" > "$tmp/post-trap.log" 2>&1 || post_trap_status=$?

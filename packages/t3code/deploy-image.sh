@@ -152,8 +152,59 @@ mv -f "$attempt_temporary" "$attempt_file"
 trap write_attempt_result EXIT
 image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
 image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
-secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
+secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+
+# A receipt written before the digest identity carries only the inode. Its
+# content is unknown from the file, so accept it only when the live container
+# secret digest proves the same input; never rewrite an old receipt.
+secret_identity_ok() {
+  local file=$1 recorded live
+  recorded=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$file" 2>/dev/null || true)
+  if [[ -n "$recorded" ]]; then
+    [[ "$recorded" == "$secret_sha256" ]]
+    return
+  fi
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "$secret_sha256" ]]
+}
+
+# The desired and applied input lines use the secret content digest. An applied
+# line written before the change still names the inode; compare its other
+# inputs exactly and the secret by content so the first no-op deploy does not
+# restart T3.
+inputs_equal() {
+  local desired=$1 applied=$2 token d_agent="" d_secret="" d_inode="" d_tool="" a_agent="" a_secret="" a_inode="" a_tool="" live=""
+  for token in $desired; do
+    case "$token" in
+      agent=*) d_agent=${token#agent=};;
+      secret_sha256=*) d_secret=${token#secret_sha256=};;
+      secret_inode=*) d_inode=${token#secret_inode=};;
+      tooling=*) d_tool=${token#tooling=};;
+    esac
+  done
+  for token in $applied; do
+    case "$token" in
+      agent=*) a_agent=${token#agent=};;
+      secret_sha256=*) a_secret=${token#secret_sha256=};;
+      secret_inode=*) a_inode=${token#secret_inode=};;
+      tooling=*) a_tool=${token#tooling=};;
+    esac
+  done
+  [[ "$d_agent" == "$a_agent" && "$d_tool" == "$a_tool" ]] || return 1
+  if [[ -z "$d_secret" && -z "$a_secret" ]]; then
+    # Both lines predate the digest. The old exact-string rule still decides.
+    [[ "$desired" == "$applied" ]]
+    return
+  fi
+  if [[ -n "$d_secret" && -n "$a_secret" ]]; then
+    [[ "$d_secret" == "$a_secret" ]]
+    return
+  fi
+  [[ -n "$d_inode" || -n "$a_inode" ]] || return 1
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "${d_secret:-$a_secret}" ]]
+}
 
 receipt_matches_image() {
   "$JQ_BIN" -e \
@@ -161,16 +212,15 @@ receipt_matches_image() {
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
-    --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
      and (.candidate_name | startswith("t3code-candidate-"))
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
-     and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)' \
+     and (.agent_path == $tooling)' \
     "$receipt" >/dev/null 2>&1 \
-    && receipt_checks_ok "$receipt"
+    && receipt_checks_ok "$receipt" \
+    && secret_identity_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -267,7 +317,7 @@ promote_accepted_alias() {
   promote_image_id "sha256:$image_id"
 }
 
-if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]]; then
+if [[ "$applied" == "$DEPLOYMENT_ID" ]] && inputs_equal "$desired_inputs" "$applied_inputs"; then
   if receipt_matches_image; then
     acquire_managed_locks
     accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
@@ -276,6 +326,12 @@ if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]
       echo "Initialized accepted image alias from the existing PASS receipt: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
     else
       echo "T3 image, runtime inputs, and accepted image alias are already applied: $DEPLOYMENT_ID"
+    fi
+    # A legacy applied line named the inode; record the digest form now so the
+    # identity does not stay ambiguous.
+    if [[ "$applied_inputs" != "$desired_inputs" ]]; then
+      printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
+      mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
     fi
     publish_pass_attestation
     exit 0
@@ -460,7 +516,7 @@ container_identity() {
     '{id:$id,image:$image,started_at:$started_at,health:$health}'
 }
 
-# record_applied AGENT_PATH SECRET_INODE marks this deployment and its inputs
+# record_applied AGENT_PATH SECRET_SHA256 marks this deployment and its inputs
 # applied, with what the running container verifiably uses.
 record_applied() {
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied.tmp"
@@ -468,10 +524,10 @@ record_applied() {
   printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
   mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
   "$JQ_BIN" -cn --arg deployment_id "$DEPLOYMENT_ID" --arg agent_revision "$AGENT_REVISION" \
-    --arg agent_path "$1" --arg provider_secret_inode "$2" \
+    --arg agent_path "$1" --arg provider_secret_sha256 "$2" \
     --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{deployment_id:$deployment_id,agent_revision:$agent_revision,agent_path:$agent_path,
-      provider_secret_inode:$provider_secret_inode,verified:true,verified_at:$verified_at}' \
+      provider_secret_sha256:$provider_secret_sha256,verified:true,verified_at:$verified_at}' \
     > "$STATE_DIR/deployed-inputs.json.tmp"
   chmod 0600 "$STATE_DIR/deployed-inputs.json.tmp"
   mv -f "$STATE_DIR/deployed-inputs.json.tmp" "$STATE_DIR/deployed-inputs.json"
@@ -482,14 +538,14 @@ pre=$(container_identity)
 # cannot restart a unit for a newer image using this image's receipt.
 current_desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
 current_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
-if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_inputs" ]]; then
+if [[ "$current_desired" != "$DEPLOYMENT_ID" ]] || ! inputs_equal "$desired_inputs" "$current_inputs"; then
   echo "T3 deployment request was superseded before restart; refusing stale image" >&2
   exit 0
 fi
 
 # A re-run of acceptance may find T3 already running exactly what it accepted:
-# every activation re-decrypts the provider secret to a new inode, which
-# changes the desired inputs without changing anything T3 uses. Restart only
+# every activation re-decrypts the provider secret to a new inode; the content
+# digest in desired inputs stays the same. Restart only
 # when the image, the agent or the secret content differs; a restart onto the
 # same inputs would only end every session. The digests stay in memory.
 pre_image=$(printf '%s' "$pre" | "$JQ_BIN" -r '.image // empty')
@@ -502,8 +558,7 @@ if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
     fi
-    running_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-    record_applied "$running_agent" "$running_secret_inode"
+    record_applied "$running_agent" "$running_secret"
     publish_pass_attestation
     echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
     exit 0
@@ -536,8 +591,8 @@ if [[ "$healthy" != true ]]; then
 fi
 
 live_agent=$("$PODMAN_BIN" exec t3code readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current")
-live_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret_inode" != "$secret_inode" ]]; then
+live_secret=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1)
+if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret" != "$secret_sha256" ]]; then
   echo "T3 restart did not load the accepted agent and provider inputs" >&2
   exit 1
 fi
@@ -558,7 +613,7 @@ install -d -m 0700 "$(dirname "$RESTART_LEDGER")"
 printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
-record_applied "$live_agent" "$live_secret_inode"
+record_applied "$live_agent" "$live_secret"
 publish_pass_attestation
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
 printf '%s\n' "action=candidate-accepted-restart deployment=$DEPLOYMENT_ID" >> "$AUDIT_LOG"
