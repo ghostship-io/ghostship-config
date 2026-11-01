@@ -383,7 +383,28 @@ deploy_artifact() {
   exec 6>"$state_dir/deploy-run.lock"
   "$FLOCK_BIN" -x 6
 
-  "$ACTIVATE_HOST" --toplevel "$build"
+  # switch-to-configuration exits 4 when the switch completed but some unit
+  # failed. Transient healthchecks for unrelated containers must not abort a
+  # T3 deploy once the switch itself is proven; a T3 unit failure still does.
+  local activate_rc=0
+  "$ACTIVATE_HOST" --toplevel "$build" || activate_rc=$?
+  if (( activate_rc != 0 )); then
+    (( activate_rc == 4 )) || die "activation failed (exit $activate_rc)"
+    assert_current_build
+    failed_units=""
+    while read -r failed_unit _; do
+      [[ -n ${failed_unit:-} ]] && failed_units+="$failed_unit "
+    done < <("$SYSTEMCTL_BIN" list-units --state=failed --plain --no-legend 2>/dev/null || true)
+    case " $failed_units " in
+      *" podman-t3code.service "*|*" ghostship-t3code-deploy.service "*)
+        die "T3 units failed during activation: $failed_units" ;;
+    esac
+    if [[ -n $failed_units ]]; then
+      echo "deploy: warning: activation reported failed non-T3 units: $failed_units" >&2
+    else
+      echo 'deploy: warning: activation returned 4 but no failed unit is still listed; the system switched' >&2
+    fi
+  fi
   assert_current_build
 
   if reconcile_attempt "$(attempt_file)"; then
