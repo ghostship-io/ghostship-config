@@ -83,7 +83,6 @@ if [[ -n ${IMAGE_STREAM:-} ]]; then
   "$IMAGE_STREAM" > "$IMAGE_ARCHIVE" || fail 'image stream unreadable'
   IMAGE_STREAMED=1
   unset IMAGE_STREAM
-  trap 'rm -f "$IMAGE_ARCHIVE"' EXIT
 fi
 # The receipt this attempt writes must not destroy a pre-existing one: a receipt
 # for an already-applied or serving deployment is evidence, not scratch space.
@@ -94,6 +93,11 @@ if [[ -f $receipt_path && ! -L $receipt_path ]]; then
   receipt_before=present
   cp "$receipt_path" "$receipt_backup" || fail 'existing receipt could not be preserved'
 fi
+cleanup_attempt_evidence() {
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] && rm -f "$IMAGE_ARCHIVE"
+  rm -f "$receipt_backup"
+}
+trap cleanup_attempt_evidence EXIT
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -170,7 +174,7 @@ write_attempt_result() {
   '{deployment_id:$deployment,started_at_ms:$started_at_ms,status:"running"}' > "$attempt_temporary"
 chmod 0600 "$attempt_temporary"
 mv -f "$attempt_temporary" "$attempt_file"
-trap write_attempt_result EXIT
+trap 'write_attempt_result; cleanup_attempt_evidence' EXIT
 # The image id is the sha256 of the image's config blob, known before the load
 # from the archive. A streamed input was materialised to an archive before this
 # point, so there is exactly one derivation.
@@ -350,7 +354,7 @@ load_image() {
     # archive. Retire only what this attempt wrote: restore a pre-existing
     # receipt, or remove the one this attempt created.
     if [[ $receipt_before == present ]]; then
-      cp "$receipt_backup" "$receipt_path"
+      cp "$receipt_backup" "$receipt_path.restore" && mv -f "$receipt_path.restore" "$receipt_path"
     else
       rm -f "$receipt_path"
     fi

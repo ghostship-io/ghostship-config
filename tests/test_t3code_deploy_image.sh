@@ -740,6 +740,8 @@ stream_rc=$?
 set -e
 [[ $stream_rc == 0 ]]
 grep -q 'Candidate acceptance PASS' "$tmp/stream-match.log"
+# Attempt-scoped evidence is removed when the deploy exits.
+compgen -G "$STATE_DIR/.receipt-before-*" >/dev/null && { echo "receipt backup left behind: $(compgen -G "$STATE_DIR/.receipt-before-*" | tr '\n' ' ')" >&2; exit 1; }
 # A different id after the load is UNKNOWN: refuse, do not promote, do not receipt.
 applied_before=$(cat "$STATE_DIR/applied")
 : > "$EVENTS"
