@@ -91,6 +91,17 @@ class PinGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("approved", result.stdout)
 
+    def test_a_sibling_with_an_owner_approval_passes(self):
+        accepted, message = guard.evaluate(self.base, self.sibling, None, self.agent,
+                                           "APPROVE review by owner")
+        self.assertTrue(accepted, message)
+        self.assertIn("approved by the owner", message)
+
+    def test_the_owner_override_is_not_read_without_configured_logins(self):
+        self.assertEqual(guard.owner_logins(), set())
+        self.assertIsNone(guard.owner_approval({"pull_request": {"number": 1},
+                                                "repository": {"full_name": "owner/repo"}}))
+
     def test_an_approval_without_a_reason_does_not_pass(self):
         result = self.run_check(self.sibling, "pin-regression-approved:\n")
         self.assertEqual(result.returncode, 1)

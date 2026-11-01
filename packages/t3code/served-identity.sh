@@ -2,7 +2,7 @@
 # Report which standalone T3 app release the container actually serves.
 #
 # One implementation shared by every reader (candidate acceptance, deploy-image,
-# release-window), because three copies of "which app is this" is how they drift
+# deploy), because three copies of "which app is this" is how they drift
 # apart. The image bakes a release and the persisted tree may hold a newer one,
 # so the answer is the monotonic maximum of the two.
 #

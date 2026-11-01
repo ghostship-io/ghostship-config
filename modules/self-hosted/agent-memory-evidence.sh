@@ -12,7 +12,7 @@
 #
 # A precondition that cannot be established is UNKNOWN, never a product FAIL.
 # The final exit code is 0 only when every case passed, 1 when any case failed,
-# and 77 when some case is UNKNOWN (the release-window convention).
+# and 77 when some case is UNKNOWN (the deploy-status convention).
 #
 # Dry run prints every command without executing anything:
 #

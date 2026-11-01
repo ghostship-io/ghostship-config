@@ -209,56 +209,6 @@ in
         test "$(jq -r .baked.version $out/served-identity.json)" = "$(cat $out/image/usr/share/t3code-app/VERSION)"
         touch $out/ok
       '';
-  # The release-window holder must be proved as the *generated* wrapper, not as
-  # the repository text: `$$` once reached the built script as `$`, which two
-  # live releases discovered and no source-level test could.
-  window-holder = let
-    holder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
-    # The generated wrappers the host actually installs. Building them forces
-    # their own text through shellcheck, so a quoting failure is a config check
-    # failure instead of a release-build surprise.
-    hostWrappers = builtins.filter
-      (p: builtins.elem (p.name or "") [
-        "ghostship-t3code-release-window"
-        "ghostship-t3code-invalidate-failure"
-      ])
-      t3codeConfig.environment.systemPackages;
-    # Building the generated release-window wrapper also proves it parses and
-    # passes its own checks; the source text alone never did.
-    window = pkgs.writeShellApplication {
-      name = "ghostship-t3code-release-window";
-      runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
-      text = builtins.readFile ./packages/t3code/release-window.sh;
-    };
-  in
-  pkgs.runCommand "ghostship-t3code-window-holder-check" { } ''
-    dir="$TMPDIR/window"; mkdir -p "$dir"
-    : > "$TMPDIR/lock1"; : > "$TMPDIR/lock2"
-    # Run the built binary in the environment the systemd manager provides.
-    /usr/bin/env -i PATH=/nonexistent       ${holder}/bin/ghostship-t3code-window-holder "$TMPDIR/lock1" "$TMPDIR/lock2" "$dir" &
-    holder=$!
-    for _ in $(seq 1 200); do [ -f "$dir/holder.ready" ] && break; sleep 0.05; done
-    [ -f "$dir/holder.ready" ] || { echo 'holder never wrote holder.ready' >&2; kill $holder; exit 1; }
-    pid=$(cat "$dir/holder.ready")
-    case "$pid" in
-      '''|*[!0-9]*) echo "holder.ready is not a numeric PID: '$pid'" >&2; kill $holder; exit 1 ;;
-    esac
-    kill "$holder" 2>/dev/null || true
-    # systemd expands `$$` in an ExecStart, so a PID written there arrives as
-    # "$". Forbid it on the systemd-run command line specifically; `$$` is still
-    # legitimate elsewhere in the script.
-    if ${pkgs.gnugrep}/bin/grep -A1 'SYSTEMD_RUN_BIN" --quiet' \
-        ${window}/bin/ghostship-t3code-release-window | ${pkgs.gnugrep}/bin/grep -q '\$\$'; then
-      echo 'systemd-run command line contains $$, which systemd expands to $' >&2
-      exit 1
-    fi
-    test -x ${window}/bin/ghostship-t3code-release-window
-    # The host packages, not a copy: the release builds exactly these.
-    [ ${toString (builtins.length hostWrappers)} -eq 2 ] || { echo 'host wrapper packages missing from systemPackages' >&2; exit 1; }
-    ${pkgs.lib.concatMapStringsSep "\n    " (p: "test -x ${p}/bin/${p.name}") hostWrappers}
-    touch "$out"
-  '';
-
   # Issue #1747: a green check must build the deployment wrappers the host
   # installs. Their definitions are module-local, so each one below mirrors its
   # modules/self-hosted/t3code.nix definition with the check's own pkgs: same
@@ -267,10 +217,7 @@ in
   # Shared definitions are the follow-up once #730 lands.
   deployment-wrappers =
     let
-      t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
       t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
-      t3codeWindowConfigFile = pkgs.writeText "t3code-release-window-dir" "${t3codeDeploymentState}/release-window\n";
-      t3codeWindowHolder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
       # t3code.nix:73
       t3codeImmediateDeploy = pkgs.writeShellApplication {
         name = "ghostship-t3code-deploy-image";
@@ -278,8 +225,7 @@ in
         excludeShellChecks = [ "SC2016" ];
         runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
         text = ''
-          export WINDOW_CONFIG=${pkgs.lib.escapeShellArg t3codeWindowConfig}
-          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
+          export STATE_DIR=${pkgs.lib.escapeShellArg t3codeDeploymentState}
           ${builtins.readFile ./packages/t3code/receipt-checks.sh}
           ${builtins.readFile ./packages/t3code/deploy-image.sh}
         '';
@@ -291,40 +237,6 @@ in
           export STATE_DIR=${pkgs.lib.escapeShellArg t3codeDeploymentState}
           export JQ_BIN=${pkgs.lib.getExe pkgs.jq}
           exec ${pkgs.lib.getExe t3codeImmediateDeploy} --invalidate-failure "$@"
-        '';
-      };
-      # t3code.nix:93
-      t3codeActivateDeployment = pkgs.writeShellApplication {
-        name = "ghostship-t3code-activate-deployment";
-        runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-        text = ''
-          export WINDOW_CONFIG=${pkgs.lib.escapeShellArg t3codeWindowConfig}
-          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
-          ${builtins.readFile ./packages/t3code/activate-deployment.sh}
-        '';
-      };
-      # t3code.nix:102
-      t3codeReleaseWindow = pkgs.writeShellApplication {
-        name = "ghostship-t3code-release-window";
-        runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
-        text = ''
-          export WINDOW_CONFIG=${t3codeWindowConfigFile}
-          export WINDOW_BOOTSTRAP=${./packages/t3code/window-bootstrap.sh}
-          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
-          export STATE_DIR=${pkgs.lib.escapeShellArg t3codeDeploymentState}
-          export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
-          export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
-          export WINDOW_HOLDER_BIN=${pkgs.lib.getExe t3codeWindowHolder}
-          export PODMAN_BIN=${pkgs.podman}/bin/podman
-          export JQ_BIN=${pkgs.jq}/bin/jq
-          export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
-          # The window holder runs under the systemd manager, which does not inherit
-          # this script's PATH, so every command it uses must be an absolute path.
-          export COREUTILS_BIN=${pkgs.coreutils}/bin
-          export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
-          export BASH_BIN=${pkgs.bash}/bin/bash
-          ${builtins.readFile ./packages/t3code/receipt-checks.sh}
-          ${builtins.readFile ./packages/t3code/release-window.sh}
         '';
       };
       # t3code.nix:130
@@ -357,8 +269,6 @@ in
       wrappers = [
         t3codeImmediateDeploy
         t3codeInvalidateFailure
-        t3codeActivateDeployment
-        t3codeReleaseWindow
         t3codeReceiptSelfCheck
         t3codeNixStoreGc
       ];
@@ -399,15 +309,10 @@ in
         # #804 shipped this proof without wiring it; the wiring guard refuses
         # an unwired T3 deployment proof.
         bash tests/test_t3code_deploy_status.sh
-        bash tests/test_t3code_release_window.sh
-        bash tests/test_t3code_unknown_ending.sh
         bash tests/test_t3code_worker_dev_env.sh
         bash tests/test_t3code_skills_publish_gate.sh
-        bash tests/test_t3code_window_lock.sh
         bash tests/test_t3code_served_identity.sh
-        bash tests/test_t3code_window_lock_slow.sh
         bash tests/test_t3code_checks_wiring.sh
-        bash tests/test_t3code_activate_deployment.sh
         bash tests/test_t3code_receipt_self_check.sh
         bash tests/test_t3code_receipt_checks.sh
         bash tests/test_t3code_tooling_pointer.sh

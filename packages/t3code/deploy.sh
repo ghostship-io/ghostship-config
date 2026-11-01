@@ -27,14 +27,10 @@ JQ_BIN=${JQ_BIN:-jq}
 SYSTEMCTL_BIN=${SYSTEMCTL_BIN:-systemctl}
 PODMAN_BIN=${PODMAN_BIN:-podman}
 FLOCK_BIN=${FLOCK_BIN:-flock}
+NIXOS_REBUILD_BIN=${NIXOS_REBUILD_BIN:-nixos-rebuild}
 HOSTNAME_BIN=${HOSTNAME_BIN:-hostname}
 ACTIVATE_HOST=${ACTIVATE_HOST:-$repo_root/scripts/activate-host}
 DEPLOY_STATUS=${DEPLOY_STATUS:-$script_dir/deploy-status.sh}
-# Bounded readiness probe, never a fixed dwell: the interval only spaces
-# observations and the deadline bounds the whole wait.
-DEPLOY_PROBE_INTERVAL=${DEPLOY_PROBE_INTERVAL:-2}
-DEPLOY_TIMEOUT_SECONDS=${DEPLOY_TIMEOUT_SECONDS:-1800}
-DEPLOY_PROBE_SLEEP=${DEPLOY_PROBE_SLEEP:-sleep}
 CURRENT_SYSTEM=${GHOSTSHIP_CURRENT_SYSTEM:-/run/current-system}
 SYSTEM_PROFILE=${GHOSTSHIP_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}
 # The artifact identity may be a store symlink (environment.etc); the test
@@ -58,6 +54,7 @@ Usage: deploy.sh [OPTIONS]
   --build-only           build the full artifact and print its identity
   --test-artifact        build and test the full artifact, do not deploy it
   --verify-only          read-only deployed and running identity check
+  --rollback             switch to the previous generation and return T3 to it
   --allow-dirty          deploy an artifact built from a dirty checkout
   --flake REF            checkout or flake reference to build (default: this checkout)
   --system NAME          nixosConfigurations attribute (default: this host name)
@@ -91,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --test-artifact) mode=test-artifact; shift ;;
     --allow-dirty) allow_dirty=1; shift ;;
     --verify-only) mode=verify-only; shift ;;
+    --rollback) mode=rollback; shift ;;
     --flake) flake=${2:?--flake needs a reference}; shift 2 ;;
     --system) system=${2:?--system needs a name}; shift 2 ;;
     --host) host=${2:?--host needs a name}; shift 2 ;;
@@ -152,6 +150,8 @@ read_identity() {
   identity_tree=$("$JQ_BIN" -r '.tree // "unknown"' "$file")
   identity_dirty=$("$JQ_BIN" -r '.dirty // false' "$file")
   identity_agent_dirty=$("$JQ_BIN" -r '.agent_dirty // false' "$file")
+  provider_secrets_file=$("$JQ_BIN" -er '.provider_secrets_file // empty' "$file")
+  [[ -n $provider_secrets_file ]] || die 'the built identity names no provider secret file'
   [[ $deployment_id =~ ^[0-9a-f]{64}$ ]] || die 'the built identity has no deployment id'
   [[ -n $agent_revision && -n $tooling_path && -n $image_archive && -n $image_metadata ]] \
     || die 'the built identity is incomplete'
@@ -207,6 +207,15 @@ test_artifact() {
       || die 'the unit does not name the built deployment id'
     grep -Fq "IMAGE_ARCHIVE=$image_archive" "$unit_file" \
       || die 'the unit does not name the built image archive'
+    # The tooling and the image must come from the built system, not from a
+    # stale store path: a mixed old-system/new-tools state is refused here,
+    # before any effect.
+    local required
+    for required in "$tooling_path" "$image_archive"; do
+      "$NIX_STORE_BIN" -qR "$build" | grep -qxF "$required" \
+        || die "the built system does not contain $required (a mixed old-system/new-tools state)"
+    done
+    echo 'deploy: tooling and image belong to the built system'
     test_baked_identity
     return 0
   fi
@@ -272,11 +281,25 @@ read_applied() {
   return 0
 }
 
+# The installed system records what it wants in its own identity file. A plain
+# `nixos-rebuild switch` or a system-only rollback changes this without touching
+# the T3 deployment state, so VERIFY has to name that divergence instead of
+# reporting the old coherent tuple.
+installed_deployment() {
+  "$JQ_BIN" -r '.deployment_id // empty' \
+    "$CURRENT_SYSTEM/etc/ghostship/t3code-deploy-identity.json" 2>/dev/null || true
+}
+
 verify_running() {
   deployment_id=${deployment_id:-}
   phase 'VERIFY the deployed and running identity'
   if ! read_applied; then
     die "${applied_reason:-the deployed identity is not verifiable}"
+  fi
+  local installed
+  installed=$(installed_deployment)
+  if [[ -n $installed && $installed != "$applied_deployment" ]]; then
+    die "the installed system wants $installed but the applied deployment is $applied_deployment; run just deploy to deploy the installed system"
   fi
   if [[ -n $deployment_id && $applied_deployment != "$deployment_id" ]]; then
     die "the deployed identity $applied_deployment is not the built deployment $deployment_id"
@@ -305,10 +328,6 @@ assert_current_build() {
   [[ $profile == "$build" ]] || die "the system profile is ${profile:-unknown}, not the build $build"
 }
 
-unit_state() {
-  "$SYSTEMCTL_BIN" show -p ActiveState --value "$identity_unit" 2>/dev/null || true
-}
-
 unit_result() {
   "$SYSTEMCTL_BIN" show -p Result --value "$identity_unit" 2>/dev/null || true
 }
@@ -317,14 +336,23 @@ attempt_file() {
   printf '%s/attempts/%s.json\n' "$state_dir" "$deployment_id"
 }
 
-wait_for_running_unit() {
-  # An activation hook starts the deployer asynchronously on a switch. Wait for
-  # that start instead of issuing a second one.
-  local deadline=$((SECONDS + DEPLOY_TIMEOUT_SECONDS))
-  while [[ $(unit_state) == activating ]]; do
-    (( SECONDS < deadline )) || die "the deployer did not finish within ${DEPLOY_TIMEOUT_SECONDS}s"
-    "$DEPLOY_PROBE_SLEEP" "$DEPLOY_PROBE_INTERVAL"
-  done
+# Record the request under the deployer's own lock: one writer, and the deployer
+# can never read a half-written request. The lock is released before the start,
+# because the deployer holds it for the whole deployment.
+write_desired() {
+  phase 'RECORD the deployment request'
+  install -d -m 0700 "$state_dir"
+  exec 7>"$state_dir/deploy.lock"
+  "$FLOCK_BIN" -x 7
+  printf '%s\n' "$deployment_id" > "$state_dir/desired.tmp"
+  mv -f "$state_dir/desired.tmp" "$state_dir/desired"
+  local secret_sha256
+  secret_sha256=$(sha256sum "$provider_secrets_file" | cut -d ' ' -f 1)
+  printf 'agent=%s secret_sha256=%s tooling=%s\n' \
+    "$agent_revision" "$secret_sha256" "$tooling_path" > "$state_dir/desired-inputs.tmp"
+  mv -f "$state_dir/desired-inputs.tmp" "$state_dir/desired-inputs"
+  rm -f "$state_dir/restart.pending" "$state_dir/restart.pending.tmp"
+  exec 7>&-
 }
 
 # reconcile_attempt returns 0 when this deployment is already applied, 1 when a
@@ -358,11 +386,11 @@ deploy_artifact() {
   "$ACTIVATE_HOST" --toplevel "$build"
   assert_current_build
 
-  wait_for_running_unit
   if reconcile_attempt "$(attempt_file)"; then
     verify_running
     return 0
   fi
+  write_desired
   echo "deploy: starting $identity_unit from $build"
   "$SYSTEMCTL_BIN" start "$identity_unit"
   local result
@@ -373,6 +401,56 @@ deploy_artifact() {
 
 if [[ $mode == verify-only ]]; then
   verify_running
+  exit 0
+fi
+
+# The generation link below the current one. Deployments record their own image
+# archive, so rollback can refuse before the switch when that archive is gone.
+previous_generation() {
+  local link
+  link=$(
+    for candidate in "$SYSTEM_PROFILE"-*-link; do
+      [[ -e $candidate ]] || continue
+      printf '%s\n' "$candidate"
+    done | sort -V | tail -n 2 | head -n 1
+  )
+  [[ -n $link ]] || return 1
+  readlink -f "$link"
+}
+
+if [[ $mode == rollback ]]; then
+  phase 'ROLLBACK the host system generation'
+  previous=$(previous_generation) || die 'there is no previous system generation to roll back to'
+  [[ $previous != "$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)" ]] \
+    || die 'the previous generation is the running system; nothing to roll back to'
+  previous_identity=$previous/etc/ghostship/t3code-deploy-identity.json
+  previous_archive=''
+  if [[ -e $previous_identity || -L $previous_identity ]]; then
+    previous_archive=$("$JQ_BIN" -r '.image_archive // empty' "$previous_identity" 2>/dev/null || true)
+  fi
+  # The old generation's unit loads its own archive. If that archive has been
+  # collected, the container could not return to the old image, so refuse
+  # before the system switch rather than leave the system and T3 disagreeing.
+  [[ -z $previous_archive || -e $previous_archive ]] \
+    || die "the previous generation's image archive is gone: $previous_archive; refusing to switch"
+  "$NIXOS_REBUILD_BIN" --rollback switch
+  build=$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)
+  [[ -n $build && -x $build/bin/switch-to-configuration ]] \
+    || die "the previous generation is not a built system: ${build:-unknown}"
+  read_identity "$build/etc/ghostship/t3code-deploy-identity.json"
+  (( state_given == 1 )) || state_dir=$identity_state
+  echo "deploy: rolled back system $build, deployment $deployment_id"
+  assert_current_build
+  install -d -m 0700 "$state_dir"
+  if reconcile_attempt "$(attempt_file)"; then
+    verify_running
+    exit 0
+  fi
+  write_desired
+  "$SYSTEMCTL_BIN" start "$identity_unit"
+  [[ $(unit_result) == success ]] || die "the deployer unit reported Result=$(unit_result)"
+  verify_running
+  echo "deploy: rollback complete for $deployment_id"
   exit 0
 fi
 

@@ -12,6 +12,8 @@ deploy="$root/packages/t3code/deploy.sh"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+printf 'provider=fixture\n' > "$tmp/provider.env"
+mkdir -p "$tmp/tooling"
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
 mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/state" "$tmp/calls" "$tmp/systemd"
 # The real artifact is a tarball file, never a directory.
@@ -41,6 +43,7 @@ cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
  "image_archive":"$image","image_metadata":"$tmp/closure/image",
+ "provider_secrets_file":"$tmp/provider.env",
  "tree":"test-rev","dirty":false,"agent_dirty":false}
 EOF
 
@@ -71,7 +74,7 @@ SH
 cat > "$tmp/bin/nix-store" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "$tmp/store/identity.json" "$tmp/store/layered-baked-t3code-baked-app"
+printf '%s\n' "$tmp/store/identity.json" "$tmp/store/layered-baked-t3code-baked-app" "$tmp/tooling" "$tmp/image"
 SH
 cat > "$tmp/bin/nix-env" <<'SH'
 #!/usr/bin/env bash
@@ -121,6 +124,14 @@ set -euo pipefail
 [[ ${DEPLOY_STATUS_STATE:-coherent} == coherent ]] || { echo '{"state":"unknown"}'; exit 77; }
 printf '{"state":"coherent","deployment":"%s","image":"%s"}\n' "${STUB_DEPLOYMENT:?}" "${STUB_IMAGE:?}"
 SH
+cat > "$tmp/bin/nixos-rebuild" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $1 == --rollback && $2 == switch ]] || { echo "unexpected nixos-rebuild: $*" >&2; exit 1; }
+printf 'rollback\n' >> "$CALLS/nixos-rebuild"
+ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_SYSTEM_PROFILE:?}"
+ln -sfn "$PREVIOUS_SYSTEM" "${GHOSTSHIP_CURRENT_SYSTEM:?}"
+SH
 cat > "$tmp/bin/probe-sleep" <<'SH'
 #!/usr/bin/env bash
 printf 'probe-sleep %s\n' "$1" >> "$CALLS/probe"
@@ -136,13 +147,10 @@ export STUB_DEPLOYMENT=$deployment_id
 export STUB_IMAGE="sha256:$image_id"
 export PODMAN_IMAGE="sha256:$image_id"
 export SYSTEMD=$tmp/systemd
-export DEPLOY_PROBE_SLEEP=$tmp/bin/probe-sleep
-export DEPLOY_PROBE_INTERVAL=1
-export DEPLOY_TIMEOUT_SECONDS=30
 export NIX_BIN=$tmp/bin/nix NIX_STORE_BIN=$tmp/bin/nix-store JQ_BIN=jq
 export IDENTITY_STORE_ROOT=$tmp/store
 export SYSTEMCTL_BIN=$tmp/bin/systemctl PODMAN_BIN=$tmp/bin/podman
-export HOSTNAME_BIN=$tmp/bin/hostname FLOCK_BIN=flock
+export HOSTNAME_BIN=$tmp/bin/hostname FLOCK_BIN=flock NIXOS_REBUILD_BIN=$tmp/bin/nixos-rebuild
 export PATH="$tmp/bin:$PATH"
 export HOME=$tmp/home
 mkdir -p "$HOME"
@@ -236,6 +244,8 @@ run --flake "$root" --system chill-penguin
 [[ $(readlink -f "$GHOSTSHIP_CURRENT_SYSTEM") == "$build" ]] || fail 'the running system is not the build'
 [[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'the deployer was not started exactly once'
 grep -q 'system.build.toplevel' "$CALLS/nix" || fail 'the full deploy did not build the host toplevel'
+[[ "$(cat "$tmp/state/desired")" == "$deployment_id" ]] || fail 'the deployment request was not recorded'
+grep -q "agent=agent-rev" "$tmp/state/desired-inputs" || fail 'the deployment inputs were not recorded'
 grep -q 'switch switch' "$CALLS/switch" || fail 'the built switch-to-configuration was not used'
 grep -q 'complete for ' "$tmp/out.log" || fail 'the deploy did not report completion'
 echo 'Deploy proof: profile set, built switch used, deployer started once, verified.'
@@ -243,13 +253,11 @@ echo 'Deploy proof: profile set, built switch used, deployer started once, verif
 # --- 4. an activation-started deployer is not started again ------------------
 reset_calls
 jq -cn --arg id "$deployment_id" '{deployment_id:$id,exit_code:0}' > "$tmp/state/attempts/$deployment_id.json"
-printf 'activating\n' > "$SYSTEMD/active"
 run --flake "$root" --system chill-penguin
 [[ $rc == 0 ]] || fail "already-applied deploy exited $rc"
 [[ ! -e $CALLS/systemctl ]] || fail 'the already-applied path started the deployer again'
 grep -q 'already applied' "$tmp/out.log" || fail 'the already-applied path did not say so'
-[[ -s $CALLS/probe ]] || fail 'the in-flight activation start was not observed'
-echo 'Already-applied proof: the in-flight activation start is awaited, no second start.'
+echo 'Already-applied proof: a recorded success is not replayed.'
 
 # --- 5. a switch that does not become the running system is a refusal --------
 reset_calls
@@ -321,5 +329,69 @@ jq '.dirty = false | .agent_dirty = false | .agent_revision = "agent-rev"' \
 cp "$tmp/identity.clean" "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$build/etc/ghostship/t3code-deploy-identity.json" "$tmp/closure/deploy-identity.json"
 echo 'Dirty-pin proof: a dirty pinned input is refused before any effect; --allow-dirty deploys it.'
+
+# --- 11. the installed system and the applied deployment must agree ----------
+reset_calls
+mkdir -p "$GHOSTSHIP_CURRENT_SYSTEM/etc/ghostship"
+jq '.deployment_id = "9999999999999999999999999999999999999999999999999999999999999999"' \
+  "$build/etc/ghostship/t3code-deploy-identity.json" \
+  > "$GHOSTSHIP_CURRENT_SYSTEM/etc/ghostship/t3code-deploy-identity.json"
+run --verify-only --state "$tmp/state"
+[[ $rc != 0 ]] || fail 'a plain switch that changed the installed system was reported coherent'
+grep -q 'run just deploy' "$tmp/out.log" || fail 'the installed/applied divergence was not named'
+rm -rf "$GHOSTSHIP_CURRENT_SYSTEM"
+echo 'Installed-system proof: a system change outside deploy.sh is named, not reported as the old tuple.'
+
+# --- 12. rollback returns the system and the T3 deployment together ----------
+reset_calls
+previous=$tmp/previous-system
+mkdir -p "$previous/bin" "$previous/etc/ghostship" "$previous/etc/systemd/system"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$previous/bin/switch-to-configuration"
+chmod +x "$previous/bin/switch-to-configuration"
+previous_id=$(printf 'previous-artifact' | sha256sum | cut -d ' ' -f 1)
+previous_image=$(printf 'previous-image' | sha256sum | cut -d ' ' -f 1)
+jq -n --arg d "$previous_id" --arg i "$tmp/image" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  --arg m "$tmp/closure/image" \
+  '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,image_metadata:$m,
+    provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
+  > "$previous/etc/ghostship/t3code-deploy-identity.json"
+printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/image" \
+  > "$previous/etc/systemd/system/ghostship-t3code-deploy.service"
+ln -sfn "$previous" "$tmp/system-profile-1-link"
+ln -sfn "$build" "$tmp/system-profile-2-link"
+export PREVIOUS_SYSTEM=$previous STUB_DEPLOYMENT=$previous_id STUB_IMAGE="sha256:$previous_image"
+export PODMAN_IMAGE="sha256:$previous_image"
+run --rollback
+[[ $rc == 0 ]] || fail "rollback exited $rc"
+[[ $(readlink -f "$GHOSTSHIP_CURRENT_SYSTEM") == "$previous" ]] || fail 'rollback did not switch the system'
+[[ "$(readlink -f "$GHOSTSHIP_SYSTEM_PROFILE")" == "$previous" ]] || fail 'rollback did not record the generation'
+[[ "$(cat "$tmp/state/desired")" == "$previous_id" ]] || fail 'rollback did not request the previous deployment'
+[[ $(grep -c '^start ' "$CALLS/systemctl") == 1 ]] || fail 'rollback did not start the deployer once'
+echo 'Rollback proof: the previous generation is switched and its deployment reconciled and verified.'
+export STUB_DEPLOYMENT=$deployment_id STUB_IMAGE="sha256:$image_id" PODMAN_IMAGE="sha256:$image_id"
+
+# --- 13. rollback refuses before the switch when the old image is gone --------
+reset_calls
+previous=$tmp/pruned-system
+mkdir -p "$previous/bin" "$previous/etc/ghostship" "$previous/etc/systemd/system"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$previous/bin/switch-to-configuration"
+chmod +x "$previous/bin/switch-to-configuration"
+jq -n --arg d "$previous_id" --arg i "$tmp/pruned-image.tar.gz" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  --arg m "$tmp/closure/image" \
+  '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,image_metadata:$m,
+    provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
+  > "$previous/etc/ghostship/t3code-deploy-identity.json"
+printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/pruned-image.tar.gz" \
+  > "$previous/etc/systemd/system/ghostship-t3code-deploy.service"
+ln -sfn "$previous" "$tmp/system-profile-1-link"
+ln -sfn "$build" "$tmp/system-profile-2-link"
+export PREVIOUS_SYSTEM=$previous
+run --rollback
+[[ $rc != 0 ]] || fail 'rollback switched to a generation whose image archive is gone'
+grep -q "image archive is gone" "$tmp/out.log" || fail 'the missing archive was not named'
+[[ ! -e $CALLS/nixos-rebuild ]] || fail 'rollback switched the system before refusing'
+echo 'Rollback guard proof: a pruned previous image is refused before the system switch.'
 
 echo 'Deploy script fixture passed.'

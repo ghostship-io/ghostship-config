@@ -467,18 +467,11 @@ public procedure.
 Read from the source, the chain after any activation that includes this
 change:
 
-1. `system.activationScripts.t3code-deployment` writes the new
-   `t3codeDeploymentId` and runtime inputs, removes any leftover legacy
-   `restart.pending` marker, and starts `ghostship-t3code-deploy.service`.
-2. The service runs isolated candidate acceptance against the embedded image
-   archive. The candidate must pass app, provider-turn, CLI, skills and desktop
-   transport checks without changing production identity.
-3. The shell deployer verifies that the receipt names the exact image,
-   deployment ID, agent revision and provider projection, then immediately
-   restarts `podman-t3code.service` and records the accepted restart.
-4. Failed acceptance marks the deployment ID as blocked and the service's
-   single failure path raises an incident. There is no timer or retry queue;
-   a newly detected image has a new deployment ID and runs its own acceptance.
+1. `packages/t3code/deploy.sh` records the requested deployment id and inputs
+   under the deployer's lock before it starts `ghostship-t3code-deploy.service`;
+   the deployer then checks the request, the secret digest and the receipt
+   before any effect. The old activation hook that did this during a switch is
+   gone.
 
 Consequence: **activation recreates the T3 Code container as soon as candidate
 acceptance passes**, even though `podman-t3code.service` itself does not restart

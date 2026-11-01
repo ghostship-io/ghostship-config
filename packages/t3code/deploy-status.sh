@@ -16,7 +16,6 @@
 # Field names and the accepted-receipt predicate are the ones the deploy path
 # and the release window already use:
 #   deploy-image.sh:155,164-171   receipt identity and provider secret
-#   release-window.sh:321-338     receipt selection (same fields)
 #   receipt-checks.sh             the only accepted-receipt predicate
 set -eu
 
@@ -79,7 +78,13 @@ live_after=$("$JQ_BIN" -r '.live_after // empty' "$receipt")
 [ "$receipt_id" = "$id" ] || mismatch 'receipt names another deployment'
 [ -n "$receipt_agent" ] && [ -n "$receipt_path" ] && [ -n "$receipt_image" ] || unknown 'receipt identity is incomplete'
 case $candidate in t3code-candidate-*) ;; *) mismatch 'receipt candidate name is not accepted' ;; esac
-[ -n "$live_before" ] && [ "$live_before" = "$live_after" ] || mismatch 'receipt live identity is not stable'
+# A receipt written after the restart legitimately has different before and
+# after identities; what matters is that the recorded post-restart image is the
+# receipted one.
+[ -n "$live_after" ] || mismatch 'receipt live identity is missing'
+recorded_image=$(printf '%s\n' "$live_after" | "$JQ_BIN" -r '.image // empty' 2>/dev/null || true)
+[ "${recorded_image#sha256:}" = "${receipt_image#sha256:}" ] \
+  || mismatch 'receipt live identity is not the receipted image'
 
 applied_inputs="$state/applied-inputs"
 [ -f "$applied_inputs" ] && [ ! -L "$applied_inputs" ] && [ -r "$applied_inputs" ] || unknown 'applied-inputs is missing or unreadable'
