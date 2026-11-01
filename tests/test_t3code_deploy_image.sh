@@ -147,6 +147,9 @@ elif [[ $1 == load ]]; then
 elif [[ $1 == tag ]]; then
   printf '%s\n' image-tag >> "$EVENTS"
   printf '%s\n' "${2#sha256:}" > "$ACCEPTED_POINTER_FILE"
+elif [[ $1 == image && $2 == inspect && ${3:-} == sha256:* ]]; then
+  # Streamed-image verification asks for the id podman computed.
+  printf 'sha256:%s\n' "${FIXTURE_LOADED_ID:-${3#sha256:}}"
 elif [[ $1 == image && $2 == inspect ]]; then
   if [[ -r "$ACCEPTED_POINTER_FILE" ]]; then
     printf 'sha256:%s\n' "$(cat "$ACCEPTED_POINTER_FILE")"
@@ -707,6 +710,78 @@ echo 'No-receipt bootstrap proof: retained the running image, logged an alarm, a
 echo 'No-running-container proof: refused bootstrap and left the accepted alias absent.'
 echo 'V3 shell proof: failed acceptance is marked once and never starts or queues the image.'
 echo 'V2 shell proof: a superseded exact-image receipt cannot restart the newer target.'
+
+# A streamed image carries no archive, so the id comes from the stream's own
+# config digest before the load, and the load must produce that same id.
+# The preceding cases left a running image with no receipt and a rotated
+# secret; restore the receipted running image and the secret it describes.
+cp "$PROVIDER_SECRETS_FILE" "$LIVE_SECRET_FILE"
+export RUNNING_IMAGE_ID="sha256:$(printf 'legacy-running-image' | sha256sum | cut -d ' ' -f 1)"
+stream_dir="$tmp/stream"; mkdir -p "$stream_dir"
+printf '{"architecture":"arm64","os":"linux"}\n' > "$stream_dir/config.json"
+stream_id=$(sha256sum "$stream_dir/config.json" | cut -d ' ' -f 1)
+printf '[{"Config":"config.json","RepoTags":["localhost/ghostship-t3code:t3code-runtime"]}]\n' > "$stream_dir/manifest.json"
+tar -cf "$tmp/image-stream.tar" -C "$stream_dir" manifest.json config.json
+cat > "$tmp/stream.sh" <<SH
+#!/usr/bin/env bash
+exec cat "$tmp/image-stream.tar"
+SH
+chmod +x "$tmp/stream.sh"
+export STATE_DIR="$tmp/state" ACCEPTED_POINTER_FILE="$tmp/state/accepted-image" RUNNING_CONTAINER=1
+export ALARM_LOG="$tmp/alarms.log" EVENTS="$tmp/stream-events" HEALTH_WAIT_BUDGET_SECONDS=390 HEALTHY_AFTER_SECONDS=0
+export CANDIDATE_FAIL=0 CANDIDATE_PRECONDITION=0 RECEIPT_MISSING=0 RECEIPT_IMAGE_MISMATCH=0
+export DEPLOYMENT_ID=deployment-streamed-image
+printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/desired"
+printf 'agent=agent-rev secret_sha256=%s\n' "$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)" > "$STATE_DIR/desired-inputs"
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$stream_id" bash "$fixture_writer" > "$tmp/stream-match.log" 2>&1
+stream_rc=$?
+set -e
+[[ $stream_rc == 0 ]]
+grep -q 'Candidate acceptance PASS' "$tmp/stream-match.log"
+# Attempt-scoped evidence is removed when the deploy exits.
+compgen -G "$STATE_DIR/.receipt-before-*" >/dev/null && { echo "receipt backup left behind: $(compgen -G "$STATE_DIR/.receipt-before-*" | tr '\n' ' ')" >&2; exit 1; }
+# A different id after the load is UNKNOWN: refuse, do not promote, do not receipt.
+applied_before=$(cat "$STATE_DIR/applied")
+: > "$EVENTS"
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json" "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$(printf '%064d' 9)" bash "$fixture_writer" > "$tmp/stream-mismatch.log" 2>&1
+mismatch_rc=$?
+set -e
+[[ $mismatch_rc == 77 ]]
+grep -q 'does not match the pre-load id' "$tmp/stream-mismatch.log"
+# The safety property is that the mismatched candidate is never promoted: an
+# alias may exist only because the running image's PASS receipt initialised it.
+if [[ -e $ACCEPTED_POINTER_FILE ]]; then
+  [[ "$(cat "$ACCEPTED_POINTER_FILE")" != "$stream_id" ]] || { echo 'mismatched candidate was aliased' >&2; exit 1; }
+fi
+! grep -q '^restart$' "$EVENTS"
+[[ "$(cat "$STATE_DIR/applied")" == "$applied_before" ]]
+# A receipt may be initialised for the running image's PASS identity; it must
+# never describe the mismatched candidate.
+if [[ -e $STATE_DIR/receipts/$DEPLOYMENT_ID.json ]]; then
+  [[ "$(jq -r '.image_id | sub("^sha256:"; "")' "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")" != "$stream_id" ]] \
+    || { echo 'mismatched candidate was receipted' >&2; exit 1; }
+fi
+# A pre-existing receipt for this deployment is evidence, not scratch space: a
+# mismatched streamed load must leave it byte-for-byte as it was.
+jq -cn --arg d "$DEPLOYMENT_ID" --arg i "$stream_id" \
+  '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",applied:true}' \
+  > "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+receipt_sum=$(sha256sum < "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")
+: > "$EVENTS"
+rm -f "$ACCEPTED_POINTER_FILE"
+set +e
+IMAGE_STREAM="$tmp/stream.sh" IMAGE_ARCHIVE= FIXTURE_LOADED_ID="$(printf '%064d' 9)" bash "$fixture_writer" > "$tmp/stream-preserved.log" 2>&1
+preserved_rc=$?
+set -e
+[[ $preserved_rc == 77 ]]
+[[ "$(sha256sum < "$STATE_DIR/receipts/$DEPLOYMENT_ID.json")" == "$receipt_sum" ]] \
+  || { echo 'a pre-existing receipt was destroyed by a mismatched load' >&2; exit 1; }
+rm -f "$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+echo 'Streamed image proof: config-digest id before load, verified after load, mismatch refused.'
 
 # A missing updater lock must be created owned by the home owner and unreadable
 # to others, because the in-container updater runs as that user and opens it for

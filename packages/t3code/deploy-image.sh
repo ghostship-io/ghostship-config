@@ -73,7 +73,31 @@ if [[ ${1:-} == --invalidate-failure ]]; then
 fi
 
 : "${STATE_DIR:?}"
-: "${IMAGE_ARCHIVE:?}"
+# Either an archive or a streamed image is required; a stream is preferred.
+if [[ -z ${IMAGE_STREAM:-} ]]; then : "${IMAGE_ARCHIVE:?}"; fi
+# A stream is one-shot: materialise it once, then use the archive path
+# everywhere (id derivation, load, acceptance) so no step reads it twice or
+# receives an empty archive. IMAGE_STREAMED keeps the post-load id check.
+if [[ -n ${IMAGE_STREAM:-} ]]; then
+  IMAGE_ARCHIVE="$STATE_DIR/image-stream.tar"
+  "$IMAGE_STREAM" > "$IMAGE_ARCHIVE" || fail 'image stream unreadable'
+  IMAGE_STREAMED=1
+  unset IMAGE_STREAM
+fi
+# The receipt this attempt writes must not destroy a pre-existing one: a receipt
+# for an already-applied or serving deployment is evidence, not scratch space.
+receipt_path="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+receipt_before=absent
+receipt_backup="$STATE_DIR/.receipt-before-$DEPLOYMENT_ID.json"
+if [[ -f $receipt_path && ! -L $receipt_path ]]; then
+  receipt_before=present
+  cp "$receipt_path" "$receipt_backup" || fail 'existing receipt could not be preserved'
+fi
+cleanup_attempt_evidence() {
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] && rm -f "$IMAGE_ARCHIVE"
+  rm -f "$receipt_backup"
+}
+trap cleanup_attempt_evidence EXIT
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -150,7 +174,10 @@ write_attempt_result() {
   '{deployment_id:$deployment,started_at_ms:$started_at_ms,status:"running"}' > "$attempt_temporary"
 chmod 0600 "$attempt_temporary"
 mv -f "$attempt_temporary" "$attempt_file"
-trap write_attempt_result EXIT
+trap 'write_attempt_result; cleanup_attempt_evidence' EXIT
+# The image id is the sha256 of the image's config blob, known before the load
+# from the archive. A streamed input was materialised to an archive before this
+# point, so there is exactly one derivation.
 image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
 image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
 secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
@@ -313,8 +340,32 @@ promote_image_id() {
   fi
 }
 
-promote_accepted_alias() {
+load_image() {
   "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+  # For a streamed input the pre-load id came from the stream itself, so the id
+  # podman computed must agree. A mismatch is UNKNOWN: no alias promotion and no
+  # receipt, rather than silently trusting either value.
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] || return 0
+  local loaded
+  loaded=$("$PODMAN_BIN" image inspect "sha256:$image_id" --format '{{.Id}}' 2>/dev/null || true)
+  [[ $loaded == "sha256:$image_id" ]] || {
+    echo "Loaded image id does not match the pre-load id: expected sha256:$image_id, got ${loaded:-absent}" >&2
+    # The receipt describes the archive, but the image that loaded is not that
+    # archive. Retire only what this attempt wrote: restore a pre-existing
+    # receipt, or remove the one this attempt created.
+    if [[ $receipt_before == present ]]; then
+      cp "$receipt_backup" "$receipt_path.restore" && mv -f "$receipt_path.restore" "$receipt_path"
+    else
+      rm -f "$receipt_path"
+    fi
+    "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"loaded image id differs from the streamed config digest"}' "$attempt_file" > "$attempt_temporary"
+    chmod 0600 "$attempt_temporary"; mv -f "$attempt_temporary" "$attempt_file"
+    exit 77
+  }
+}
+
+promote_accepted_alias() {
+  load_image
   promote_image_id "sha256:$image_id"
 }
 
