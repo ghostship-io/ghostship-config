@@ -13,12 +13,12 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     environment: private-source-ci
     runs-on: [self-hosted, Linux, ARM64, ghostship-fast]
-    timeout-minutes: 45 # Measured 2026-10-31: the private-source import alone took
+    timeout-minutes: 10 # Measured 2026-10-31: the private-source import alone took
                         # 3m17s (four shallow depth=1 fetches); the old 4-minute cap
                         # cancelled every run during "Run fast repository checks".
-                        # The job also builds the exact T3 system artifact a worker
-                        # deploys (packages/t3code/deploy.sh --no-deploy), so the
-                        # budget covers a full toplevel build on a cold cache.
+                        # Ten minutes leaves room for the checks plus a concurrent PR.
+                        # The T3 artifact build runs in its own job below so it
+                        # cannot consume this gate's budget.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -51,17 +51,47 @@ jobs:
           # runner is ARM64 like the host, and the check re-instantiates the
           # wrappers with the check's pkgs, so this is a native build.
           nix build -L "${args[@]}" --no-write-lock-file .#checks.aarch64-linux.deployment-wrappers
-          # The one T3 deployment script, deploy skipped: build the exact
-          # artifact a worker deploys and test it (wrappers + baked identity).
-          # The runner is not a nixosConfiguration, so name the host explicitly.
-          nix develop .#ci "${args[@]}" --no-write-lock-file -c \
-            just test --system chill-penguin --override-file "$overrides"
       - name: Check the isolated-service evidence script
         run: |
           nix develop .#ci --no-write-lock-file -c shellcheck -s bash -e SC1091 modules/self-hosted/agent-memory-evidence.sh
           modules/self-hosted/agent-memory-evidence.sh --dry-run > /tmp/agent-memory-evidence-dry-run.txt
           test "$(grep -c '^CASE ' /tmp/agent-memory-evidence-dry-run.txt)" -eq 7
           test "$(grep -c '^SUMMARY dry-run cases=7$' /tmp/agent-memory-evidence-dry-run.txt)" -eq 1
+  # The one T3 deployment script with the deploy skipped. It builds the exact
+  # system artifact a worker deploys, so it needs its own budget instead of the
+  # fast PR gate's ten minutes. It runs only after the fast gate passes, and the
+  # PR concurrency group still cancels it on a new push.
+  deploy-artifact:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: check
+    environment: private-source-ci
+    runs-on: [self-hosted, Linux, ARM64, ghostship-fast]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - name: Import pinned private sources with read-only deploy keys
+        env:
+          GITHUB_META_TOKEN: ${{ github.token }}
+          GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
+        run: python3 scripts/ci-private-inputs.py
+      - name: Build and test the T3 deployment artifact (no deploy)
+        run: |
+          set -euo pipefail
+          overrides="$RUNNER_TEMP/ghostship-private-overrides.txt"
+          [ -s "$overrides" ] || { echo 'private inputs were not imported; refusing to evaluate anonymously' >&2; exit 1; }
+          args=()
+          while read -r name url; do
+            [ -n "$name" ] || continue
+            case "$url" in git+file://*) ;; *) echo "private input not substituted: $name" >&2; exit 1 ;; esac
+            args+=(--override-input "$name" "$url")
+          done < "$overrides"
+          # The runner is not a nixosConfiguration, so name the host explicitly.
+          nix develop .#ci "${args[@]}" --no-write-lock-file -c \
+            just test --system chill-penguin --override-file "$overrides"
   integration:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     environment: private-source-main
