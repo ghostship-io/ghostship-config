@@ -188,6 +188,7 @@ in
         jq -e '
           (.deployment_id | test("^[0-9a-f]{64}$"))
           and (.image_archive | type == "string" and length > 0)
+          and (.image_metadata | type == "string" and length > 0)
           and (.agent_revision | type == "string" and length > 0)
           and (.tooling_path | type == "string" and length > 0)
           and (.state_dir | type == "string" and length > 0)

@@ -13,7 +13,9 @@ deploy="$root/packages/t3code/deploy.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
-mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/image" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+# The real artifact is a tarball file, never a directory.
+: > "$tmp/image"
 
 deployment_id=$(printf 'deploy-artifact' | sha256sum | cut -d ' ' -f 1)
 image_id=$(printf 'image-artifact' | sha256sum | cut -d ' ' -f 1)
@@ -38,7 +40,8 @@ EOF
 cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
- "image_archive":"$image","tree":"test-rev","dirty":false,"agent_dirty":false}
+ "image_archive":"$image","image_metadata":"$tmp/closure/image",
+ "tree":"test-rev","dirty":false,"agent_dirty":false}
 EOF
 
 # The fast closure: the same identity, the image metadata root, and the
@@ -199,6 +202,18 @@ run --build-only --flake "$root" --system chill-penguin
 rm -f "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$tmp/store/identity.json" "$build/etc/ghostship/t3code-deploy-identity.json"
 echo 'Symlink proof: closure store identity read; outside-store and outside-closure identities refused.'
+
+# --- 1c. --test-artifact runs the real-artifact TEST without deploying ------
+reset_calls
+run --test-artifact --flake "$root" --system chill-penguin
+[[ $rc == 0 ]] || fail "--test-artifact exited $rc"
+grep -q 'full artifact built and tested; deployment skipped' "$tmp/out.log" \
+  || fail '--test-artifact did not report the full test'
+grep -q 'deployment wrappers built and shellchecked' "$tmp/out.log" \
+  || fail '--test-artifact did not test the wrappers'
+[[ ! -e $GHOSTSHIP_CURRENT_SYSTEM ]] || fail '--test-artifact switched the host'
+[[ ! -e $CALLS/systemctl ]] || fail '--test-artifact started a unit'
+echo 'Test-artifact proof: full artifact TEST ran, host untouched.'
 
 # --- 2. verify-only reports the deployed and running identity ----------------
 reset_calls
