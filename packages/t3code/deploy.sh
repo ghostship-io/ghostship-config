@@ -50,8 +50,9 @@ usage() {
   cat <<'EOF'
 Usage: deploy.sh [OPTIONS]
 
-  --no-deploy            build and test the artifact, do not touch the host
-  --build-only           build the artifact and print its identity
+  --no-deploy            build and test the deployment closure, do not touch the host
+  --build-only           build the full artifact and print its identity
+  --test-artifact        build and test the full artifact, do not deploy it
   --verify-only          read-only deployed and running identity check
   --rollback             switch to the previous generation and return T3 to it
   --allow-dirty          deploy an artifact built from a dirty checkout
@@ -84,6 +85,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --no-deploy) mode=no-deploy; shift ;;
     --build-only) mode=build; shift ;;
+    --test-artifact) mode=test-artifact; shift ;;
     --allow-dirty) allow_dirty=1; shift ;;
     --verify-only) mode=verify-only; shift ;;
     --rollback) mode=rollback; shift ;;
@@ -141,6 +143,7 @@ read_identity() {
   agent_revision=$("$JQ_BIN" -er '.agent_revision // empty' "$file")
   tooling_path=$("$JQ_BIN" -er '.tooling_path // empty' "$file")
   image_archive=$("$JQ_BIN" -er '.image_archive // empty' "$file")
+  image_metadata=$("$JQ_BIN" -er '.image_metadata // empty' "$file")
   identity_state=$("$JQ_BIN" -er '.state_dir // empty' "$file")
   identity_host=$("$JQ_BIN" -er '.host // empty' "$file")
   identity_unit=$("$JQ_BIN" -er '.unit // empty' "$file")
@@ -150,7 +153,8 @@ read_identity() {
   provider_secrets_file=$("$JQ_BIN" -er '.provider_secrets_file // empty' "$file")
   [[ -n $provider_secrets_file ]] || die 'the built identity names no provider secret file'
   [[ $deployment_id =~ ^[0-9a-f]{64}$ ]] || die 'the built identity has no deployment id'
-  [[ -n $agent_revision && -n $tooling_path && -n $image_archive ]] || die 'the built identity is incomplete'
+  [[ -n $agent_revision && -n $tooling_path && -n $image_archive && -n $image_metadata ]] \
+    || die 'the built identity is incomplete'
   [[ -n $identity_state && -n $identity_unit ]] || die 'the built identity names no state directory or unit'
 }
 
@@ -194,7 +198,7 @@ test_artifact() {
   nix_build "$flake#checks.$nix_system.deployment-wrappers" >/dev/null
   echo 'deploy: deployment wrappers built and shellchecked'
 
-  if [[ $mode == deploy || $mode == build ]]; then
+  if [[ $mode != no-deploy ]]; then
     local unit_file=$build/etc/systemd/system/$identity_unit
     [[ -f $unit_file ]] || die "the built system has no $identity_unit"
     # The unit and the identity file are generated from the same values; if
@@ -230,27 +234,21 @@ test_closure_metadata() {
 }
 
 test_baked_identity() {
-  # The baked app is a store path the image archive references. Read the real
-  # VERSION/DIGEST through the image's own selector, not a copy of its rules.
-  local baked version digest root served
-  [[ -d $image_archive ]] || die "the built image archive is missing: $image_archive"
-  baked=$("$NIX_STORE_BIN" -qR "$image_archive" | grep -E -- '-t3code-baked-app$' | head -n 1 || true)
-  [[ -n $baked ]] || die 'the image archive does not reference the baked T3 app'
-  version=$(tr -d '[:space:]' < "$baked/VERSION")
-  digest=$(tr -d '[:space:]' < "$baked/DIGEST")
+  # The archive is a layered docker tarball, so its baked app is not a store
+  # reference `nix-store -qR` can see. The identity's metadata view is the same
+  # evaluation's baked app and selector; read VERSION/DIGEST through that
+  # selector, never by decoding the archive or copying its rules.
+  local served version digest
+  [[ -f $image_archive ]] || die "the built image archive is missing: $image_archive"
+  [[ -d $image_metadata ]] || die "the built image metadata is missing: $image_metadata"
+  if ! served=$(T3CODE_HOME_PREFIX=$image_metadata/home/t3code \
+    "$image_metadata/usr/share/t3code/served-identity.sh" --root "$image_metadata" 2>&1); then
+    die "served-identity refused the image metadata: $served"
+  fi
+  version=$("$JQ_BIN" -r '.baked.version // empty' <<< "$served")
+  digest=$("$JQ_BIN" -r '.baked.digest // empty' <<< "$served")
   [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the baked app has no usable VERSION: $version"
   [[ $digest =~ ^[0-9a-f]{64}$ ]] || die 'the baked app has no usable DIGEST'
-
-  root=$(mktemp -d)
-  mkdir -p "$root/usr/share" "$root/home/t3code"
-  ln -s "$baked" "$root/usr/share/t3code-app"
-  if ! served=$(T3CODE_HOME_PREFIX=$root/home/t3code "$script_dir/served-identity.sh" --root "$root" 2>&1); then
-    rm -rf "$root"
-    die "served-identity refused the baked artifact: $served"
-  fi
-  rm -rf "$root"
-  [[ $("$JQ_BIN" -r '.baked.version' <<< "$served") == "$version" ]] \
-    || die 'served-identity disagrees with the baked VERSION'
   echo "deploy: baked app $version ($digest) is the image's served identity"
 }
 
@@ -433,7 +431,7 @@ if [[ $mode == rollback ]]; then
   # The old generation's unit loads its own archive. If that archive has been
   # collected, the container could not return to the old image, so refuse
   # before the system switch rather than leave the system and T3 disagreeing.
-  [[ -z $previous_archive || -d $previous_archive ]] \
+  [[ -z $previous_archive || -e $previous_archive ]] \
     || die "the previous generation's image archive is gone: $previous_archive; refusing to switch"
   "$NIXOS_REBUILD_BIN" --rollback switch
   build=$(readlink -f "$CURRENT_SYSTEM" 2>/dev/null || true)
@@ -469,6 +467,10 @@ fi
 test_artifact
 if [[ $mode == no-deploy ]]; then
   echo 'deploy: deployment closure built and tested; deployment skipped'
+  exit 0
+fi
+if [[ $mode == test-artifact ]]; then
+  echo 'deploy: full artifact built and tested; deployment skipped'
   exit 0
 fi
 deploy_artifact

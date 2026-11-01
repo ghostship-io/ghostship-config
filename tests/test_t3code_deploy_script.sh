@@ -15,7 +15,9 @@ trap 'rm -rf "$tmp"' EXIT
 printf 'provider=fixture\n' > "$tmp/provider.env"
 mkdir -p "$tmp/tooling"
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
-mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/image" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+# The real artifact is a tarball file, never a directory.
+: > "$tmp/image"
 
 deployment_id=$(printf 'deploy-artifact' | sha256sum | cut -d ' ' -f 1)
 image_id=$(printf 'image-artifact' | sha256sum | cut -d ' ' -f 1)
@@ -40,7 +42,8 @@ EOF
 cat > "$build/etc/ghostship/t3code-deploy-identity.json" <<EOF
 {"host":"test-host","unit":"ghostship-t3code-deploy.service","state_dir":"$tmp/state",
  "deployment_id":"$deployment_id","agent_revision":"agent-rev","tooling_path":"$tmp/tooling",
- "image_archive":"$image","provider_secrets_file":"$tmp/provider.env",
+ "image_archive":"$image","image_metadata":"$tmp/closure/image",
+ "provider_secrets_file":"$tmp/provider.env",
  "tree":"test-rev","dirty":false,"agent_dirty":false}
 EOF
 
@@ -208,6 +211,18 @@ rm -f "$build/etc/ghostship/t3code-deploy-identity.json"
 cp "$tmp/store/identity.json" "$build/etc/ghostship/t3code-deploy-identity.json"
 echo 'Symlink proof: closure store identity read; outside-store and outside-closure identities refused.'
 
+# --- 1c. --test-artifact runs the real-artifact TEST without deploying ------
+reset_calls
+run --test-artifact --flake "$root" --system chill-penguin
+[[ $rc == 0 ]] || fail "--test-artifact exited $rc"
+grep -q 'full artifact built and tested; deployment skipped' "$tmp/out.log" \
+  || fail '--test-artifact did not report the full test'
+grep -q 'deployment wrappers built and shellchecked' "$tmp/out.log" \
+  || fail '--test-artifact did not test the wrappers'
+[[ ! -e $GHOSTSHIP_CURRENT_SYSTEM ]] || fail '--test-artifact switched the host'
+[[ ! -e $CALLS/systemctl ]] || fail '--test-artifact started a unit'
+echo 'Test-artifact proof: full artifact TEST ran, host untouched.'
+
 # --- 2. verify-only reports the deployed and running identity ----------------
 reset_calls
 run --verify-only --state "$tmp/state"
@@ -336,8 +351,9 @@ chmod +x "$previous/bin/switch-to-configuration"
 previous_id=$(printf 'previous-artifact' | sha256sum | cut -d ' ' -f 1)
 previous_image=$(printf 'previous-image' | sha256sum | cut -d ' ' -f 1)
 jq -n --arg d "$previous_id" --arg i "$tmp/image" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  --arg m "$tmp/closure/image" \
   '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
-    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,image_metadata:$m,
     provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
   > "$previous/etc/ghostship/t3code-deploy-identity.json"
 printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/image" \
@@ -362,8 +378,9 @@ mkdir -p "$previous/bin" "$previous/etc/ghostship" "$previous/etc/systemd/system
 printf '#!/usr/bin/env bash\nexit 0\n' > "$previous/bin/switch-to-configuration"
 chmod +x "$previous/bin/switch-to-configuration"
 jq -n --arg d "$previous_id" --arg i "$tmp/pruned-image.tar.gz" --arg s "$tmp/state" --arg p "$tmp/provider.env" \
+  --arg m "$tmp/closure/image" \
   '{host:"test-host",unit:"ghostship-t3code-deploy.service",state_dir:$s,deployment_id:$d,
-    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,
+    agent_revision:"agent-rev",tooling_path:"/tmp/tooling",image_archive:$i,image_metadata:$m,
     provider_secrets_file:$p,tree:"test-rev",dirty:false,agent_dirty:false}' \
   > "$previous/etc/ghostship/t3code-deploy-identity.json"
 printf 'Environment="DEPLOYMENT_ID=%s" "IMAGE_ARCHIVE=%s"\n' "$previous_id" "$tmp/pruned-image.tar.gz" \

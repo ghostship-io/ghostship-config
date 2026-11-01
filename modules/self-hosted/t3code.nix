@@ -323,6 +323,10 @@ in
     tooling_path = toString tooling;
     image_archive = toString t3codeImage;
     provider_secrets_file = t3codeSecrets;
+    # The archive is a layered docker tarball, so its baked app is not a
+    # readable store reference. The same evaluation's metadata view carries the
+    # baked app and the one served-identity selector without building the image.
+    image_metadata = toString runtimeImage.metadata;
     tree = self.dirtyRev or self.rev or "unknown";
     dirty = self ? dirtyRev;
     # A dirty pinned input is as unfit for a host as a dirty tree: the artifact
