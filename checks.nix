@@ -351,6 +351,10 @@ in
         cd source
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
+        bash tests/test_t3code_deploy_script.sh
+        # #804 shipped this proof without wiring it; the wiring guard refuses
+        # an unwired T3 deployment proof.
+        bash tests/test_t3code_deploy_status.sh
         bash tests/test_t3code_release_window.sh
         bash tests/test_t3code_unknown_ending.sh
         bash tests/test_t3code_worker_dev_env.sh

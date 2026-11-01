@@ -340,6 +340,18 @@ in
   ];
 
   environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
+  # deploy.sh reads the deployment identity from the built system, so the
+  # artifact that is tested is exactly the one that is deployed and the caller
+  # never passes a release id or revision.
+  environment.etc."ghostship/t3code-deploy-identity.json".text = builtins.toJSON {
+    host = config.networking.hostName;
+    unit = "ghostship-t3code-deploy.service";
+    state_dir = t3codeDeploymentState;
+    deployment_id = t3codeDeploymentId;
+    agent_revision = t3codeAgentRevision;
+    tooling_path = toString tooling;
+    image_archive = toString t3codeImage;
+  };
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
   environment.etc."ghostship/t3code-acceptance-route.json".source =
     ../../packages/t3code/acceptance-route.json;

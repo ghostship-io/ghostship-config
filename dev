@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Enter this repository's dev shell and run just in it.
+#
+# The shell environment is cached per flake.lock/flake.nix digest with
+# `nix print-dev-env`, so a warm checkout reuses it instead of rebuilding the
+# shell on every command. If the cache cannot be used, fall back to
+# `nix develop`, which always works and costs a shell build.
+#
+#   ./dev build | test | deploy | verify | integration
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+cd "$root"
+
+if [[ -n ${IN_NIX_SHELL:-} ]] && command -v just >/dev/null 2>&1; then
+  exec just "$@"
+fi
+
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/ghostship-config/devshell
+stamp=$(cat flake.lock flake.nix 2>/dev/null | sha256sum | cut -d ' ' -f 1)
+env_file=$cache/$stamp/env.sh
+
+if [[ ! -s $env_file ]]; then
+  mkdir -p "$cache/$stamp"
+  if ! nix print-dev-env "$root#default" > "$env_file.tmp.$$" 2>/dev/null; then
+    rm -f "$env_file.tmp.$$"
+    exec nix develop "$root#default" -c just "$@"
+  fi
+  mv -f "$env_file.tmp.$$" "$env_file"
+fi
+
+# shellcheck disable=SC1090
+if ! source "$env_file" 2>/dev/null; then
+  exec nix develop "$root#default" -c just "$@"
+fi
+exec just "$@"

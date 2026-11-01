@@ -117,7 +117,6 @@ trap cleanup_attempt_evidence EXIT
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
-RESTART_DWELL_SECONDS=${RESTART_DWELL_SECONDS:-180}
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
 ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
@@ -624,16 +623,22 @@ promote_accepted_alias
 echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
-restart_dwell_started=$(health_wait_now)
-restart_dwell_deadline=$((restart_dwell_started + RESTART_DWELL_SECONDS))
+
+# Readiness, observed instead of waited out. The health budget bounds the
+# observation; it is a ceiling, not a fixed dwell, so a host that is ready on
+# the first probe is accepted immediately.
+t3_ready() {
+  local status
+  status=$("$PODMAN_BIN" inspect t3code --format '{{.State.Health.Status}}' 2>/dev/null || true)
+  [[ "$status" == healthy ]] \
+    && "$PODMAN_BIN" exec t3code systemctl is-active --quiet t3code-server.service \
+    && "$PODMAN_BIN" exec t3code curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null 2>&1
+}
 
 deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
 healthy=false
 while (( $(health_wait_now) < deadline )); do
-  status=$("$PODMAN_BIN" inspect t3code --format '{{.State.Health.Status}}' 2>/dev/null || true)
-  if [[ "$status" == healthy ]] \
-    && "$PODMAN_BIN" exec t3code systemctl is-active --quiet t3code-server.service \
-    && "$PODMAN_BIN" exec t3code curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null 2>&1; then
+  if t3_ready; then
     healthy=true
     break
   fi
@@ -662,22 +667,32 @@ if [[ -z "$healthy_id" || -z "$healthy_started" ]]; then
   exit 1
 fi
 
-# One bounded dwell after this deploy's own restart, on the same clock as the
-# health wait. A different Id or StartedAt means T3 restarted again; exit 1
-# (never 75, which systemd would retry and restart T3 again) and do not record
-# applied.
-while (( $(health_wait_now) < restart_dwell_deadline )); do
+# Read the identity immediately: a second restart is visible now, without a
+# fixed settle window. A different Id or StartedAt means T3 restarted again;
+# exit 1 (never 75, which systemd would retry and restart T3 again) and do not
+# record applied. The bounded probe below only confirms that the identity and
+# readiness hold together; it never waits out a constant.
+post=""
+probe_deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
+while (( $(health_wait_now) < probe_deadline )); do
+  post=$(container_identity)
+  post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
+  post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
+  if [[ -z "$post_id" || -z "$post_started" ]]; then
+    echo 'container identity unreadable at settle' >&2
+    exit 1
+  fi
+  if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
+    echo 'T3 restarted again during the readiness probe (container identity changed)' >&2
+    exit 1
+  fi
+  if t3_ready; then
+    break
+  fi
   health_wait_sleep 5
 done
-post=$(container_identity)
-post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
-post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
-if [[ -z "$post_id" || -z "$post_started" ]]; then
-  echo 'container identity unreadable at settle end' >&2
-  exit 1
-fi
-if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
-  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (container identity changed)" >&2
+if [[ -z "$post" ]] || ! t3_ready; then
+  echo 'T3 did not stay ready after the accepted image restart' >&2
   exit 1
 fi
 

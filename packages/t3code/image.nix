@@ -32,7 +32,10 @@ let
     sha256sum ${t3codeBakedSource} | cut -d' ' -f1 > $out/DIGEST
     chmod 0444 $out/VERSION $out/DIGEST
   '';
-  t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert ];
+  # `just` is provisioned with the runtime like the other worker tools so it is
+  # always on PATH: the release/deployment entry point needs no activation and
+  # no per-command install inside the container.
+  t3codePackages = with pkgs; [ nix systemd dbus pam sudo bashInteractive coreutils cacert just ];
   t3codePath = "${managedBin}:/home/t3code/.local/bin:${lib.makeBinPath t3codePackages}";
 
   t3codeImageContents = t3codePackages ++ [
