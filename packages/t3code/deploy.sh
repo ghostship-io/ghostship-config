@@ -224,7 +224,7 @@ test_baked_identity() {
   # The baked app is a store path the image archive references. Read the real
   # VERSION/DIGEST through the image's own selector, not a copy of its rules.
   local baked version digest root served
-  [[ -d $image_archive ]] || die "the built image archive is missing: $image_archive"
+  [[ -f $image_archive ]] || die "the built image archive is missing: $image_archive"
   baked=$("$NIX_STORE_BIN" -qR "$image_archive" | grep -E -- '-t3code-baked-app$' | head -n 1 || true)
   [[ -n $baked ]] || die 'the image archive does not reference the baked T3 app'
   version=$(tr -d '[:space:]' < "$baked/VERSION")

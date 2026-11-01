@@ -13,7 +13,9 @@ deploy="$root/packages/t3code/deploy.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/build/bin" "$tmp/build/etc/systemd/system" "$tmp/build/etc/ghostship"
-mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/image" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+mkdir -p "$tmp/store/layered-baked-t3code-baked-app" "$tmp/state" "$tmp/calls" "$tmp/systemd"
+# The real artifact is a tarball file, never a directory.
+: > "$tmp/image"
 
 deployment_id=$(printf 'deploy-artifact' | sha256sum | cut -d ' ' -f 1)
 image_id=$(printf 'image-artifact' | sha256sum | cut -d ' ' -f 1)
