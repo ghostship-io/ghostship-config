@@ -104,4 +104,35 @@ run_status "$tmp/unreadable"
 [[ $rc == 77 ]]
 chmod 600 "$tmp/unreadable/applied-inputs"
 
-echo 'Deploy-status fixture passed: coherent digest and legacy tuples pass; mismatch and a failed mechanical receipt fail; missing, malformed and unreadable are UNKNOWN.'
+# 9. The real pre-schema host shape, sanitized: no schema or verified, the live
+# tuple as arrays, and a digest in the old applied-inputs line.
+legacy_state="$tmp/applied-legacy"
+mkdir -p "$legacy_state/receipts"
+printf '%s\n' "$id" > "$legacy_state/desired"
+printf '%s\n' "$id" > "$legacy_state/applied"
+printf 'agent=agent-rev secret_sha256=%s tooling=%s\n' "$digest" "$tooling" > "$legacy_state/applied-inputs"
+printf 'agent=agent-rev secret_sha256=%s tooling=%s\n' "$digest" "$tooling" > "$legacy_state/desired-inputs"
+"$JQ_BIN" -n --arg d "$id" --arg i "$image" --arg p "$tooling" --arg s "$digest" '
+  {deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",
+   agent_revision:"agent-rev",agent_path:$p,provider_secret_sha256:$s,
+   live_before:["live","2026-01-01T00:00:00Z",1,2],
+   live_after:["live","2026-01-01T00:00:00Z",1,2],
+   checks:{agent_cli:true,app_ready:true,desktop_cli:true,fixture_turn:true,skills:true},
+   claims:{candidate_fixture_turn:true,production_turn:"post"},
+   candidate_toolchain:{codex:"x",opencode:"y",t3:"z"}}' > "$legacy_state/receipts/$id.json"
+"$JQ_BIN" -n --arg d "$id" --arg p "$tooling" --arg s "$digest" \
+  '{deployment_id:$d,agent_revision:"agent-rev",agent_path:$p,provider_secret_sha256:$s}' \
+  > "$legacy_state/deployed-inputs.json"
+run_status "$legacy_state"
+[[ $rc == 0 ]]
+"$JQ_BIN" -e --arg i "$image" --arg s "$digest" \
+  '.state == "coherent" and .image == $i and .secret_evidence == "digest" and .secret_sha256 == $s' <<<"$out" >/dev/null
+
+# 9b. The same legacy receipt with a different applied tooling is refused.
+cp -R "$legacy_state" "$tmp/applied-legacy-mismatch"
+printf 'agent=agent-rev secret_sha256=%s tooling=/nix/store/other-tooling\n' "$digest" \
+  > "$tmp/applied-legacy-mismatch/applied-inputs"
+run_status "$tmp/applied-legacy-mismatch"
+[[ $rc == 1 ]]
+
+echo 'Deploy-status fixture passed: coherent digest, legacy and applied pre-schema tuples pass; mismatch and a failed mechanical receipt fail; missing, malformed and unreadable are UNKNOWN.'

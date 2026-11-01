@@ -19,6 +19,16 @@ receipt_checks_ok() {
       ( (.verified == true)
         and (.provider_secret_sha256 | type == "string" and length == 64) )
       or
+      # A receipt written before the mechanical schema has neither schema nor
+      # verified, but carries the digest, image id and exact live before/after
+      # tuple. deploy-status still requires its deployment id, image, agent and
+      # tooling to equal the applied tuple, so this only bridges the upgrade.
+      # The next real deploy writes a mechanical receipt and retires the clause.
+      ( (.schema == null and .verified == null)
+        and (.provider_secret_sha256 | type == "string" and length == 64)
+        and (.image_id | type == "string" and length > 0)
+        and (.live_before != null and .live_before == .live_after) )
+      or
       ( (.provider_secret_sha256 == null)
         and (.provider_secret_inode | type == "string" and length > 0) )
     )

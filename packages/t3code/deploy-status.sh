@@ -82,7 +82,13 @@ case $candidate in t3code-candidate-*) ;; *) mismatch 'receipt candidate name is
 # after identities; what matters is that the recorded post-restart image is the
 # receipted one.
 [ -n "$live_after" ] || mismatch 'receipt live identity is missing'
-recorded_image=$(printf '%s\n' "$live_after" | "$JQ_BIN" -r '.image // empty' 2>/dev/null || true)
+receipt_schema=$("$JQ_BIN" -r '.schema // empty' "$receipt")
+recorded_image=$(printf '%s\n' "$live_after" | "$JQ_BIN" -r 'if type == "object" then .image // empty else empty end' 2>/dev/null || true)
+if [ -z "$recorded_image" ] && [ -z "$receipt_schema" ]; then
+  # Pre-schema receipts recorded the live tuple as an array and kept the image
+  # separately in image_id; that field is still the receipted identity.
+  recorded_image=$receipt_image
+fi
 [ "${recorded_image#sha256:}" = "${receipt_image#sha256:}" ] \
   || mismatch 'receipt live identity is not the receipted image'
 
