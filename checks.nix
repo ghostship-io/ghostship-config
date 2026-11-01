@@ -215,6 +215,115 @@ in
     touch "$out"
   '';
 
+  # Issue #1747: a green check must build the deployment wrappers the host
+  # installs. Their definitions are module-local, so each one below mirrors its
+  # modules/self-hosted/t3code.nix definition with the check's own pkgs: same
+  # source files, prepended constants, runtimeInputs and excluded checks. That
+  # keeps their generated text in shellcheck without a host-platform build.
+  # Shared definitions are the follow-up once #730 lands.
+  deployment-wrappers =
+    let
+      t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
+      t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
+      t3codeWindowConfigFile = pkgs.writeText "t3code-release-window-dir" "${t3codeDeploymentState}/release-window\n";
+      t3codeWindowHolder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
+      # t3code.nix:73
+      t3codeImmediateDeploy = pkgs.writeShellApplication {
+        name = "ghostship-t3code-deploy-image";
+        # The single-quoted jq programs intentionally avoid shell interpolation.
+        excludeShellChecks = [ "SC2016" ];
+        runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
+        text = ''
+          export WINDOW_CONFIG=${pkgs.lib.escapeShellArg t3codeWindowConfig}
+          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
+          ${builtins.readFile ./packages/t3code/receipt-checks.sh}
+          ${builtins.readFile ./packages/t3code/deploy-image.sh}
+        '';
+      };
+      # t3code.nix:85
+      t3codeInvalidateFailure = pkgs.writeShellApplication {
+        name = "ghostship-t3code-invalidate-failure";
+        text = ''
+          export STATE_DIR=${pkgs.lib.escapeShellArg t3codeDeploymentState}
+          export JQ_BIN=${pkgs.lib.getExe pkgs.jq}
+          exec ${pkgs.lib.getExe t3codeImmediateDeploy} --invalidate-failure "$@"
+        '';
+      };
+      # t3code.nix:93
+      t3codeActivateDeployment = pkgs.writeShellApplication {
+        name = "ghostship-t3code-activate-deployment";
+        runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
+        text = ''
+          export WINDOW_CONFIG=${pkgs.lib.escapeShellArg t3codeWindowConfig}
+          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
+          ${builtins.readFile ./packages/t3code/activate-deployment.sh}
+        '';
+      };
+      # t3code.nix:102
+      t3codeReleaseWindow = pkgs.writeShellApplication {
+        name = "ghostship-t3code-release-window";
+        runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
+        text = ''
+          export WINDOW_CONFIG=${t3codeWindowConfigFile}
+          export WINDOW_BOOTSTRAP=${./packages/t3code/window-bootstrap.sh}
+          export WINDOW_INTENT_HELPER=${./packages/t3code/window-intent.sh}
+          export STATE_DIR=${pkgs.lib.escapeShellArg t3codeDeploymentState}
+          export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
+          export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+          export WINDOW_HOLDER_BIN=${pkgs.lib.getExe t3codeWindowHolder}
+          export PODMAN_BIN=${pkgs.podman}/bin/podman
+          export JQ_BIN=${pkgs.jq}/bin/jq
+          export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
+          # The window holder runs under the systemd manager, which does not inherit
+          # this script's PATH, so every command it uses must be an absolute path.
+          export COREUTILS_BIN=${pkgs.coreutils}/bin
+          export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
+          export BASH_BIN=${pkgs.bash}/bin/bash
+          ${builtins.readFile ./packages/t3code/receipt-checks.sh}
+          ${builtins.readFile ./packages/t3code/release-window.sh}
+        '';
+      };
+      # t3code.nix:130
+      t3codeReceiptSelfCheck = pkgs.writeShellApplication {
+        name = "t3code-receipt-self-check";
+        excludeShellChecks = [ "SC2016" ];
+        runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
+        text = ''
+          ${builtins.readFile ./packages/t3code/receipt-checks.sh}
+          ${builtins.readFile ./packages/t3code/receipt-self-check.sh}
+        '';
+      };
+      # t3code.nix:147
+      t3codeNixStoreGc = pkgs.writeShellApplication {
+        name = "t3code-nix-store-gc";
+        runtimeInputs = [
+          pkgs.coreutils
+          pkgs.util-linux
+          pkgs.podman
+        ];
+        text = ''
+          if test -z "$(podman ps --quiet --filter 'name=^t3code$')"; then
+            echo "t3code container is not running; skipping isolated Nix store GC" >&2
+            exit 0
+          fi
+          flock -w 300 /run/ghostship-maintenance.lock \
+            podman exec t3code nix store gc
+        '';
+      };
+      wrappers = [
+        t3codeImmediateDeploy
+        t3codeInvalidateFailure
+        t3codeActivateDeployment
+        t3codeReleaseWindow
+        t3codeReceiptSelfCheck
+        t3codeNixStoreGc
+      ];
+    in
+    pkgs.runCommand "ghostship-t3code-deployment-wrappers-check" { } ''
+      ${pkgs.lib.concatMapStringsSep "\n  " (p: "test -x ${p}/bin/${p.name}") wrappers}
+      touch "$out"
+    '';
+
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"
