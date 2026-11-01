@@ -136,11 +136,10 @@ let
     "opencode/ollama-cloud/deepseek-v4.1-flash"
     "opencode/ollama-cloud/deepseek-v4.1-flash:1017"
     "opencode/opencode-go/deepseek-v4.1-flash"
+    "opencode-free/opencode/deepseek-v4.1-flash-free"
     "opencode/command-code/deepseek/deepseek-v4.1-flash"
     "opencode/literouter/deepseek-v4.1-flash-1017:full-context"
-    "antigravity/gemini-3.8-flash-high"
-    "antigravity/gemini-3.8-flash-medium"
-    "antigravity/gemini-3.8-flash-low"
+    "antigravity/gemini-3.8-flash"
     "claudeAgent/claude-sonnet-5-5"
     "codex/gpt-6.1-terra"
   ];
@@ -166,6 +165,56 @@ in
     (antigravityPkgs.callPackage "${agentSource}/packages/t3code/antigravity-acp.nix" { })
     .tests.native-loader;
   podman-ipam = import ./packages/podman-network/regression.nix { pkgs = securityPkgs; };
+  # The release-window holder must be proved as the *generated* wrapper, not as
+  # the repository text: `$$` once reached the built script as `$`, which two
+  # live releases discovered and no source-level test could.
+  window-holder = let
+    holder = import ./packages/t3code/window-holder.nix { inherit pkgs; };
+    # The generated wrappers the host actually installs. Building them forces
+    # their own text through shellcheck, so a quoting failure is a config check
+    # failure instead of a release-build surprise.
+    hostWrappers = builtins.filter
+      (p: builtins.elem (p.name or "") [
+        "ghostship-t3code-release-window"
+        "ghostship-t3code-invalidate-failure"
+      ])
+      t3codeConfig.environment.systemPackages;
+    # Building the generated release-window wrapper also proves it parses and
+    # passes its own checks; the source text alone never did.
+    window = pkgs.writeShellApplication {
+      name = "ghostship-t3code-release-window";
+      runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
+      text = builtins.readFile ./packages/t3code/release-window.sh;
+    };
+  in
+  pkgs.runCommand "ghostship-t3code-window-holder-check" { } ''
+    dir="$TMPDIR/window"; mkdir -p "$dir"
+    : > "$TMPDIR/lock1"; : > "$TMPDIR/lock2"
+    # Run the built binary in the environment the systemd manager provides.
+    /usr/bin/env -i PATH=/nonexistent       ${holder}/bin/ghostship-t3code-window-holder "$TMPDIR/lock1" "$TMPDIR/lock2" "$dir" &
+    holder=$!
+    for _ in $(seq 1 200); do [ -f "$dir/holder.ready" ] && break; sleep 0.05; done
+    [ -f "$dir/holder.ready" ] || { echo 'holder never wrote holder.ready' >&2; kill $holder; exit 1; }
+    pid=$(cat "$dir/holder.ready")
+    case "$pid" in
+      '''|*[!0-9]*) echo "holder.ready is not a numeric PID: '$pid'" >&2; kill $holder; exit 1 ;;
+    esac
+    kill "$holder" 2>/dev/null || true
+    # systemd expands `$$` in an ExecStart, so a PID written there arrives as
+    # "$". Forbid it on the systemd-run command line specifically; `$$` is still
+    # legitimate elsewhere in the script.
+    if ${pkgs.gnugrep}/bin/grep -A1 'SYSTEMD_RUN_BIN" --quiet' \
+        ${window}/bin/ghostship-t3code-release-window | ${pkgs.gnugrep}/bin/grep -q '\$\$'; then
+      echo 'systemd-run command line contains $$, which systemd expands to $' >&2
+      exit 1
+    fi
+    test -x ${window}/bin/ghostship-t3code-release-window
+    # The host packages, not a copy: the release builds exactly these.
+    [ ${toString (builtins.length hostWrappers)} -eq 2 ] || { echo 'host wrapper packages missing from systemPackages' >&2; exit 1; }
+    ${pkgs.lib.concatMapStringsSep "\n    " (p: "test -x ${p}/bin/${p.name}") hostWrappers}
+    touch "$out"
+  '';
+
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"
@@ -193,8 +242,17 @@ in
         cd source
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
+        bash tests/test_t3code_release_window.sh
+        bash tests/test_t3code_unknown_ending.sh
+        bash tests/test_t3code_worker_dev_env.sh
+        bash tests/test_t3code_skills_publish_gate.sh
+        bash tests/test_t3code_window_lock.sh
+        bash tests/test_t3code_served_identity.sh
+        bash tests/test_t3code_window_lock_slow.sh
+        bash tests/test_t3code_checks_wiring.sh
         bash tests/test_t3code_activate_deployment.sh
         bash tests/test_t3code_receipt_self_check.sh
+        bash tests/test_t3code_receipt_checks.sh
         bash tests/test_t3code_tooling_pointer.sh
         python -m unittest discover -s tests -v
         node --test ${agentSource}/packages/t3code/activity-probe/probe-v1-sqlite.test.cjs
@@ -261,6 +319,10 @@ in
     assert
       builtins.sort builtins.lessThan actualApprovedRoutes
       == builtins.sort builtins.lessThan approvedRoutes;
+    assert builtins.any
+      (r: r.provider_instance == "antigravity" && r.model == "gemini-3.8-flash"
+        && r.effort_source == "provider_default" && r.efforts == [ "provider_default" ]
+        && r.buckets == [ "low" "medium" "high" ]) routePolicy.routes;
     assert pkgs.lib.assertMsg
       (builtins.any (r: r.provider_instance == "opencode"
         && r.model == "ollama-cloud/deepseek-v4-pro") routePolicy.routes)
@@ -327,8 +389,8 @@ in
     assert goCoordinatorSecrets.GHOSTSHIP_T3_PLAINTEXT_HOSTS.key == "GHOSTSHIP_T3_PLAINTEXT_HOSTS";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.unit == "hooks";
     assert goCoordinatorSecrets.GHOSTSHIP_COORDINATOR_GITHUB_WEBHOOK_SECRET.key == "GITHUB_WEBHOOK_SECRET";
-    assert goCoordinator.environment.GOMEMLIMIT == "200MiB";
-    assert builtins.elem "--memory=256m" goCoordinator.extraOptions;
+    assert goCoordinator.environment.GOMEMLIMIT == "384MiB";
+    assert builtins.elem "--memory=512m" goCoordinator.extraOptions;
     assert goCoordinator.environment.T3_SERVER_URL == "http://t3code:3773";
     assert goCoordinator.environment.GHOSTSHIP_COORDINATOR_GITHUB_REPOSITORIES
       == "ghostship-io/ghostship-agent";

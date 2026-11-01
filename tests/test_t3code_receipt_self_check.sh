@@ -25,7 +25,7 @@ bash "$root/packages/t3code/receipt-self-check.sh"
 
 jq -n '{image_id:"unreceipted",deployment_id:"deployment-accepted",
   candidate_name:"t3code-candidate-accepted",live_before:{id:"candidate"},live_after:{id:"candidate"},
-  checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_transport:true}}' \
+  checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
   > "$tmp/state/receipts/accepted.json"
 bash "$root/packages/t3code/receipt-self-check.sh"
 [[ $(wc -l < "$tmp/incidents") == 1 ]]

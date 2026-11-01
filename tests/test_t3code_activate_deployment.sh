@@ -4,6 +4,16 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+printf '%s\n' "$tmp/window" > "$tmp/window-config"
+# First installation: the activation bootstrap creates missing paths before
+# the deployment hook. Re-running it must preserve an existing lock inode.
+export WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
+export WINDOW_CONFIG="$tmp/window-config"
+bash "$root/packages/t3code/window-bootstrap.sh"
+inode=$(stat -c %i "$tmp/window/window.lock")
+bash "$root/packages/t3code/window-bootstrap.sh"
+[[ $(stat -c %i "$tmp/window/window.lock") == "$inode" ]]
+export WINDOW_CONFIG="$tmp/window-config" WINDOW_INTENT_HELPER="$root/packages/t3code/window-intent.sh"
 mkdir -p "$tmp/bin" "$tmp/state"
 printf '%s\n' old-deployment > "$tmp/state/desired"
 printf '%s\n' old-inputs > "$tmp/state/desired-inputs"
@@ -24,7 +34,8 @@ export AGENT_REVISION=new-agent TOOLING_PATH=/nix/store/expected-tooling \
 # leave the current target intact until the deploy completes.
 exec 8>"$STATE_DIR/deploy.lock"
 flock -x 8
-bash "$root/packages/t3code/activate-deployment.sh" &
+cp "$root/packages/t3code/activate-deployment.sh" "$tmp/fixture-activation-writer"
+bash "$tmp/fixture-activation-writer" &
 activation_pid=$!
 for _ in $(seq 1 40); do
   [[ $(cat "$STATE_DIR/desired") == old-deployment ]] || break

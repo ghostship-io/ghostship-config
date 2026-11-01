@@ -24,6 +24,7 @@ SOURCES = {
     'ghostship-native-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-agent-policy': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-engineering-skills': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
+    'ghostship-route-catalog': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
 }
 
 
@@ -88,13 +89,33 @@ def main():
                 raise SystemExit('Pinned private source hash mismatch: ' + name)
             # CI-only local Git locks avoid private GitHub archive/API credentials.
             substituted = {
-                'type': 'git', 'url': checkout.as_uri(), 'rev': locked['rev'],
+                'type': 'git', 'url': 'git+' + checkout.as_uri(), 'rev': locked['rev'],
                 'narHash': locked['narHash'], 'lastModified': locked['lastModified']}
             if spec['dir']:
                 substituted['dir'] = spec['dir']
             nodes[name]['locked'] = substituted
             print('Verified pinned private source: ' + name, flush=True)
         lock_path.write_text(json.dumps(lock, indent=2) + '\n')
+        # The check step must consume these checkouts explicitly: a Nix
+        # evaluation of the committed lock would fetch the private repository
+        # anonymously. Emit the overrides and prove every private input has one,
+        # so a new pin without an import fails loudly instead of 404ing later.
+        overrides = Path(os.environ['RUNNER_TEMP'])/'ghostship-private-overrides.txt'
+        entries = []
+        for name in SOURCES:
+            locked = nodes[name]['locked']
+            url = locked.get('url', '')
+            if not url.startswith('git+file://'):
+                raise SystemExit('Private input was not substituted: ' + name)
+            entries.append(name + ' ' + url)
+        private = {spec['repo'] for spec in SOURCES.values()}
+        for name, node in nodes.items():
+            locked = node.get('locked') or {}
+            if (locked.get('type') == 'github' and locked.get('owner') == 'ghostship-io'
+                    and locked.get('repo') in private and name not in SOURCES):
+                raise SystemExit('Private input not imported: ' + name)
+        overrides.write_text('\n'.join(entries) + '\n')
+        print('Emitted ' + str(len(entries)) + ' private input override(s)', flush=True)
     finally:
         credentials.clear()
         for key in root.glob('*.key'):

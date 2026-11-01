@@ -5,6 +5,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 from pathlib import Path
 
 import socketio
@@ -93,6 +94,16 @@ def reconcile_ntfy_notification(call, notifications, password):
     return call("addNotification", (settings, notification_id))["id"]
 
 
+def get_monitor_list_with_diagnostics(call):
+    started = time.monotonic()
+    try:
+        call("getMonitorList")
+    except socketio.exceptions.TimeoutError:
+        print(f"Kuma getMonitorList acknowledgement timed out after {time.monotonic() - started:.3f}s", file=sys.stderr, flush=True)
+        raise
+    print(f"Kuma getMonitorList acknowledged after {time.monotonic() - started:.3f}s", file=sys.stderr, flush=True)
+
+
 def main():
     client = socketio.Client(request_timeout=15, reconnection=False)
     monitors = {}
@@ -144,7 +155,7 @@ def main():
                 {"username": username, "password": os.environ["KUMA_PASSWORD"]},
             )
         enforce_access_only_auth(call, os.environ["KUMA_PASSWORD"])
-        call("getMonitorList")
+        get_monitor_list_with_diagnostics(call)
         if not monitor_event.wait(15) or not notification_event.wait(15):
             raise RuntimeError("Kuma did not provide its configuration lists")
         notification_id = reconcile_ntfy_notification(

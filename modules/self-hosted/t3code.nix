@@ -9,7 +9,9 @@
 let
   t3codeHome = "/srv/apps/t3code/home";
   hardened = config.ghostship.t3code.hardening.enable;
+  t3codeWindowConfig = "/etc/ghostship/t3code-release-window-dir";
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
+  t3codeWindowConfigFile = pkgs.writeText "t3code-release-window-dir" "${t3codeDeploymentState}/release-window\n";
   t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -27,6 +29,8 @@ let
     cp ${../../packages/t3code/acceptance-launcher-key.py} "$out/acceptance-launcher-key.py"
     cp ${../../packages/t3code/hardening-probe.py} "$out/hardening-probe.py"
     cp ${../../packages/t3code/provider-turn-probe.py} "$out/provider-turn-probe.py"
+    cp ${../../packages/t3code/fixture-provider.py} "$out/fixture-provider.py"
+    cp ${../../packages/t3code/rehearsal-isolation.py} "$out/rehearsal-isolation.py"
     cp ${../../packages/t3code/runtime-caps.json} "$out/runtime-caps.json"
   '';
   t3codeSecretsFile = "/run/secrets/t3code.env";
@@ -71,7 +75,12 @@ let
     # The single-quoted jq programs intentionally avoid shell interpolation.
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.gnutar pkgs.gzip pkgs.inetutils pkgs.jq pkgs.podman pkgs.systemd pkgs.util-linux ];
-    text = builtins.readFile ../../packages/t3code/deploy-image.sh;
+    text = ''
+      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/deploy-image.sh}
+    '';
   };
   t3codeInvalidateFailure = pkgs.writeShellApplication {
     name = "ghostship-t3code-invalidate-failure";
@@ -84,13 +93,48 @@ let
   t3codeActivateDeployment = pkgs.writeShellApplication {
     name = "ghostship-t3code-activate-deployment";
     runtimeInputs = [ pkgs.coreutils pkgs.util-linux ];
-    text = builtins.readFile ../../packages/t3code/activate-deployment.sh;
+    text = ''
+      export WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig}
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      ${builtins.readFile ../../packages/t3code/activate-deployment.sh}
+    '';
   };
+  t3codeReleaseWindow = pkgs.writeShellApplication {
+    name = "ghostship-t3code-release-window";
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.podman pkgs.jq pkgs.su-exec ];
+    text = ''
+      export WINDOW_CONFIG=${t3codeWindowConfigFile}
+      export WINDOW_BOOTSTRAP=${../../packages/t3code/window-bootstrap.sh}
+      export WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh}
+      export STATE_DIR=${lib.escapeShellArg t3codeDeploymentState}
+      export SYSTEMCTL_BIN=${pkgs.systemd}/bin/systemctl
+      export SYSTEMD_RUN_BIN=${pkgs.systemd}/bin/systemd-run
+      export WINDOW_HOLDER_BIN=${lib.getExe t3codeWindowHolder}
+      export PODMAN_BIN=${pkgs.podman}/bin/podman
+      export JQ_BIN=${pkgs.jq}/bin/jq
+      export SUEXEC_BIN=${pkgs.su-exec}/bin/su-exec
+      # The window holder runs under the systemd manager, which does not inherit
+      # this script's PATH, so every command it uses must be an absolute path.
+      export COREUTILS_BIN=${pkgs.coreutils}/bin
+      export UTIL_LINUX_BIN=${pkgs.util-linux}/bin
+      export BASH_BIN=${pkgs.bash}/bin/bash
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/release-window.sh}
+    '';
+  };
+  # The window holder writes its own PID, so it must be its own program. Inlined
+  # into the release-window unit, systemd's ExecStart expansion turned `$$` into
+  # `$`, so holder.ready recorded "$" instead of a PID. One shared definition, so
+  # the check below builds the same artifact the module installs.
+  t3codeWindowHolder = import ../../packages/t3code/window-holder.nix { inherit pkgs; };
   t3codeReceiptSelfCheck = pkgs.writeShellApplication {
     name = "t3code-receipt-self-check";
     excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.podman pkgs.systemd ];
-    text = builtins.readFile ../../packages/t3code/receipt-self-check.sh;
+    text = ''
+      ${builtins.readFile ../../packages/t3code/receipt-checks.sh}
+      ${builtins.readFile ../../packages/t3code/receipt-self-check.sh}
+    '';
   };
 
   # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
@@ -121,7 +165,7 @@ in
 {
   imports = [ ./t3code-recovery.nix ];
 
-  environment.systemPackages = [ t3codeInvalidateFailure ];
+  environment.systemPackages = [ t3codeInvalidateFailure t3codeReleaseWindow ];
 
   # Permit memory-policy deployment without replacing the active T3 container.
   assertions = map (name: {
@@ -278,12 +322,16 @@ in
     };
   };
 
+  environment.etc."ghostship/t3code-release-window-dir".text = "${t3codeDeploymentState}/release-window\n";
+
   ghostship.t3codePodman.enable = true;
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
     "d /var/lib/t3code-restarts 0700 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
+    "d ${t3codeDeploymentState}/release-window 0700 root root -"
+    "f ${t3codeDeploymentState}/release-window/window.lock 0600 root root -"
     "d ${t3codeTmp} 1777 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
@@ -293,6 +341,8 @@ in
 
   environment.etc."ghostship/route-policy.json".source = routeCatalogFile;
   environment.etc."ghostship/approved-free-workers.json".source = approvedFreeWorkers;
+  environment.etc."ghostship/t3code-acceptance-route.json".source =
+    ../../packages/t3code/acceptance-route.json;
 
   systemd.services.podman-t3code = {
     restartIfChanged = false;
@@ -389,7 +439,11 @@ in
   };
 
   system.activationScripts.t3code-deployment = {
+    deps = [ "etc" ];
     text = ''
+      WINDOW_CONFIG=${lib.escapeShellArg t3codeWindowConfig} \
+        WINDOW_INTENT_HELPER=${../../packages/t3code/window-intent.sh} \
+        ${pkgs.bash}/bin/bash ${../../packages/t3code/window-bootstrap.sh} || exit 1
       STATE_DIR=${lib.escapeShellArg t3codeDeploymentState} \
         DEPLOYMENT_ID=${lib.escapeShellArg t3codeDeploymentId} \
         AGENT_REVISION=${lib.escapeShellArg t3codeAgentRevision} \
