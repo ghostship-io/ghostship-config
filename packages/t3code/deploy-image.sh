@@ -93,6 +93,7 @@ fi
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
+RESTART_DWELL_SECONDS=${RESTART_DWELL_SECONDS:-180}
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
 ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
@@ -572,6 +573,8 @@ promote_accepted_alias
 echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
+restart_dwell_started=$(health_wait_now)
+restart_dwell_deadline=$((restart_dwell_started + RESTART_DWELL_SECONDS))
 
 deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
 healthy=false
@@ -597,7 +600,36 @@ if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret" != "$secret_sha256" ]];
   exit 1
 fi
 
+# Baseline once the health loop reports healthy: systemd-driven restarts create
+# a new container, so podman's RestartCount stays 0 and misses the 329 shape.
+# Id + StartedAt is the identity the ledger already uses.
+healthy_identity=$(container_identity)
+healthy_id=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.id // empty')
+healthy_started=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$healthy_id" || -z "$healthy_started" ]]; then
+  echo 'container identity unreadable at settle start' >&2
+  exit 1
+fi
+
+# One bounded dwell after this deploy's own restart, on the same clock as the
+# health wait. A different Id or StartedAt means T3 restarted again; exit 1
+# (never 75, which systemd would retry and restart T3 again) and do not record
+# applied.
+while (( $(health_wait_now) < restart_dwell_deadline )); do
+  health_wait_sleep 5
+done
 post=$(container_identity)
+post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
+post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$post_id" || -z "$post_started" ]]; then
+  echo 'container identity unreadable at settle end' >&2
+  exit 1
+fi
+if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
+  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (container identity changed)" >&2
+  exit 1
+fi
+
 post_image=$(printf '%s' "$post" | "$JQ_BIN" -r '.image // empty')
 if [[ "${post_image#sha256:}" != "$image_id" ]]; then
   echo "T3 container did not start the receipted image sha256:$image_id" >&2
