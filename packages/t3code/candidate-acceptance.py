@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
+import secrets
 import shlex
 import shutil
 import stat
@@ -25,7 +26,7 @@ _probe_spec = importlib.util.spec_from_file_location(
 _probe = importlib.util.module_from_spec(_probe_spec)
 _probe_spec.loader.exec_module(_probe)
 
-CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills", "desktop_cli")
+CHECKS = ("app_ready", "fixture_turn", "agent_cli", "skills", "desktop_cli")
 HOME_DIRS = (".agents/skills",)
 T3_FREE_PROVIDER = "opencode-free"
 # Acceptance names one exact owner-approved worker primary. Dispatch's picker,
@@ -999,20 +1000,21 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
                     route_policy_file="/etc/ghostship/route-policy.json", routing_snapshot=None,
                     evidence=None, acceptance_route=None,
                     acceptance_route_file=None):
-    if acceptance_route is None:
-        if acceptance_route_file is None:
-            # Never fall back to the superseded nominated primary route.
-            raise PreconditionError("the acceptance route is required")
-        acceptance_route = read_acceptance_route(acceptance_route_file)
+    # Candidate acceptance is credential-free: it proves a fixture turn and
+    # never depends on a provider route or an account.
+    del acceptance_route, acceptance_route_file
     # The isolated manager starts one leaf unit to avoid target-wide timers.
     # Production exposes the app through this separate proxy unit on :3773.
     # Start that same serving path explicitly in the disposable candidate.
     proxy_deadline = time.monotonic() + min(timeout_s, 30)
     while True:
-        proxy_start = command(
-            engine, "exec", name, "systemctl", "start", "t3code-access-proxy.service",
-            timeout=15,
-        )
+        try:
+            proxy_start = command(
+                engine, "exec", name, "systemctl", "start", "--no-block",
+                "t3code-access-proxy.service", timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("candidate access proxy dispatch timed out")
         if proxy_start.returncode == 0:
             break
         state = command(engine, "inspect", name, "--format", "{{json .State}}")
@@ -1026,6 +1028,32 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
             raise RuntimeError(f"candidate container exited before proxy startup{detail}")
         if time.monotonic() >= proxy_deadline:
             raise RuntimeError("candidate access proxy failed to start")
+        time.sleep(2)
+    # --no-block returns on dispatch, not on readiness. The proxy unit is
+    # ordered after the booting server, so prove its own active state inside a
+    # separate bound and fail the acceptance when it never comes up.
+    proxy_ready_deadline = time.monotonic() + min(timeout_s, 120)
+    while True:
+        try:
+            proxy_active = command(
+                engine, "exec", name, "systemctl", "is-active", "--quiet",
+                "t3code-access-proxy.service", timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("candidate access proxy readiness timed out")
+        if proxy_active.returncode == 0:
+            break
+        state = command(engine, "inspect", name, "--format", "{{json .State}}")
+        try:
+            state_data = json.loads(state.stdout)
+        except (TypeError, ValueError):
+            state_data = {}
+        if state_data.get("Running") is not True:
+            exit_code = state_data.get("ExitCode")
+            detail = f" (exit code {exit_code})" if isinstance(exit_code, int) else ""
+            raise RuntimeError(f"candidate container exited before proxy readiness{detail}")
+        if time.monotonic() >= proxy_ready_deadline:
+            raise RuntimeError("candidate access proxy did not become ready")
         time.sleep(2)
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
@@ -1054,14 +1082,8 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     ).returncode == 0
 
     register_candidate_workspace(engine, name)
-    provider_route = check_provider_turn(
-        engine, name, provider_env_file, timeout_s=timeout_s,
-        tooling_path=tooling_path,
-        policy=read_route_policy(route_policy_file), snapshot=routing_snapshot, evidence=evidence,
-        acceptance_route=acceptance_route,
-    )
-    checks["provider_turn"] = bool(provider_route)
-    checks["provider_turn_route"] = provider_route
+    checks["fixture_turn"] = check_fixture_turn(
+        engine, name, timeout_s=timeout_s, tooling_path=tooling_path, evidence=evidence)
     checks["agent_cli"] = candidate_agent_command(
         engine, name, "agent", "--help"
     ).returncode == 0
@@ -1245,6 +1267,119 @@ def record_candidate_turn(evidence, payload):
         "settled": payload.get("settled") is True,
         "source": "candidate provider-turn-probe output",
     }
+
+
+FIXTURE_PORT = 38917
+FIXTURE_MODEL = "opencode/deepseek-v4.1-flash-free"
+FIXTURE_NATIVE_MODEL = "deepseek-v4.1-flash-free"
+FIXTURE_ROOT = "/tmp/gs-acceptance-fixture"
+
+
+def check_fixture_turn(engine, name, timeout_s=180, tooling_path=None, evidence=None):
+    """One deterministic turn against a test-only endpoint; no account.
+
+    The fixture is copied into the disposable candidate at acceptance time and
+    bound to loopback. Every opencode path is redirected into a private tmpdir
+    (never the default config, data or state), so no shared configuration or
+    account can be read or written. The claim passes only when the fixture
+    itself recorded the turn with the placeholder credential; a reply from any
+    other endpoint, or any non-placeholder credential, refuses.
+    """
+    source = Path(__file__).with_name("fixture-provider.py")
+    if not source.is_file():
+        raise PreconditionError("the fixture provider is unavailable")
+    nonce = secrets.token_hex(16)
+    reply = "PROBE_PASS_" + hashlib.sha256(nonce.encode()).hexdigest()[:12]
+    diagnostics = {"endpoint": "loopback test-only fixture", "model": FIXTURE_MODEL,
+                   "credentials": "none", "xdg": FIXTURE_ROOT,
+                   "nonce": nonce, "required_reply": reply}
+
+    def record(outcome, **extra):
+        diagnostics.update(extra)
+        diagnostics["outcome"] = outcome
+        if evidence is not None:
+            evidence["candidate_fixture_turn"] = diagnostics
+
+    if command(engine, "cp", str(source), f"{name}:/tmp/gs-fixture-provider.py",
+               timeout=30).returncode != 0:
+        record("failed", stage="copy")
+        return False
+    setup = ("rm -rf %s && mkdir -p %s/config/opencode %s/data %s/state %s/cache "
+             "&& cat > %s/config/opencode/opencode.json <<'EOF'\n"
+             '{"$schema":"https://opencode.ai/config.json","provider":{"opencode":'
+             '{"options":{"baseURL":"http://127.0.0.1:%d/v1","apiKey":"fixture"}}}}'
+             "\nEOF\n") % ((FIXTURE_ROOT,) * 6 + (FIXTURE_PORT,))
+    if command(engine, "exec", "--user=3000:3000", "-e", "HOME=" + FIXTURE_ROOT, name,
+               "sh", "-c", setup, timeout=30).returncode != 0:
+        record("failed", stage="setup")
+        return False
+    if command(engine, "exec", "-d", "--user=3000:3000", "-e", "HOME=" + FIXTURE_ROOT, name,
+               "python3", "/tmp/gs-fixture-provider.py", "--port", str(FIXTURE_PORT),
+               "--reply", reply, "--nonce", nonce,
+               "--pid-file", "/tmp/gs-fixture-provider.pid", timeout=30).returncode != 0:
+        record("failed", stage="server")
+        return False
+    try:
+        deadline = time.monotonic() + min(timeout_s, 60)
+        healthy = False
+        while time.monotonic() < deadline:
+            if command(engine, "exec", name, "curl", "-fsS", "--max-time", "3",
+                       "http://127.0.0.1:%d/health" % FIXTURE_PORT).returncode == 0:
+                healthy = True
+                break
+            time.sleep(1)
+        if not healthy:
+            record("failed", stage="health", health=False)
+            return False
+        turn = command(
+            engine, "exec", "--user=3000:3000",
+            "-e", "HOME=" + FIXTURE_ROOT,
+            "-e", "XDG_CONFIG_HOME=" + FIXTURE_ROOT + "/config",
+            "-e", "XDG_DATA_HOME=" + FIXTURE_ROOT + "/data",
+            "-e", "XDG_STATE_HOME=" + FIXTURE_ROOT + "/state",
+            "-e", "XDG_CACHE_HOME=" + FIXTURE_ROOT + "/cache",
+            name,
+            "/home/t3code/.local/share/t3code-tools/opencode/current/bin/opencode",
+            "run", "--standalone", "-m", FIXTURE_MODEL,
+            f"Reply with exactly {reply} (nonce {nonce})",
+            timeout=min(timeout_s, 120))
+        output = (turn.stdout or "") + (turn.stderr or "")
+        recorded = command(engine, "exec", name, "curl", "-fsS", "--max-time", "5",
+                           "http://127.0.0.1:%d/requests" % FIXTURE_PORT, timeout=15)
+        requests = []
+        if recorded.returncode == 0:
+            try:
+                requests = json.loads(recorded.stdout).get("requests") or []
+            except (ValueError, AttributeError):
+                requests = []
+        placeholder = [item for item in requests if isinstance(item, dict)
+                       and item.get("auth") == "placeholder" and not item.get("refused")]
+        non_placeholder = [item for item in requests if isinstance(item, dict)
+                           and item.get("auth") in ("other",)
+                           and not item.get("refused")]
+        fixture_received = any(
+            str(item.get("model") or "") == FIXTURE_NATIVE_MODEL
+            and item.get("nonce_seen") is True
+            for item in placeholder
+        )
+        passed = (turn.returncode == 0 and reply in output
+                  and fixture_received and not non_placeholder)
+        record("passed" if passed else "failed",
+               health=True, fixture_requests=len(requests),
+               placeholder_requests=len(placeholder),
+               non_placeholder_requests=len(non_placeholder),
+               fixture_received_turn=fixture_received, turn_exit=turn.returncode,
+               models=sorted({str(item.get("model")) for item in requests
+                              if isinstance(item, dict)})[:4],
+               prompts=[str(item.get("prompt"))[:120] for item in requests
+                        if isinstance(item, dict)][:4],
+               stdout=(turn.stdout or "")[-400:], stderr=(turn.stderr or "")[-400:])
+        return passed
+    finally:
+        command(engine, "exec", "--user=3000:3000", "-e", "HOME=" + FIXTURE_ROOT, name,
+                "sh", "-c",
+                "kill $(cat /tmp/gs-fixture-provider.pid) 2>/dev/null || true; "
+                "rm -rf " + FIXTURE_ROOT, timeout=30)
 
 
 def check_provider_turn(engine, name, provider_env_file, timeout_s=300, tooling_path=None,
@@ -1882,13 +2017,18 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
                 "image_id": image_id,
                 "agent_revision": expected_agent_revision,
                 "agent_path": agent_path,
-                "provider_secret_inode": (str(Path(provider_secrets_file).stat().st_ino)
-                                          if provider_secrets_file else None),
+                "provider_secret_sha256": (hashlib.sha256(
+                    Path(provider_secrets_file).read_bytes()).hexdigest()
+                    if provider_secrets_file else None),
                 "candidate_name": name,
                 "candidate_toolchain": staged_toolchain,
                 "live_before": before,
                 "live_after": after,
                 "checks": checks,
+                "claims": {
+                    "candidate_fixture_turn": checks.get("fixture_turn") is True,
+                    "production_turn": "post",
+                },
             }
             temporary = receipt_path.with_suffix(".json.tmp")
             temporary.write_text(json.dumps(receipt, sort_keys=True) + "\n")
@@ -1896,6 +2036,25 @@ def _accept(state_dir, image_archive, podman_bin, candidate_socket, home_dir,
             os.replace(temporary, receipt_path)
             return receipt
     finally:
+        # Failed acceptance evidence must survive teardown: the deploy attempt
+        # records only an outcome, so write the bounded evidence beside it.
+        if _evidence and not rehearsal:
+            try:
+                bounded = {}
+                for key in ("candidate_fixture_turn", "checks", "rehearsal_checks",
+                            "error", "live_before", "live_after", "route_provenance"):
+                    if key not in _evidence:
+                        continue
+                    value = _evidence[key]
+                    text = json.dumps(value, sort_keys=True)
+                    bounded[key] = (value if len(text) <= 8000
+                                    else {"truncated": True, "prefix": text[:4000]})
+                evidence_path = state_dir / "attempts" / f"{desired}.evidence.json"
+                evidence_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                evidence_path.write_text(json.dumps(bounded, sort_keys=True) + "\n")
+                os.chmod(evidence_path, 0o600)
+            except (OSError, TypeError, ValueError):
+                pass
         cleanup_error = None
         cleanup_record = {
             "container_created": created,

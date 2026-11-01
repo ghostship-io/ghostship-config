@@ -73,7 +73,31 @@ if [[ ${1:-} == --invalidate-failure ]]; then
 fi
 
 : "${STATE_DIR:?}"
-: "${IMAGE_ARCHIVE:?}"
+# Either an archive or a streamed image is required; a stream is preferred.
+if [[ -z ${IMAGE_STREAM:-} ]]; then : "${IMAGE_ARCHIVE:?}"; fi
+# A stream is one-shot: materialise it once, then use the archive path
+# everywhere (id derivation, load, acceptance) so no step reads it twice or
+# receives an empty archive. IMAGE_STREAMED keeps the post-load id check.
+if [[ -n ${IMAGE_STREAM:-} ]]; then
+  IMAGE_ARCHIVE="$STATE_DIR/image-stream.tar"
+  "$IMAGE_STREAM" > "$IMAGE_ARCHIVE" || fail 'image stream unreadable'
+  IMAGE_STREAMED=1
+  unset IMAGE_STREAM
+fi
+# The receipt this attempt writes must not destroy a pre-existing one: a receipt
+# for an already-applied or serving deployment is evidence, not scratch space.
+receipt_path="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+receipt_before=absent
+receipt_backup="$STATE_DIR/.receipt-before-$DEPLOYMENT_ID.json"
+if [[ -f $receipt_path && ! -L $receipt_path ]]; then
+  receipt_before=present
+  cp "$receipt_path" "$receipt_backup" || fail 'existing receipt could not be preserved'
+fi
+cleanup_attempt_evidence() {
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] && rm -f "$IMAGE_ARCHIVE"
+  rm -f "$receipt_backup"
+}
+trap cleanup_attempt_evidence EXIT
 : "${DEPLOYMENT_ID:?}"
 : "${HOME_DIR:?}"
 : "${CANDIDATE_ACCEPTANCE:?}"
@@ -93,6 +117,7 @@ fi
 : "${ACCEPTED_IMAGE_REF:?}"
 : "${RECEIPT_SELF_CHECK:?}"
 : "${HEALTH_WAIT_BUDGET_SECONDS:?}"
+RESTART_DWELL_SECONDS=${RESTART_DWELL_SECONDS:-180}
 ROUTE_POLICY_FILE=${ROUTE_POLICY_FILE:-/etc/ghostship/route-policy.json}
 APPROVED_FREE_FILE=${APPROVED_FREE_FILE:-/etc/ghostship/approved-free-workers.json}
 ACCEPTANCE_ROUTE_FILE=${ACCEPTANCE_ROUTE_FILE:-/etc/ghostship/t3code-acceptance-route.json}
@@ -149,11 +174,65 @@ write_attempt_result() {
   '{deployment_id:$deployment,started_at_ms:$started_at_ms,status:"running"}' > "$attempt_temporary"
 chmod 0600 "$attempt_temporary"
 mv -f "$attempt_temporary" "$attempt_file"
-trap write_attempt_result EXIT
+trap 'write_attempt_result; cleanup_attempt_evidence' EXIT
+# The image id is the sha256 of the image's config blob, known before the load
+# from the archive. A streamed input was materialised to an archive before this
+# point, so there is exactly one derivation.
 image_config=$(tar -xOf "$IMAGE_ARCHIVE" manifest.json | "$JQ_BIN" -er '.[0].Config')
 image_id=$(tar -xOf "$IMAGE_ARCHIVE" "$image_config" | sha256sum | cut -d ' ' -f 1)
-secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE")
+secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1)
 receipt="$STATE_DIR/receipts/$DEPLOYMENT_ID.json"
+
+# A receipt written before the digest identity carries only the inode. Its
+# content is unknown from the file, so accept it only when the live container
+# secret digest proves the same input; never rewrite an old receipt.
+secret_identity_ok() {
+  local file=$1 recorded live
+  recorded=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$file" 2>/dev/null || true)
+  if [[ -n "$recorded" ]]; then
+    [[ "$recorded" == "$secret_sha256" ]]
+    return
+  fi
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "$secret_sha256" ]]
+}
+
+# The desired and applied input lines use the secret content digest. An applied
+# line written before the change still names the inode; compare its other
+# inputs exactly and the secret by content so the first no-op deploy does not
+# restart T3.
+inputs_equal() {
+  local desired=$1 applied=$2 token d_agent="" d_secret="" d_inode="" d_tool="" a_agent="" a_secret="" a_inode="" a_tool="" live=""
+  for token in $desired; do
+    case "$token" in
+      agent=*) d_agent=${token#agent=};;
+      secret_sha256=*) d_secret=${token#secret_sha256=};;
+      secret_inode=*) d_inode=${token#secret_inode=};;
+      tooling=*) d_tool=${token#tooling=};;
+    esac
+  done
+  for token in $applied; do
+    case "$token" in
+      agent=*) a_agent=${token#agent=};;
+      secret_sha256=*) a_secret=${token#secret_sha256=};;
+      secret_inode=*) a_inode=${token#secret_inode=};;
+      tooling=*) a_tool=${token#tooling=};;
+    esac
+  done
+  [[ "$d_agent" == "$a_agent" && "$d_tool" == "$a_tool" ]] || return 1
+  if [[ -z "$d_secret" && -z "$a_secret" ]]; then
+    # Both lines predate the digest. The old exact-string rule still decides.
+    [[ "$desired" == "$applied" ]]
+    return
+  fi
+  if [[ -n "$d_secret" && -n "$a_secret" ]]; then
+    [[ "$d_secret" == "$a_secret" ]]
+    return
+  fi
+  [[ -n "$d_inode" || -n "$a_inode" ]] || return 1
+  live=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env 2>/dev/null | cut -d ' ' -f 1 || true)
+  [[ -n "$live" && "$live" == "${d_secret:-$a_secret}" ]]
+}
 
 receipt_matches_image() {
   "$JQ_BIN" -e \
@@ -161,16 +240,15 @@ receipt_matches_image() {
     --arg image "$image_id" \
     --arg agent "$AGENT_REVISION" \
     --arg tooling "$TOOLING_PATH" \
-    --arg secret_inode "$secret_inode" \
     '(.deployment_id == $deployment)
      and (.image_id | sub("^sha256:"; "")) == $image
      and (.candidate_name | startswith("t3code-candidate-"))
      and (.live_before != null) and (.live_before == .live_after)
      and (.agent_revision == $agent)
-     and (.agent_path == $tooling)
-     and (.provider_secret_inode == $secret_inode)' \
+     and (.agent_path == $tooling)' \
     "$receipt" >/dev/null 2>&1 \
-    && receipt_checks_ok "$receipt"
+    && receipt_checks_ok "$receipt" \
+    && secret_identity_ok "$receipt"
 }
 
 any_receipt_matches_image() {
@@ -242,7 +320,8 @@ publish_pass_attestation() {
   [[ ! -e "$STATE_DIR/failed-candidate" && ! -L "$STATE_DIR/failed-candidate" ]] || return 1
   receipt_matches_image || return 1
   fields=$("$PODMAN_BIN" inspect t3code --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Health.Status}}') || return 1
-  read -r container_id live_image started health <<< "$fields"
+  read -r container_id live_image rest <<< "$fields"
+  health=${rest##* }
   [[ $container_id =~ ^[0-9a-f]{64}$ && ${live_image#sha256:} == "$image_id" && $health == healthy ]] || return 1
   receipt_hash=$(sha256sum < "$receipt" | cut -d ' ' -f 1)
   publish_attestation "$("$JQ_BIN" -cn --arg image "$image_id" --arg container "$container_id" \
@@ -261,12 +340,36 @@ promote_image_id() {
   fi
 }
 
-promote_accepted_alias() {
+load_image() {
   "$PODMAN_BIN" load --input "$IMAGE_ARCHIVE"
+  # For a streamed input the pre-load id came from the stream itself, so the id
+  # podman computed must agree. A mismatch is UNKNOWN: no alias promotion and no
+  # receipt, rather than silently trusting either value.
+  [[ ${IMAGE_STREAMED:-0} == 1 ]] || return 0
+  local loaded
+  loaded=$("$PODMAN_BIN" image inspect "sha256:$image_id" --format '{{.Id}}' 2>/dev/null || true)
+  [[ $loaded == "sha256:$image_id" ]] || {
+    echo "Loaded image id does not match the pre-load id: expected sha256:$image_id, got ${loaded:-absent}" >&2
+    # The receipt describes the archive, but the image that loaded is not that
+    # archive. Retire only what this attempt wrote: restore a pre-existing
+    # receipt, or remove the one this attempt created.
+    if [[ $receipt_before == present ]]; then
+      cp "$receipt_backup" "$receipt_path.restore" && mv -f "$receipt_path.restore" "$receipt_path"
+    else
+      rm -f "$receipt_path"
+    fi
+    "$JQ_BIN" -c '. + {outcome:"acceptance_unknown",reason:"loaded image id differs from the streamed config digest"}' "$attempt_file" > "$attempt_temporary"
+    chmod 0600 "$attempt_temporary"; mv -f "$attempt_temporary" "$attempt_file"
+    exit 77
+  }
+}
+
+promote_accepted_alias() {
+  load_image
   promote_image_id "sha256:$image_id"
 }
 
-if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]]; then
+if [[ "$applied" == "$DEPLOYMENT_ID" ]] && inputs_equal "$desired_inputs" "$applied_inputs"; then
   if receipt_matches_image; then
     acquire_managed_locks
     accepted_id=$("$PODMAN_BIN" image inspect "$ACCEPTED_IMAGE_REF" --format '{{.Id}}' 2>/dev/null || true)
@@ -275,6 +378,12 @@ if [[ "$applied" == "$DEPLOYMENT_ID" && "$applied_inputs" == "$desired_inputs" ]
       echo "Initialized accepted image alias from the existing PASS receipt: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
     else
       echo "T3 image, runtime inputs, and accepted image alias are already applied: $DEPLOYMENT_ID"
+    fi
+    # A legacy applied line named the inode; record the digest form now so the
+    # identity does not stay ambiguous.
+    if [[ "$applied_inputs" != "$desired_inputs" ]]; then
+      printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
+      mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
     fi
     publish_pass_attestation
     exit 0
@@ -450,13 +559,16 @@ container_identity() {
     printf '{}\n'
     return
   fi
-  read -r container_id image started health <<< "$fields"
+  # .State.StartedAt contains spaces; the health status is the final field, so
+  # split it from the end and keep the whole timestamp.
+  read -r container_id image rest <<< "$fields"
+  started=${rest% *}; health=${rest##* }
   "$JQ_BIN" -cn --arg id "$container_id" --arg image "$image" --arg started_at "$started" \
     --arg health "$health" \
     '{id:$id,image:$image,started_at:$started_at,health:$health}'
 }
 
-# record_applied AGENT_PATH SECRET_INODE marks this deployment and its inputs
+# record_applied AGENT_PATH SECRET_SHA256 marks this deployment and its inputs
 # applied, with what the running container verifiably uses.
 record_applied() {
   printf '%s\n' "$DEPLOYMENT_ID" > "$STATE_DIR/applied.tmp"
@@ -464,10 +576,10 @@ record_applied() {
   printf '%s\n' "$desired_inputs" > "$STATE_DIR/applied-inputs.tmp"
   mv -f "$STATE_DIR/applied-inputs.tmp" "$STATE_DIR/applied-inputs"
   "$JQ_BIN" -cn --arg deployment_id "$DEPLOYMENT_ID" --arg agent_revision "$AGENT_REVISION" \
-    --arg agent_path "$1" --arg provider_secret_inode "$2" \
+    --arg agent_path "$1" --arg provider_secret_sha256 "$2" \
     --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{deployment_id:$deployment_id,agent_revision:$agent_revision,agent_path:$agent_path,
-      provider_secret_inode:$provider_secret_inode,verified:true,verified_at:$verified_at}' \
+      provider_secret_sha256:$provider_secret_sha256,verified:true,verified_at:$verified_at}' \
     > "$STATE_DIR/deployed-inputs.json.tmp"
   chmod 0600 "$STATE_DIR/deployed-inputs.json.tmp"
   mv -f "$STATE_DIR/deployed-inputs.json.tmp" "$STATE_DIR/deployed-inputs.json"
@@ -478,14 +590,14 @@ pre=$(container_identity)
 # cannot restart a unit for a newer image using this image's receipt.
 current_desired=$(cat "$STATE_DIR/desired" 2>/dev/null || true)
 current_inputs=$(cat "$STATE_DIR/desired-inputs" 2>/dev/null || true)
-if [[ "$current_desired" != "$DEPLOYMENT_ID" || "$current_inputs" != "$desired_inputs" ]]; then
+if [[ "$current_desired" != "$DEPLOYMENT_ID" ]] || ! inputs_equal "$desired_inputs" "$current_inputs"; then
   echo "T3 deployment request was superseded before restart; refusing stale image" >&2
   exit 0
 fi
 
 # A re-run of acceptance may find T3 already running exactly what it accepted:
-# every activation re-decrypts the provider secret to a new inode, which
-# changes the desired inputs without changing anything T3 uses. Restart only
+# every activation re-decrypts the provider secret to a new inode; the content
+# digest in desired inputs stays the same. Restart only
 # when the image, the agent or the secret content differs; a restart onto the
 # same inputs would only end every session. The digests stay in memory.
 pre_image=$(printf '%s' "$pre" | "$JQ_BIN" -r '.image // empty')
@@ -498,8 +610,7 @@ if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
     fi
-    running_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-    record_applied "$running_agent" "$running_secret_inode"
+    record_applied "$running_agent" "$running_secret"
     publish_pass_attestation
     echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
     exit 0
@@ -513,6 +624,8 @@ promote_accepted_alias
 echo "Accepted image pointer moved after exact-image candidate acceptance: $ACCEPTED_IMAGE_REF -> sha256:$image_id"
 echo "Restarting podman-t3code.service immediately after exact-image candidate acceptance"
 "$SYSTEMCTL_BIN" restart podman-t3code.service
+restart_dwell_started=$(health_wait_now)
+restart_dwell_deadline=$((restart_dwell_started + RESTART_DWELL_SECONDS))
 
 deadline=$(($(health_wait_now) + HEALTH_WAIT_BUDGET_SECONDS))
 healthy=false
@@ -532,13 +645,42 @@ if [[ "$healthy" != true ]]; then
 fi
 
 live_agent=$("$PODMAN_BIN" exec t3code readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current")
-live_secret_inode=$("$PODMAN_BIN" exec t3code stat -Lc '%i' /run/secrets/t3code.env)
-if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret_inode" != "$secret_inode" ]]; then
+live_secret=$("$PODMAN_BIN" exec t3code sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1)
+if [[ "$live_agent" != "$TOOLING_PATH" || "$live_secret" != "$secret_sha256" ]]; then
   echo "T3 restart did not load the accepted agent and provider inputs" >&2
   exit 1
 fi
 
+# Baseline once the health loop reports healthy: systemd-driven restarts create
+# a new container, so podman's RestartCount stays 0 and misses the 329 shape.
+# Id + StartedAt is the identity the ledger already uses.
+healthy_identity=$(container_identity)
+healthy_id=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.id // empty')
+healthy_started=$(printf '%s' "$healthy_identity" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$healthy_id" || -z "$healthy_started" ]]; then
+  echo 'container identity unreadable at settle start' >&2
+  exit 1
+fi
+
+# One bounded dwell after this deploy's own restart, on the same clock as the
+# health wait. A different Id or StartedAt means T3 restarted again; exit 1
+# (never 75, which systemd would retry and restart T3 again) and do not record
+# applied.
+while (( $(health_wait_now) < restart_dwell_deadline )); do
+  health_wait_sleep 5
+done
 post=$(container_identity)
+post_id=$(printf '%s' "$post" | "$JQ_BIN" -r '.id // empty')
+post_started=$(printf '%s' "$post" | "$JQ_BIN" -r '.started_at // empty')
+if [[ -z "$post_id" || -z "$post_started" ]]; then
+  echo 'container identity unreadable at settle end' >&2
+  exit 1
+fi
+if [[ "$post_id" != "$healthy_id" || "$post_started" != "$healthy_started" ]]; then
+  echo "T3 restarted again during the ${RESTART_DWELL_SECONDS}s settle (container identity changed)" >&2
+  exit 1
+fi
+
 post_image=$(printf '%s' "$post" | "$JQ_BIN" -r '.image // empty')
 if [[ "${post_image#sha256:}" != "$image_id" ]]; then
   echo "T3 container did not start the receipted image sha256:$image_id" >&2
@@ -554,7 +696,7 @@ install -d -m 0700 "$(dirname "$RESTART_LEDGER")"
 printf '%s\n' "$entry" >> "$RESTART_LEDGER"
 chmod 0600 "$RESTART_LEDGER"
 
-record_applied "$live_agent" "$live_secret_inode"
+record_applied "$live_agent" "$live_secret"
 publish_pass_attestation
 install -d -m 0700 "$(dirname "$AUDIT_LOG")"
 printf '%s\n' "action=candidate-accepted-restart deployment=$DEPLOYMENT_ID" >> "$AUDIT_LOG"

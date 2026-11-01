@@ -122,8 +122,8 @@ run_cross() {
     ln -sfn "$W/sysnew" "$W/profile"; ln -sfn "$W/sysnew" "$W/current"
     printf '%s\n' "$NEW_DEP" > "$STATE_DIR/applied"
     jq -n --arg d "$NEW_DEP" --argjson n "$(date +%s%3N)" '{deployment_id:$d,started_at_ms:$n,exit_code:0}' > "$STATE_DIR/attempts/$NEW_DEP.json"
-    inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$NEW_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$NEW_DEP.json"
+    secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)
+    jq -n --arg d "$NEW_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$secret" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_sha256:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$NEW_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" post 2>&1); rc=$?; printf '%s POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 ]] || exit 23
     output=$(bash "$PROOF_DIR/fixture-release-window" end-post "$mode" 2>&1); rc=$?; printf '%s END_POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 && ! -e $HOLD_FILE ]] || exit 24
     printf '%s SERVER: fixture PID changed; exact synthetic receipt verified\n' "$mode"
@@ -136,8 +136,8 @@ run_cross() {
   fi
   output=$(bash "$PROOF_DIR/fixture-release-window" post 2>&1); rc=$?; printf '%s POST rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 1 ]] || exit 18
   if [[ $mode == known ]]; then
-    inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
+    secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)
+    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$secret" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_sha256:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?; printf '%s ROLLBACK rc=%s: %s\n' "$mode" "$rc" "$output"; [[ $rc == 0 && ! -e $HOLD_FILE && -f $STATE_DIR/failed-candidate ]] || exit 25
     [[ $(cat "$STATE_DIR/applied") != "$(cat "$STATE_DIR/desired")" ]] || exit 26
     printf '%s STATE: serving receipt verified; desired/applied remain split; failed marker retained\n' "$mode"
@@ -149,8 +149,8 @@ run_cross() {
     output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?
     printf '%s ROLLBACK_NO_RECEIPT rc=%s: %s\n' "$mode" "$rc" "$output"
     [[ $rc == 1 && -e $HOLD_FILE && -e $W/container-stopped ]] || exit 27
-    inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
-    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
+    secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1)
+    jq -n --arg d "$OLD_DEP" --arg i "$IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$secret" '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_sha256:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,provider_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' > "$STATE_DIR/receipts/$OLD_DEP.json"
     output=$(bash "$PROOF_DIR/fixture-release-window" rollback "$mode" 2>&1); rc=$?
     printf '%s ROLLBACK_RECOVER rc=%s: %s\n' "$mode" "$rc" "$output"
     [[ $rc == 0 && ! -e $HOLD_FILE && ! -e $W/container-stopped && -f $STATE_DIR/failed-candidate ]] || exit 28

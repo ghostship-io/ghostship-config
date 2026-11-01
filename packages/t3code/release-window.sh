@@ -303,17 +303,39 @@ JQ
     printf 'unknown\n'
   fi
 }
+# A receipt written before the digest identity carries only the inode. Accept
+# it for recovery only when the live container content matches the host secret;
+# the window record marks that weaker evidence explicitly.
+secret_receipt_matches() {
+  local file=$1 live=$2 host=$3 recorded
+  recorded=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$file" 2>/dev/null || true)
+  if [[ -n $recorded ]]; then
+    [[ $recorded == "$live" ]]
+  else
+    [[ $live == "$host" ]]
+  fi
+}
+
 known_good_receipt() {
-  : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling=""
+  : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}" "${PROVIDER_SECRETS_FILE:?}"
+  local cid image started tooling secret host_secret receipt wanted="${2:-}" mode="${3:-}" declared_tooling=""
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
+  # Bind the receipt to the deployment that is actually applied. The
+  # container's release.json is mutable metadata written by other tooling and
+  # can disagree with the accepted receipt; the code identity is the tooling
+  # closure, which is matched below.
+  if [[ -z $wanted ]]; then
+    [[ -f $STATE_DIR/applied && ! -L $STATE_DIR/applied ]] || return 2
+    wanted=$(< "$STATE_DIR/applied") || return 2
+    [[ $wanted =~ ^[0-9a-f]{64}$ ]] || return 2
+  fi
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
-  revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 2
-  inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || return 2
-  [[ -n $tooling && $inode =~ ^[0-9]+$ ]] || return 2
+  secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || return 2
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || return 2
+  [[ -n $tooling && $secret =~ ^[0-9a-f]{64}$ && $host_secret =~ ^[0-9a-f]{64}$ ]] || return 2
   if [[ $mode == advanced ]]; then
-    read -r declared_revision declared_tooling < <(declared_target) || return 2
+    read -r _ declared_tooling < <(declared_target) || return 2
   fi
   [[ ! -L $STATE_DIR/receipts ]] || return 2
   [[ ! -e $STATE_DIR/receipts || -d $STATE_DIR/receipts ]] || return 2
@@ -321,16 +343,15 @@ known_good_receipt() {
   for receipt in "$STATE_DIR"/receipts/*.json; do
     [[ -f $receipt && ! -L $receipt && -r $receipt ]] || return 2
     # shellcheck disable=SC2016
-    if "$JQ_BIN" -e --arg i "$image" --arg a "$revision" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
-      --arg da "$declared_revision" --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
+    if "$JQ_BIN" -e --arg i "$image" --arg p "$tooling" --arg wanted "$wanted" \
+      --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
       (.image_id | sub("^sha256:"; "")) == $i and
-      (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
+      (.deployment_id | type == "string" and length > 0) and .deployment_id == $wanted and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and
-      .provider_secret_inode == $s and
-      ((.agent_revision == $a and .agent_path == $p) or
-        ($adv == "1" and .agent_revision == $da and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
-      && receipt_checks_ok "$receipt"; then
+      (.agent_path == $p or ($adv == "1" and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
+      && receipt_checks_ok "$receipt" \
+      && secret_receipt_matches "$receipt" "$secret" "$host_secret"; then
       printf '%s\n' "$receipt"
       return 0
     fi
@@ -370,12 +391,15 @@ require_matching_receipt_and_alias() {
   restore_alias_to_image "$image"
 }
 record_known_good() {
-  local destination=$1 hash desired applied
+  local destination=$1 hash desired applied digest evidence
   hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
   desired=$(cat "$STATE_DIR/desired"); applied=$(cat "$STATE_DIR/applied")
+  digest=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$matched_receipt" 2>/dev/null || true)
+  if [[ -n $digest ]]; then evidence="receipt-digest"; else evidence="legacy-content-consistent"; fi
   # shellcheck disable=SC2016
-  "$JQ_BIN" -cn --arg desired "$desired" --arg applied "$applied" --arg receipt "$(basename "$matched_receipt")" --arg hash "$hash" --arg at "$(date -u +%FT%TZ)" \
-    '{state:"KNOWN_GOOD_SERVING",desired:$desired,applied:$applied,receipt:$receipt,receipt_sha256:$hash,at:$at}' > "$destination.tmp"
+  "$JQ_BIN" -cn --arg desired "$desired" --arg applied "$applied" --arg receipt "$(basename "$matched_receipt")" --arg hash "$hash" --arg digest "$digest" --arg evidence "$evidence" --arg at "$(date -u +%FT%TZ)" \
+    '{state:"KNOWN_GOOD_SERVING",desired:$desired,applied:$applied,receipt:$receipt,receipt_sha256:$hash,
+      provider_secret_sha256:(if $digest == "" then null else $digest end),secret_evidence:$evidence,at:$at}' > "$destination.tmp"
   chmod 0600 "$destination.tmp"; sync -f "$destination.tmp"; mv "$destination.tmp" "$destination"; sync -f "$(dirname "$destination")"
 }
 post_verify() {
@@ -389,19 +413,22 @@ post_verify() {
   [[ ! -e $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed candidate exists'
   [[ $(cat "$STATE_DIR/applied") == "$EXPECTED_DEPLOYMENT" && $(cat "$STATE_DIR/desired") == "$EXPECTED_DEPLOYMENT" ]] || fail 'deployment state not reconciled'
   [[ $(readlink -f "$CURRENT_SYSTEM") == "$EXPECTED_SYSTEM" && $(readlink -f "$PROFILE") == "$EXPECTED_SYSTEM" ]] || fail 'system generation not reconciled'
-  local allow=${1:-} receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" inode image switch_at switch_ms host_secret live_secret
+  local allow=${1:-} receipt="$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json" attempt="$STATE_DIR/attempts/$EXPECTED_DEPLOYMENT.json" secret image switch_at switch_ms host_secret live_secret
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   [[ -f $receipt && ! -L $receipt && -f $attempt && ! -L $attempt && -f $PROVIDER_SECRETS_FILE ]] || fail 'receipt or attempt missing'
-  inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'provider secret identity unknown'
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || fail 'provider secret content unknown'
+  live_secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || fail 'live secret content unknown'
+  [[ $host_secret =~ ^[0-9a-f]{64}$ && $live_secret =~ ^[0-9a-f]{64}$ ]] || fail 'provider secret content unknown'
   # shellcheck disable=SC2016
   if ! {
-    "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" '
+    "$JQ_BIN" -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg a "$EXPECTED_AGENT_REVISION" --arg p "$EXPECTED_TOOLING_PATH" '
       .deployment_id == $d and (.image_id | sub("^sha256:"; "")) == $i and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and .agent_revision == $a and
-      .agent_path == $p and .provider_secret_inode == $s' "$receipt" >/dev/null &&
-    receipt_checks_ok "$receipt"
+      .agent_path == $p' "$receipt" >/dev/null &&
+    receipt_checks_ok "$receipt" &&
+    secret_receipt_matches "$receipt" "$live_secret" "$host_secret"
   }; then
     fail 'exact-image receipt invalid'
   fi
@@ -415,9 +442,6 @@ post_verify() {
   "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'server inactive'
   "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'server unresponsive'
   [[ $("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") == "$EXPECTED_TOOLING_PATH" ]] || fail 'live tooling differs from receipt'
-  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE") || fail 'provider secret content unknown'
-  live_secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env) || fail 'live secret content unknown'
-  host_secret=${host_secret%% *}; live_secret=${live_secret%% *}
   [[ $host_secret =~ ^[0-9a-f]{64}$ && $live_secret == "$host_secret" ]] || fail 'live secret differs from receipt inputs'
   lock_managed_tools
   no_pending_restart "$allow"
@@ -476,6 +500,24 @@ JQ
   rm "$record"; sync -f "$STATE_DIR"
   printf 'PASS recorded UNKNOWN superseded window=%s superseded_by=%s\n' "$old" "$new_id"
 }
+# One production turn in the serving T3's existing authenticated environment.
+# It is not candidate proof: it runs outside the candidate, after the switch,
+# and is recorded as its own claim. PRODUCTION_TURN_COMMAND is a test seam.
+production_turn() {
+  local out rc
+  if [[ -n ${PRODUCTION_TURN_COMMAND:-} ]]; then
+    out=$(bash -c "$PRODUCTION_TURN_COMMAND" 2>&1); rc=$?
+  else
+    out=$("$PODMAN_BIN" exec -u 3000 -e HOME="$CANDIDATE_HOME_TARGET" "$PODMAN_TARGET" \
+      "$CANDIDATE_HOME_TARGET/.local/share/t3code-tools/opencode/current/bin/opencode" \
+      run -m opencode-go/deepseek-v4.1-flash "Reply with exactly PROBE_PASS" 2>&1); rc=$?
+  fi
+  printf '%s' "$out" > "$dir/production-turn.out.tmp"
+  chmod 0600 "$dir/production-turn.out.tmp"
+  mv "$dir/production-turn.out.tmp" "$dir/production-turn.out"; sync -f "$dir"
+  [[ $rc == 0 && $out == *PROBE_PASS* ]]
+}
+
 case ${1:-} in
  preflight)
   [[ $# -le 2 ]] || fail 'usage: preflight [--adopt-inhibit]'
@@ -656,7 +698,20 @@ case ${1:-} in
     *) fail 'window holder state unknown' ;;
   esac
   post_verify
-  printf 'PASS post deployment=%s image=%s\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
+  if ! production_turn; then
+    # shellcheck disable=SC2016
+    "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+      '{deployment_id:$d,image_id:$i,claim:"production_turn",route:"opencode-go/deepseek-v4.1-flash",outcome:"failed",at:$at}' \
+      > "$dir/production-turn.json.tmp"
+    chmod 0600 "$dir/production-turn.json.tmp"; mv "$dir/production-turn.json.tmp" "$dir/production-turn.json"; sync -f "$dir"
+    fail 'production turn failed; window remains open for the receipted rollback path'
+  fi
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+    '{deployment_id:$d,image_id:$i,claim:"production_turn",route:"opencode-go/deepseek-v4.1-flash",outcome:"passed",at:$at}' \
+    > "$dir/production-turn.json.tmp"
+  chmod 0600 "$dir/production-turn.json.tmp"; mv "$dir/production-turn.json.tmp" "$dir/production-turn.json"; sync -f "$dir"
+  printf 'PASS post deployment=%s image=%s production_turn=passed\n' "$EXPECTED_DEPLOYMENT" "$EXPECTED_IMAGE"
   ;;
  end-post)
   [[ $# -le 2 ]] || fail 'usage: end-post [WINDOW_ID]'
@@ -680,9 +735,16 @@ case ${1:-} in
     *) fail 'window holder state unknown' ;;
   esac
   post_verify
-  # Post evidence is not a receipt: it references the existing receipt only.
+  [[ -f $dir/production-turn.json && ! -L $dir/production-turn.json ]] || fail 'production turn evidence missing'
   # shellcheck disable=SC2016
-  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" '{deployment_id:$d,image_id:$i,verified_at:$at}' > "$dir/post.verified.tmp"
+  "$JQ_BIN" -e '.claim == "production_turn" and .outcome == "passed"' "$dir/production-turn.json" >/dev/null \
+    || fail 'production turn did not pass'
+  # Post evidence is not a receipt: it references the existing receipt and
+  # names both release claims separately.
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg at "$(date -u +%FT%TZ)" \
+    '{deployment_id:$d,image_id:$i,verified_at:$at,
+      claims:{candidate_fixture_turn:"receipt",production_turn:"passed"}}' > "$dir/post.verified.tmp"
   chmod 0600 "$dir/post.verified.tmp"; sync -f "$dir/post.verified.tmp"; mv "$dir/post.verified.tmp" "$dir/post.verified"; sync -f "$dir"
   "$SYSTEMCTL_BIN" start t3code-recovery.service
   [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery not active; inhibit retained'
@@ -1095,17 +1157,16 @@ case ${1:-} in
   [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
   applied=$(cat "$STATE_DIR/applied"); expected=$(cat "$STATE_DIR/desired")
   [[ $applied =~ ^[0-9a-f]{64}$ && $expected =~ ^[0-9a-f]{64}$ ]] || fail 'deployment identity unknown'
-  [[ ! -e $STATE_DIR/receipts/$expected.json && ! -L $STATE_DIR/receipts/$expected.json ]] || fail 'expected deployment is receipted; use post'
   read -r _ image _ <<< "$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}} {{.Image}} {{.State.StartedAt}}')" || fail 'serving image unknown'
   image=${image#sha256:}
   [[ $image =~ ^[0-9a-f]{64}$ ]] || fail 'serving image unknown'
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || fail 'live tooling unknown'
   revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || fail 'live agent revision unknown'
-  inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || fail 'live secret identity unknown'
+  secret=$("$PODMAN_BIN" exec "$PODMAN_TARGET" sha256sum /run/secrets/t3code.env | cut -d ' ' -f 1) || fail 'live secret content unknown'
   status=0; known=$(known_good_receipt "$image") || status=$?
   [[ $status == 1 ]] || fail 'an exact accepted receipt describes the serving identity; use post or resolve-unknown'
   : "$known"
-  host_inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE") || fail 'host secret identity unknown'
+  host_secret=$(sha256sum < "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f 1) || fail 'host secret content unknown'
   read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
   [[ $switch_at =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && $switch_ms =~ ^[0-9]+$ ]] || fail 'switch start time unknown'
   attempt="$STATE_DIR/attempts/$expected.json"
@@ -1122,11 +1183,26 @@ case ${1:-} in
     [[ -f $STATE_DIR/failed-candidate && ! -L $STATE_DIR/failed-candidate ]] || fail 'failed marker state unknown'
     failed_hash=$(sha256sum < "$STATE_DIR/failed-candidate" | cut -d ' ' -f1)
   fi
+  expected_receipt=null
+  receipt_applied=null
+  expected_receipt_path="$STATE_DIR/receipts/$expected.json"
+  if [[ -e $expected_receipt_path ]]; then
+    # A receipt can exist while the deploy refused to apply it (for example a
+    # validator defect). The attempt check above already required a terminal
+    # failure, so this records the receipt without claiming it was applied.
+    [[ -f $expected_receipt_path && ! -L $expected_receipt_path ]] || fail 'expected receipt state unknown'
+    expected_sha=$(sha256sum < "$expected_receipt_path" | cut -d' ' -f1) || fail 'expected receipt unreadable'
+    expected_image=$("$JQ_BIN" -er '.image_id' "$expected_receipt_path") || fail 'expected receipt identity unreadable'
+    # shellcheck disable=SC2016
+    expected_receipt=$("$JQ_BIN" -cn --arg d "$expected" --arg i "$expected_image" --arg sha "$expected_sha" \
+      '{deployment_id:$d, image_id:$i, sha256:$sha}') || fail 'expected receipt record unreadable'
+    receipt_applied=false
+  fi
   not_reused=null
   if not_reused_path=$(receipt_for_image "$image"); then
     # shellcheck disable=SC2016
     not_reused=$("$JQ_BIN" -c --arg file "$not_reused_path" '{
-      deployment_id, agent_revision, agent_path, provider_secret_inode,
+      deployment_id, agent_revision, agent_path, provider_secret_sha256,
       receipt_file: ($file | split("/") | last)}' "$not_reused_path") || fail 'unreceipted carrying receipt unreadable'
   fi
   # Classify every failed unit by its FIRST failure in this boot. A unit that
@@ -1162,21 +1238,23 @@ case ${1:-} in
       | "$JQ_BIN" -c --arg u "$unit" --arg f "$first" --arg l "$last" --arg c "$class" \
         '. + [{unit:$u, first:$f, last:$l, class:$c}]') || fail 'failed-unit record unreadable'
   done
-  inode_match=false
-  [[ $inode == "$host_inode" ]] && inode_match=true
+  secret_match=false
+  [[ $secret == "$host_secret" ]] && secret_match=true
   # shellcheck disable=SC2016
   "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg a "$applied" \
-    --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg inode "$inode" \
-    --arg host_inode "$host_inode" --argjson inode_match "$inode_match" \
+    --arg image "$image" --arg rev "$revision" --arg tool "$tooling" --arg secret "$secret" \
+    --arg host_secret "$host_secret" --argjson secret_match "$secret_match" \
     --arg switch_result "$switch_result" --arg la "$activation_start" --arg lb "$activation_end" \
     --arg at "$(date -u +%FT%TZ)" --arg failed "$failed_hash" \
     --argjson attempt "$attempt_json" --argjson not_reused "$not_reused" \
-    --argjson failed_units "$failed_units_json" '
+    --argjson failed_units "$failed_units_json" --argjson expected_receipt "$expected_receipt" \
+    --argjson receipt_applied "$receipt_applied" '
     {state:"closed_unaccepted", window:$id, deployment_id:$d, applied:$a,
      attempt:$attempt, serving:{image:$image, agent_revision:$rev,
-       tooling_path:$tool, provider_secret_inode:$inode},
-     provider_secret_inode_host:$host_inode, provider_secret_inode_match:$inode_match,
+       tooling_path:$tool, provider_secret_sha256:$secret},
+     provider_secret_sha256_host:$host_secret, provider_secret_sha256_match:$secret_match,
      serving_receipt:"absent", receipt_not_reused:$not_reused,
+     expected_receipt:$expected_receipt, receipt_applied:$receipt_applied,
      failed_marker_sha256:$failed, switch_result:$switch_result,
      activation:{start:($la|tonumber), end:($lb|tonumber)},
      failed_units:$failed_units,
@@ -1196,6 +1274,114 @@ case ${1:-} in
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   printf 'CLOSED unaccepted window=%s deployment=%s serving_image=%s attempt=%s\n' \
     "$id" "$expected" "$image" "$(printf '%s' "$attempt_json" | "$JQ_BIN" -r '.outcome')"
+  ;;
+ closed-unattested)
+  [[ $# == 1 ]] || fail 'usage: closed-unattested'
+  lock_window
+  read_active
+  [[ ! -e $dir/closed-unattested.json && ! -L $dir/closed-unattested.json ]] || fail 'window already closed unattested'
+  [[ ! -e $STATE_DIR/recovery-unknown.json && ! -L $STATE_DIR/recovery-unknown.json ]] || fail 'recorded UNKNOWN remains; supersede it before this window can close'
+  [[ -f $HOLD_FILE && ! -L $HOLD_FILE ]] || fail 'recovery inhibit missing'
+  case $(unit_state "$WINDOW_UNIT") in
+    active) holder_ready || fail 'window holder state unknown' ;;
+    inactive) expired_holder_locks ;;
+    *) fail 'window holder state unknown' ;;
+  esac
+  [[ -f $dir/complete.started && ! -L $dir/complete.started ]] || fail 'switch evidence missing'
+  [[ -f $dir/switch.result && ! -L $dir/switch.result ]] || fail 'switch result unknown'
+  switch_result=$(cat "$dir/switch.result")
+  case $switch_result in
+    exit_code=0|exit_code=4) ;;
+    *) fail 'switch did not succeed' ;;
+  esac
+  [[ -f $STATE_DIR/deploy.lock && ! -L $STATE_DIR/deploy.lock ]] || fail 'deploy lock missing'
+  exec 9<"$STATE_DIR/deploy.lock"; flock -n -x 9 || fail 'deploy writer active'
+  complete_locks_free
+  case $(unit_state ghostship-t3code-deploy) in inactive|failed) ;; *) fail 'deploy service active or unknown' ;; esac
+  case $(unit_state t3code-podman-candidate) in inactive|failed) ;; *) fail 'candidate service active or unknown' ;; esac
+  [[ -f $STATE_DIR/applied && -f $STATE_DIR/desired ]] || fail 'deployment state missing'
+  applied=$(cat "$STATE_DIR/applied"); expected=$(cat "$STATE_DIR/desired")
+  [[ $applied =~ ^[0-9a-f]{64}$ && $expected =~ ^[0-9a-f]{64}$ ]] || fail 'deployment identity unknown'
+  [[ $applied == "$expected" ]] || fail 'deployment is not applied'
+  expected_receipt_path="$STATE_DIR/receipts/$expected.json"
+  [[ -f $expected_receipt_path && ! -L $expected_receipt_path ]] || fail 'expected receipt missing'
+  receipt_checks_ok "$expected_receipt_path" || fail 'exact-image receipt invalid'
+  expected_sha=$(sha256sum < "$expected_receipt_path" | cut -d' ' -f1) || fail 'expected receipt unreadable'
+  expected_image=$("$JQ_BIN" -er '.image_id' "$expected_receipt_path") || fail 'expected receipt identity unreadable'
+  expected_image=${expected_image#sha256:}
+  container=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Id}}') || fail 'serving container unknown'
+  image=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.Image}}') || fail 'serving image unknown'
+  health=$("$PODMAN_BIN" inspect "$PODMAN_TARGET" --format '{{.State.Health.Status}}') || fail 'serving health unknown'
+  [[ ${image#sha256:} == "$expected_image" ]] || fail 'serving image is not the receipted image'
+  [[ $health == healthy ]] || fail 'serving container unhealthy'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" systemctl is-active --quiet t3code-server.service || fail 'serving server inactive'
+  "$PODMAN_BIN" exec "$PODMAN_TARGET" curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null || fail 'serving server unresponsive'
+  tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || fail 'live tooling unknown'
+  [[ $tooling == "$EXPECTED_TOOLING_PATH" ]] || fail 'live tooling differs from the accepted tooling'
+  [[ $("$SYSTEMCTL_BIN" show ghostship-t3code-deploy.service -p Result --value) != success ]] || fail 'deploy succeeded; use post'
+  attempt="$STATE_DIR/attempts/$expected.json"
+  [[ -f $attempt && ! -L $attempt ]] || fail 'attempt missing'
+  # shellcheck disable=SC2016
+  attempt_json=$("$JQ_BIN" -ce --arg d "$expected" '
+    select(.deployment_id == $d
+      and (.exit_code | type == "number" and . != 0)
+      and .status == null)
+    | {exit_code, outcome, started_at_ms}' "$attempt") || fail 'attempt is not a terminal failed deployment'
+  read -r switch_at switch_ms < "$dir/complete.started" || fail 'switch start evidence malformed'
+  activation_start=$(date -d "$switch_at" +%s) || fail 'activation start unknown'
+  activation_end=$(stat -c %Y "$dir/switch.result") || fail 'activation end unknown'
+  failed_now=$("$SYSTEMCTL_BIN" --failed --no-legend --plain 2>/dev/null | awk 'NF {print $1}' | sort -u)
+  # shellcheck disable=SC2016
+  activation_failures=$("${JOURNALCTL_BIN:-journalctl}" -b --since "@$activation_start" --until "@$activation_end" -o json --no-pager 2>/dev/null \
+    | "$JQ_BIN" -r 'select((.MESSAGE? // "") | startswith("Failed to start")) | (.UNIT? // empty)' 2>/dev/null | sort -u) || activation_failures=
+  units=$( { printf '%s\n' "$failed_now"; printf '%s\n' "$activation_failures"; } | awk 'NF' | sort -u )
+  failed_units_json='[]'
+  for unit in $units; do
+    first=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep -m1 'Failed with result' | cut -d' ' -f1) || first=
+    last=$("${JOURNALCTL_BIN:-journalctl}" -b -u "$unit" -o short-iso --no-pager 2>/dev/null | grep 'Failed with result' | tail -1 | cut -d' ' -f1) || last=
+    first_epoch=
+    [[ -z $first ]] || first_epoch=$(date -d "$first" +%s 2>/dev/null) || first_epoch=
+    class=unclassified
+    if [[ -n $first_epoch ]]; then
+      if [[ $unit == ghostship-t3code-deploy.service ]]; then class=expected_deploy
+      elif (( first_epoch < activation_start )); then class=pre_existing
+      elif (( first_epoch > activation_end )); then class=later
+      fi
+    fi
+    case $class in pre_existing|later|expected_deploy) ;; *) fail "unclassified failed unit: $unit" ;; esac
+    # shellcheck disable=SC2016
+    failed_units_json=$(printf '%s' "$failed_units_json" \
+      | "$JQ_BIN" -c --arg u "$unit" --arg f "$first" --arg l "$last" --arg c "$class" \
+        '. + [{unit:$u, first:$f, last:$l, class:$c}]') || fail 'failed-unit record unreadable'
+  done
+  # shellcheck disable=SC2016
+  "$JQ_BIN" -cn --arg id "$id" --arg d "$expected" --arg image "$expected_image" \
+    --arg sha "$expected_sha" --arg container "$container" --arg tooling "$tooling" \
+    --arg rev "$EXPECTED_AGENT_REVISION" --arg switch_result "$switch_result" \
+    --arg at "$(date -u +%FT%TZ)" --argjson attempt "$attempt_json" \
+    --argjson failed_units "$failed_units_json" '
+    {state:"closed_unattested", window:$id, deployment_id:$d, applied:true,
+     receipt:{deployment_id:$d, image_id:$image, sha256:$sha},
+     serving:{image:$image, container:$container, health:"healthy",
+       tooling_path:$tooling, agent_revision:$rev},
+     attempt:$attempt, attestation:"failed", production_turn:"not_run",
+     switch_result:$switch_result, failed_units:$failed_units,
+     closed_at:$at, operator:"release worker"}' > "$dir/closed-unattested.json.tmp"
+  chmod 0600 "$dir/closed-unattested.json.tmp"; sync -f "$dir/closed-unattested.json.tmp"
+  mv "$dir/closed-unattested.json.tmp" "$dir/closed-unattested.json"; sync -f "$dir"
+  "$SYSTEMCTL_BIN" start t3code-recovery.service
+  [[ $(unit_state t3code-recovery) == active ]] || fail 'recovery not active; inhibit retained'
+  if [[ $(unit_state "$WINDOW_UNIT") == active ]]; then
+    holder_ready || fail 'holder lost before release; inhibit retained'
+    "$SYSTEMCTL_BIN" stop "$WINDOW_UNIT.service"
+  fi
+  [[ $(unit_state "$WINDOW_UNIT") == inactive ]] || fail 'holder stop outcome unknown'
+  lock_candidate_pair
+  [[ ! -L $HOLD_FILE ]] || fail 'recovery hold is a symlink'
+  [[ ! -e $HOLD_FILE ]] || rm "$HOLD_FILE"
+  rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
+  printf 'CLOSED unattested window=%s deployment=%s image=%s attempt=%s\n' \
+    "$id" "$expected" "$expected_image" "$(printf '%s' "$attempt_json" | "$JQ_BIN" -r '.exit_code')"
   ;;
  end-no-activation)
   [[ $(unit_state ghostship-t3code-deploy) == inactive && $(unit_state t3code-podman-candidate) == inactive ]] || fail 'failed service requires post or recovery'
@@ -1220,5 +1406,5 @@ case ${1:-} in
   rm "$HOLD_FILE"
   rm "$WINDOW_ROOT/active-window"; sync -f "$WINDOW_ROOT"
   ;;
- *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation|closed-unaccepted' >&2; exit 2 ;;
+ *) echo 'usage: release-window preflight [--adopt-inhibit]|start [--adopt-inhibit [--supersede-unknown REASON]] WINDOW_ID|cancel-start|switch -- COMMAND [ARG...]|post|end-post [WINDOW_ID]|rollback [WINDOW_ID]|end-receipted-failure|end-unknown|resolve-unknown|end-no-activation|closed-unaccepted|closed-unattested' >&2; exit 2 ;;
 esac

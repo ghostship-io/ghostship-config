@@ -13,12 +13,10 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     environment: private-source-ci
     runs-on: [self-hosted, Linux, ARM64, ghostship-fast]
-    timeout-minutes: 4 # Headroom for concurrent PR runs on the shared self-hosted runner.
-                       # Measured across ~21 recent CI runs: the "Run fast repository checks"
-                       # step p95 is ~78s (max ~97s) and the check job total p95 is ~118s,
-                       # so lone runs already approach the old 2-minute cap. With two PRs
-                       # sharing the runner, both used to be cancelled at the cap after
-                       # printing PASS. Four minutes gives concurrent runs room to finish.
+    timeout-minutes: 10 # Measured 2026-10-31: the private-source import alone took
+                        # 3m17s (four shallow depth=1 fetches); the old 4-minute cap
+                        # cancelled every run during "Run fast repository checks".
+                        # Ten minutes leaves room for the checks plus a concurrent PR.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -47,6 +45,10 @@ jobs:
             args+=(--override-input "$name" "$url")
           done < "$overrides"
           nix develop .#ci "${args[@]}" --no-write-lock-file -c scripts/check "$PR_BASE" "$PR_HEAD"
+          # Build the deployment wrappers the host installs (#1747). The PR
+          # runner is ARM64 like the host, and the check re-instantiates the
+          # wrappers with the check's pkgs, so this is a native build.
+          nix build -L "${args[@]}" --no-write-lock-file .#checks.aarch64-linux.deployment-wrappers
       - name: Check the isolated-service evidence script
         run: |
           nix develop .#ci --no-write-lock-file -c shellcheck -s bash -e SC1091 modules/self-hosted/agent-memory-evidence.sh
@@ -82,7 +84,7 @@ jobs:
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
         run: nix develop .#ci --no-write-lock-file -c scripts/check-integration
       - name: Evaluate hosts and run regression tests
-        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package .#checks.x86_64-linux.window-holder
+        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package .#checks.x86_64-linux.window-holder .#checks.x86_64-linux.deployment-wrappers
       - name: Check workflows and backup script
         run: |
           nix develop .#ci -c actionlint

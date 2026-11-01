@@ -776,11 +776,19 @@ let
   };
 
   t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb imageArgs;
+  # The same layers, streamed to `podman load` instead of re-gzipped into one
+  # whole-image archive. Layers are separate store paths, so bumping one input
+  # rebuilds that layer only rather than recompressing all 384 MiB.
+  # Layer order is slowest-changing first: the runtime and its libraries, then
+  # the baked agent CLIs, then the T3 app, then this image's own config and
+  # units, so a T3 version bump leaves the CLI layers untouched.
+  t3codeImageStream = pkgs.dockerTools.streamLayeredImage imageArgs;
   t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
 
 in {
   inherit imageArgs;
   image = t3codeImage;
+  stream = t3codeImageStream;
   contents = t3codeImageContents;
   deploymentId = t3codeDeploymentId;
 }

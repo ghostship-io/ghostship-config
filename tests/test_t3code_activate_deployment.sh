@@ -49,7 +49,7 @@ wait "$activation_pid"
 [[ $(cat "$STATE_DIR/desired") == new-deployment ]]
 # The recorded expectation must include the tooling path, the value the
 # acceptance gate compares against the loaded agent.
-[[ $(cat "$STATE_DIR/desired-inputs") == "agent=new-agent secret_inode=$(stat -Lc '%i' "$PROVIDER_SECRETS_FILE") tooling=/nix/store/expected-tooling" ]]
+[[ $(cat "$STATE_DIR/desired-inputs") == "agent=new-agent secret_sha256=$(sha256sum "$PROVIDER_SECRETS_FILE" | cut -d ' ' -f1) tooling=/nix/store/expected-tooling" ]]
 [[ $(sed -n '1p' "$EVENTS") == daemon-reload ]]
 [[ $(sed -n '2p' "$EVENTS") == 'start --no-block ghostship-t3code-deploy.service' ]]
 echo 'Activation shell proof: activation serializes desired writes, reloads units, then starts deployment.'
