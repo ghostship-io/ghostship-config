@@ -395,7 +395,7 @@ record_known_good() {
   hash=$(sha256sum < "$matched_receipt" | cut -d ' ' -f1)
   desired=$(cat "$STATE_DIR/desired"); applied=$(cat "$STATE_DIR/applied")
   digest=$("$JQ_BIN" -r '.provider_secret_sha256 // empty' "$matched_receipt" 2>/dev/null || true)
-  if [[ -n $digest ]]; then evidence=receipt-digest; else evidence=legacy-content-consistent; fi
+  if [[ -n $digest ]]; then evidence="receipt-digest"; else evidence="legacy-content-consistent"; fi
   # shellcheck disable=SC2016
   "$JQ_BIN" -cn --arg desired "$desired" --arg applied "$applied" --arg receipt "$(basename "$matched_receipt")" --arg hash "$hash" --arg digest "$digest" --arg evidence "$evidence" --arg at "$(date -u +%FT%TZ)" \
     '{state:"KNOWN_GOOD_SERVING",desired:$desired,applied:$applied,receipt:$receipt,receipt_sha256:$hash,
