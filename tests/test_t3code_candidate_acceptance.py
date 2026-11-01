@@ -1098,9 +1098,34 @@ class CandidateAcceptanceTest(unittest.TestCase):
             return Mock(returncode=1, stdout="")
 
         with patch.object(acceptance, "command", side_effect=command):
-            with self.assertRaisesRegex(RuntimeError, r"exited before app readiness \(exit code 255\)"):
+            with self.assertRaisesRegex(RuntimeError, r"exited before (app|proxy) readiness \(exit code 255\)"):
                 acceptance.check_candidate(["podman"], "candidate", "provider.env",
                                            acceptance_route=self.zen_route())
+
+    def test_candidate_proxy_dispatch_timeout_is_a_failure(self):
+        def command(engine, *args, **kwargs):
+            if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                raise subprocess.TimeoutExpired(args, 15)
+            return Mock(returncode=0, stdout="")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, "proxy dispatch timed out"):
+                acceptance.check_candidate(["podman"], "candidate", "provider.env")
+
+    def test_candidate_proxy_dispatch_is_not_readiness(self):
+        def command(engine, *args, **kwargs):
+            if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                return Mock(returncode=0, stdout="")
+            if args[:4] == ("exec", "candidate", "systemctl", "is-active"):
+                return Mock(returncode=3, stdout="inactive")
+            if args[:1] == ("inspect",):
+                return Mock(returncode=0, stdout='{"Running":true}')
+            return Mock(returncode=0, stdout="")
+
+        with patch.object(acceptance, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, "proxy did not become ready"):
+                acceptance.check_candidate(["podman"], "candidate", "provider.env",
+                                           timeout_s=0.01)
 
     def test_candidate_readiness_starts_the_frontend_proxy_unit(self):
         calls = []
@@ -1108,6 +1133,8 @@ class CandidateAcceptanceTest(unittest.TestCase):
         def command(engine, *args, **kwargs):
             calls.append(tuple(args))
             if args[:4] == ("exec", "candidate", "systemctl", "start"):
+                return Mock(returncode=0, stdout="")
+            if args[:4] == ("exec", "candidate", "systemctl", "is-active"):
                 return Mock(returncode=0, stdout="")
             if args[:4] == ("exec", "candidate", "curl", "-fsS"):
                 return Mock(returncode=0, stdout="ok")
@@ -1127,7 +1154,7 @@ class CandidateAcceptanceTest(unittest.TestCase):
                 acceptance_route=self.zen_route(),
             )
         self.assertTrue(all(checks.values()))
-        self.assertIn(("exec", "candidate", "systemctl", "start",
+        self.assertIn(("exec", "candidate", "systemctl", "start", "--no-block",
                        "t3code-access-proxy.service"), calls)
         self.assertIn(("exec", "--user=3000:3000", "candidate", "t3", "project",
                        "add", "/workspace", "--title", "Candidate acceptance"), calls)

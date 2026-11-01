@@ -70,7 +70,7 @@ case "$1 $3 ${4:-}" in
   'inspect --format {{.Id}}') printf '%064d\n' 1 ;;
   'inspect --format {{.State.Health.Status}}') printf 'healthy\n' ;;
   'exec readlink -f') printf '%s\n' "$EXPECTED_TOOLING_PATH" ;;
-  'exec cat '*) printf '{"revision":"%s"}\n' "$EXPECTED_AGENT_REVISION" ;;
+  'exec cat '*) printf '{"revision":"%s"}\n' "${FIXTURE_RELEASE_REVISION:-$EXPECTED_AGENT_REVISION}" ;;
   'exec stat -Lc') if [[ -n ${FIXTURE_CONTAINER_INODE:-} ]]; then printf '%s\n' "$FIXTURE_CONTAINER_INODE"; else stat -Lc '%i' "$PROVIDER_SECRETS_FILE"; fi ;;
   'exec sha256sum '*) if [[ ${FIXTURE_SECRET_MISMATCH:-0} == 1 ]]; then printf '%064d  /run/secrets/t3code.env\n' 0; else sha256sum "$PROVIDER_SECRETS_FILE"; fi ;;
   'exec systemctl is-active'|'exec curl -fsS'|'exec sh -c') exit 0 ;;
@@ -909,4 +909,33 @@ jq -e --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg sha "$recei
   || { echo 'unattested record is not truthful' >&2; cat "$record" >&2; exit 1; }
 unset FIXTURE_DEPLOY_RESULT JOURNALCTL_BIN
 
+# The known-good receipt is bound to the applied deployment, not to the
+# mutable release.json revision written by other tooling.
+export STATE_DIR="$tmp/state-receipt"; rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR/receipts" "$STATE_DIR/attempts"; : > "$STATE_DIR/deploy.lock"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/desired"
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+inode=$(stat -Lc %i "$PROVIDER_SECRETS_FILE")
+jq -n --arg d "$EXPECTED_DEPLOYMENT" --arg i "$EXPECTED_IMAGE" --arg p "$EXPECTED_TOOLING_PATH" --arg s "$inode" \
+  '{deployment_id:$d,image_id:$i,candidate_name:"t3code-candidate-fixture",agent_revision:"fixture",agent_path:$p,provider_secret_inode:$s,live_before:{id:"fixture"},live_after:{id:"fixture"},checks:{app_ready:true,fixture_turn:true,agent_cli:true,skills:true,desktop_cli:true,desktop_transport:true}}' \
+  > "$STATE_DIR/receipts/$EXPECTED_DEPLOYMENT.json"
+export FIXTURE_RELEASE_REVISION=0000000000000000000000000000000000000000
+"${cmd[@]}" start receiptmeta
+"${cmd[@]}" switch -- true
+printf '%064d\n' 5 > "$STATE_DIR/desired"
+"${cmd[@]}" rollback receiptmeta
+[[ -f $tmp/evidence/receiptmeta/known-good.json ]]
+unset FIXTURE_RELEASE_REVISION
+# A different applied deployment id must not borrow that receipt.
+printf '%064d\n' 6 > "$STATE_DIR/applied"
+"${cmd[@]}" start wrongapplied
+"${cmd[@]}" switch -- true
+if "${cmd[@]}" rollback wrongapplied 2>"$tmp/wrong-applied.log"; then
+  echo 'restored without the applied receipt' >&2; exit 1
+fi
+grep -q 'no exact known-good receipt' "$tmp/wrong-applied.log" || {
+  echo 'wrong-applied refusal is not the receipt guard' >&2; cat "$tmp/wrong-applied.log" >&2; exit 1; }
+printf '%s\n' "$EXPECTED_DEPLOYMENT" > "$STATE_DIR/applied"
+
 echo 'Release window refusal and reopen fixture passed.'
+

@@ -1008,10 +1008,13 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
     # Start that same serving path explicitly in the disposable candidate.
     proxy_deadline = time.monotonic() + min(timeout_s, 30)
     while True:
-        proxy_start = command(
-            engine, "exec", name, "systemctl", "start", "t3code-access-proxy.service",
-            timeout=15,
-        )
+        try:
+            proxy_start = command(
+                engine, "exec", name, "systemctl", "start", "--no-block",
+                "t3code-access-proxy.service", timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("candidate access proxy dispatch timed out")
         if proxy_start.returncode == 0:
             break
         state = command(engine, "inspect", name, "--format", "{{json .State}}")
@@ -1025,6 +1028,32 @@ def check_candidate(engine, name, provider_env_file, timeout_s=300, tooling_path
             raise RuntimeError(f"candidate container exited before proxy startup{detail}")
         if time.monotonic() >= proxy_deadline:
             raise RuntimeError("candidate access proxy failed to start")
+        time.sleep(2)
+    # --no-block returns on dispatch, not on readiness. The proxy unit is
+    # ordered after the booting server, so prove its own active state inside a
+    # separate bound and fail the acceptance when it never comes up.
+    proxy_ready_deadline = time.monotonic() + min(timeout_s, 120)
+    while True:
+        try:
+            proxy_active = command(
+                engine, "exec", name, "systemctl", "is-active", "--quiet",
+                "t3code-access-proxy.service", timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("candidate access proxy readiness timed out")
+        if proxy_active.returncode == 0:
+            break
+        state = command(engine, "inspect", name, "--format", "{{json .State}}")
+        try:
+            state_data = json.loads(state.stdout)
+        except (TypeError, ValueError):
+            state_data = {}
+        if state_data.get("Running") is not True:
+            exit_code = state_data.get("ExitCode")
+            detail = f" (exit code {exit_code})" if isinstance(exit_code, int) else ""
+            raise RuntimeError(f"candidate container exited before proxy readiness{detail}")
+        if time.monotonic() >= proxy_ready_deadline:
+            raise RuntimeError("candidate access proxy did not become ready")
         time.sleep(2)
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:

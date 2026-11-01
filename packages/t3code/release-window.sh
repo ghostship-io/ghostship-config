@@ -305,15 +305,23 @@ JQ
 }
 known_good_receipt() {
   : "${CANDIDATE_HOME_TARGET:?}" "${JQ_BIN:?}"
-  local cid image started revision tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_revision="" declared_tooling=""
+  local cid image started tooling inode receipt wanted="${2:-}" mode="${3:-}" declared_tooling=""
   if [[ $# -ge 1 ]]; then image=$1; else read -r cid image started < "$dir/serving.before"; fi
   image=${image#sha256:}
+  # Bind the receipt to the deployment that is actually applied. The
+  # container's release.json is mutable metadata written by other tooling and
+  # can disagree with the accepted receipt; the code identity is the tooling
+  # closure, which is matched below.
+  if [[ -z $wanted ]]; then
+    [[ -f $STATE_DIR/applied && ! -L $STATE_DIR/applied ]] || return 2
+    wanted=$(< "$STATE_DIR/applied") || return 2
+    [[ $wanted =~ ^[0-9a-f]{64}$ ]] || return 2
+  fi
   tooling=$("$PODMAN_BIN" exec "$PODMAN_TARGET" readlink -f "$CANDIDATE_HOME_TARGET/.local/state/ghostship-t3-tools/current") || return 2
-  revision=$("$PODMAN_BIN" exec "$PODMAN_TARGET" cat "$CANDIDATE_HOME_TARGET/.local/state/t3code-shared-agents/release.json" | "$JQ_BIN" -er '.revision | select(type == "string" and length > 0)') || return 2
   inode=$("$PODMAN_BIN" exec "$PODMAN_TARGET" stat -Lc '%i' /run/secrets/t3code.env) || return 2
   [[ -n $tooling && $inode =~ ^[0-9]+$ ]] || return 2
   if [[ $mode == advanced ]]; then
-    read -r declared_revision declared_tooling < <(declared_target) || return 2
+    read -r _ declared_tooling < <(declared_target) || return 2
   fi
   [[ ! -L $STATE_DIR/receipts ]] || return 2
   [[ ! -e $STATE_DIR/receipts || -d $STATE_DIR/receipts ]] || return 2
@@ -321,15 +329,14 @@ known_good_receipt() {
   for receipt in "$STATE_DIR"/receipts/*.json; do
     [[ -f $receipt && ! -L $receipt && -r $receipt ]] || return 2
     # shellcheck disable=SC2016
-    if "$JQ_BIN" -e --arg i "$image" --arg a "$revision" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
-      --arg da "$declared_revision" --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
+    if "$JQ_BIN" -e --arg i "$image" --arg p "$tooling" --arg s "$inode" --arg wanted "$wanted" \
+      --arg dp "$declared_tooling" --arg adv "${mode:+1}" '
       (.image_id | sub("^sha256:"; "")) == $i and
-      (.deployment_id | type == "string" and length > 0) and ($wanted == "" or .deployment_id == $wanted) and
+      (.deployment_id | type == "string" and length > 0) and .deployment_id == $wanted and
       (.candidate_name | type == "string" and startswith("t3code-candidate-")) and
       .live_before != null and .live_before == .live_after and
       .provider_secret_inode == $s and
-      ((.agent_revision == $a and .agent_path == $p) or
-        ($adv == "1" and .agent_revision == $da and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
+      (.agent_path == $p or ($adv == "1" and .agent_path == $dp))' "$receipt" >/dev/null 2>&1 \
       && receipt_checks_ok "$receipt"; then
       printf '%s\n' "$receipt"
       return 0
