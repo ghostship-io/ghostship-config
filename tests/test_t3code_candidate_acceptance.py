@@ -1547,7 +1547,7 @@ def _selection(document, now):
             with self.subTest(mount=mount), self.assertRaisesRegex(ValueError, "allowlist"):
                 acceptance.validate_candidate_mounts([mount])
 
-    def test_candidate_receipt_binds_the_agent_pin_and_provider_inode(self):
+    def test_candidate_receipt_binds_the_agent_pin_and_provider_digest(self):
         secrets = self.root / "t3code.env"
         secrets.write_text("OPENROUTER_API_KEY=provider-fixture\nGITHUB_TOKEN=excluded\n")
         self.add_installed_toolchain()
@@ -1571,7 +1571,12 @@ def _selection(document, now):
             )
         self.assertEqual(receipt["agent_revision"], "a" * 40)
         self.assertEqual(receipt["agent_path"], pinned_tooling)
-        self.assertEqual(receipt["provider_secret_inode"], str(secrets.stat().st_ino))
+        # The receipt binds the provider inputs by content, not by the host
+        # inode: a switch re-decrypts the secret to a new inode with the same
+        # bytes, and the digest is what a later reader can compare.
+        self.assertEqual(receipt["provider_secret_sha256"],
+                         hashlib.sha256(secrets.read_bytes()).hexdigest())
+        self.assertNotIn("provider_secret_inode", receipt)
         self.assertIn(("cp", staged, f"{receipt['candidate_name']}:/nix/store/"), self.commands)
 
     def observed_isolation(self):
