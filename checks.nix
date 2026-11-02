@@ -306,6 +306,7 @@ in
         python modules/common/scripts/ghostship-config.py --test
         bash tests/test_t3code_deploy_image.sh
         bash tests/test_t3code_deploy_script.sh
+        bash tests/test_t3code_pin_agent.sh
         # #804 shipped this proof without wiring it; the wiring guard refuses
         # an unwired T3 deployment proof.
         bash tests/test_t3code_deploy_status.sh
