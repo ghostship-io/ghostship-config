@@ -216,18 +216,17 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   required build, start, restart and usable-app performance is unmeasured or
   unacceptable** — performance is not post-release polish. Report every
   measurement as PASS, FAIL or UNKNOWN against the evidence-based budget, and
-  treat UNKNOWN as acceptance left open rather than as a pass.
+  treat UNKNOWN as the measurement left open rather than as a pass.
 - Measured partials do not close the gate: current evidence of 110.1 MiB
   compressed, 384.4 MiB uncompressed and a 17.7 s cached build says nothing
   about restart or readiness. Restart and ready timings come from the executor
   at the planned activation, never from a benchmark-only restart.
 - Record the measured baseline, the final numbers and the agreed budget with
   the image change's release evidence — the first one is #1636. Performance is
-  **not** part of the candidate-acceptance receipt: that schema is closed at
-  `CHECKS = ("app_ready", "provider_turn", "agent_cli", "skills",
-  "desktop_cli")`; `desktop_transport` is recorded as typed
-  `not_applicable` in the credential-free candidate and is verified live after
-  the switch by the production smoke check. Do not add fields to the required
+  **not** part of any receipt: the mechanical receipt records identity only
+  (deployment id, image, agent, tooling, secret digest, before/after), and the
+  behavioural suite is `just acceptance`, run explicitly. This measurement stays
+  release evidence, not a deploy gate. Do not add fields to the required
   set or expect it to gate on timings. Budgets are set per image from measured evidence; do not invent
   fleet-wide thresholds, and do not compare images of different roles.
 - Anything on the start path that installs, fetches, compiles, migrates or

@@ -49,8 +49,8 @@ permanent security thread. Keep private security evidence off free-tier workers.
    successful `--no-link` builds may have been collected since testing.
    Account for daemon/build continuity, indirect container
    restarts, image retags, rollback artifact availability and scheduled writers.
-   Apply assigned fixes through committed Git with `agent deploy run`, preserving
-   its busy-session guard. Follow the
+   Apply assigned fixes through committed Git with `just deploy` from the host
+   checkout, preserving the busy-session guard. Follow the
    [session guard](container-workflow.md#preserve-the-active-t3-code-session).
    Material compatibility decisions, exposure, reboot, destructive migration and
    unresolved broad enforcement retain their owner gates. Advance independent

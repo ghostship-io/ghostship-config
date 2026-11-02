@@ -81,7 +81,8 @@ Open `https://t3code.ghostship.io` and complete Cloudflare sign-in.
 The container hostname is the internal name `t3code`: assigning its public
 hostname would also register that name in Podman DNS and `/etc/hosts`, shadowing
 the Cloudflare HTTPS edge with the HTTP-only origin. Container hostname changes
-apply with an image activation after its candidate acceptance passes.
+apply with an image activation, which `just deploy` performs after its
+mechanical activation checks.
 
 No separate T3 account is required for this web interface. The internal gateway supplies a
 native T3 bearer session for HTTP and WebSocket requests. The credential stays
@@ -499,9 +500,12 @@ only the session leaving the running state settles the turn. No conversation rec
 
 ## Maintenance
 
-Deploy merged changes with `agent deploy run`; `--agent-rev REV` pins an agent
-revision first. Its gates require passing candidate acceptance for the target
-T3 image, record the generation and verify live health.
+Deploy merged changes with `just deploy` from a working checkout on the host;
+`just verify` before and after, `just rollback` to return the system and T3
+together. It builds and tests one artifact, records the system generation, runs
+the T3 deployer after its mechanical activation checks, then verifies the
+deployed and running identity. Pinning an agent revision is a configuration
+change: update the flake input, land it, deploy.
 
 The four-hour timer checks official T3 standalone releases and provider registry
 versions. It verifies T3's SHA-256 checksum, executable version, web client and
@@ -571,18 +575,18 @@ skip the fetch so recovery never waits on GitHub. Sync output is in
 `~/.t3code-container/logs/t3code-hooks.log`. Update output is in
 `t3code-tool-auto-update.log` in the same directory.
 
-The host unit preserves production while it builds and accepts a candidate. The
-candidate uses the target image, deployment inputs, credentials and tooling in an
-isolated runtime; production identity must be unchanged before the receipt is
-written. `ghostship-t3code-deploy.service` accepts the exact image and runtime
-inputs, then holds the container's tool-maintenance lock
+The host unit preserves production while it checks the artifact. Activation is
+mechanical: the image id must equal the artifact identity, the provider secret
+digest must be present, the tooling must exist and the state schema must match.
+`ghostship-t3code-deploy.service` checks those, then holds the container's
+tool-maintenance lock
 (`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
 bind mount) across the immediate restart. Each container carries its deployment
 ID in the `io.ghostship.t3code.deployment` label. A successful run records the
 deployment as applied only after the new container is healthy and its runtime
-inputs match. Failed candidate acceptance raises the service failure incident
-once and blocks the same image and acceptance bundle only when a previously
-proven-working route demonstrates the candidate failure. The probe names the
+inputs match, and writes a mechanical receipt with no behavioural claim. A
+failed activation check exits for that step and records the attempt. The
+behavioural suite (`just acceptance`) is separate. The probe names the
 owner-approved, acceptance-only anonymous OpenCode Zen route
 (`opencode-free` / `opencode/glm-5.3-flash-free`, high effort), pins that
 route's effort, and proves one real turn; worker admission is unchanged, picker
@@ -607,11 +611,15 @@ key and reason in the root-only deployment state's `failure-invalidations.jsonl`
 under the deployment lock before removing the marker; it does not run
 acceptance or restart T3. If audit recording fails, the marker remains. Treat a
 record as an invalidation request: a crash can leave the marker in place.
-Reasons must not contain secrets. The next deployment still runs all acceptance
-checks and requires the exact-image PASS receipt before any restart. Backups include
+Reasons must not contain secrets. The next deployment still runs the mechanical
+activation checks before any restart. Backups include
 the home and projects but exclude the development engine and Nix stores.
 
-### Candidate rehearsal
+### Behavioural suite
+
+The behavioural checks run only when asked: `just acceptance` calls the same
+`candidate-acceptance.py` explicitly, and nothing in `just deploy` or
+`just verify` depends on it.
 
 `candidate-acceptance.py --rehearsal` runs the same `accept()`/`_accept()` path
 against a built image and closure without a release window, switch, deploy
