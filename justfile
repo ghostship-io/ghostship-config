@@ -6,6 +6,11 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# Pin the private agent to a commit and open the ordinary config PR. It lands
+# on a green check with a head-matched merge, then `just deploy` ships it.
+pin-agent REV:
+    ./scripts/pin-agent {{REV}}
+
 # Build and test the T3 deployment artifact; deploys nothing (the CI path).
 test *ARGS:
     ./packages/t3code/deploy.sh --no-deploy {{ARGS}}

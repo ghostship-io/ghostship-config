@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Pin the private agent inputs to REV and open the ordinary pull request.
+#
+#   scripts/pin-agent REV            # run from the config checkout
+#
+# It changes exactly two things: the agent URL revs in flake.nix and the lock
+# nodes `nix flake lock` refreshes, then commits on a branch and opens a PR.
+# There is no special landing rule: the pin lands like any config PR, on a green
+# check with a head-matched merge, and then `just deploy` ships it.
+#
+# The guard is scripts/check-agent-pin.py: it refuses a pin that does not
+# descend from the current one, with the owner's approval as the override.
+set -euo pipefail
+
+rev=${1:-}
+[[ $rev =~ ^[0-9a-f]{40}$ ]] || { echo "usage: pin-agent REV (a full 40 character commit)" >&2; exit 2; }
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+[[ -z $(git status --porcelain) ]] \
+  || { echo 'pin-agent: the checkout is not clean; commit or stash first' >&2; exit 1; }
+grep -q "github:ghostship-io/ghostship-agent/" flake.nix \
+  || { echo 'pin-agent: flake.nix has no ghostship-agent inputs' >&2; exit 1; }
+
+NIX_BIN=${NIX_BIN:-nix}
+GH_BIN=${GH_BIN:-gh}
+
+# Only the two runtime inputs move: the policy and route-catalog pins are
+# separate approvals and keep their own revisions.
+sed -i -E \
+  -e "s#(ghostship-private-agent\.url = \"github:ghostship-io/ghostship-agent/)[0-9a-f]{40}#\\1${rev}#" \
+  -e "/ghostship-native-agent = \{/,/^    \};/ s#(url = \"github:ghostship-io/ghostship-agent/)[0-9a-f]{40}#\\1${rev}#" \
+  flake.nix
+
+# Refresh the lock nodes from the new URL rev: narHash, lastModified and rev.
+"$NIX_BIN" flake lock \
+  --update-input ghostship-private-agent \
+  --update-input ghostship-native-agent
+
+moved=$(grep -c "github:ghostship-io/ghostship-agent/${rev}" flake.nix)
+[[ $moved == 2 ]] || { echo "pin-agent: expected both agent inputs at $rev, found $moved" >&2; exit 1; }
+
+branch="pin/agent-${rev:0:8}"
+git switch -c "$branch"
+git add flake.nix flake.lock
+# No attribution trailer: the repository's identity rules own commit metadata.
+git commit -q -m "flake: pin the private agent to ${rev:0:8} (#1636)"
+git push -q -u origin "$branch"
+"$GH_BIN" pr create --base main --head "$branch" \
+  --title "flake: pin the private agent to ${rev:0:8} (#1636)" \
+  --body "Pins \`ghostship-private-agent\` and \`ghostship-native-agent\` to ${rev}.
+
+Only the agent URL revs in \`flake.nix\` and the lock nodes \`nix flake lock\` refreshes change. \`scripts/check-agent-pin.py\` guards the move: it must descend from the current pin, unless the owner approves the PR.
+
+Lands as an ordinary config PR on a green check with a head-matched merge; then \`just deploy\`."
+
+echo "pin-agent: opened $branch; merge it on a green check, then run 'just deploy'"

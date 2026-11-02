@@ -18,7 +18,7 @@ if [[ $# -ne 0 && $# -ne 2 ]]; then
 fi
 
 shellcheck scripts/check scripts/check-integration
-shellcheck -s bash packages/t3code/deploy.sh tests/test_t3code_deploy_script.sh dev
+shellcheck -s bash packages/t3code/deploy.sh tests/test_t3code_deploy_script.sh dev scripts/pin-agent tests/test_t3code_pin_agent.sh
 shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh scripts/activate-host
 actionlint
 if [[ $# -eq 2 ]]; then
