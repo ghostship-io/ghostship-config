@@ -161,13 +161,16 @@ terminates the agent session. This restriction also covers Podman auto-update,
 dependency restarts, host reboot, and container bootstrap/activation helpers.
 
 Host configuration changes keep `podman-t3code.service` from restarting as
-part of the switch itself. When the deployment identity changes, the switch
-starts `ghostship-t3code-deploy.service` immediately. It accepts the exact
-image, verifies the receipt, and restarts `podman-t3code.service` in that same
-run. Failed acceptance marks that image blocked, raises the service failure
-incident once, and does not schedule a retry. T3 app and provider updates
-happen in the persistent home; image and agent pin changes use the same exact
-candidate acceptance path.
+part of the switch itself, and a switch no longer writes T3 deployment state.
+`just deploy` records the requested deployment id and inputs under the
+deployer's lock, starts `ghostship-t3code-deploy.service` from the now-current
+system and reads its result. The deployer runs only mechanical activation
+checks (image id equals the artifact identity, provider secret digest present,
+tooling present, state schema compatible), restarts `podman-t3code.service`
+when the identity changed, and writes a mechanical receipt. A failure exits for
+that step and schedules no retry. T3 app and provider updates happen in the
+persistent home; the behavioural suite is `just acceptance`, run explicitly and
+never from deploy or verify.
 
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
@@ -178,9 +181,11 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
-Candidate acceptance runs against the target image in isolation and confirms
-that the live production identity remains unchanged. Once the exact-image
-receipt passes, the deployment may restart T3 Code immediately.
+The behavioural suite (`just acceptance`) runs against the target image in
+isolation and confirms the application, provider turn, CLI, skills and desktop
+transport while the production container identity stays unchanged. It is not
+part of deployment: `just deploy` runs the mechanical checks and restarts T3
+Code, and `just verify` reads the deployed and running identity afterwards.
 
 For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
 read-only. A unit linked under `/run/systemd/system` also has lower precedence
@@ -259,9 +264,12 @@ until their native adapters are validated. Run the deployed boundary proof with
 Provider data-retention settings and their re-check are documented in
 [provider zero data retention](provider-zdr.md).
 
-Use `agent deploy run` for merged changes. It builds the target configuration,
-accepts the exact T3 candidate image before activation, then restarts T3 as soon
-as the receipt passes.
+Use `just deploy` for merged changes, from a working checkout on the host. It
+builds one artifact, tests it, records the generation, switches, runs the T3
+deployer from the now-current system and verifies the result. `just test` is the
+same build and test with the deploy skipped; `just verify` is the read-only
+check to run before any retry; `just rollback` returns the system and T3
+together.
 
 The container hostname identifies the coding environment. Always select the
 target explicitly instead of using `.#$(hostname)` here. Host configuration
@@ -288,10 +296,12 @@ uncommitted files onto the host.
 After landing the PR, deploy the committed configuration with:
 
 ```sh
-agent deploy run
+just verify        # before
+just deploy        # build, test, switch, run the T3 deployer, verify
+just verify        # after
 ```
 
-Use `agent deploy run --agent-rev REV` to pin an agent change first. The command
-builds with local firmware support, checks dry-activation and live health, and
-records the system generation. Other hosts retain their explicit target and
-host-specific procedure. Do not bypass failed gates with a direct switch.
+`just deploy` uses the built switch and records the system generation. Pinning
+an agent change is a configuration change: update the flake input, land it,
+then deploy. Other hosts retain their explicit target and host-specific
+procedure. Do not bypass a failed step with a direct switch.

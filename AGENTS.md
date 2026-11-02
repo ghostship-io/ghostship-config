@@ -25,8 +25,12 @@
   is fixed rather than relaxed, and the exposure approval above stays the owner's.
 - Deploy through committed Git changes and direct root SSH on the target host.
   If push or SSH access fails, report the blocker. Do not call `sudo`.
-- T3 Code may restart after candidate acceptance passes for the exact image
-  being activated. Deploys must verify that receipt before switching.
+- Deploy with the one script: `just verify`, `just deploy`, `just verify`, and
+  `just rollback` to return the system and T3 together. T3 Code restarts during
+  `just deploy` after the mechanical activation checks (image id, secret digest,
+  tooling, state schema) and before the mechanical receipt is written. The
+  behavioural suite is `just acceptance`, run explicitly and never from deploy
+  or verify.
 
 Read on demand:
 

@@ -350,9 +350,13 @@ the complete regression suite. Stage new Nix files before evaluation so the
 flake can see them. Host evaluation constructs derivations without activating
 systems. CI cancels superseded PR and main runs.
 
-Deploy the merged configuration with `agent deploy run`. It records the system
-generation and checks activation gates and live health. Use `--agent-rev REV`
-to pin an agent change before deploying.
+Deploy the merged configuration with the one script, from a working checkout on
+the host: `just verify`, `just deploy`, `just verify`. It builds one artifact,
+tests it, records the system generation, runs the T3 deployer from the
+now-current system and verifies the deployed and running identity. `just
+rollback` returns the system and T3 together. The identity is read from the
+built system; there is no release id to pass. Pinning an agent revision is a
+configuration change: update the flake input, land it, deploy.
 
 Build a different host without switching:
 

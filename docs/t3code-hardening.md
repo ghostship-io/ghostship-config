@@ -91,6 +91,8 @@ Use `packages/t3code/hardening-probe.py --help` for disposable outer-runtime
 checks and `--podman-workspace` workflow checks. Never run them against the active
 T3 container. Preserve the session guard in [container workflow](container-workflow.md).
 
-Activation changes the T3 image and requires a passing candidate acceptance
-receipt for that exact image before restart. Source readiness, candidate tests
-and deployed runtime proof are distinct.
+Activation changes the T3 image and requires the mechanical activation checks
+for that exact image before restart (image id equals the artifact identity,
+provider secret digest present, tooling present, state schema compatible).
+Source readiness, the behavioural suite (`just acceptance`) and deployed runtime
+proof are distinct.

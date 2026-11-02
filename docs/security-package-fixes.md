@@ -473,16 +473,16 @@ change:
    before any effect. The old activation hook that did this during a switch is
    gone.
 
-Consequence: **activation recreates the T3 Code container as soon as candidate
-acceptance passes**, even though `podman-t3code.service` itself does not restart
-as part of switch-to-configuration.
+Consequence: **`just deploy` recreates the T3 Code container after the
+mechanical activation checks pass**, even though `podman-t3code.service` itself
+does not restart as part of switch-to-configuration.
 
 ### Activation remains gated
 
 No activation procedure is approved here. A normal switch would restart 35
-other OCI containers and start exact-image candidate acceptance for T3. A
-passing receipt immediately activates and restarts that image; a failed
-acceptance blocks it and raises one incident. Rebooting would interrupt
+other OCI containers. `just deploy` runs the mechanical activation checks for T3
+and restarts only that image; a failed check exits for that step and leaves the
+rest of the host alone. Rebooting would interrupt
 the active session; changing a boot default also changes profile/boot state.
 Neither is a permitted workaround under the current continuity constraints.
 Scoped activation is possible in principle, but requires its own exact
@@ -810,10 +810,10 @@ Postchecks must compare the executable of the running main process with the
 fixed component and verify a fresh daemon-protocol connection, together with
 socket, T3 identity, deployment-state and kernel-containment guards.
 
-An in-flight T3 deployment holds `deploy.lock`. The activation writes the
+An in-flight T3 deployment holds `deploy.lock`. `just deploy` writes the
 desired deployment identity and starts the immediate deploy service; it does
-not create a delayed restart request. Failed candidate acceptance records the
-blocked deployment ID and reports through the service's one failure path.
+not create a delayed restart request. A failed mechanical check exits for that
+step and records the attempt; nothing else on the host is held.
 
 A runtime override also needs the verified, explicitly owned GC root from
 the restoration step for its fixed store path.

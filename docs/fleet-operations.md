@@ -462,12 +462,11 @@ Fleet checks after review when needed.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
-3. Deploy `chill-penguin` with `agent deploy run` (ghostship-agent
-   `docs/deploy.md`) from the thread that merged the work. It holds a host
-   `flock` for the whole run, builds `github:ghostship-io/ghostship-config/<sha>`
-   with `--impure` so the system records its revision, passes the dry-activate
-   gates, sets the profile, switches, verifies, and checks T3 Code, container
-   health, failed units and the upgrade timer. `--agent-rev REV` pins the
+3. Deploy `chill-penguin` with `just deploy` from a working checkout on the
+   host (builds one artifact, tests it, records the generation, switches, runs
+   the T3 deployer from the now-current system, verifies). `just verify` before
+   and after, and `just rollback` to return the system and T3 together. A dirty
+   checkout or dirty pinned input is refused for a real deploy. Pinning the
    private agent first. The unattended upgrade is off on this host.
 4. Check failed units, container health, NAS mounts, configuration file modes,
    secret-dependent integrations, and active agent sessions.
@@ -508,11 +507,13 @@ than ten minutes reaches operations through `ghostship-notify` with the
 `boot-generation-drift` dedupe key, because a reboot would revert to the
 profile's generation.
 
-T3 Code restarts immediately after the isolated candidate passes acceptance for
-the exact deployment and image. The acceptance checks cover the application,
-provider turn, CLI, skills, and desktop transport while confirming that the
-production container identity stayed unchanged. Image updates trigger this
-path directly from host activation; there is no manual safe-restart command or
+T3 Code restarts during `just deploy`, after the mechanical activation checks
+(image id equals the artifact identity, provider secret digest present, tooling
+present, state schema compatible) and before the mechanical receipt is written.
+The behavioural checks (application, provider turn, CLI, skills, desktop) are
+`just acceptance`, a separate explicit suite that never runs from deploy or
+verify. A switch no longer starts the deployer by itself; the deploy script
+does. There is no manual safe-restart command or
 idle queue.
 
 Every candidate-accepted restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl`

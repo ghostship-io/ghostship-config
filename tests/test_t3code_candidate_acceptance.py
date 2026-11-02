@@ -47,12 +47,14 @@ class CandidateDeploymentPackagingTest(unittest.TestCase):
                 self.assertIn(f"packages/t3code/{name}", module)
         self.assertIn('name = "ghostship-t3code-deploy-image"', module)
         self.assertIn('name = "ghostship-t3code-invalidate-failure"', module)
-        self.assertIn('t3codeInvalidateFailure t3codeReleaseWindow', module)
+        self.assertIn('t3codeInvalidateFailure', module)
+        self.assertNotIn('t3codeReleaseWindow', module)
         self.assertIn('exec ${lib.getExe t3codeImmediateDeploy} --invalidate-failure', module)
         self.assertIn('builtins.readFile ../../packages/t3code/deploy-image.sh', module)
+        # The behavioural suite is explicit (`just acceptance`) and the deploy
+        # path is deploy.sh; neither an activation hook nor a window runs it.
         self.assertIn('CANDIDATE_ACCEPTANCE = "${t3codeDeploymentScripts}/candidate-acceptance.py"', module)
-        activation = (ROOT / "packages/t3code/activate-deployment.sh").read_text()
-        self.assertIn('start --no-block ghostship-t3code-deploy.service', activation)
+        self.assertNotIn('activationScripts.t3code-deployment', module)
         self.assertNotIn('t3code-deploy-when-idle', module)
         self.assertNotIn('t3code-safe-restart', module)
 
