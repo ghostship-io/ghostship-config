@@ -32,6 +32,33 @@ jobs:
           # previous account; the deployment supplies that name.
           GHOSTSHIP_TRANSITION_OWNERS: ${{ vars.GHOSTSHIP_TRANSITION_OWNERS }}
         run: python3 scripts/ci-private-inputs.py
+      - name: Guard the agent pin ancestry
+        env:
+          GITHUB_META_TOKEN: ${{ github.token }}
+          GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          GHOSTSHIP_OWNER_LOGINS: ${{ vars.GHOSTSHIP_OWNER_LOGINS }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$PR_BASE" "$PR_HEAD" -- flake.nix flake.lock)
+          if [ -z "$changed" ]; then
+            echo 'agent pin guard: flake.nix and flake.lock are unchanged'
+            exit 0
+          fi
+          git show "$PR_BASE:flake.lock" > "$RUNNER_TEMP/agent-pin-base.lock"
+          git show "$PR_HEAD:flake.lock" > "$RUNNER_TEMP/agent-pin-head.lock"
+          python3 - "$PR_BASE" "$PR_HEAD" > "$RUNNER_TEMP/agent-pin-approvals.txt" <<'PY'
+          import json, os, subprocess, sys
+          event = json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))
+          print((event.get("pull_request") or {}).get("body") or "")
+          print(subprocess.run(["git", "log", "--format=%B", f"{sys.argv[1]}..{sys.argv[2]}"],
+                               capture_output=True, text=True).stdout)
+          PY
+          python3 scripts/check-agent-pin.py \
+            --base-lock "$RUNNER_TEMP/agent-pin-base.lock" \
+            --head-lock "$RUNNER_TEMP/agent-pin-head.lock" \
+            --approvals "$RUNNER_TEMP/agent-pin-approvals.txt"
       - name: Run fast repository checks
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
