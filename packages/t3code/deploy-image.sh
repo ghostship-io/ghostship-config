@@ -500,8 +500,25 @@ if [[ -n "$pre_image" && "${pre_image#sha256:}" == "$image_id" ]]; then
     if [[ "${accepted_id#sha256:}" != "$image_id" ]]; then
       promote_accepted_alias
     fi
-    record_applied "$running_agent" "$running_secret"
-    publish_pass_attestation
+    # This path restarts nothing, so it must still write the mechanical
+    # receipt the attestation publishes; without it receipt_matches_image
+    # returns 1 and set -e exits with no step named.
+    if ! "$JQ_BIN" -cn --arg deployment "$DEPLOYMENT_ID" --arg image "sha256:$image_id" \
+      --arg candidate "t3code-candidate-$image_id" --arg agent "$AGENT_REVISION" \
+      --arg tooling "$TOOLING_PATH" --arg secret "$secret_sha256" \
+      --argjson before "$pre" --argjson after "$pre" --arg at "$(date -u +%FT%TZ)" \
+      --argjson schema "$STATE_SCHEMA" \
+      '{schema:$schema,deployment_id:$deployment,image_id:$image,candidate_name:$candidate,
+        agent_revision:$agent,agent_path:$tooling,provider_secret_sha256:$secret,
+        live_before:$before,live_after:$after,verified:true,verified_at:$at}' > "$receipt.tmp"; then
+      echo 'writing the mechanical receipt failed' >&2; exit 1
+    fi
+    if ! chmod 0600 "$receipt.tmp"; then echo 'protecting the mechanical receipt failed' >&2; exit 1; fi
+    if ! mv -f "$receipt.tmp" "$receipt"; then echo 'recording the mechanical receipt failed' >&2; exit 1; fi
+    if ! record_applied "$running_agent" "$running_secret"; then
+      echo 'recording the applied inputs failed' >&2; exit 1
+    fi
+    if ! publish_pass_attestation; then echo 'publishing the pass attestation failed' >&2; exit 1; fi
     echo "T3 already runs accepted image sha256:$image_id with the accepted agent and provider secret; PASS recorded, no restart"
     exit 0
   fi

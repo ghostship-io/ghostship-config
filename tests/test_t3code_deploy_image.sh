@@ -224,6 +224,32 @@ grep -q 'already applied' "$tmp/out.log" || fail 'the already-applied path did n
 [[ ! -s $tmp/events ]] || fail 'an already-applied deployment had an effect'
 echo 'Already-applied proof: a receipted deployment is not restarted.'
 
+# --- 5b. T3 already runs the accepted image but has no receipt: record it, no restart
+reset_case
+printf '%s\n' "$image_id" > "$tmp/accepted-image"
+printf '%s\n' "sha256:$image_id" > "$tmp/live-image"
+run
+[[ $rc == 0 ]] || fail "the already-running deploy exited $rc"
+grep -q 'already runs accepted image' "$tmp/out.log" || fail 'the already-running path did not say so'
+[[ ! -s $tmp/events ]] || fail 'the already-running path had an effect'
+[[ -f $tmp/state/receipts/deployment-1.json ]] || fail 'the already-running path wrote no receipt'
+. "$root/packages/t3code/receipt-checks.sh"
+JQ_BIN=jq receipt_checks_ok "$tmp/state/receipts/deployment-1.json" || fail 'the already-running receipt is not mechanical'
+[[ $(cat "$tmp/state/applied") == deployment-1 ]] || fail 'the already-running path did not record applied'
+echo 'Already-running proof: the accepted image is recorded without a restart or silent exit.'
+
+# --- 5c. a receipt write failure is step-named and leaves applied unchanged
+reset_case
+printf '%s\n' "$image_id" > "$tmp/accepted-image"
+printf '%s\n' "sha256:$image_id" > "$tmp/live-image"
+mkdir "$tmp/state/receipts/deployment-1.json.tmp"
+run
+[[ $rc != 0 ]] || fail 'a failed receipt write was accepted'
+grep -q 'writing the mechanical receipt failed' "$tmp/out.log" || fail 'the receipt failure was not named'
+[[ $(cat "$tmp/state/applied") == old ]] || fail 'a failed receipt write changed applied'
+[[ ! -e $tmp/state/receipts/deployment-1.json ]] || fail 'a failed receipt write left a receipt'
+echo 'Receipt-failure proof: the write names its step and applied stays unchanged.'
+
 # --- 6. bootstrap keeps the running image and does not restart --------------
 reset_case
 rm -f "$tmp/accepted-image"
