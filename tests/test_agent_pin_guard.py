@@ -140,6 +140,9 @@ class PullRequestEventTests(unittest.TestCase):
         (self.agent / "line.txt").write_text("pinned\n")
         git(self.agent, "commit", "-q", "-am", "pinned")
         self.pinned = git(self.agent, "rev-parse", "HEAD").strip()
+        (self.agent / "line.txt").write_text("descendant\n")
+        git(self.agent, "commit", "-q", "-am", "descendant")
+        self.descendant = git(self.agent, "rev-parse", "HEAD").strip()
         git(self.agent, "checkout", "-q", "-b", "sibling", root_revision)
         (self.agent / "other.txt").write_text("sibling\n")
         git(self.agent, "add", "other.txt")
@@ -184,6 +187,14 @@ class PullRequestEventTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("does not descend", result.stdout)
 
+    def test_a_pull_request_that_moves_the_pin_to_a_descendant_passes(self):
+        self.write_lock(self.repository / "flake.lock", self.descendant)
+        git(self.repository, "commit", "-q", "-am", "move the pin to its descendant")
+        self.head_sha = git(self.repository, "rev-parse", "HEAD").strip()
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("descends from", result.stdout)
+
     def test_an_approved_pull_request_body_passes(self):
         result = self.run_check(body="pin-regression-approved: the pinned line was merged upstream\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -193,6 +204,16 @@ class PullRequestEventTests(unittest.TestCase):
         result = self.run_check(commit_message="move the pin\n\npin-regression-approved: upstream merged it\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("approved", result.stdout)
+
+
+class CIIntegrationTests(unittest.TestCase):
+    def test_the_config_check_job_runs_the_guard_with_the_existing_read_key(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        check = workflow.split("check:", 1)[1].split("integration:", 1)[0]
+        self.assertIn("check-agent-pin.py", check)
+        self.assertIn("GHOSTSHIP_AGENT_READ_KEY", check)
+        self.assertIn("GITHUB_META_TOKEN", check)
+        self.assertIn("agent-pin-approvals.txt", check)
 
 
 class ApprovalTests(unittest.TestCase):
